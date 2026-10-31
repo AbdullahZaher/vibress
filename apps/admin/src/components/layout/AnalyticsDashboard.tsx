@@ -490,13 +490,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   {tr("LATEST POST PERFORMANCE")}
                 </h3>
                 {data.latestPost ? (
-                  <Card className="p-5 border-border/70 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                  <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center">
                     <div className="flex items-center gap-4 min-w-0">
-                      <div aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60 text-muted-foreground sm:h-24 sm:w-28">
-                        <FileText className="size-7" />
+                      <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted/80 text-muted-foreground">
+                        <FileText className="size-5" />
                       </div>
                       <div className="space-y-1 min-w-0">
-                        <h4 className="font-bold text-base text-foreground truncate">
+                        <h4 dir="auto" className="truncate text-base font-semibold text-foreground">
                           {data.latestPost.title}
                         </h4>
                         <p className="text-xs text-muted-foreground">

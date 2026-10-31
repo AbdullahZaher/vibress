@@ -157,9 +157,10 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
             <button
               key={filter}
               onClick={() => setStatusFilter(filter)}
-              className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium capitalize transition-all cursor-pointer ${
+              aria-pressed={statusFilter === filter}
+              className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium capitalize transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring ${
                 statusFilter === filter
-                  ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
+                  ? "bg-card text-foreground border border-border font-semibold"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >

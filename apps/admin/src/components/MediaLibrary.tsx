@@ -185,7 +185,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   const assets = data?.items || [];
 
   return (
-    <div className="space-y-8 w-full max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-8">
       {/* Header */}
       <AdminPageHeader
         title={tr("Media")}
@@ -226,7 +226,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
               onClick={() => setSelectedType(type)}
               aria-pressed={selectedType === type}
               className={selectedType === type
-                ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted px-3 text-sm font-semibold text-foreground shadow-2xs"
+                ? "min-h-11 shrink-0 rounded-lg border border-border bg-muted/70 px-3 text-sm font-semibold text-foreground"
                 : "min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"}
             >
               {tr(type === "all" ? "All Media" : type === "image" ? "Images" : type === "video" ? "Videos" : type === "audio" ? "Audio" : "Files")}
