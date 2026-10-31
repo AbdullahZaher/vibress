@@ -367,11 +367,11 @@ export const PagesList: React.FC<PagesListProps> = ({
         ) : pages.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-16 text-center text-muted-foreground">
             <FileText className="size-9 opacity-40" aria-hidden="true" />
-            <p className="font-medium text-foreground">{searchQuery || statusFilter !== "all" ? tr("No pages found") : tr("No pages yet")}</p>
+            <p className="font-medium text-foreground">{tr("No pages found")}</p>
             <p className="max-w-md text-sm">
               {searchQuery || statusFilter !== "all"
                 ? tr("Try a different search or filter.")
-                : tr("Create your first page to get started.")}
+                : tr("No pages yet. Create your first page to get started.")}
             </p>
             {(searchQuery || statusFilter !== "all") && (
               <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
