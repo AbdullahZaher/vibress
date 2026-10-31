@@ -46,12 +46,12 @@ export const AdminPageHeader: React.FC<AdminPageHeaderProps> = ({
           )}
           <h1
             id={titleId}
-            className="break-words text-2xl font-semibold leading-tight tracking-tight text-foreground sm:text-[28px]"
+            className="break-words text-[28px] font-semibold leading-tight tracking-tight text-foreground sm:text-[34px]"
           >
             {title}
           </h1>
           {description && (
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 max-w-3xl text-sm leading-relaxed text-muted-foreground">
               {description}
             </p>
           )}

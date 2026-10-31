@@ -118,7 +118,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   }, [isOpen]);
 
   const sidebarContent = (
-    <aside className="flex h-full max-h-dvh w-[min(17.5rem,86vw)] shrink-0 select-none flex-col overflow-hidden border-e border-sidebar-border bg-sidebar shadow-xl md:shadow-none">
+    <aside className="flex h-full max-h-dvh w-[min(17rem,86vw)] shrink-0 select-none flex-col overflow-hidden bg-sidebar shadow-xl md:shadow-none">
       {/* Top Header */}
       <div className="shrink-0">
         <AppSidebarHeader
@@ -130,8 +130,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
         />
       </div>
 
-      {/* Middle Navigation Stream (Main & Content) */}
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-3.5 py-5">
+      {/* Middle Navigation Stream (Main, Content, Extensions, Settings) */}
+      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4">
         <NavMain currentPath={currentPath} onNavigate={handleNavigate} />
         <NavContent
           currentPath={currentPath}
@@ -150,11 +150,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           currentPath={currentPath}
           onNavigate={handleNavigate}
         />
+        <div className="pt-2 border-t border-sidebar-border/60">
+          <NavSettings currentPath={currentPath} onNavigate={handleNavigate} canReadPlugins={canReadPlugins} />
+        </div>
       </div>
 
-      {/* Fixed Bottom Section (Settings + Help above What's New & UserNav) */}
-      <div className="z-20 shrink-0 space-y-3 border-t border-sidebar-border/70 bg-sidebar px-3.5 pb-4 pt-3">
-        <NavSettings currentPath={currentPath} onNavigate={handleNavigate} canReadPlugins={canReadPlugins} />
+      {/* Fixed Bottom Section (What's New & UserNav) */}
+      <div className="z-20 shrink-0 space-y-2 border-t border-sidebar-border/70 bg-sidebar px-3 pb-3.5 pt-2.5">
         <AppSidebarBanner onNavigate={handleNavigate} />
         <UserMenu user={user} onLogout={onLogout} onNavigate={handleNavigate} locale={locale} onToggleLocale={onToggleLocale} />
       </div>
@@ -179,7 +181,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           />
 
           {/* Slide-in Sidebar Panel */}
-          <div className="relative z-50 flex h-full w-[min(17.5rem,86vw)] animate-in ltr:slide-in-from-left rtl:slide-in-from-right duration-200 ease-out">
+          <div className="relative z-50 flex h-full w-[min(17rem,86vw)] animate-in ltr:slide-in-from-left rtl:slide-in-from-right duration-200 ease-out">
             {sidebarContent}
           </div>
         </div>
