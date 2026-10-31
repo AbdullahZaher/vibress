@@ -189,10 +189,14 @@ export const PagesList: React.FC<PagesListProps> = ({
       const endpoint = action.kind === "publish" ? `/pages/${item.id}/publish` : `/pages/${item.id}/unpublish`;
       return apiRequest(endpoint, { method: "POST" });
     }));
-    const failed = results.filter((result) => result.status === "rejected").length;
+    const failedIds = results.flatMap((result, index) => {
+      const id = targets[index]?.id;
+      return result.status === "rejected" && id ? [id] : [];
+    });
+    const failed = failedIds.length;
     const succeeded = results.length - failed;
     setConfirmAction(null);
-    setSelectedIds(new Set());
+    setSelectedIds(new Set(failedIds));
     setProcessing(false);
     setActionFeedback({
       type: failed ? "error" : "success",
@@ -219,6 +223,8 @@ export const PagesList: React.FC<PagesListProps> = ({
   const actionDescription = confirmAction
     ? `${tr("You are about to")} ${confirmAction.kind === "delete" ? tr("delete") : confirmAction.kind === "publish" ? tr("publish") : tr("unpublish")} ${formatNumber(confirmAction.ids.length)} ${tr("items on this page")}.`
     : "";
+
+  const resultsPending = loading || searchQuery.trim() !== debouncedSearch;
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
@@ -285,27 +291,27 @@ export const PagesList: React.FC<PagesListProps> = ({
                   <option value="title">{tr("Title")}</option>
                 </select>
               </label>
-              <Button type="button" variant="outline" size="sm" className="min-h-10 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
+              <Button type="button" variant="outline" size="sm" className="min-h-11 shrink-0" onClick={() => setSortOrder((order) => order === "desc" ? "asc" : "desc")} aria-label={tr("Toggle sort direction")}>
                 {sortOrder === "desc" ? tr("Descending") : tr("Ascending")}
               </Button>
             </div>
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
-          {selectionEnabled && !loading && !error && pages.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+          {selectionEnabled && !resultsPending && !error && pages.length > 0 && <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={allVisibleSelected}
-              disabled={loading || pages.length === 0}
+              disabled={resultsPending || pages.length === 0}
               onChange={(event) => setSelectedIds(event.target.checked ? new Set(visibleIds) : new Set())}
               className="size-4 accent-primary"
               aria-label={tr("Select all on this page")}
             />
             {tr("Select all on this page")}
           </label>}
-          <span aria-live="polite" className="text-sm text-muted-foreground">{loading ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}</span>
+          <span aria-live="polite" className="text-sm text-muted-foreground">{resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}</span>
         </div>
-        {!loading && !error && selectedIds.size > 0 && (
+        {!resultsPending && !error && selectedIds.size > 0 && (
           <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
             <span className="me-auto text-sm font-semibold text-foreground">{formatNumber(selectedIds.size)} {tr("selected on this page")}</span>
             {canPublish && selectedPages.some((item) => item.status !== "published") && (
@@ -331,7 +337,7 @@ export const PagesList: React.FC<PagesListProps> = ({
       </section>
 
       <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Pages")}>
-        {loading ? (
+        {resultsPending ? (
           <div role="status" aria-label={tr("Loading")} aria-busy="true">
             {[1, 2, 3, 4].map((item) => (
               <div key={item} className="flex min-h-[76px] items-center gap-4 border-b border-border/50 py-3 last:border-b-0">
@@ -396,7 +402,7 @@ export const PagesList: React.FC<PagesListProps> = ({
         )}
       </section>
 
-      {!loading && !error && (
+      {!resultsPending && !error && (
       <EditorialPagination
         page={page}
         pageSize={pageSize}

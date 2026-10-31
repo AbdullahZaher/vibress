@@ -299,3 +299,8 @@ The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px).
 
 ### Accessible contextual menu — source-level review
 The row contextual actions now expose menu and menuitem semantics, a menu-capable trigger, and ArrowUp/ArrowDown/Home/End keyboard traversal. Existing viewport-aware portal positioning, outside-click dismissal and Escape focus return remain intact. A focused Vitest regression case checks keyboard behavior without adding a UI dependency.
+
+
+### In-flight search and partial-bulk retry polish
+- During the 250ms search debounce, the content region is already in a non-interactive pending state; previously the old rows could remain clickable until network fetch began.
+- Failed batch mutation IDs stay selected after a mixed successful/failed run, enabling an intentional retry of only unresolved items. Completed IDs are removed from the selection. Permission-gated actions and confirmation remain unchanged.
