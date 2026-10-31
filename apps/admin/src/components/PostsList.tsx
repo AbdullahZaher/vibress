@@ -63,6 +63,7 @@ export const PostsList: React.FC<PostsListProps> = ({
   const [posts, setPosts] = useState<PostSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [resolvedQueryKey, setResolvedQueryKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [initialView] = useState(() => readEditorialViewState("posts", filterStatus || "all"));
@@ -100,6 +101,7 @@ export const PostsList: React.FC<PostsListProps> = ({
     setSelectedIds(new Set());
   }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
 
+  const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
   const fetchPosts = useCallback(async () => {
     const requestId = ++requestSequence.current;
     setLoading(true);
@@ -118,13 +120,15 @@ export const PostsList: React.FC<PostsListProps> = ({
       if (requestId !== requestSequence.current) return;
       setPosts(data.posts || []);
       setTotal(data.total || 0);
+      setResolvedQueryKey(queryKey);
     } catch (err: unknown) {
       if (requestId !== requestSequence.current) return;
       setError(err instanceof Error ? err.message : tr("Failed to fetch posts"));
+      setResolvedQueryKey(queryKey);
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, tr]);
+  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, queryKey, tr]);
 
   useEffect(() => {
     void fetchPosts();
@@ -226,7 +230,7 @@ export const PostsList: React.FC<PostsListProps> = ({
     ? `${tr("You are about to")} ${confirmAction.kind === "delete" ? tr("delete") : confirmAction.kind === "publish" ? tr("publish") : tr("unpublish")} ${formatNumber(confirmAction.ids.length)} ${tr("items on this page")}.`
     : "";
 
-  const resultsPending = loading || searchQuery.trim() !== debouncedSearch;
+  const resultsPending = loading || searchQuery.trim() !== debouncedSearch || resolvedQueryKey !== queryKey;
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">

@@ -307,3 +307,6 @@ The row contextual actions now expose menu and menuitem semantics, a menu-capabl
 
 ### Single primary create action
 Empty states contain explanatory text and filter recovery only. The existing permission-gated **New Post / New Page** page-header CTA is the single creation entry point, avoiding duplicate action hierarchy and ambiguous automated button matching.
+
+### Request-identity guard
+Posts/Pages now tie each loaded/error state to the exact page, size, filter, sort and debounced query key. Changes to status or sort immediately show a non-interactive pending view, before effects start the next API call. Stale previous errors are never presented as the new query result.
