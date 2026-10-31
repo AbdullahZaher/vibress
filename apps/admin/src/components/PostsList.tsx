@@ -376,11 +376,6 @@ export const PostsList: React.FC<PostsListProps> = ({
                 {tr("Clear filters")}
               </Button>
             )}
-            {!debouncedSearch && !searchQuery && statusFilter === "all" && canCreate && (
-              <Button size="sm" onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2">
-                <Plus className="size-4" aria-hidden="true" /> {tr("New Post")}
-              </Button>
-            )}
           </div>
         ) : (
           <div role="list" aria-label={tr("Posts")} className="min-w-0">

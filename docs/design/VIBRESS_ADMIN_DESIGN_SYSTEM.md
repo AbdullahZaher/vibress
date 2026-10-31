@@ -304,3 +304,6 @@ The row contextual actions now expose menu and menuitem semantics, a menu-capabl
 ### In-flight search and partial-bulk retry polish
 - During the 250ms search debounce, the content region is already in a non-interactive pending state; previously the old rows could remain clickable until network fetch began.
 - Failed batch mutation IDs stay selected after a mixed successful/failed run, enabling an intentional retry of only unresolved items. Completed IDs are removed from the selection. Permission-gated actions and confirmation remain unchanged.
+
+### Single primary create action
+Empty states contain explanatory text and filter recovery only. The existing permission-gated **New Post / New Page** page-header CTA is the single creation entry point, avoiding duplicate action hierarchy and ambiguous automated button matching.
