@@ -947,11 +947,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
           <Button
             onClick={handleSave}
-            disabled={saving || autosaveState === "conflict"}
-            className="min-h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm gap-1.5 shadow-sm"
+            disabled={autosaveState === "conflict"}
+            loading={saving}
+            loadingLabel={tr("Saving...")}
+            className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? tr("Saving...") : postId ? tr("Update") : tr("Save Draft")}
+            <Save className="size-4" aria-hidden="true" />
+            {postId ? tr("Update") : tr("Save Draft")}
           </Button>
 
           <IconButton
@@ -976,7 +978,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => window.location.reload()}
-                className="h-8 text-xs font-semibold ms-4 shrink-0"
+                className="ms-4 shrink-0"
               >
                 {tr("Reload Latest")}
               </Button>

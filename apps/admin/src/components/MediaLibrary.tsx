@@ -1,5 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listMediaApi,
@@ -42,6 +42,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   canDelete = false,
 }) => {
   const { tr } = useAdminLocale();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -191,16 +192,28 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
         title={tr("Media")}
         description={tr("Upload, organize, and manage visual assets across your publication.")}
         actions={canUpload ? (
-          <label className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-2xs transition-colors hover:bg-primary/90 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring cursor-pointer gap-2 shrink-0">
-            <Upload className="h-4 w-4" /> {tr("Upload Files")}
+          <div>
             <input
+              ref={uploadInputRef}
               type="file"
               multiple
               onChange={handleFileUpload}
-              className="sr-only"
+              className="hidden"
+              tabIndex={-1}
+              aria-hidden="true"
               disabled={uploadMutation.isPending}
             />
-          </label>
+            <Button
+              type="button"
+              loading={uploadMutation.isPending}
+              loadingLabel={tr("Uploading...")}
+              onClick={() => uploadInputRef.current?.click()}
+              className="gap-2"
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              {tr("Upload Files")}
+            </Button>
+          </div>
         ) : undefined}
       />
 

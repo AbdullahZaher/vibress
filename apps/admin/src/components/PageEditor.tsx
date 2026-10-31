@@ -405,11 +405,13 @@ export const PageEditor: React.FC<PageEditorProps> = ({
 
           <Button
             onClick={handleManualSave}
-            disabled={saving || autosaveState === "conflict"}
-            className="min-h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-sm gap-1.5 shadow-sm"
+            disabled={autosaveState === "conflict"}
+            loading={saving}
+            loadingLabel={tr("Saving...")}
+            className="gap-1.5"
           >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? tr("Saving...") : pageId ? tr("Update Page") : tr("Create Page")}
+            <Save className="size-4" aria-hidden="true" />
+            {pageId ? tr("Update Page") : tr("Create Page")}
           </Button>
 
           <IconButton
@@ -434,7 +436,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={() => window.location.reload()}
-                className="h-8 text-xs font-semibold ms-4 shrink-0"
+                className="ms-4 shrink-0"
               >
                 {tr("Reload Latest")}
               </Button>

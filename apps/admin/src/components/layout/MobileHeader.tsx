@@ -2,6 +2,8 @@ import React from "react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { Menu, Sun, Moon, Search, Plus } from "lucide-react";
 import vibressLogo from "../../assets/images/vibress-logo.png";
+import { Button } from "../ui/button";
+import { IconButton } from "../ui/icon-button";
 
 interface MobileHeaderProps {
   currentPath: string;
@@ -64,15 +66,14 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
     <header className="md:hidden sticky top-0 z-20 flex min-h-14 w-full items-center justify-between gap-2 border-b border-border bg-background/95 backdrop-blur-md px-3">
       {/* Left Section: Hamburger button + Logo */}
       <div className="flex min-w-0 items-center gap-2">
-        <button
-          type="button"
+        <IconButton
+          label={tr("Toggle navigation menu")}
           onClick={onToggleSidebar}
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-card text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-          aria-label={tr("Toggle navigation menu")}
-          title={tr("Open menu")}
+          variant="outline"
+          size="icon-sm"
         >
-          <Menu className="h-4 w-4" />
-        </button>
+          <Menu className="size-4" aria-hidden="true" />
+        </IconButton>
 
         <div className="flex min-w-0 items-center gap-2">
           <img
@@ -90,52 +91,49 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
       {/* Right Section: Quick Action + Search + Theme Toggle */}
       <div className="flex shrink-0 items-center gap-1">
         {canCreatePosts && (
-          <button
-            type="button"
+          <IconButton
+            label={tr("Create new post")}
             onClick={() => onNavigate("/admin/posts/new")}
-            className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-2 focus-visible:outline-ring"
-            title={tr("Create new post")}
-            aria-label={tr("Create new post")}
+            variant="default"
+            size="icon-sm"
           >
-            <Plus className="h-4 w-4" />
-          </button>
+            <Plus className="size-4" aria-hidden="true" />
+          </IconButton>
         )}
 
-        <button
-          type="button"
+        <IconButton
+          label={tr("Search")}
           onClick={onOpenCommandPalette}
-          className="flex size-10 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          title="Search / Command Palette"
-          aria-label={tr("Search")}
+          variant="outline"
+          size="icon-sm"
         >
-          <Search className="h-4 w-4" />
-        </button>
+          <Search className="size-4" aria-hidden="true" />
+        </IconButton>
 
         {onToggleLocale && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onToggleLocale}
-            className="flex min-h-10 px-2 items-center justify-center rounded-lg border border-border/60 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-            title={tr("Switch interface language")}
             aria-label={tr("Switch interface language")}
+            className="px-2 text-xs"
           >
             {locale === "ar" ? "EN" : "عربي"}
-          </button>
+          </Button>
         )}
 
-        <button
-          type="button"
+        <IconButton
+          label={tr("Toggle theme")}
           onClick={onToggleDarkMode}
-          className="hidden min-[420px]:flex size-9 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-          title={tr("Toggle theme")}
-          aria-label={tr("Toggle theme")}
+          size="icon-sm"
+          className="hidden min-[420px]:inline-flex"
         >
           {darkMode ? (
-            <Sun className="h-3.5 w-3.5 text-amber-400" />
+            <Sun className="size-4 text-amber-400" aria-hidden="true" />
           ) : (
-            <Moon className="h-3.5 w-3.5 text-slate-700" />
+            <Moon className="size-4 text-slate-700" aria-hidden="true" />
           )}
-        </button>
+        </IconButton>
       </div>
     </header>
   );
