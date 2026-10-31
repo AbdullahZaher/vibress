@@ -177,3 +177,35 @@ A change is not design-complete until:
 
 ### Delivery and acceptance limitations
 **Source review and implemented changes are not equivalent to live visual QA.** The system must still be exercised in a real authenticated browser at 320, 390, 768, 1024 and 1440px for Arabic/English and both themes, including 200% text zoom, keyboard and destructive actions. Complete WCAG AA conformance, calibrated 9.5/10 scores and before/after screenshots must not be claimed without those observations.
+
+
+## Ghost-inspired editorial Admin — 31 October 2026
+
+**Design direction:** Content-first publishing interface, informed by the current `TryGhost/Ghost` monorepo, especially `apps/admin` and the `apps/shade` design system. Use principles and patterns, not Ghost brand marks, assets, copied source, or platform feature assumptions.
+
+**Reference investigation (code and product):**
+- [Ghost Shade design system](https://github.com/TryGhost/Ghost/tree/main/apps/shade): semantic tokens, reusable PageHeader / SettingGroup / FilterBar / ListPage patterns.
+- [Ghost current React Admin](https://github.com/TryGhost/Ghost/tree/main/apps/admin): app-level Admin layout, page chrome, organized content operations.
+- [Ghost: Organizing content](https://ghost.org/help/organizing-content/): article-first lists, searching, statuses, view filters and bulk actions.
+- [Ghost: Refreshed settings](https://ghost.org/changelog/refreshed-settings/): one searchable settings workspace with dedicated section navigation.
+- [Ghost Shade component rules](https://github.com/TryGhost/Ghost/blob/main/apps/shade/AGENTS.md): default, hover, focus, disabled and semantic-theme requirements.
+- The former `TryGhost/Admin` repository is archived; never treat it as the contemporary UI source.
+
+### Role review and implementation constraints
+- **Product design:** A calm sidebar, content-first white editorial canvas, strong 28/34px headings, no fake home statistics.
+- **Frontend:** Only adjust Admin shell, reusable navigation, list and settings presentation; preserve API hooks, async state, mutation semantics, and native Studio editor surface.
+- **Internationalization:** Use existing `tr()` strings and CSS logical properties, preserve Arabic/LTR and mixed-direction content.
+- **Security:** Existing permission-gated actions and destructive confirmation flows remain authoritative; never create fake controls.
+- **QA:** Verify at 320/390/768/1024/1440 CSS pixels, both color schemes, keyboard navigation, input labels, 200% text scaling and authenticated workflows.
+
+### Vibress-specific rules
+1. The non-Studio Admin surface is a restrained inset editorial canvas on desktop, with a distinct, quiet navigation rail. Studio stays fullscreen as before.
+2. Active navigation states use a neutral fill and semibold label; do not decorate every active item with a high-contrast border and shadow.
+3. Publishing lists use a flat, scrollable row pattern, uncluttered search/filter controls, visible bulk action feedback and a clear primary create action.
+4. Display actual post image thumbnails if available; do not substitute fake images for content without one. Metadata follows title in a compact, legible inline grouping.
+5. Settings keep one searchable workspace; use section headers, plain groups and restrained actions.
+6. Semantic status colors and dark mode must remain readable; never rely solely on color to communicate state.
+7. Never claim an achieved score, full accessibility certification, or visual comparisons without a running browser and screenshots.
+
+### Verification gate
+A GitHub PR and CI will test type-check/lint/tests/build. UI screenshot validation requires a running authenticated instance and remains a release prerequisite. This document records design decisions, not a WCAG certificate.

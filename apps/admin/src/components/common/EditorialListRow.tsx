@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { BarChart3, ImageIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { BarChart3, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { IconButton } from "../ui/icon-button";
 
@@ -68,16 +68,16 @@ export function EditorialListRow({
     approved: tr("Approved"),
     archived: tr("Archived"),
   };
-  const statusColor = status === "draft"
-    ? "text-pink-500"
+  const statusColor = status === "published"
+    ? "text-status-published-fg"
     : status === "scheduled"
-      ? "text-amber-500"
-      : status === "published"
-        ? "text-muted-foreground"
-        : "text-primary";
+      ? "text-status-scheduled-fg"
+      : status === "in_review" || status === "changes_requested"
+        ? "text-status-review-fg"
+        : "text-muted-foreground";
 
   return (
-    <div role="listitem" className="group relative flex items-center gap-2 px-1 py-2 transition-colors hover:bg-muted/20 focus-within:z-20 focus-within:bg-muted/20 sm:gap-3 sm:py-2.5">
+    <div role="listitem" className="group relative flex min-h-[76px] items-center gap-3 px-1 py-3 transition-colors hover:bg-muted/40 focus-within:z-20 focus-within:bg-muted/40 sm:gap-4 sm:px-3">
       {/* A sibling button covers the row; actions are stacked above it. Avoid nested interactive controls. */}
       {onEdit && (
         <button
@@ -98,8 +98,8 @@ export function EditorialListRow({
           />
         </label>
       )}
-      <div className="flex h-12 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted/70 text-muted-foreground/60 sm:h-14 sm:w-20">
-        {imageUrl && !imageFailed ? (
+      {imageUrl && !imageFailed && (
+        <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted sm:h-14 sm:w-20">
           <img
             src={imageUrl}
             alt=""
@@ -108,14 +108,12 @@ export function EditorialListRow({
             onError={() => setImageFailed(true)}
             className="h-full w-full object-cover"
           />
-        ) : (
-          <ImageIcon className="size-4 sm:size-5" aria-hidden="true" />
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="min-w-0 flex-1 space-y-0.5 text-start">
+      <div className="min-w-0 flex-1 space-y-1.5 text-start">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <h3 dir="auto" className="max-w-full break-words text-start text-sm font-semibold leading-tight text-foreground transition-colors group-hover:text-primary sm:text-sm">
+          <h3 dir="auto" className="max-w-full break-words text-start text-[15px] font-semibold leading-snug text-foreground transition-colors group-hover:underline group-hover:underline-offset-4">
             {displayTitle}
           </h3>
           {featured && (
@@ -124,18 +122,17 @@ export function EditorialListRow({
             </span>
           )}
         </div>
-        <p className="text-xs leading-4 text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] leading-5 text-muted-foreground">
           {authorName && (
             <>
-              {tr("By")} <span dir="auto">{authorName}</span>
-              <span aria-hidden="true"> · </span>
+              <span>{tr("By")} <span dir="auto">{authorName}</span></span>
+              <span aria-hidden="true">·</span>
             </>
           )}
           <time dateTime={date}>{formatDate(date, { day: "numeric", month: "short", year: "numeric" })}</time>
-        </p>
-        <p className={`text-xs font-medium leading-4 ${statusColor}`}>
-          {statusLabels[status] ?? tr("Draft")}
-        </p>
+          <span aria-hidden="true">·</span>
+          <span className={`font-medium ${statusColor}`}>{statusLabels[status] ?? tr("Draft")}</span>
+        </div>
       </div>
 
       <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
@@ -143,9 +140,9 @@ export function EditorialListRow({
           <IconButton
             label={tr("Analytics Dashboard")}
             accessibleLabel={`${tr("Analytics Dashboard")}: ${displayTitle}`}
-            variant="outline"
+            variant="ghost"
             onClick={onStatistics}
-            className="h-10 w-10 rounded-lg"
+            className="h-10 w-10 rounded-lg border-0"
           >
             <BarChart3 className="size-4" aria-hidden="true" />
           </IconButton>
@@ -153,7 +150,7 @@ export function EditorialListRow({
           <IconButton
             label={tr("Edit")}
             accessibleLabel={`${tr("Edit")}: ${displayTitle}`}
-            variant="outline"
+            variant="ghost"
             onClick={onEdit}
             className="h-10 w-10 rounded-lg"
           >

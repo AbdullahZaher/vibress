@@ -33,7 +33,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       </div>
 
       {/* Grouped Section Card Container */}
-      <div className="divide-y divide-border/50 overflow-hidden rounded-xl border border-border/80 bg-card">
+      <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border bg-card">
         {children}
       </div>
     </section>
