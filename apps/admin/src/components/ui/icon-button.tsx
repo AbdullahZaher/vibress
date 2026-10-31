@@ -12,7 +12,7 @@ export interface IconButtonProps extends Omit<ButtonProps, "size" | "title"> {
 
 /** Compact secondary action with an unclipped hover and focus tooltip. */
 export function IconButton({
-  label, accessibleLabel, size = "icon", className, disabled,
+  label, accessibleLabel, size = "icon", className, disabled, loading,
   onFocus, onBlur, onMouseEnter, onMouseLeave, children, ...props
 }: IconButtonProps) {
   const buttonRef = React.useRef<HTMLButtonElement>(null);
@@ -21,7 +21,7 @@ export function IconButton({
   } | null>(null);
 
   const show = () => {
-    if (disabled || !buttonRef.current) return;
+    if (disabled || loading || !buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const above = rect.top >= 48;
     setPosition({
@@ -44,7 +44,7 @@ export function IconButton({
 
   React.useEffect(() => {
     if (disabled) hide();
-  }, [disabled]);
+  }, [disabled, loading]);
 
   return (
     <>
@@ -55,8 +55,9 @@ export function IconButton({
         variant={props.variant ?? "ghost"}
         size={size}
         disabled={disabled}
+        loading={loading}
         aria-label={accessibleLabel ?? label}
-        className={`min-h-9 min-w-9 ${className ?? ""}`}
+        className={className}
         onFocus={(event) => { show(); onFocus?.(event); }}
         onBlur={(event) => { hide(); onBlur?.(event); }}
         onMouseEnter={(event) => { show(); onMouseEnter?.(event); }}
