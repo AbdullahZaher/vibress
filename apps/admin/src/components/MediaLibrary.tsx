@@ -217,10 +217,10 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
       )}
 
       {/* Filter Toolbar */}
-      <section className="space-y-4 rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-2xs" aria-label={tr("Media filters")}>
+      <section className="vibress-editorial-filterbar space-y-4 pb-4 pt-1" aria-label={tr("Media filters")}>
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div role="group" aria-label={tr("Filter by media type")} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 overflow-x-auto max-w-full">
+            <div role="group" aria-label={tr("Filter by media type")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto">
               {["all", "image", "video", "audio", "file"].map((type) => (
                 <button
                   key={type}
@@ -228,8 +228,8 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   onClick={() => setSelectedType(type)}
                   aria-pressed={selectedType === type}
                   className={selectedType === type
-                    ? "min-h-9 shrink-0 rounded-lg border border-border/70 bg-card px-3.5 text-sm font-semibold text-foreground shadow-2xs"
-                    : "min-h-9 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-card/40 hover:text-foreground cursor-pointer"}
+                    ? "min-h-11 shrink-0 rounded-lg bg-muted px-3.5 text-sm font-semibold text-foreground"
+                    : "min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer"}
                 >
                   {tr(type === "all" ? "All Media" : type === "image" ? "Images" : type === "video" ? "Videos" : type === "audio" ? "Audio" : "Files")}
                 </button>
@@ -245,15 +245,15 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   aria-label={tr("Filter assets by filename...")}
-                  className="h-10 w-full ps-9 text-sm rounded-lg border-border/80 bg-background"
+                  className="min-h-11 w-full rounded-lg border-border/80 bg-card ps-9 text-sm"
                 />
               </div>
-              <label className="flex min-h-10 items-center gap-2 text-xs text-muted-foreground">
+              <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
                 <span className="shrink-0">{tr("Sort by")}</span>
                 <select
                   value={sortBy}
                   onChange={(event) => { setSortBy(event.target.value as typeof sortBy); setPage(0); }}
-                  className="min-h-10 min-w-0 rounded-lg border border-border/80 bg-background px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer sm:w-40"
+                  className="min-h-11 min-w-0 rounded-lg border border-border/80 bg-card px-2.5 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer sm:w-40"
                   aria-label={tr("Sort by")}
                 >
                   <option value="createdAt">{tr("Recently added")}</option>
@@ -296,7 +296,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
               type="button"
               onClick={() => openDetail(asset)}
               aria-label={`${tr("Open asset details")}: ${asset.displayName}`}
-              className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-start shadow-2xs transition-all hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-start transition-colors hover:bg-muted/35 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             >
               <div className="aspect-square bg-muted/40 flex items-center justify-center relative overflow-hidden">
                 {asset.assetType === "image" ? (

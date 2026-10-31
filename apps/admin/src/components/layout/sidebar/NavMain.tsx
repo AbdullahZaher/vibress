@@ -26,7 +26,7 @@ export const NavMain: React.FC<NavMainProps> = ({
         onClick={() => onNavigate("/admin")}
         className={`w-full flex min-h-11 items-center gap-2.5 px-2.5 py-2.5 rounded-lg font-medium transition-colors focus-visible:outline-2 focus-visible:outline-ring cursor-pointer ${
           isAnalyticsActive
-            ? "bg-sidebar-accent text-foreground font-semibold border-s-2 border-primary"
+            ? "bg-sidebar-accent text-foreground font-semibold"
             : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
         }`}
       >

@@ -24,6 +24,20 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Analytics overview": "نظرة عامة على التحليلات",
+  "Refresh and retry the remaining items.": "حدّث القائمة وأعِد محاولة تنفيذ الإجراء على العناصر المتبقية.",
+  "Unknown status": "حالة غير معروفة",
+  "Unpublish": "إلغاء النشر",
+  "No posts yet": "لا توجد مقالات بعد",
+  "No pages yet": "لا توجد صفحات بعد",
+  "Create your first post to get started.": "أنشئ مقالتك الأولى للبدء.",
+  "Create your first page to get started.": "أنشئ صفحتك الأولى للبدء.",
+  "Results unavailable": "تعذّر تحميل النتائج",
+  "All Pages": "جميع الصفحات",
+  "Loading": "جارٍ التحميل",
+  "Clear filters": "مسح الفلاتر",
+  "No posts yet. Create your first post to get started.": "لا توجد مقالات بعد. أنشئ مقالتك الأولى للبدء.",
+  "No pages yet. Create your first page to get started.": "لا توجد صفحات بعد. أنشئ صفحتك الأولى للبدء.",
   "Skip to main content": "التخطي إلى المحتوى الرئيسي",
   "This media is in use and cannot be deleted.": "هذا الوسيط مستخدم في محتوى آخر ولا يمكن حذفه.",
   "Failed to load members:": "تعذّر تحميل الأعضاء:",

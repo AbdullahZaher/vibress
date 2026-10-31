@@ -214,3 +214,99 @@ Automated verification run against the live PostgreSQL database, gateway server,
 
 ### Delivery and acceptance limitations
 **Source review and implemented changes are not equivalent to live visual QA.** The system must still be exercised in a real authenticated browser at 320, 390, 768, 1024 and 1440px for Arabic/English and both themes, including 200% text zoom, keyboard and destructive actions. Complete WCAG AA conformance, calibrated 9.5/10 scores and before/after screenshots must not be claimed without those observations.
+
+
+## Ghost-inspired editorial Admin — 31 October 2026
+
+The design direction of **Vibress Editorial Workspace** draws on the actual source of modern Ghost: [TryGhost/Ghost/apps/admin](https://github.com/TryGhost/Ghost/tree/main/apps/admin) and the [Shade design system](https://github.com/TryGhost/Ghost/tree/main/apps/shade). The former TryGhost/Admin repository is archived and not an accurate modern reference. Only interaction and composition principles are studied; no Ghost source, logos, or brand artwork are copied.
+
+### Research findings and product applications
+1. **Structured workspace:** Ghost Admin uses a quiet navigation area and independent work surface; Vibress applies an inset editorial canvas on desktop while leaving the fullscreen Studio editor unchanged.
+2. **Typographic focus:** The [Shade PageHeader](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/page-header.tsx) establishes clear title, metadata and action hierarchy; Vibress uses a 28–34px page title and retains one primary authorized create action.
+3. **List-first publishing:** The [Shade ListPage](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/page-templates/list-page.tsx) and [FilterBar](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/filter-bar.tsx) emphasize calm list chrome; Vibress removes excess filter containers, uses flat editorial rows, and leaves bulk selection and server-backed sorting intact.
+4. **Honest thumbnails:** Display actual post feature images only when available, not fake placeholders; prioritize title with inline author/date/status metadata and existing permission-gated contextual actions.
+5. **Searchable settings:** The [Shade SettingGroup](https://github.com/TryGhost/Ghost/blob/main/apps/shade/src/components/patterns/setting-group.tsx) keeps related controls together; Vibress preserves its searchable, permission-aware SettingsHub with less visual noise.
+
+### Implementation guardrails and review
+- **Architecture:** no API contract, server state, publisher lifecycle, Studio serialization or permission changes.
+- **RTL/localization:** preserve tr() translations, CSS logical spacing, date formatting, and dir=auto for mixed-script editorial titles.
+- **Accessibility:** preserve accessible row buttons, keyboard focus, the action menu and destructive confirmations. Never rely on status color alone: visible status text is retained.
+- **Release QA:** CI must finish; authenticated visual verification at 320, 390, 768, 1024 and 1440px in Arabic/English and light/dark, with keyboard, screen-reader, 200% text zoom and row-action checks, remains required before any claims of complete WCAG conformance.
+
+
+### Second design review — October 31, 2026
+- The existing screenshots in `docs/design/screenshots/redesign/` document the pre-PR editorial UI (the old bordered filters and repeated placeholder images); they do not validate the new PR render.
+- Kept semantic status color **and** explicit status text. A calculation of CSS-token text contrast against the editorial white surface exceeds 4.5:1 for light-theme published, scheduled and review labels; full WCAG verification requires the running UI.
+- Updated row analytics/edit actions to use the shared borderless ghost variant, retaining 40px targets and visible focus so secondary actions do not compete with the article title.
+- Updated the sort labels on Posts and Pages to legible 14px type; no change to the server-backed sorting behavior.
+- Post images intentionally display only when the resource has a source image; invalid-source handling still requires browser verification for layout shift at real network speeds.
+- Ghost remains a conceptual benchmark, not a copied theme. See the preceding source links.
+
+
+### Follow-up: cross-screen coherence
+The second code/design review identified a real visual inconsistency: after converting Posts and Pages to flat editorial filters, Media, Members and Dashboard retained a separate, card-heavy segmented filter system. Harmonized all three with the same neutral selected state, unboxed filter rail, readable labels and 44px control targets. Kept search/filter queries, server sorting, table semantics, media actions and analytics data rendering unchanged. Regression checks must include the existing multi-screen browser screenshot suite; past screenshots are baseline only.
+
+## Posts and Pages — focused Ghost-comparison refinement (2026-10-31)
+
+Current Ghost reference: [TryGhost/Ghost `posts-list-screen.tsx`](https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/posts-list-screen.tsx) and [`post-list-row.tsx`](https://github.com/TryGhost/Ghost/blob/main/apps/admin/src/posts/list/components/post-list-row.tsx); both Posts and Pages render the same list screen via a resource argument. Ghost uses a persistent list header, compact contextual filters, consistent feature-image geometry, and localized publishing metadata.
+
+### Confirmed defects and fixes
+- **Incomplete loading/error screen:** The former early returns hid the creation action, page header and filters; loading/error/retry are now always inside the result region.
+- **Mobile filter overflow:** Six desktop tabs were squeezed into an undiscoverable horizontal strip at 320px; use an accessible native status select below 768px and tabs above.
+- **Stale selection:** Sorting left previously selected item IDs checked; reset selection on both sort-field and sort-direction changes.
+- **Ragged editorial rows:** Post image failures caused columns to jump and missing images shifted titles. Keep image geometry reserved for Posts, using a subtle Lucide placeholder; Pages without feature images use clean text-first rows.
+- **Duplicate edit focus:** Two accessible buttons for the same edit operation caused repetitive keyboard stops; retain one row-level edit action and a separate authorized analytics action.
+- **Clipped context menus:** Menus within a scrollable admin shell could be cut at the bottom; portal the menu into the document layer and compute viewport-aware placement. Close on Escape, outside pointer, focus leave, scroll or resize; restore trigger focus on Escape.
+- **Inconsistent empty state:** Add clear-filter recovery for zero matching results, and first-content creation guidance for empty publications. Preserve localized Arabic text.
+- **Double separators:** Avoid both `divide-y` and explicit row borders within the same list.
+- **Desktop long-list workflow:** Keep the toolbar sticky from the tablet breakpoint without trapping mobile users behind a tall fixed header.
+
+### Quality gates
+- Automated: TypeScript, lint, editorial row tests, mobile filter tests, and full existing CI.
+- Browser: compare real authenticated Posts/Pages screenshots at 320, 390, 768, 1024 and 1440px; Arabic RTL and English LTR, both themes, 200% zoom, many items, zero items, reload, failed image, failed list fetch, last-row menu and bulk actions.
+- This is a reviewable implementation, **not** a certified 9.5/10 score until the browser gates above pass.
+
+
+### Final editorial copy polish
+- Ghost-style resource lists start with the resource name and a single primary **New Post / New Page** action; remove lengthy descriptive subtitle from those two high-frequency screens only.
+- Status selects show **All Posts** and **All Pages**, not an ambiguous unqualified `All`, especially on 320px Arabic screens. Keys remain localized with the existing Arabic dictionary.
+
+### Final content-state consistency
+- Distinguish an empty publication from a filtered zero-match result without repeating the same message twice. Keep one creation CTA and one clear-filters CTA, each conditionally visible.
+- Do not announce old `total` values while a new query is loading or has failed; show a localized result-state message.
+- For scheduled posts and pages, display the scheduled timestamp when the API provides it, instead of the unrelated last-edit date.
+
+
+### Ghost comparison: filter disclosure
+The latest Ghost `PostsListScreen` places a filter trigger and sort menu in the header, expanding a filter row only when active. After a second visual critique, Vibress's six permanent status tabs were still too dense and duplicated the sidebar quick views. Replaced them with one 44px accessible native status menu (localized **All Posts / All Pages**), alongside search and sorting. This keeps all states accessible without recreating the current Ghost's custom popover architecture or introducing dependencies.
+
+### Small-view sticky-header guard
+The filter rail becomes sticky only in wide desktop workspaces (≥1280 CSS px). At 768 and 1024px a wrapping toolbar can be several rows tall, so leaving it in document flow avoids occluding most of the content and keyboard focus.
+
+### Follow-up: factual analytics and editor smoke tests (2026-10-31)
+- Move the global analytics overview action into the permission-gated page header instead of presenting a generic dashboard as per-post metrics.
+- Keep explicit real status text for unrecognized editorial states rather than mislabeling them Draft; increase metadata and pagination text to at least 14px.
+- Align Playwright Studio article creation with the current accessible **New Post** button, fixing three prior false timeouts at the old **Create Post** selector. Keep the Studio creation journey covered by E2E.
+- Localize the remaining partial-bulk-failure instruction.
+
+
+### Query transition safety (2026-10-31)
+- List search, filter, sort and pagination persist as URL query state with tab-local backup when editors navigate back. Values are validated; no content bodies or credentials are stored.
+- Quick sidebar status views use distinct route keys and do not mutate the main Posts/Pages saved list state.
+- On every query transition, show only the loading skeleton, then the matching response or a retryable error. Previously loaded rows and bulk controls are unavailable until the new query succeeds, avoiding destructive actions against stale filters.
+- Pagination is suppressed during loading and failed requests; its count cannot suggest outdated results.
+
+
+### Accessible contextual menu — source-level review
+The row contextual actions now expose menu and menuitem semantics, a menu-capable trigger, and ArrowUp/ArrowDown/Home/End keyboard traversal. Existing viewport-aware portal positioning, outside-click dismissal and Escape focus return remain intact. A focused Vitest regression case checks keyboard behavior without adding a UI dependency.
+
+
+### In-flight search and partial-bulk retry polish
+- During the 250ms search debounce, the content region is already in a non-interactive pending state; previously the old rows could remain clickable until network fetch began.
+- Failed batch mutation IDs stay selected after a mixed successful/failed run, enabling an intentional retry of only unresolved items. Completed IDs are removed from the selection. Permission-gated actions and confirmation remain unchanged.
+
+### Single primary create action
+Empty states contain explanatory text and filter recovery only. The existing permission-gated **New Post / New Page** page-header CTA is the single creation entry point, avoiding duplicate action hierarchy and ambiguous automated button matching.
+
+### Request-identity guard
+Posts/Pages now tie each loaded/error state to the exact page, size, filter, sort and debounced query key. Changes to status or sort immediately show a non-interactive pending view, before effects start the next API call. Stale previous errors are never presented as the new query result.

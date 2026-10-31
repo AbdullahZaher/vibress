@@ -152,16 +152,16 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
 
       {/* Filter Toolbar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div role="group" aria-label={tr("Filter by member status")} className="inline-flex min-h-11 items-center gap-1 rounded-xl bg-muted/60 p-1 text-muted-foreground border border-border/40 overflow-x-auto max-w-full">
+        <div role="group" aria-label={tr("Filter by member status")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
           {(["all", "active", "disabled"] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setStatusFilter(filter)}
               aria-pressed={statusFilter === filter}
-              className={`min-h-9 shrink-0 rounded-lg px-3.5 text-sm font-medium transition-all cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
+              className={`min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
                 statusFilter === filter
-                  ? "bg-card text-foreground border border-border/70 shadow-2xs font-semibold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-card/40"
+                  ? "bg-muted text-foreground font-semibold"
+                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
               }`}
             >
               {filter === "all" ? tr("All Members") : tr(filter)}
@@ -177,13 +177,13 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
             aria-label={tr("Search by email or name...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-10 ps-9 text-sm rounded-lg border-border/80 bg-background"
+            className="min-h-11 rounded-lg border-border/80 bg-card ps-9 text-sm"
           />
         </div>
       </div>
 
       {/* Content Table Card */}
-      <Card className="border-border/80 shadow-2xs p-0 overflow-hidden">
+      <Card className="overflow-hidden border-border/80 p-0">
         <div className="overflow-x-auto">
         <Table className="min-w-[640px]">
           <TableHeader>

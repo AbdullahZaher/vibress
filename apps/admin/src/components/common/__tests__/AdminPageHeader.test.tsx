@@ -38,14 +38,14 @@ describe("AdminPageHeader component", () => {
     expect(h1).not.toBeNull();
     expect(h1?.textContent?.trim()).toBe("Posts");
     expect(h1?.id).toBe("page-title-posts");
-    expect(h1?.className).toContain("text-2xl font-semibold leading-tight tracking-tight text-foreground");
+    expect(h1?.className).toContain("text-[28px] font-semibold leading-tight tracking-tight text-foreground");
     // Assert no svg icon inside h1 or as a sibling leading icon in title block
     expect(h1?.querySelector("svg")).toBeNull();
 
     const desc = container.querySelector("p");
     expect(desc).not.toBeNull();
     expect(desc?.textContent?.trim()).toBe("Manage your published posts and drafts");
-    expect(desc?.className).toContain("mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground");
+    expect(desc?.className).toContain("mt-1.5 max-w-3xl text-sm leading-relaxed text-muted-foreground");
   });
 
   it("renders page action buttons on desktop/mobile", async () => {

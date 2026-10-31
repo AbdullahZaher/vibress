@@ -156,7 +156,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       />
 
       {/* Search and Section Sticky Filter Bar */}
-      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 rounded-xl border border-border/80 bg-background/95 p-2 backdrop-blur-md sm:flex-row sm:items-center">
+      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           {SETTINGS_REGISTRY.map((pillar) => {
@@ -169,7 +169,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 aria-pressed={isActive}
                 className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring ${
                   isActive
-                    ? "border-border bg-card text-foreground font-semibold"
+                    ? "border-border bg-muted text-foreground font-semibold"
                     : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                 }`}
               >

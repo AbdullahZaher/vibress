@@ -40,18 +40,41 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).toHaveBeenCalledOnce();
   });
 
-  it("uses compact thumbnails and spacing without shrinking action touch targets", () => {
+  it("shows an uncluttered two-line row without a fake thumbnail and keeps accessible actions", () => {
     act(() => root.render(<EditorialListRow {...base} />));
     const row = container.querySelector<HTMLElement>('[role="listitem"]');
-    const thumbnail = row?.querySelector<HTMLElement>("div.rounded-md");
     const editAction = container.querySelector<HTMLButtonElement>('button[aria-label="Edit: Hello there"]');
     const moreAction = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
-    expect(row?.className).toContain("py-2");
-    expect(row?.className).toContain("sm:py-2.5");
-    expect(thumbnail?.className).toContain("h-12");
-    expect(thumbnail?.className).toContain("sm:h-14");
-    expect(moreAction?.className).toContain("h-10");
+    expect(row?.className).toContain("min-h-[80px]");
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector("div[aria-hidden] svg")).not.toBeNull();
+    expect(row?.textContent).toContain("Draft");
+    expect(moreAction?.className).toContain("size-11");
     expect(editAction).not.toBeNull();
+    expect(row?.querySelectorAll('button[aria-label="Edit: Hello there"]').length).toBe(1);
+  });
+
+  it("shows a thumbnail only when the post has a working feature image", () => {
+    act(() => root.render(<EditorialListRow {...base} imageUrl="https://example.test/post.jpg" />));
+    const thumbnail = container.querySelector<HTMLImageElement>('img[src="https://example.test/post.jpg"]');
+    expect(thumbnail).not.toBeNull();
+    expect(thumbnail?.getAttribute("alt")).toBe("");
+  });
+
+
+  it("keeps page titles aligned without rendering decorative thumbnails", () => {
+    act(() => root.render(<EditorialListRow {...base} resource="page" />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.querySelector("img")).toBeNull();
+    expect(row?.querySelector('div[aria-hidden="true"] svg')).toBeNull();
+    expect(row?.textContent).toContain("Hello there");
+  });
+
+  it("highlights selected rows while keeping a single accessible edit action", () => {
+    act(() => root.render(<EditorialListRow {...base} selected />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.getAttribute("data-selected")).toBe("true");
+    expect(row?.querySelectorAll('button[aria-label="Edit: Hello there"]').length).toBe(1);
   });
 
   it("navigates when the row background is clicked, and exposes a keyboard-accessible row action", () => {
@@ -65,22 +88,16 @@ describe("EditorialListRow", () => {
     expect(container.querySelector('[role="listitem"] h3')?.textContent).toBe("Hello there");
   });
 
-  it("opens analytics for published content without triggering the row editor", () => {
-    const onStatistics = vi.fn();
-    act(() => root.render(<EditorialListRow {...base} status="published" onStatistics={onStatistics} />));
-    const analytics = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Analytics Dashboard: Hello there"]',
-    );
-    expect(analytics).not.toBeNull();
+  it("keeps published rows focused on editing instead of showing a misleading per-item dashboard", () => {
+    act(() => root.render(<EditorialListRow {...base} status="published" />));
+    expect(container.querySelector('button[aria-label^="Analytics Dashboard"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Edit: Hello there"]')).not.toBeNull();
-    act(() => analytics?.click());
-    expect(onStatistics).toHaveBeenCalledOnce();
-    expect(base.onEdit).not.toHaveBeenCalled();
   });
 
-  it("does not show analytics without an authorized handler, even when published", () => {
-    act(() => root.render(<EditorialListRow {...base} status="published" />));
-    expect(container.querySelector('button[aria-label="Analytics Dashboard: Hello there"]')).toBeNull();
+  it("does not misrepresent an unfamiliar editorial status as Draft", () => {
+    act(() => root.render(<EditorialListRow {...base} status="under_legal_review" />));
+    expect(container.textContent).toContain("under legal review");
+    expect(container.textContent).not.toContain("Draft");
   });
 
   it("preserves publish and delete actions behind an accessible menu", () => {
@@ -89,7 +106,7 @@ describe("EditorialListRow", () => {
     const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="More actions: Hello there"]');
     act(() => trigger?.click());
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
-    const menu = container.querySelector('[role="group"]');
+    const menu = document.body.querySelector('[role="menu"]');
     expect(menu?.textContent).toContain("Unpublish");
     const unpublish = Array.from(menu?.querySelectorAll<HTMLButtonElement>("button") ?? []).find(b => b.textContent?.includes("Unpublish"));
     act(() => unpublish?.click());
@@ -97,7 +114,7 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).not.toHaveBeenCalled();
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
     act(() => trigger?.click());
-    const remove = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"] button'))
+    const remove = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menu"] button'))
       .find(b => b.textContent?.includes("Delete"));
     act(() => remove?.click());
     expect(base.onDelete).toHaveBeenCalledOnce();
@@ -111,9 +128,25 @@ describe("EditorialListRow", () => {
     expect(img?.getAttribute("alt")).toBe("");
     act(() => img?.dispatchEvent(new Event("error")));
     expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector('[aria-hidden="true"] svg')).not.toBeNull();
     const trigger = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
     act(() => trigger?.click());
-    expect(container.querySelector('[role="group"]')?.textContent).not.toContain("Publish");
+    expect(document.body.querySelector('[role="menu"]')?.textContent).not.toContain("Publish");
+  });
+
+  it("supports ArrowDown and ArrowUp navigation across menu items", () => {
+    act(() => root.render(<EditorialListRow {...base} onPublishToggle={vi.fn()} />));
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
+    act(() => trigger?.click());
+    const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+    const items = menu?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    expect(trigger?.getAttribute("aria-haspopup")).toBe("menu");
+    expect(items?.length).toBe(2);
+    expect(document.activeElement).toBe(items?.[0]);
+    act(() => menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
+    expect(document.activeElement).toBe(items?.[1]);
+    act(() => menu?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })));
+    expect(document.activeElement).toBe(items?.[0]);
   });
 
   it("dismisses the action menu with Escape and returns focus to its trigger", () => {
