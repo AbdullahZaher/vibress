@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostsList } from "../PostsList";
@@ -26,7 +26,7 @@ vi.mock("../../lib/api", () => ({
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-describe("Editorial Selection System — Posts and Pages lifecycle", () => {
+describe("Editorial Selection System — Posts and Pages lifecycle & stability", () => {
   let element: HTMLDivElement;
   let root: Root;
 
@@ -111,9 +111,8 @@ describe("Editorial Selection System — Posts and Pages lifecycle", () => {
       expect(doneButton).not.toBeUndefined();
       expect(doneButton?.getAttribute("aria-pressed")).toBe("true");
 
-      // Checkboxes are now rendered
+      // Checkboxes are now rendered (1 Select all + 2 rows = 3)
       const checkboxes = element.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-      // 1 for "Select all on this page" + 2 for rows = 3
       expect(checkboxes.length).toBe(3);
 
       // Bulk actions not visible yet (0 selected)
@@ -145,7 +144,7 @@ describe("Editorial Selection System — Posts and Pages lifecycle", () => {
       ).not.toBeUndefined();
     });
 
-    it("clears selections and announces polite live region notice when filters change, keeping selection mode active", async () => {
+    it("clears selections and keeps post count visible when filters change, keeping selection mode active", async () => {
       vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
 
       await act(async () => {
@@ -188,12 +187,103 @@ describe("Editorial Selection System — Posts and Pages lifecycle", () => {
         )
       ).not.toBeUndefined();
 
-      // But selectedIds is cleared (Bulk actions gone)
+      // Selected items are cleared (Bulk actions gone)
       expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).toBeNull();
 
+      // Post count remains visible and unchanged!
+      expect(element.textContent).toContain("Showing 2 posts");
+
       // Polite live region announces cleared notice
-      const politeRegion = element.querySelector('[aria-live="polite"]');
+      const politeRegion = element.querySelector('[role="status"][aria-live="polite"]');
       expect(politeRegion?.textContent).toContain("Selection cleared for new view");
+
+      // Visual cleared notice is rendered separately alongside the count
+      expect(element.textContent).toContain("Selection cleared for new view");
+    });
+
+    it("survives React Strict Mode with pure state updaters and no double-effect bugs", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(
+          <StrictMode>
+            <PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />
+          </StrictMode>
+        );
+      });
+
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      expect(selectButton).not.toBeUndefined();
+
+      // Toggle to selection mode
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      const doneButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Done")
+      );
+      expect(doneButton).not.toBeUndefined();
+
+      // Rapidly toggle Done -> Select -> Done
+      await act(async () => {
+        doneButton?.click();
+      });
+      expect(element.querySelector('input[type="checkbox"]')).toBeNull();
+
+      const selectAgain = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectAgain?.click();
+      });
+      expect(element.querySelectorAll('input[type="checkbox"]').length).toBe(3);
+    });
+
+    it("cleans up notification timers on unmount without errors", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+      const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode and select an item
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      const firstRow = element.querySelectorAll('[role="listitem"]')[0];
+      await act(async () => {
+        firstRow?.querySelector("h3")?.click();
+      });
+
+      // Change filter to trigger notice and timer
+      const filterButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Filter"
+      );
+      await act(async () => {
+        filterButton?.click();
+      });
+      const draftOption = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find(
+        (item) => item.textContent?.includes("Drafts")
+      ) as HTMLButtonElement | undefined;
+      await act(async () => {
+        draftOption?.click();
+      });
+
+      // Unmount component
+      await act(async () => {
+        root.unmount();
+      });
+
+      // Timer cleanup was called
+      expect(clearTimeoutSpy).toHaveBeenCalled();
     });
   });
 
@@ -236,12 +326,67 @@ describe("Editorial Selection System — Posts and Pages lifecycle", () => {
       expect(bulkGroup).not.toBeNull();
       expect(bulkGroup?.textContent).toContain("2 selected on this page");
 
+      // Page count remains visible
+      expect(element.textContent).toContain("Showing 2 pages");
+
       // Done exits selection mode
       await act(async () => {
         doneButton?.click();
       });
       expect(element.querySelector('input[type="checkbox"]')).toBeNull();
       expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).toBeNull();
+    });
+
+    it("maintains selection mode and stable page count when filters change in PagesList", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ pages: mockPages, total: 2 });
+
+      await act(async () => {
+        root.render(<PagesList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      const firstRow = element.querySelectorAll('[role="listitem"]')[0];
+      await act(async () => {
+        firstRow?.querySelector("h3")?.click();
+      });
+      expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).not.toBeNull();
+
+      // Trigger filter change
+      const filterButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Filter"
+      );
+      await act(async () => {
+        filterButton?.click();
+      });
+      const draftOption = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find(
+        (item) => item.textContent?.includes("Drafts")
+      ) as HTMLButtonElement | undefined;
+      await act(async () => {
+        draftOption?.click();
+      });
+
+      // Mode stays ON
+      expect(
+        Array.from(element.querySelectorAll("button")).find((b) =>
+          b.textContent?.trim().includes("Done")
+        )
+      ).not.toBeUndefined();
+
+      // Selected IDs cleared
+      expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).toBeNull();
+
+      // Page count remains visible
+      expect(element.textContent).toContain("Showing 2 pages");
+
+      // Live region announcement
+      const politeRegion = element.querySelector('[role="status"][aria-live="polite"]');
+      expect(politeRegion?.textContent).toContain("Selection cleared for new view");
     });
   });
 });

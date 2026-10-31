@@ -101,20 +101,49 @@ export const PostsList: React.FC<PostsListProps> = ({
   }, [searchQuery]);
 
   const [clearedNotice, setClearedNotice] = useState<string | null>(null);
-  const isFirstViewRender = useRef(true);
+  const noticeTimerRef = useRef<number | null>(null);
+  const trRef = useRef(tr);
+  useEffect(() => {
+    trRef.current = tr;
+  }, [tr]);
+
+  const showClearedNotice = useCallback(() => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    setClearedNotice(trRef.current("Selection cleared for new view"));
+    noticeTimerRef.current = window.setTimeout(() => {
+      setClearedNotice(null);
+      noticeTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   useEffect(() => {
-    if (isFirstViewRender.current) {
-      isFirstViewRender.current = false;
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}`;
+  const previousViewKey = useRef(viewKey);
+  const selectedCountRef = useRef(selectedIds.size);
+  selectedCountRef.current = selectedIds.size;
+
+  useEffect(() => {
+    if (previousViewKey.current === viewKey) {
       return;
     }
-    setSelectedIds((prev) => {
-      if (prev.size === 0) return prev;
-      setClearedNotice(tr("Selection cleared for new view"));
-      window.setTimeout(() => setClearedNotice(null), 3000);
-      return new Set();
-    });
-  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder, tr]);
+    previousViewKey.current = viewKey;
+
+    if (selectedCountRef.current > 0) {
+      setSelectedIds(new Set());
+      showClearedNotice();
+    }
+    setConfirmAction(null);
+  }, [viewKey, showClearedNotice]);
 
   const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
   const fetchPosts = useCallback(async () => {
@@ -197,7 +226,7 @@ export const PostsList: React.FC<PostsListProps> = ({
   };
 
   const runConfirmedAction = async () => {
-    if (!confirmAction || processing) return;
+    if (!confirmAction || processing || resolvedQueryKey !== queryKey) return;
     const action = confirmAction;
     const targets = posts.filter((post) => action.ids.includes(post.id)).filter((post) => {
       if (action.kind === "publish") return post.status !== "published";
@@ -239,6 +268,20 @@ export const PostsList: React.FC<PostsListProps> = ({
       .filter((post) => kind === "publish" ? post.status !== "published" : kind === "unpublish" ? post.status === "published" : true)
       .map((post) => post.id);
     if (ids.length) setConfirmAction({ kind, ids });
+  };
+
+  const handleToggleSelectionMode = () => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      setClearedNotice(null);
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    } else {
+      setSelectionMode(true);
+    }
   };
 
   const actionTitle = confirmAction?.kind === "delete"
@@ -321,13 +364,7 @@ export const PostsList: React.FC<PostsListProps> = ({
               size="sm"
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
-              onClick={() => {
-                setSelectionMode((active) => {
-                  const next = !active;
-                  if (!next) setSelectedIds(new Set());
-                  return next;
-                });
-              }}
+              onClick={handleToggleSelectionMode}
             >
               {selectionMode ? (
                 <Check className="size-4" aria-hidden="true" />
@@ -369,16 +406,28 @@ export const PostsList: React.FC<PostsListProps> = ({
               showLabel
               className="min-h-11 px-0"
             />
-            <span aria-live="polite" className="text-sm text-muted-foreground">
-              {clearedNotice || (resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>)}
-            </span>
+            <div className="flex items-center gap-3">
+              {clearedNotice && (
+                <span className="text-xs font-medium text-muted-foreground animate-in fade-in motion-reduce:animate-none">
+                  {clearedNotice}
+                </span>
+              )}
+              <span className="text-sm text-muted-foreground">
+                {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("posts")}</>}
+              </span>
+            </div>
           </div>
         )}
         {!selectionMode && (
-          <span aria-live="polite" className="sr-only">
-            {clearedNotice || (resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`)}
-          </span>
+          <div className="flex items-center justify-end">
+            <span aria-live="polite" className="sr-only">
+              {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("posts")}`}
+            </span>
+          </div>
         )}
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {clearedNotice || ""}
+        </div>
         {selectionMode && !resultsPending && !error && selectedIds.size > 0 && (
           <EditorialBulkActions
             selectedCount={selectedIds.size}

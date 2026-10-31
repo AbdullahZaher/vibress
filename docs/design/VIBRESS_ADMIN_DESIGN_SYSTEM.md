@@ -435,7 +435,23 @@ The top **Select** button followed the desired minimal, modern design; however, 
 ### 8. Quality Assurance & Test Verification
 - `pnpm --filter @vibress/admin typecheck`: 0 errors.
 - `pnpm --filter @vibress/admin lint`: 0 errors, 0 warnings.
-- `pnpm vitest run apps/admin`: 37 test files, 192 tests passing (100%).
+- `pnpm vitest run apps/admin`: 37 test files, 195 tests passing (100%).
 - `pnpm exec playwright test tests/e2e/admin-ui-design-acceptance.test.ts`: 11/11 tests passing (100%).
 - `pnpm --filter @vibress/admin build`: Production Vite build successful.
 - Real browser screenshots captured across viewports (320px, 390px, 1440px), light/dark themes, and Arabic RTL / English LTR.
+
+## 2026-10-31 — Selection State & UX Stability Hardening
+
+### 1. Pure React State Management & Strict Mode Hardening
+- **Zero Side Effects in Updaters:** Removed all notifications and `setTimeout` calls from `setSelectedIds` updater callbacks. Updaters remain 100% pure, predictable, and compliant with React Strict Mode double-invocation semantics.
+- **Explicit Event Handlers:** Replaced nested updater calls (`setSelectionMode(active => { if (!next) setSelectedIds(...) })`) with explicit `handleToggleSelectionMode` handlers. Transitions between Select and Done are synchronous, sequential, and transparent.
+
+### 2. View Identity Key & Lifecycle Isolation
+- **View Key Tracking:** Data view identity is formulated as `viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}``.
+- **Immunity to Language and Theme Toggles:** Selection state and active mode are never cleared by interface language switches (`en` / `ar`) or dark/light theme changes.
+- **Stale Mutation Guard:** Selections are cleared immediately when the underlying view changes. `runConfirmedAction` explicitly verifies that `resolvedQueryKey === queryKey` before dispatching batch mutations, preventing accidental operations on mismatched records.
+
+### 3. Separation of Live Notifications From Result Counts
+- **Persistent Result Counts:** Result counts (`Showing X posts/pages`) remain permanently visible and are never replaced or hidden by transient notices.
+- **Dedicated Feedback & Politeness:** Selection clearing messages appear in a dedicated, non-disruptive feedback container (`text-xs font-medium text-muted-foreground`) alongside the count, paired with a dedicated `<div role="status" aria-live="polite" aria-atomic="true">` live region for screen readers.
+- **Timer Lifecycle & Cleanup:** Notification timers are tracked via `noticeTimerRef`, canceled on subsequent view changes, and cleaned up on unmount.
