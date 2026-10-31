@@ -42,6 +42,11 @@ describe("Button System v2", () => {
     expect(buttonVariants({ size: "lg" })).toContain("min-h-12");
     expect(buttonVariants({ size: "icon" })).toContain("size-11");
     expect(buttonVariants({ size: "icon-sm" })).toContain("size-10");
+    for (const size of ["xs", "sm", "default", "lg", "icon", "icon-sm"] as const) {
+      const classes = buttonVariants({ size });
+      expect(classes).toContain("rounded-lg");
+      expect(classes).not.toContain("rounded-md");
+    }
   });
 
   it("keeps label geometry stable and blocks repeated activation while loading", () => {
@@ -88,7 +93,7 @@ describe("Button System v2", () => {
   });
 
   it("preserves destructive, subdued, ghost and focus styles", () => {
-    for (const variant of ["default", "destructive", "secondary", "subtle", "ghost", "outline", "link"] as const) {
+    for (const variant of ["default", "destructive", "destructive-outline", "secondary", "subtle", "ghost", "outline", "link"] as const) {
       expect(buttonVariants({ variant })).toContain("focus-visible:outline-2");
     }
     expect(buttonVariants({ variant: "ghost" })).not.toContain("active:scale");

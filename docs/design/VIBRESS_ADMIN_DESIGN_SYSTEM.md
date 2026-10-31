@@ -349,3 +349,16 @@ Shared buttons in Vibress must read as **one action system**, not a separate vis
 3. Verify real screenshots at 320, 390, 768, 1024 and 1440 CSS px in both themes. Do not claim that any score, contrast audit or visual QA is certified without exercising those views.
 
 This branch is independent of in-flight PR #102 (editorial disclosure toolbar): the new shared Button/ToggleButton layer is compatible with its controls, and Posts/Pages files are intentionally not changed here to avoid merge overlap.
+
+
+## 2026-10-31 — Unified batch actions (Posts & Pages)
+
+The screenshot review exposed accidental differences within one toolbar: `sm` buttons had `rounded-md`, standard buttons `rounded-lg`, and Publish/Unpublish/Delete/Clear mixed full solid, outline, ghost and solid destructive treatments. This is an inconsistent component system, not merely a palette issue.
+
+**Component rule:** every control in one related action group must use the same `size`, **44px minimum target height**, corner radius (`rounded-lg`), typographic level (14px medium), vertical padding, and icon geometry (16px). Responsive layout can rearrange the group without changing button sizing. Button v2 `sm` and `xs` no longer override the shared radius; only explicit context/shape components can vary it.
+
+**Hierarchy:** New Post/Page remains the one high-emphasis solid action in the header. In the contextual batch toolbar, Publish, Unpublish and Clear use the same low-emphasis `outline`, while Delete uses the parallel **`destructive-outline`** variant (not an attention-grabbing solid danger button before confirmation). Destructive confirmation dialogs continue to use solid `destructive` when the user explicitly confirms deletion.
+
+**Architecture:** Posts and Pages share `EditorialBulkActions`, including permission/state visibility, localized labels, action order, and ARIA toolbar semantics. The user still confirms batch mutations in the existing Dialog. All four actions have matching text/icon gaps, width rules and responsive behavior. No API or permission logic changed.
+
+**QA:** test 320/390/768/1024/1440px, Arabic RTL & English LTR, light/dark, long text at 200% zoom, keyboard focus, mixed published/draft selections and confirmation dialogs. See the [Carbon Design System button-group guidance](https://www.carbondesignsystem.com/building-blocks/core/components/button/guidelines) for grouping and avoiding mixed sizes. Do not claim verified visual compliance without browser screenshots.

@@ -15,6 +15,7 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground shadow-2xs hover:bg-primary/90 motion-safe:active:scale-[0.99]",
         destructive: "bg-destructive text-destructive-foreground shadow-2xs hover:bg-destructive/90 motion-safe:active:scale-[0.99]",
+        "destructive-outline": "border border-destructive/35 bg-transparent text-destructive hover:border-destructive/60 hover:bg-destructive/10",
         outline: "border border-border/80 bg-card text-foreground shadow-2xs hover:bg-muted/60 hover:border-border motion-safe:active:scale-[0.99]",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 motion-safe:active:scale-[0.99]",
         subtle: "bg-muted/70 text-foreground hover:bg-muted",
@@ -23,8 +24,8 @@ const buttonVariants = cva(
       },
       size: {
         default: "min-h-11 px-4 py-2",
-        sm: "min-h-10 rounded-md px-3 text-sm",
-        xs: "min-h-8 rounded-md px-2.5 text-xs",
+        sm: "min-h-10 px-3 text-sm",
+        xs: "min-h-8 px-2.5 text-xs",
         lg: "min-h-12 px-6 text-sm",
         icon: "size-11 p-0 shrink-0",
         "icon-sm": "size-10 p-0 shrink-0",

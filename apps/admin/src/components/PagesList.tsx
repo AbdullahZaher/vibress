@@ -6,11 +6,12 @@ import { EditorialListRow } from "./common/EditorialListRow";
 import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialChoiceMenu } from "./common/EditorialChoiceMenu";
 import { EditorialPagination } from "./common/EditorialPagination";
+import { EditorialBulkActions } from "./common/EditorialBulkActions";
 import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, Trash2, Send, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -296,7 +297,7 @@ export const PagesList: React.FC<PagesListProps> = ({
           {selectionEnabled && (
             <Button
               type="button"
-              variant={selectionMode || selectedIds.size > 0 ? "secondary" : "ghost"}
+              variant={selectionMode || selectedIds.size > 0 ? "subtle" : "ghost"}
               size="sm"
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
@@ -351,27 +352,14 @@ export const PagesList: React.FC<PagesListProps> = ({
           </span>
         </div>
         {!resultsPending && !error && selectedIds.size > 0 && (
-          <div role="toolbar" aria-label={tr("Bulk actions")} className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3">
-            <span className="me-auto text-sm font-semibold text-foreground">{formatNumber(selectedIds.size)} {tr("selected on this page")}</span>
-            {canPublish && selectedPages.some((item) => item.status !== "published") && (
-              <Button type="button" size="sm" onClick={() => requestBulkAction("publish")} className="min-h-10 gap-1.5">
-                <Send className="size-4" aria-hidden="true" /> {tr("Publish")}
-              </Button>
-            )}
-            {canPublish && selectedPages.some((item) => item.status === "published") && (
-              <Button type="button" size="sm" variant="outline" onClick={() => requestBulkAction("unpublish")} className="min-h-10">
-                {tr("Unpublish")}
-              </Button>
-            )}
-            {canDelete && (
-              <Button type="button" size="sm" variant="destructive" onClick={() => requestBulkAction("delete")} className="min-h-10 gap-1.5">
-                <Trash2 className="size-4" aria-hidden="true" /> {tr("Delete")}
-              </Button>
-            )}
-            <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className="min-h-10">
-              {tr("Clear selection")}
-            </Button>
-          </div>
+          <EditorialBulkActions
+            selectedCount={selectedIds.size}
+            showPublish={canPublish && selectedPages.some((item) => item.status !== "published")}
+            showUnpublish={canPublish && selectedPages.some((item) => item.status === "published")}
+            showDelete={canDelete}
+            onAction={requestBulkAction}
+            onClear={() => setSelectedIds(new Set())}
+          />
         )}
       </section>
 
