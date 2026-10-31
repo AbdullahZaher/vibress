@@ -27,3 +27,9 @@ Run typecheck, lint, relevant Vitest suites and build. Browser-check 320/390/768
 
 ## Next design review
 Review all remaining tables, settings forms, plugins, media, translation and content-model surfaces; capture genuine before/after browser screenshots and fix regressions before marking an enterprise-level redesign complete.
+
+## Second review — collection management
+- **P1:** The collection entry list used native `confirm()` and `alert()`. Replace with the shared focus-managed confirmation Dialog, pending state, inline error, and named target resource.
+- **P2:** Collection controls and pagination had unusually short click targets; standardize minimum heights and focus styling. Use semantic status tokens for entry badges.
+- **P2:** Media Library and Members screens had 10–11px secondary information; normalize to the established minimum 12px metadata scale.
+- **Outstanding:** Verify all changes in a real browser and audit remaining forms, plugins and editors before any product-wide certification.

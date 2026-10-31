@@ -240,7 +240,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                         <span className="font-semibold text-xs text-foreground">
                           {member.name || tr("Anonymous Member")}
                         </span>
-                        <span className="text-[11px] text-muted-foreground font-mono">
+                        <span className="text-xs text-muted-foreground font-mono">
                           {member.email}
                         </span>
                       </div>
@@ -251,14 +251,14 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                     {member.status === "disabled" ? (
                       <Badge
                         variant="outline"
-                        className="text-[10px] font-mono px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+                        className="text-xs font-mono px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
                       >
                         {tr("Disabled")}
                       </Badge>
                     ) : (
                       <Badge
                         variant="outline"
-                        className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                        className="text-xs font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                       >
                         {tr("Active")}
                       </Badge>
@@ -311,7 +311,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                 <p className="text-xs text-muted-foreground font-mono">
                   {memberDetail.email}
                 </p>
-                <p className="text-[11px] text-muted-foreground/80 pt-0.5">
+                <p className="text-xs text-muted-foreground/80 pt-0.5">
                   ID: {memberDetail.id}
                 </p>
               </div>
@@ -336,13 +336,13 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
                       <span className="font-semibold text-foreground">
                         {tr("Plan")}: {sub.planId}
                       </span>
-                      <p className="text-[11px] font-mono text-muted-foreground">
+                      <p className="text-xs font-mono text-muted-foreground">
                         {tr("Status")}: {tr(sub.status)}
                       </p>
                     </div>
                     <Badge
                       variant="outline"
-                      className="text-[10px] font-mono uppercase"
+                      className="text-xs font-mono uppercase"
                     >
                       {sub.billingInterval}
                     </Badge>
