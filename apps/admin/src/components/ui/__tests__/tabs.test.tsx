@@ -10,7 +10,7 @@ function TestTabs() {
   const [active, setActive] = useState("overview");
   return (
     <Tabs value={active} onValueChange={setActive}>
-      <TabsList aria-label="Analytics sections">
+      <TabsList ariaLabel="Analytics sections">
         <TabsTrigger value="overview">Overview</TabsTrigger>
         <TabsTrigger value="growth">Growth</TabsTrigger>
       </TabsList>

@@ -33,9 +33,11 @@ export function Tabs({
 export function TabsList({
   children,
   className,
+  ariaLabel,
 }: {
   children: React.ReactNode;
   className?: string;
+  ariaLabel?: string;
 }) {
   const listRef = React.useRef<HTMLDivElement>(null);
 
@@ -68,6 +70,7 @@ export function TabsList({
     <div
       ref={listRef}
       role="tablist"
+      aria-label={ariaLabel}
       aria-orientation="horizontal"
       onKeyDown={handleKeyDown}
       className={cn(

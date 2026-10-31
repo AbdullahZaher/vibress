@@ -375,7 +375,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" aria-label={tr("Analytics")}>
+        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" ariaLabel={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
