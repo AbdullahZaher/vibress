@@ -49,9 +49,14 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       "Advanced",
     ];
     for (const tab of tabs) {
-      const tabButton = page.locator("button").filter({ hasText: tab }).first();
-      await expect(tabButton).toBeVisible({ timeout: 5000 });
+      // Settings headings are bookmarkable section navigation links, not toggle buttons.
+      const sectionLink = page.locator('nav[aria-label="Settings sections"] a').filter({ hasText: tab }).first();
+      await expect(sectionLink).toBeVisible({ timeout: 5000 });
     }
+    const growth = page.locator('nav[aria-label="Settings sections"] a[href="/admin/settings/growth"]');
+    await growth.click();
+    await expect(page).toHaveURL(/\/admin\/settings\/growth$/);
+    await expect(growth).toHaveAttribute("aria-current", "location");
   });
 
   test("2. General Settings: Title, Description, Locale, Timezone updates & persistence", async ({

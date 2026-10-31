@@ -1,5 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   listMediaApi,
@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { ToggleButton } from "./ui/toggle-button";
 import { IconButton } from "./ui/icon-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { EditorialPagination } from "./common/EditorialPagination";
@@ -42,6 +43,7 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
   canDelete = false,
 }) => {
   const { tr } = useAdminLocale();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -191,16 +193,28 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
         title={tr("Media")}
         description={tr("Upload, organize, and manage visual assets across your publication.")}
         actions={canUpload ? (
-          <label className="inline-flex min-h-11 items-center justify-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-2xs transition-colors hover:bg-primary/90 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring cursor-pointer gap-2 shrink-0">
-            <Upload className="h-4 w-4" /> {tr("Upload Files")}
+          <div>
             <input
+              ref={uploadInputRef}
               type="file"
               multiple
               onChange={handleFileUpload}
-              className="sr-only"
+              className="hidden"
+              tabIndex={-1}
+              aria-hidden="true"
               disabled={uploadMutation.isPending}
             />
-          </label>
+            <Button
+              type="button"
+              loading={uploadMutation.isPending}
+              loadingLabel={tr("Uploading...")}
+              onClick={() => uploadInputRef.current?.click()}
+              className="gap-2"
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              {tr("Upload Files")}
+            </Button>
+          </div>
         ) : undefined}
       />
 
@@ -222,17 +236,13 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div role="group" aria-label={tr("Filter by media type")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto">
               {["all", "image", "video", "audio", "file"].map((type) => (
-                <button
+                <ToggleButton
                   key={type}
-                  type="button"
+                  pressed={selectedType === type}
                   onClick={() => setSelectedType(type)}
-                  aria-pressed={selectedType === type}
-                  className={selectedType === type
-                    ? "min-h-11 shrink-0 rounded-lg bg-muted px-3.5 text-sm font-semibold text-foreground"
-                    : "min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer"}
                 >
                   {tr(type === "all" ? "All Media" : type === "image" ? "Images" : type === "video" ? "Videos" : type === "audio" ? "Audio" : "Files")}
-                </button>
+                </ToggleButton>
               ))}
             </div>
 
@@ -438,11 +448,11 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   {canDelete && (
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
+                      variant="destructive-outline"
+                      size="default"
                       disabled={isLoadingRefs || isRefsError || deleteMutation.isPending}
                       onClick={() => { setDeleteError(null); setDeleteConfirmOpen(true); }}
-                      className="min-h-11 gap-1 text-sm text-destructive hover:bg-destructive/10"
+                      className="w-full gap-2 sm:w-auto sm:min-w-36"
                     >
                       <Trash2 className="size-4" aria-hidden="true" /> {tr("Delete Asset")}
                     </Button>
@@ -450,11 +460,12 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
                   {canEdit && (
                     <Button
                       type="submit"
-                      size="sm"
-                      className="min-h-11 text-sm font-semibold"
-                      disabled={updateMutation.isPending}
+                      size="default"
+                      className="w-full sm:w-auto sm:min-w-36"
+                      loading={updateMutation.isPending}
+                      loadingLabel={tr("Saving...")}
                     >
-                      {updateMutation.isPending ? tr("Saving...") : tr("Save Changes")}
+                      {tr("Save Changes")}
                     </Button>
                   )}
                 </div>
@@ -483,10 +494,12 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({
           <Button
             type="button"
             variant="destructive"
-            disabled={!canDelete || isLoadingRefs || isRefsError || deleteMutation.isPending || !selectedAsset}
+            disabled={!canDelete || isLoadingRefs || isRefsError || !selectedAsset}
+            loading={deleteMutation.isPending}
+            loadingLabel={tr("Processing...")}
             onClick={() => { if (selectedAsset) deleteMutation.mutate(selectedAsset.id); }}
           >
-            {deleteMutation.isPending ? tr("Processing...") : tr("Confirm delete")}
+            {tr("Confirm delete")}
           </Button>
         </div>
       </Dialog>

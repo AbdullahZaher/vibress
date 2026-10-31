@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 
 import { Button } from "./ui/button";
+import { ToggleButton } from "./ui/toggle-button";
 import { AdminPageHeader } from "./common/AdminPageHeader";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
@@ -154,18 +155,13 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div role="group" aria-label={tr("Filter by member status")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
           {(["all", "active", "disabled"] as const).map((filter) => (
-            <button
+            <ToggleButton
               key={filter}
+              pressed={statusFilter === filter}
               onClick={() => setStatusFilter(filter)}
-              aria-pressed={statusFilter === filter}
-              className={`min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
-                statusFilter === filter
-                  ? "bg-muted text-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              }`}
             >
               {filter === "all" ? tr("All Members") : tr(filter)}
-            </button>
+            </ToggleButton>
           ))}
         </div>
 
@@ -348,30 +344,31 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
               <div className="flex flex-wrap gap-2">
                 {memberDetail.disabledAt !== null ? (
                   <Button
-                    size="sm"
+                    size="default"
+                    variant="outline"
                     onClick={() => setPendingAction("enable")}
-                    className="min-h-11 text-sm font-semibold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="w-full gap-2 sm:min-w-48 sm:w-auto"
                   >
-                    <UserCheck className="h-3.5 w-3.5" /> {tr("Enable Account")}
+                    <UserCheck className="size-4" aria-hidden="true" /> {tr("Enable Account")}
                   </Button>
                 ) : (
                   <Button
-                    variant="outline"
-                    size="sm"
+                    variant="destructive-outline"
+                    size="default"
                     onClick={() => setPendingAction("disable")}
-                    className="min-h-11 text-sm font-semibold gap-1.5 text-red-600 dark:text-red-400 border-red-500/20 hover:bg-red-500/10"
+                    className="w-full gap-2 sm:min-w-48 sm:w-auto"
                   >
-                    <UserX className="h-3.5 w-3.5" /> {tr("Disable Account")}
+                    <UserX className="size-4" aria-hidden="true" /> {tr("Disable Account")}
                   </Button>
                 )}
 
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={() => setPendingAction("revoke")}
-                  className="min-h-11 text-sm font-semibold gap-1.5 border-border bg-card hover:bg-accent text-foreground"
+                  className="w-full gap-2 sm:min-w-48 sm:w-auto"
                 >
-                  <ShieldAlert className="h-3.5 w-3.5" /> {tr("Revoke All Sessions")}
+                  <ShieldAlert className="size-4" aria-hidden="true" /> {tr("Revoke All Sessions")}
                 </Button>
               </div>
             </div>}
@@ -391,7 +388,9 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
           <Button
             type="button"
             variant={pendingAction === "disable" ? "destructive" : "default"}
-            disabled={!canManage || isActionPending}
+            disabled={!canManage}
+            loading={isActionPending}
+            loadingLabel={tr("Processing...")}
             onClick={() => {
               if (!memberDetail || !pendingAction || !canManage) return;
               if (pendingAction === "disable") disableMutation.mutate(memberDetail.id);
@@ -399,7 +398,7 @@ export const MembersList: React.FC<MembersListProps> = ({ canManage = false }) =
               else revokeMutation.mutate(memberDetail.id);
             }}
           >
-            {isActionPending ? tr("Processing...") : tr("Confirm")}
+            {tr("Confirm")}
           </Button>
         </div>
       </Dialog>

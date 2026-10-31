@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
+import { Button } from "../ui/button";
 
 export interface EditorialChoice {
   value: string;
@@ -90,21 +91,22 @@ export function EditorialChoiceMenu({
 
   return (
     <div className="inline-flex min-w-0 shrink-0">
-      <button
+      <Button
         ref={trigger}
-        type="button"
+        variant={active ? "subtle" : "ghost"}
+        size="sm"
         aria-label={label}
         aria-expanded={open}
         aria-controls={id}
         aria-haspopup="menu"
         onClick={openMenu}
         onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); if (!open) openMenu(); } }}
-        className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"}`}
+        className="min-h-11 gap-2 px-3"
       >
         {icon}
         <span>{label}</span>
         {!compact && <ChevronDown className="size-3.5 opacity-60" aria-hidden="true" />}
-      </button>
+      </Button>
       {open && position && createPortal(
         <div
           ref={menu}
@@ -116,17 +118,18 @@ export function EditorialChoiceMenu({
           style={{ top: position.top, left: position.left, width: Math.max(176, Math.min(240, window.innerWidth - 16)), maxHeight: position.maxHeight }}
         >
           {options.map(option => (
-            <button
+            <Button
               key={option.value}
-              type="button"
+              variant="ghost"
+              size="sm"
               role="menuitemradio"
               aria-checked={option.value === value}
               onClick={() => { onChange(option.value); setOpen(false); trigger.current?.focus(); }}
-              className="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 text-start text-sm text-foreground hover:bg-muted focus-visible:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+              className="min-h-11 w-full justify-between gap-3 px-3 text-start text-foreground hover:bg-muted focus-visible:bg-muted"
             >
               <span className="min-w-0">{option.label}</span>
               {option.value === value && <Check className="size-4 shrink-0" aria-hidden="true" />}
-            </button>
+            </Button>
           ))}
         </div>,
         document.body,

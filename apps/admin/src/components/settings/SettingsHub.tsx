@@ -10,6 +10,8 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
+import { Button, buttonVariants } from "../ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -157,28 +159,27 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Navigation Tabs */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          {SETTINGS_REGISTRY.map((pillar) => {
+        {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
+        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
-              <button
+              <a
                 key={pillar.id}
-                type="button"
-                onClick={() => scrollToSection(pillar.id, true)}
-                aria-pressed={isActive}
-                className={`flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-sm font-medium transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-ring ${
-                  isActive
-                    ? "border-border bg-muted text-foreground font-semibold"
-                    : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                }`}
+                href={`/admin/settings/${pillar.id}`}
+                aria-current={isActive ? "location" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  scrollToSection(pillar.id, true);
+                }}
+                className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
-              </button>
+              </a>
             );
           })}
-        </div>
+        </nav>
 
         {/* Search Input */}
         <div className="relative w-full sm:w-64">
@@ -188,17 +189,19 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("Filter settings...")}
-            className="min-h-11 border-border bg-card ps-9 text-sm"
+            className="min-h-11 border-border bg-card ps-9 pe-12 text-sm"
           />
           {query && (
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-sm"
               onClick={() => setQuery("")}
               aria-label={tr("Clear search")}
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground size-9 flex items-center justify-center rounded cursor-pointer"
+              className="absolute end-1 top-1/2 -translate-y-1/2 text-muted-foreground"
             >
-              <X className="h-3.5 w-3.5" />
-            </button>
+              <X className="size-4" aria-hidden="true" />
+            </Button>
           )}
         </div>
       </div>

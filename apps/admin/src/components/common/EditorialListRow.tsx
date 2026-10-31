@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, MoreHorizontal, Trash2 } from "lucide-react";
+import { Button } from "../ui/button";
 import { useAdminLocale } from "../../lib/admin-locale";
 
 export interface EditorialListRowProps {
@@ -197,19 +198,20 @@ export function EditorialListRow({
 
       <div className="relative z-10 flex shrink-0 items-center gap-1 sm:gap-1.5">
         {(onPublishToggle || onDelete) && <div ref={actionsRef} className="relative">
-          <button
+          <Button
             ref={triggerRef}
-            type="button"
+            variant="ghost"
+            size="icon"
             aria-label={`${tr("More actions")}: ${displayTitle}`}
             aria-expanded={actionsOpen}
             aria-controls={actionsId}
             aria-haspopup="menu"
             title={tr("More actions")}
             onClick={toggleMenu}
-            className="inline-flex size-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            className="text-muted-foreground"
           >
             <MoreHorizontal className="size-4" aria-hidden="true" />
-          </button>
+          </Button>
           {actionsOpen && menuPosition && createPortal(
             <div
               ref={menuRef}

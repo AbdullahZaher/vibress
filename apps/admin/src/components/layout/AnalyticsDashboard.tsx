@@ -14,6 +14,8 @@ import { ApiUser, apiRequest } from "../../lib/api";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { ToggleButton } from "../ui/toggle-button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { AdminPageHeader } from "../common/AdminPageHeader";
 import {
   getAnalyticsOverviewApi,
@@ -312,7 +314,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const totalVisitors = data?.summary.visitors ?? 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8">
+    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl space-y-8">
       {/* Page Title Header */}
       <AdminPageHeader
         title={tr("Dashboard")}
@@ -373,22 +375,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div role="group" aria-label={tr("Analytics")} className="flex min-h-11 max-w-full items-center gap-1 overflow-x-auto text-muted-foreground">
+        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" ariaLabel={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setAnalyticsTab(t)}
-              aria-pressed={analyticsTab === t}
-              className={`min-h-11 shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-colors cursor-pointer capitalize focus-visible:outline-2 focus-visible:outline-ring ${
-                analyticsTab === t
-                  ? "bg-muted text-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-              }`}
-            >
+            <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
-            </button>
+            </TabsTrigger>
           ))}
-        </div>
+        </TabsList>
 
         <div className="relative w-full shrink-0 sm:w-auto">
           <Calendar className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -420,8 +413,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
       {canReadAnalytics && overviewQuery.isSuccess && data && (
         <>
           {/* TAB 1: OVERVIEW */}
-          {analyticsTab === "overview" && (
-            <div className="space-y-8">
+          <TabsContent value="overview" className="mt-0 space-y-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Members KPI Card */}
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
@@ -569,36 +561,18 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 2: WEB TRAFFIC */}
-          {analyticsTab === "web" && (
-            <div className="space-y-6">
+          <TabsContent value="web" className="mt-0 space-y-6">
               <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    onClick={() => setTrafficMetric("views")}
-                    aria-pressed={trafficMetric === "views"}
-                    className={`min-h-10 px-3 py-2 text-sm font-medium rounded-md transition-all cursor-pointer ${
-                      trafficMetric === "views"
-                        ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
+                  <ToggleButton pressed={trafficMetric === "views"} onClick={() => setTrafficMetric("views")}>
                     {tr("Total views")} ({formatCompact(totalViews)})
-                  </button>
-                  <button
-                    onClick={() => setTrafficMetric("visitors")}
-                    aria-pressed={trafficMetric === "visitors"}
-                    className={`min-h-10 px-3 py-2 text-sm font-medium rounded-md transition-all cursor-pointer ${
-                      trafficMetric === "visitors"
-                        ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
+                  </ToggleButton>
+                  <ToggleButton pressed={trafficMetric === "visitors"} onClick={() => setTrafficMetric("visitors")}>
                     {tr("Unique visitors")} ({formatCompact(totalVisitors)})
-                  </button>
+                  </ToggleButton>
                 </div>
 
                 <AreaChart
@@ -617,18 +591,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                     </h3>
                     <div className="flex flex-wrap items-center gap-1">
                       {(["all", "posts", "pages"] as const).map((t) => (
-                        <button
-                          key={tr(t.charAt(0).toUpperCase() + t.slice(1))}
+                        <ToggleButton
+                          key={t}
+                          pressed={topContentType === t}
                           onClick={() => setTopContentType(t)}
-                          aria-pressed={topContentType === t}
-                          className={`min-h-10 px-2.5 py-2 rounded-md text-sm transition-all cursor-pointer capitalize ${
-                            topContentType === t
-                              ? "bg-card text-foreground border border-border shadow-2xs font-semibold"
-                              : "text-muted-foreground hover:text-foreground font-medium"
-                          }`}
                         >
                           {tr(t.charAt(0).toUpperCase() + t.slice(1))}
-                        </button>
+                        </ToggleButton>
                       ))}
                     </div>
                   </div>
@@ -698,12 +667,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   )}
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 3: NEWSLETTERS */}
-          {analyticsTab === "newsletters" && (
-            <div className="space-y-6">
+          <TabsContent value="newsletters" className="mt-0 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -730,12 +697,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
 
           {/* TAB 4: GROWTH */}
-          {analyticsTab === "growth" && (
-            <div className="space-y-6">
+          <TabsContent value="growth" className="mt-0 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -754,10 +719,9 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </div>
                 </Card>
               </div>
-            </div>
-          )}
+          </TabsContent>
         </>
       )}
-    </div>
+    </Tabs>
   );
 };

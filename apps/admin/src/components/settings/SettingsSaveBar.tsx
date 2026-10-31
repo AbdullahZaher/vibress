@@ -3,7 +3,6 @@ import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
   Sparkles,
-  RefreshCw,
   CheckCircle2,
   AlertCircle,
   RotateCcw,
@@ -92,29 +91,26 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2">
+            <div className="grid w-full grid-cols-2 gap-2 min-[420px]:w-auto">
               <Button
-                variant="ghost"
-                size="sm"
+                variant="outline"
+                size="default"
                 onClick={onDiscard}
                 disabled={saving}
-                className="min-h-10 text-sm text-muted-foreground hover:text-foreground cursor-pointer"
+                className="w-full min-w-0 gap-2"
               >
-                <RotateCcw className="h-3 w-3 me-1" />
+                <RotateCcw className="size-4 shrink-0" aria-hidden="true" />
                 {tr("Discard")}
               </Button>
               <Button
-                size="sm"
+                size="default"
                 onClick={onSave}
-                disabled={saving}
-                className="min-h-10 text-sm gap-1.5 cursor-pointer shadow-sm"
+                loading={saving}
+                loadingLabel={tr("Saving...")}
+                className="w-full min-w-0 gap-2"
               >
-                {saving ? (
-                  <RefreshCw className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Sparkles className="h-3 w-3" />
-                )}
-                {saving ? tr("Saving...") : tr("Save (⌘S)") }
+                <Sparkles className="size-4 shrink-0" aria-hidden="true" />
+                {tr("Save (⌘S)")}
               </Button>
             </div>
           </div>

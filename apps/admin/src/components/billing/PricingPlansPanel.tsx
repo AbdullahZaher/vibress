@@ -206,10 +206,10 @@ export function PricingPlansPanel({
                   </TableCell>
                   <TableCell className="text-end pe-6">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => handleArchivePlan(pl.id)}
-                      className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                      
                     >
                       Archive
                     </Button>

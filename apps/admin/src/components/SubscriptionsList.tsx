@@ -272,10 +272,10 @@ export function SubscriptionsList() {
             {selected.status === "active" && (
               <div className="pt-2 border-t border-border flex justify-end">
                 <Button
-                  variant="ghost"
+                  variant="destructive-outline"
                   size="sm"
                   onClick={() => handleCancel(selected.id)}
-                  className="text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
+                  
                 >
                   {tr("Cancel Subscription")}
                 </Button>

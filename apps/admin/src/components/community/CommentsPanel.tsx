@@ -256,15 +256,15 @@ export function CommentsPanel({
                             variant="outline"
                             size="sm"
                             onClick={() => handleApprove(c.id)}
-                            className="min-h-10 text-sm border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1"
+                            className="gap-2"
                           >
                             <Check className="h-3 w-3" aria-hidden="true" /> {tr("Approve")}
                           </Button>
                           <Button
-                            variant="outline"
+                            variant="destructive-outline"
                             size="sm"
                             onClick={() => setReasonModal({ commentId: c.id, action: "reject", title: "Reject Comment" })}
-                            className="min-h-10 text-sm border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 gap-1"
+                            className="gap-2"
                           >
                             <X className="h-3 w-3" aria-hidden="true" /> {tr("Reject")}
                           </Button>
@@ -276,7 +276,7 @@ export function CommentsPanel({
                           variant="outline"
                           size="sm"
                           onClick={() => setReasonModal({ commentId: c.id, action: "hide", title: "Hide Comment" })}
-                          className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
+                          className="gap-2"
                         >
                           <EyeOff className="h-3 w-3" aria-hidden="true" /> {tr("Hide")}
                         </Button>
@@ -287,7 +287,7 @@ export function CommentsPanel({
                           variant="outline"
                           size="sm"
                           onClick={() => handleRestore(c.id)}
-                          className="min-h-10 text-sm border-border bg-card hover:bg-accent text-foreground gap-1"
+                          className="gap-2"
                         >
                           <RotateCcw className="h-3 w-3" aria-hidden="true" /> {tr("Restore")}
                         </Button>
@@ -295,13 +295,13 @@ export function CommentsPanel({
 
                       {c.status !== "deleted" && (
                         <Button
-                          variant="ghost"
-                          size="sm"
+                          variant="destructive-outline"
+                          size="icon-sm"
                           onClick={() => setReasonModal({ commentId: c.id, action: "delete", title: "Delete Comment" })}
-                          className="min-h-10 min-w-10 px-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-500/10"
+                          aria-label={tr("Delete Comment")}
                         >
-                          <Trash2 className="h-3 w-3" aria-hidden="true" />
-                          <span className="sr-only">{tr("Delete Comment")}</span>
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          
                         </Button>
                       )}
 
@@ -310,12 +310,12 @@ export function CommentsPanel({
                       )}
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon-sm"
                         onClick={() => handleOpenHistory(c)}
-                        className="min-h-10 min-w-10 px-2 text-sm text-muted-foreground hover:text-foreground"
+                        
                         title={tr("View Moderation History")} aria-label={tr("View Moderation History")}
                       >
-                        <History className="h-3 w-3" />
+                        <History className="size-4" aria-hidden="true" />
                       </Button>
 
                     </div>
