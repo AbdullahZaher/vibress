@@ -159,18 +159,17 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
 
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Anchored section navigation, not toggle controls or content tabs. */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+        {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
+        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
               <a
                 key={pillar.id}
-                href={`#${pillar.anchor}`}
+                href={`/admin/settings/${pillar.id}`}
                 aria-current={isActive ? "location" : undefined}
                 onClick={(event) => {
                   event.preventDefault();
-                  window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}#${pillar.anchor}`);
                   scrollToSection(pillar.id, true);
                 }}
                 className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
@@ -180,7 +179,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
               </a>
             );
           })}
-        </div>
+        </nav>
 
         {/* Search Input */}
         <div className="relative w-full sm:w-64">

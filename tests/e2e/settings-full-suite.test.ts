@@ -50,12 +50,12 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     ];
     for (const tab of tabs) {
       // Settings headings are bookmarkable section navigation links, not toggle buttons.
-      const sectionLink = page.locator('a[href^="#"]').filter({ hasText: tab }).first();
+      const sectionLink = page.locator('nav[aria-label="Settings sections"] a').filter({ hasText: tab }).first();
       await expect(sectionLink).toBeVisible({ timeout: 5000 });
     }
-    const growth = page.locator('a[href="#growth"]');
+    const growth = page.locator('nav[aria-label="Settings sections"] a[href="/admin/settings/growth"]');
     await growth.click();
-    await expect(page).toHaveURL(/#growth$/);
+    await expect(page).toHaveURL(/\/admin\/settings\/growth$/);
     await expect(growth).toHaveAttribute("aria-current", "location");
   });
 
