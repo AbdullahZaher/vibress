@@ -97,6 +97,7 @@ describe("SettingsHub Advanced Pillar - Content Models", () => {
   });
 
   it("keeps one horizontal category navigation and full-width settings content", async () => {
+    const replaceState = vi.spyOn(window.history, "replaceState").mockImplementation(() => {});
     await act(async () => {
       root.render(<SettingsHub initialSection="general" can={() => true} />);
     });
@@ -115,6 +116,7 @@ describe("SettingsHub Advanced Pillar - Content Models", () => {
     expect(container.querySelector("#site")).not.toBeNull();
     expect(container.querySelector("#general")).toBeNull();
     expect(site?.getAttribute("aria-current")).toBe("location");
+    replaceState.mockRestore();
   });
 
   it("renders Content Models card row with an icon and navigates on manage click", async () => {
