@@ -78,6 +78,7 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
           </div>
 
           {enabled && (
+            <>
             <div aria-label="Announcement preview" className="rounded-lg border border-border/60 bg-card p-3">
               <div className="rounded-md px-3 py-2 text-center text-xs font-medium text-primary-foreground bg-primary">
                 {text || "Your announcement will appear here."}
@@ -120,6 +121,7 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
                 />
               </div>
             </div>
+            </>
           )}
         </div>
       )}

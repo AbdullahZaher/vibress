@@ -64,22 +64,6 @@ interface SettingsHubProps {
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
-const SETTINGS_CARD_PERMISSIONS: Record<string, string> = {
-  "publication-info": "settings.manage", localization: "settings.manage",
-  "metadata-social": "settings.manage", "site-privacy": "settings.manage",
-  "staff-overview": "users.read", "design-branding": "settings.manage",
-  "navigation-manager": "settings.manage", "social-links": "settings.manage",
-  "themes-manager": "themes.manage", "announcement-bar": "settings.manage",
-  "portal-access": "members.manage", "subscription-tiers": "billing.manage",
-  "offers-promotions": "offers.manage", "newsletters-config": "email.manage",
-  "analytics-tracking": "analytics.read", "community-discussions": "comments.manage",
-  "recommendations-card": "recommendations.manage", "content-models": "posts.read",
-  "code-injection": "settings.manage", "integrations-platform": "integrations.manage",
-  "system-diagnostics": "system.read", "import-export": "imports.manage",
-  "audit-logs": "audit.read", "danger-zone": "system.manage",
-};
-
-
 const getPillarIcon = (iconName: string) => {
   switch (iconName) {
     case "Sliders":
@@ -119,7 +103,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
     discardAllDirty,
   } = useSettingsHub();
 
-  const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId, highlightCard } =
+  const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId } =
     useSettingsSearch();
 
   // One category at a time; global search temporarily shows matching categories.
@@ -146,14 +130,6 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
     window.history.replaceState(null, "", `/admin/settings/${id}`);
   };
 
-  const jumpToCard = (pillarId: string, cardId: string, anchor: string) => {
-    selectPillar(pillarId);
-    window.setTimeout(() => {
-      document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "center" });
-      highlightCard(cardId);
-    }, 0);
-  };
-
   const isCardVisible = (cardId: string) => {
     return filteredPillars.some((p) => p.cards.some((c) => c.id === cardId));
   };
@@ -178,19 +154,19 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8 pb-28">
+    <div className="mx-auto w-full max-w-7xl space-y-5 pb-28">
       {/* Page Header */}
       <AdminPageHeader
         title={tr("Settings")}
         description={tr("Manage publication preferences, membership, theme, and system options.")}
       />
 
-      {/* Search and Section Sticky Filter Bar */}
-      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
-        <nav aria-label={tr("Mobile settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 lg:hidden">
-          {SETTINGS_REGISTRY.filter((pillar) => !query.trim() || filteredPillars.some((match) => match.id === pillar.id)).map((pillar) => {
-            const isActive = activeSection === pillar.id;
+      {/* A single, quiet toolbar restores full-width content alongside the app sidebar.
+          Keep the category-specific view and global search improvements without nested navigation. */}
+      <div className="sticky top-0 z-30 -mx-1 flex flex-col gap-3 border-b border-border/70 bg-background/95 px-1 py-2.5 backdrop-blur-md lg:flex-row lg:items-center lg:justify-between">
+        <nav aria-label={tr("Settings sections")} className="flex min-w-0 items-center gap-1 overflow-x-auto no-scrollbar py-1">
+          {SETTINGS_REGISTRY.map((pillar) => {
+            const isActive = activeSection === pillar.id && !query.trim();
             return (
               <a
                 key={pillar.id}
@@ -200,7 +176,10 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   event.preventDefault();
                   selectPillar(pillar.id);
                 }}
-                className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
+                className={cn(
+                  buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }),
+                  "min-h-10 shrink-0 gap-2 rounded-lg px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                )}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
@@ -209,17 +188,16 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           })}
         </nav>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:ms-auto sm:w-80">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <div className="relative w-full shrink-0 lg:w-64 xl:w-72">
+          <Search aria-hidden="true" className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
             aria-label={tr("Search settings")}
             aria-controls="settings-results"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder={tr("Filter settings...")}
-            className="min-h-11 border-border bg-card ps-9 pe-12 text-sm"
+            className="min-h-10 rounded-lg border-border/80 bg-card ps-10 pe-10 text-sm"
           />
           {query && (
             <Button
@@ -236,52 +214,20 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </div>
       </div>
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8">
-        <aside className="hidden lg:sticky lg:top-24 lg:block" aria-label={tr("Settings categories")}>
-          <nav aria-label={tr("Settings sections")} className="rounded-xl border border-border/70 bg-card p-2">
-            {SETTINGS_REGISTRY.map((pillar) => {
-              const selected = activeSection === pillar.id && !query.trim();
-              return (
-                <div key={pillar.id}>
-                  <a href={`/admin/settings/${pillar.id}`}
-                    aria-current={selected ? "location" : undefined}
-                    onClick={(event) => { event.preventDefault(); selectPillar(pillar.id); }}
-                    className={cn("flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      selected ? "bg-primary/10 font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
-                  >
-                    {getPillarIcon(pillar.iconName)}
-                    <span className="flex-1">{tr(pillar.title)}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">{pillar.cards.filter((card) => !can || can(SETTINGS_CARD_PERMISSIONS[card.id] ?? "settings.manage")).length}</span>
-                  </a>
-                  {selected && (
-                    <div className="mb-2 ms-6 border-s border-border/60 ps-3">
-                      {pillar.cards.filter((card) => !can || can(SETTINGS_CARD_PERMISSIONS[card.id] ?? "settings.manage")).map((card) => (
-                        <button key={card.id} type="button"
-                          onClick={() => jumpToCard(pillar.id, card.id, card.anchor)}
-                          className="block w-full rounded-md px-2 py-2 text-start text-xs leading-5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >{tr(card.title)}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
-        </aside>
-        <div id="settings-results" className="min-w-0 space-y-8">
-          {query.trim() && (
-            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
-              {matchingCardsCount} {tr("matching settings")}
-            </p>
-          )}
-          {query.trim() && matchingCardsCount === 0 && (
-            <div className="rounded-xl border border-dashed border-border p-10 text-center">
-              <Search className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
-              <h2 className="font-semibold text-foreground">{tr("No matching settings")}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{tr("Try another keyword or clear your search.")}</p>
-              <Button variant="outline" className="mt-5" onClick={() => setQuery("")}>{tr("Clear search")}</Button>
-            </div>
-          )}
+      <div id="settings-results" className="min-w-0 space-y-7">
+        {query.trim() && (
+          <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+            {matchingCardsCount} {tr("matching settings")}
+          </p>
+        )}
+        {query.trim() && matchingCardsCount === 0 && (
+          <div className="rounded-xl border border-dashed border-border p-10 text-center">
+            <Search className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
+            <h2 className="font-semibold text-foreground">{tr("No matching settings")}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{tr("Try another keyword or clear your search.")}</p>
+            <Button variant="outline" className="mt-5" onClick={() => setQuery("")}>{tr("Clear search")}</Button>
+          </div>
+        )}
       {/* ========================================================================= */}
       {/* 1. GENERAL SETTINGS PILLAR                                                */}
       {/* ========================================================================= */}
@@ -599,7 +545,6 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </SettingsSection>
       )}
 
-        </div>
       </div>
 
       {/* Floating Save / Discard Action Bar */}
