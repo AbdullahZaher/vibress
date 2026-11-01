@@ -26,6 +26,7 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   return (
     <SettingsCard id="site-announcement" isHighlighted={isHighlighted}>
@@ -51,12 +52,13 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
           )
         }
         actionLabel={isExpanded ? "Close" : "Configure"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-card">
             <div>
               <p className="text-xs font-semibold text-foreground">

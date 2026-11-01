@@ -22,6 +22,7 @@ export const CommunityDiscussionsCard: React.FC<
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   const getLabel = () => {
     if (commentAccess === "all") return "All Members";
@@ -41,12 +42,13 @@ export const CommunityDiscussionsCard: React.FC<
           </Badge>
         }
         actionLabel={isExpanded ? "Close" : "Configure"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5 max-w-sm">
             <label
               htmlFor="card-comment-access"
