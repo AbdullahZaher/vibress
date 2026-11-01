@@ -110,6 +110,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
 
       {/* Import & Export Modal */}
       <SettingsModalPortal
+        title="Import and export"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
