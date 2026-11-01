@@ -5,8 +5,9 @@ import { SettingsModalPortal } from "../SettingsModalPortal";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { Menu, Plus, Trash2, GripVertical, X } from "lucide-react";
+import { Menu, Plus, Trash2, X } from "lucide-react";
 import { NavItem } from "../hooks/useSiteSettings";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface NavigationManagerCardProps {
   primaryNav: NavItem[];
@@ -23,6 +24,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
   onChangeSecondary,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const handleAddPrimary = () => {
@@ -85,7 +87,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
               </Badge>
             </div>
           }
-          actionLabel="Manage navigation"
+          actionLabel={tr("Manage navigation")}
           onAction={() => setIsDrawerOpen(true)}
         />
       </SettingsCard>
@@ -132,17 +134,18 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={handleAddPrimary}
-                    className="h-7 text-xs gap-1 cursor-pointer"
+                    className="min-h-10 text-sm gap-1"
                   >
                     <Plus className="h-3 w-3" /> Add Link
                   </Button>
                 </div>
 
                 <div className="space-y-2">
-                  {primaryNav.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0" />
+                  {primaryNav.map((item, index) => (
+                    <div key={item.id} className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
+                      <span className="w-4 shrink-0 text-center text-xs text-muted-foreground" aria-hidden="true">{index + 1}</span>
                       <Input
+                        aria-label={`${tr("Header link")} ${index + 1} ${tr("Label")}`}
                         value={item.label}
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "label", e.target.value)
@@ -151,6 +154,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         className="text-xs h-8 flex-1"
                       />
                       <Input
+                        aria-label={`${tr("Header link")} ${index + 1} URL`}
                         value={item.url}
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "url", e.target.value)
@@ -161,6 +165,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                       <Button
                         size="sm"
                         variant="ghost"
+                        aria-label={`${tr("Remove")} ${tr("Header link")} ${index + 1}`}
                         onClick={() => handleRemovePrimary(item.id)}
                         className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
@@ -186,17 +191,18 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={handleAddSecondary}
-                    className="h-7 text-xs gap-1 cursor-pointer"
+                    className="min-h-10 text-sm gap-1"
                   >
                     <Plus className="h-3 w-3" /> Add Link
                   </Button>
                 </div>
 
                 <div className="space-y-2">
-                  {secondaryNav.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0" />
+                  {secondaryNav.map((item, index) => (
+                    <div key={item.id} className="flex min-w-0 flex-wrap items-center gap-2 sm:flex-nowrap">
+                      <span className="w-4 shrink-0 text-center text-xs text-muted-foreground" aria-hidden="true">{index + 1}</span>
                       <Input
+                        aria-label={`${tr("Footer link")} ${index + 1} ${tr("Label")}`}
                         value={item.label}
                         onChange={(e) =>
                           handleUpdateSecondary(
@@ -209,6 +215,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         className="text-xs h-8 flex-1"
                       />
                       <Input
+                        aria-label={`${tr("Footer link")} ${index + 1} URL`}
                         value={item.url}
                         onChange={(e) =>
                           handleUpdateSecondary(item.id, "url", e.target.value)
@@ -219,6 +226,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                       <Button
                         size="sm"
                         variant="ghost"
+                        aria-label={`${tr("Remove")} ${tr("Footer link")} ${index + 1}`}
                         onClick={() => handleRemoveSecondary(item.id)}
                         className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
@@ -231,13 +239,14 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-t border-border/60 bg-muted/20">
+              <p className="text-xs text-muted-foreground">{tr("Changes are saved using the main Save changes bar.")}</p>
               <Button
                 size="sm"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-xs cursor-pointer"
+                className="min-h-10 text-sm"
               >
-                Done Editing
+                {tr("Close editor")}
               </Button>
             </div>
           </div>
