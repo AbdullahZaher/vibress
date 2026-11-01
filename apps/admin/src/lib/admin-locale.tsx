@@ -24,6 +24,8 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Confirm settings change": "تأكيد تغيير الإعدادات",
+  "Uninstall theme": "إلغاء تثبيت القالب",
   "Manage navigation": "إدارة قوائم التنقل",
   "Header link": "رابط الترويسة",
   "Footer link": "رابط التذييل",

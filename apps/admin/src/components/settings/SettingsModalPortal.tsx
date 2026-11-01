@@ -41,6 +41,8 @@ export const SettingsModalPortal: React.FC<SettingsModalPortalProps> = ({
     }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        // A nested accessible confirmation dialog owns Escape while it is open.
+        if (document.querySelector(".settings-confirmation-dialog")) return;
         event.preventDefault();
         closeRef.current?.();
         return;

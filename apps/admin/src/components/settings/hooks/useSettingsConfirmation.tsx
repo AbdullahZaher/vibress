@@ -29,6 +29,7 @@ export function useSettingsConfirmation() {
       isOpen={pending !== null}
       onClose={() => settle(false)}
       title={tr("Confirm settings change")}
+      className="settings-confirmation-dialog"
     >
       <p className="text-sm leading-relaxed text-muted-foreground">{pending?.message}</p>
       <div className="mt-6 flex flex-wrap justify-end gap-2">
