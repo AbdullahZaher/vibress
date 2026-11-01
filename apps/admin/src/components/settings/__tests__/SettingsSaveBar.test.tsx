@@ -64,4 +64,47 @@ describe("SettingsSaveBar destructive actions", () => {
     expect(onDiscard).toHaveBeenCalledOnce();
     expect(onSave).not.toHaveBeenCalled();
   });
+  it("blocks in-app navigation and asks before leaving settings", async () => {
+    const approvedPaths: string[] = [];
+    const onConfirmed = (event: Event) => {
+      approvedPaths.push((event as CustomEvent<{path: string}>).detail.path);
+    };
+    window.addEventListener("vibress:confirmed-settings-navigation", onConfirmed);
+    const onDiscard = vi.fn();
+    try {
+      await act(async () => root.render(
+        <SettingsSaveBar isDirty dirtyCount={1} saving={false}
+          onSave={vi.fn()} onDiscard={onDiscard}
+          successMsg={null} errorMsg={null} />,
+      ));
+      const request = new CustomEvent("vibress:before-settings-navigation", {
+        cancelable: true, detail: { path: "/admin/posts" },
+      });
+      await act(async () => { window.dispatchEvent(request); });
+      expect(request.defaultPrevented).toBe(true);
+      const firstDialog = document.querySelector<HTMLElement>(".settings-confirmation-dialog");
+      expect(firstDialog?.textContent).toContain("Leave settings without saving changes?");
+      const cancel = Array.from(firstDialog?.querySelectorAll("button") ?? []).find(
+        x => x.textContent?.trim() === "Cancel",
+      );
+      await act(async () => { cancel?.click(); });
+      expect(approvedPaths).toEqual([]);
+
+      const next = new CustomEvent("vibress:before-settings-navigation", {
+        cancelable: true, detail: { path: "/admin/pages" },
+      });
+      await act(async () => { window.dispatchEvent(next); });
+      const secondDialog = document.querySelector<HTMLElement>(".settings-confirmation-dialog");
+      const leave = Array.from(secondDialog?.querySelectorAll("button") ?? []).find(
+        x => x.textContent?.trim() === "Leave settings",
+      );
+      expect(leave).toBeDefined();
+      await act(async () => { leave?.click(); });
+      expect(approvedPaths).toEqual(["/admin/pages"]);
+      expect(onDiscard).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("vibress:confirmed-settings-navigation", onConfirmed);
+    }
+  });
+
 });
