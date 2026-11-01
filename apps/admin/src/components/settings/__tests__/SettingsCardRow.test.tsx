@@ -30,7 +30,7 @@ describe("SettingsCardRow disclosure and action rules", () => {
       <>
         <SettingsCardRow
           title="Site timezone & language"
-          description="Edit publication language"
+          description="Manage publication language"
           currentValue={<span>English (en) · Asia/Riyadh</span>}
           actionLabel="Edit"
           isExpanded={false}
@@ -48,7 +48,8 @@ describe("SettingsCardRow disclosure and action rules", () => {
     expect(button?.getAttribute("aria-expanded")).toBe("false");
     expect(button?.getAttribute("aria-controls")).toBe("locale-panel");
     expect(button?.textContent).toContain("Site timezone & language");
-    expect(button?.textContent).not.toContain("Edit");
+    expect(button?.textContent).not.toContain("Close");
+    expect(button?.textContent).toContain("Manage publication language");
     expect(container.textContent).not.toContain("English (en)");
     expect(container.textContent).not.toContain("Asia/Riyadh");
 
@@ -73,7 +74,7 @@ describe("SettingsCardRow disclosure and action rules", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     const targetId = toggle.getAttribute("aria-controls");
     expect(targetId).toBeTruthy();
-    expect(container.querySelector(`[id="${targetId}"]`)).toBeNull();
+    expect(container.querySelector(`[id="${targetId}"]`)?.hasAttribute("hidden")).toBe(true);
 
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -82,7 +83,7 @@ describe("SettingsCardRow disclosure and action rules", () => {
 
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(container.querySelector(`[id="${targetId}"]`)).toBeNull();
+    expect(container.querySelector(`[id="${targetId}"]`)?.hasAttribute("hidden")).toBe(true);
   });
 
   it("retains a labeled action button for modal and external-page settings", () => {
