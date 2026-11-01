@@ -3,6 +3,7 @@ import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { Share2, Search, Globe } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "../../ui/tabs";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface MetadataSocialCardProps {
   title: string;
@@ -15,6 +16,7 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
   description,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
   const [activePreview, setActivePreview] = useState("google");
 
@@ -41,9 +43,9 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
 
       {isExpanded && (
         <div className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h5 className="text-xs font-semibold text-foreground">
-              Live Search & Social Previews
+              {tr("Illustrative search and social previews")}
             </h5>
             <Tabs
               value={activePreview}
@@ -53,19 +55,19 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
               <TabsList className="bg-card border border-border/60 p-0.5 h-8">
                 <TabsTrigger
                   value="google"
-                  className="text-[11px] px-3 py-1 gap-1.5 cursor-pointer"
+                  className="min-h-10 text-xs px-3 py-1 gap-1.5 cursor-pointer"
                 >
                   <Search className="h-3 w-3" /> Google Search
                 </TabsTrigger>
                 <TabsTrigger
                   value="twitter"
-                  className="text-[11px] px-3 py-1 gap-1.5 cursor-pointer"
+                  className="min-h-10 text-xs px-3 py-1 gap-1.5 cursor-pointer"
                 >
                   X / Twitter
                 </TabsTrigger>
                 <TabsTrigger
                   value="facebook"
-                  className="text-[11px] px-3 py-1 gap-1.5 cursor-pointer"
+                  className="min-h-10 text-xs px-3 py-1 gap-1.5 cursor-pointer"
                 >
                   Facebook
                 </TabsTrigger>
@@ -82,14 +84,14 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
                 </div>
                 <div className="flex items-center gap-1 text-[11px]">
                   <span className="font-medium text-foreground">
-                    vibress.org
+                    {tr("Your publication")}
                   </span>
                   <span>›</span>
                   <span>home</span>
                 </div>
               </div>
               <h4 className="text-sm font-semibold text-blue-500 dark:text-blue-400 hover:underline cursor-pointer">
-                {siteTitle} - Official Publication
+                {siteTitle}
               </h4>
               <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                 {siteDesc}
@@ -107,7 +109,7 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
               </div>
               <div className="p-3.5 space-y-1 bg-background/50 border-t border-border/50">
                 <p className="text-[10px] text-muted-foreground uppercase font-mono tracking-wider">
-                  vibress.org
+                  {tr("Your publication")}
                 </p>
                 <h4 className="text-xs font-bold text-foreground line-clamp-1">
                   {siteTitle}
@@ -129,7 +131,7 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
               </div>
               <div className="p-3.5 space-y-1 bg-background/50 border-t border-border/50">
                 <p className="text-[10px] text-muted-foreground uppercase font-semibold">
-                  VIBRESS.ORG
+                  {tr("Your publication")}
                 </p>
                 <h4 className="text-xs font-bold text-foreground line-clamp-1">
                   {siteTitle}

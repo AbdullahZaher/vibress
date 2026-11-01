@@ -134,25 +134,24 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-medium text-foreground block mb-1">
-                      From Name
-                    </label>
+                    <label htmlFor="settings-mail-from-name" className="text-sm font-medium text-foreground block mb-1">From Name</label>
                     <Input
-                      value={fromName}
+                      id="settings-mail-from-name"
+                     value={fromName}
                       onChange={(e) => onChange("fromName", e.target.value)}
                       placeholder="Publication Name"
-                      className="text-xs h-8.5"
+                      className="text-sm min-h-10"
                     />
                   </div>
                   <div>
-                    <label className="text-xs font-medium text-foreground block mb-1">
-                      From Email Address
-                    </label>
+                    <label htmlFor="settings-mail-from-email" className="text-sm font-medium text-foreground block mb-1">From Email Address</label>
                     <Input
-                      value={fromEmail}
+                      id="settings-mail-from-email"
+                     type="email"
+                     value={fromEmail}
                       onChange={(e) => onChange("fromEmail", e.target.value)}
                       placeholder="noreply@domain.com"
-                      className="text-xs h-8.5 font-mono"
+                      className="text-sm min-h-10 font-mono"
                     />
                   </div>
                 </div>
@@ -169,18 +168,17 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                     variant="outline"
                     className="text-[10px] font-mono text-emerald-500 border-emerald-500/30"
                   >
-                    Operational
+                    {smtpHost ? "Configured" : "Not configured"}
                   </Badge>
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-foreground block mb-1">
-                    SMTP Host
-                  </label>
+                  <label htmlFor="settings-mail-smtp-host" className="text-sm font-medium text-foreground block mb-1">SMTP Host</label>
                   <Input
-                    value={smtpHost}
+                    id="settings-mail-smtp-host"
+                     value={smtpHost}
                     onChange={(e) => onChange("smtpHost", e.target.value)}
                     placeholder="mailpit (port 1025)"
-                    className="text-xs h-8.5 font-mono"
+                    className="text-sm min-h-10 font-mono"
                   />
                   <p className="text-[11px] text-muted-foreground mt-1">
                     Integrated with internal MailPit SMTP relay for
@@ -205,7 +203,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                     variant="outline"
                     disabled={sendingTest}
                     onClick={handleSendTest}
-                    className="gap-1.5 text-xs cursor-pointer h-8 bg-card"
+                    className="gap-1.5 text-sm min-h-10 bg-card"
                   >
                     {sendingTest ? (
                       <RefreshCw className="h-3.5 w-3.5 animate-spin" />
