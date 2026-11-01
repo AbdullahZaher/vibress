@@ -6,6 +6,7 @@ import {
   type PublicationLocaleConfiguration,
 } from "../../../lib/api/operations";
 import { Button } from "../../ui/button";
+import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 
 const CONTENT_LANGUAGES = [
   { code: "en", name: "English" },
@@ -23,6 +24,7 @@ function nativeLanguage(code: string): string {
 }
 
 export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLocale: string) => void) | undefined }) {
+  const { confirm, confirmationDialog } = useSettingsConfirmation();
   const [config, setConfig] = useState<PublicationLocaleConfiguration | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [primary, setPrimary] = useState("");
@@ -64,10 +66,10 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
     }
     const removed = config.enabledLocales.filter((locale) => !selected.includes(locale));
     if (removed.length > 0 &&
-        !window.confirm(label(
+        !(await confirm(label(
           "Disabling a language will retire public access to its translated URLs. Do you want to proceed?",
           "سيؤدي تعطيل إحدى اللغات إلى إيقاف الوصول إلى روابطها المترجمة المنشورة. هل تريد المتابعة؟",
-        ))) return;
+        ), { destructive: true, confirmLabel: label("Disable language", "تعطيل اللغة") }))) return;
 
     setWorking(true);
     setError("");
@@ -99,11 +101,12 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
         (cause instanceof ApiError && cause.code === "PUBLISHED_LOCALE_REQUIRES_REVIEW") ||
         (cause instanceof Error && cause.message.includes("Review published translated URLs"))
       ) {
-        const confirmed = window.confirm(
+        const confirmed = await confirm(
           label(
             "This language has published translations that will no longer be publicly accessible. Do you want to proceed and disable it?",
             "تحتوي هذه اللغة على ترجمات منشورة لن تعد متاحة للعامة. هل تريد المتابعة وتعطيلها؟",
           ),
+          { destructive: true, confirmLabel: label("Disable language", "تعطيل اللغة") },
         );
         if (confirmed) {
           try {
@@ -162,7 +165,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
                 }
               }}
               disabled={working || config.needsReconciliation}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+              className="min-h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
               {Array.from(new Set([
                 "en",
                 "ar",
@@ -192,7 +195,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
           </fieldset>
           <div className="flex flex-wrap items-center gap-2">
             <label htmlFor="publication-add-language" className="sr-only">{label("Add language", "إضافة لغة")}</label>
-            <select id="publication-add-language" className="h-9 flex-1 rounded-md border bg-background px-2 text-sm"
+            <select id="publication-add-language" className="min-h-10 flex-1 rounded-md border bg-background px-2 text-sm"
               value={toAdd} onChange={(event) => setToAdd(event.target.value)}
               disabled={working || config.needsReconciliation}>
               <option value="">{label("Choose another content language", "اختر لغة محتوى إضافية")}</option>
@@ -221,6 +224,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
           </Button>
         </>
       )}
+      {confirmationDialog}
     </section>
   );
 }
