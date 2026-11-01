@@ -30,6 +30,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
   errorMsg,
 }) => {
   const { tr } = useAdminLocale();
+  const shortcut = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘S" : "Ctrl+S";
   // Guard window navigation / tab close
   useUnsavedChanges(isDirty);
 
@@ -57,7 +58,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
           className="fixed top-5 end-5 z-50 flex items-center gap-2 p-3.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
         >
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>{successMsg}</span>
+          <span>{tr(successMsg)}</span>
         </div>
       )}
       {errorMsg && (
@@ -67,14 +68,15 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
           className="fixed top-5 end-5 z-50 flex items-center gap-2 p-3.5 bg-destructive/15 border border-destructive/30 text-destructive rounded-xl text-xs font-semibold shadow-xl backdrop-blur-md animate-in slide-in-from-top-2 duration-200"
         >
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{errorMsg}</span>
+          <span>{tr(errorMsg)}</span>
         </div>
       )}
 
       {/* Floating Save Action Bar */}
       {isDirty && (
         <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-in slide-in-from-bottom-5 duration-200">
-          <div className="pointer-events-auto flex flex-col min-[420px]:flex-row items-stretch min-[420px]:items-center gap-3 px-4 py-3 rounded-2xl bg-card/95 border border-primary/30 shadow-2xl backdrop-blur-md text-foreground max-w-lg w-full justify-between">
+          <div role="region" aria-label={tr("Unsaved changes")}
+            className="pointer-events-auto flex flex-col min-[420px]:flex-row items-stretch min-[420px]:items-center gap-3 px-4 py-3 rounded-2xl bg-card/95 border border-primary/30 shadow-2xl backdrop-blur-md text-foreground max-w-lg w-full justify-between">
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
@@ -110,7 +112,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 className="w-full min-w-0 gap-2"
               >
                 <Sparkles className="size-4 shrink-0" aria-hidden="true" />
-                {tr("Save (⌘S)")}
+                {tr("Save changes")} <kbd className="text-xs opacity-75" dir="ltr">{shortcut}</kbd>
               </Button>
             </div>
           </div>

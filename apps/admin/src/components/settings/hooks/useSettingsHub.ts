@@ -64,8 +64,8 @@ export function useSettingsHub() {
   ]);
 
   const loading = useMemo(() => {
-    return general.loading || membership.loading || growth.loading;
-  }, [general.loading, membership.loading, growth.loading]);
+    return general.loading || site.loading || membership.loading || growth.loading || advanced.loading;
+  }, [general.loading, site.loading, membership.loading, growth.loading, advanced.loading]);
 
   const saveAllDirty = useCallback(async () => {
     setGlobalError(null);

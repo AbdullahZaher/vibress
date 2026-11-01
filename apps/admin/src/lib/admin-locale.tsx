@@ -24,6 +24,12 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "No settings found": "لم يتم العثور على إعدادات",
+  "Try a different keyword or clear your search to browse all settings.": "جرّب كلمة أخرى أو امسح البحث لاستعراض جميع الإعدادات.",
+  "Save changes": "حفظ التغييرات",
+  "Manage models": "إدارة النماذج",
+  "Settings saved successfully.": "تم حفظ الإعدادات بنجاح.",
+  "Some settings could not be saved. Please check the affected cards.": "تعذّر حفظ بعض الإعدادات. تحقّق من الأقسام المتأثرة.",
   "Filter": "فلترة",
   "Sort": "ترتيب",
   "Active filters": "الفلاتر النشطة",

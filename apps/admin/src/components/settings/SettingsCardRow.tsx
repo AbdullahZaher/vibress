@@ -60,6 +60,7 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
             variant={actionVariant}
             onClick={onAction}
             disabled={disabled}
+            aria-expanded={isExpanded}
             className="min-h-10 shrink-0 gap-1.5 px-3 text-sm"
           >
             <span>{actionLabel}</span>

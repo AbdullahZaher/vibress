@@ -105,7 +105,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
     discardAllDirty,
   } = useSettingsHub();
 
-  const { query, setQuery, filteredPillars, highlightedCardId } =
+  const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId } =
     useSettingsSearch();
 
   const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 120);
@@ -205,6 +205,15 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           )}
         </div>
       </div>
+
+      {query.trim() && matchingCardsCount === 0 && (
+        <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
+          <Search className="size-6 text-muted-foreground" aria-hidden="true" />
+          <h2 className="text-base font-semibold">{tr("No settings found")}</h2>
+          <p className="max-w-md text-sm text-muted-foreground">{tr("Try a different keyword or clear your search to browse all settings.")}</p>
+          <Button type="button" variant="outline" onClick={() => setQuery("")}>{tr("Clear search")}</Button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 1. GENERAL SETTINGS PILLAR                                                */}
@@ -462,7 +471,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   icon={<Database className="h-4 w-4" />}
                   title={tr("Content Models")}
                   description={tr("Define structured content types, fields, relations and their validation rules.")}
-                  actionLabel="Manage models"
+                  actionLabel={tr("Manage models")}
                   onAction={() => onNavigate?.("/admin/settings/advanced/content-models")}
                   disabled={!onNavigate}
                 />
@@ -531,7 +540,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         onSave={saveAllDirty}
         onDiscard={discardAllDirty}
         successMsg={globalSuccess}
-        errorMsg={globalError}
+        errorMsg={globalError ?? general.error ?? site.error ?? membership.error ?? growth.error ?? advanced.error ?? null}
       />
     </div>
   );
