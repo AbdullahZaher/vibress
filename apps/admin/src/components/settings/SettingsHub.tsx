@@ -192,7 +192,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             aria-hidden="true"
           />
           <Input
-            type="search"
+            type="text"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={tr("Filter settings...")}
