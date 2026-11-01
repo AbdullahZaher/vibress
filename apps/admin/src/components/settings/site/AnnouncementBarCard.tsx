@@ -57,6 +57,7 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
         <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-card">
