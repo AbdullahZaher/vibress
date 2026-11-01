@@ -206,6 +206,29 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </div>
       </div>
 
+      {[
+        { label: tr("General settings"), error: general.error },
+        { label: tr("Site"), error: site.error },
+        { label: tr("Membership"), error: membership.error },
+        { label: tr("Growth"), error: growth.error },
+        { label: tr("Advanced"), error: advanced.error },
+      ].some(item => item.error) && !globalSuccess && (
+        <div role="alert" className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <p className="font-semibold text-destructive">{tr("Some settings need attention")}</p>
+          {[
+            { label: tr("General settings"), error: general.error },
+            { label: tr("Site"), error: site.error },
+            { label: tr("Membership"), error: membership.error },
+            { label: tr("Growth"), error: growth.error },
+            { label: tr("Advanced"), error: advanced.error },
+          ].filter(item => item.error).map(item => (
+            <p key={item.label} className="text-foreground">
+              <span className="font-medium">{item.label}:</span> {item.error}
+            </p>
+          ))}
+        </div>
+      )}
+
       {query.trim() && matchingCardsCount === 0 && (
         <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
           <Search className="size-6 text-muted-foreground" aria-hidden="true" />
@@ -540,7 +563,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         onSave={saveAllDirty}
         onDiscard={discardAllDirty}
         successMsg={globalSuccess}
-        errorMsg={globalError ?? general.error ?? site.error ?? membership.error ?? growth.error ?? advanced.error ?? null}
+        errorMsg={globalSuccess ? null : globalError ?? general.error ?? site.error ?? membership.error ?? growth.error ?? advanced.error ?? null}
       />
     </div>
   );
