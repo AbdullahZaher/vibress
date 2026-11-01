@@ -20,6 +20,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   return (
     <SettingsCard id="general-info" isHighlighted={isHighlighted}>
@@ -40,12 +41,13 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? "Close" : "Edit"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-title"

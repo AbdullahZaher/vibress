@@ -45,6 +45,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -104,12 +105,13 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? "Close" : "Customize"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/40 p-5 bg-muted/15 space-y-5 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-5 animate-in slide-in-from-top-2 duration-150">
           {/* Visual Theme Preview Mockup Banner */}
           <div className="rounded-xl border border-border/70 overflow-hidden bg-card p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
             <div className="space-y-1">

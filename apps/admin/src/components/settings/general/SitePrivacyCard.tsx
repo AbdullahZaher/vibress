@@ -22,6 +22,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   return (
     <SettingsCard id="general-privacy" isHighlighted={isHighlighted}>
@@ -47,12 +48,13 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
           )
         }
         actionLabel={isExpanded ? tr("Close") : tr("Configure")}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-card">
             <div>
               <label htmlFor="site-private-toggle" className="block text-sm font-semibold text-foreground">{tr("Enable site password protection")}</label>

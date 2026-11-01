@@ -19,6 +19,7 @@ export const SocialLinksCard: React.FC<SocialLinksCardProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [expanded, setExpanded] = useState(false);
+  const panelId = React.useId();
   const safeLinks = Array.isArray(links) ? links : [];
 
   const addLink = () => {
@@ -49,11 +50,12 @@ export const SocialLinksCard: React.FC<SocialLinksCardProps> = ({
         description={tr("Connect your publication's profiles. Themes can display them anywhere.")}
         currentValue={<span>{safeLinks.length} {tr("links")}</span>}
         actionLabel={expanded ? tr("Close") : tr("Manage")}
+        panelId={panelId}
         isExpanded={expanded}
         onAction={() => setExpanded(!expanded)}
       />
       {expanded && (
-        <div className="space-y-4 border-t border-border/50 p-5 bg-muted/10">
+        <div id={panelId} className="space-y-4 border-t border-border/50 p-5 bg-muted/10">
           <p className="text-xs text-muted-foreground">
             {tr("Social links appear in built-in theme footers. Changes are saved with Site settings.")}
           </p>

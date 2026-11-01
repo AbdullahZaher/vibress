@@ -18,6 +18,7 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
   const [activePreview, setActivePreview] = useState("google");
 
   const siteTitle = title || "Vibress Publication";
@@ -37,12 +38,13 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
           </span>
         }
         actionLabel={isExpanded ? "Close" : "Preview"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h5 className="text-xs font-semibold text-foreground">
               {tr("Illustrative search and social previews")}

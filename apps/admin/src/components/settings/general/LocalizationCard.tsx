@@ -33,6 +33,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   const langObj = COMMON_LANGUAGES.find((l) => l.code === locale);
   const langLabel = langObj ? langObj.label : locale;
@@ -55,12 +56,13 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? tr("Close") : tr("Edit")}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-3">
               <PublicationLanguagesManager onSaved={onSaved} />
