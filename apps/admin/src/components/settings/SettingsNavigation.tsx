@@ -51,11 +51,11 @@ export const SettingsNavigation: React.FC<SettingsNavigationProps> = ({
     <nav
       role="navigation"
       aria-label={tr("Settings categories navigation")}
-      className="sticky top-0 z-30 bg-background/90 backdrop-blur-md border-b border-border/60 pb-3 pt-1 -mt-2 space-y-3"
+      className="flex min-w-0 flex-col gap-3 border-b border-border/70 pb-3 lg:flex-row lg:items-center lg:justify-between"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="contents">
         {/* Navigation Tabs / Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+        <div className="flex min-w-0 flex-1 items-center gap-5 overflow-x-auto no-scrollbar">
           {pillars.map((pillar) => {
             const isActive = activeSection === pillar.id && !searchQuery;
             return (
@@ -63,11 +63,9 @@ export const SettingsNavigation: React.FC<SettingsNavigationProps> = ({
                 key={pillar.id}
                 type="button"
                 onClick={() => onSelectSection(pillar.id)}
-                aria-current={isActive ? "true" : undefined}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                aria-current={isActive ? "location" : undefined}
+                className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  isActive ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {getIcon(pillar.iconName)}
