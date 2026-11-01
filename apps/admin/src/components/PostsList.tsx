@@ -29,9 +29,17 @@ interface PostSummary {
 
 type PostSortBy = "updatedAt" | "createdAt" | "publishedAt" | "title";
 type BulkAction = "delete" | "publish" | "unpublish";
-interface ConfirmAction {
+interface ConfirmationContext {
   kind: BulkAction;
   ids: string[];
+  viewKey: string;
+  queryKey: string;
+  searchSnapshot: string;
+  statusFilter: string;
+  sortBy: PostSortBy;
+  sortOrder: "asc" | "desc";
+  page: number;
+  pageSize: number;
 }
 
 interface PostsListProps {
@@ -78,15 +86,18 @@ export const PostsList: React.FC<PostsListProps> = ({
   const [pageSize, setPageSize] = useState(initialView.pageSize);
   const [sortBy, setSortBy] = useState<PostSortBy>(initialView.sortBy);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialView.sortOrder);
-  const viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}`;
+  const viewKey = JSON.stringify(["posts", statusFilter, debouncedSearch, sortBy, sortOrder, page, pageSize]);
   const [selectionRecord, setSelectionRecord] = useState<{ viewKey: string; ids: Set<string> }>(() => ({
     viewKey,
     ids: new Set<string>(),
   }));
   const selectedIds = selectionRecord.viewKey === viewKey ? selectionRecord.ids : EMPTY_SELECTION_SET;
   const selectButtonRef = useRef<HTMLButtonElement>(null);
+  const listContainerRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const emptyActionRef = useRef<HTMLButtonElement>(null);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmationContext | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const requestSequence = useRef(0);
@@ -97,6 +108,9 @@ export const PostsList: React.FC<PostsListProps> = ({
 
   const previousSearch = useRef(initialView.search);
   useEffect(() => {
+    if (searchQuery.trim() !== debouncedSearch) {
+      setConfirmAction(null);
+    }
     const timer = window.setTimeout(() => {
       const nextSearch = searchQuery.trim();
       if (nextSearch !== previousSearch.current) {
@@ -106,7 +120,7 @@ export const PostsList: React.FC<PostsListProps> = ({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
 
   const [clearedNotice, setClearedNotice] = useState<string | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
@@ -150,7 +164,38 @@ export const PostsList: React.FC<PostsListProps> = ({
     setConfirmAction(null);
   }, [viewKey, selectionRecord, showClearedNotice]);
 
-  const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
+  const queryKey = JSON.stringify(["posts", page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
+  const isSearchPending = searchQuery.trim() !== debouncedSearch;
+  const resultsPending = loading || isSearchPending || resolvedQueryKey !== queryKey;
+
+  const restoreListFocus = useCallback((targetIndex: number) => {
+    window.requestAnimationFrame(() => {
+      const container = listContainerRef.current;
+      if (!container) return;
+      const rows = container.querySelectorAll<HTMLElement>('[role="listitem"]');
+      if (rows.length > 0) {
+        const clampedIndex = Math.max(0, Math.min(targetIndex, rows.length - 1));
+        const targetRow = rows[clampedIndex];
+        const focusable = targetRow?.querySelector<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]'
+        );
+        if (focusable) {
+          focusable.focus();
+          return;
+        }
+        targetRow?.focus();
+        return;
+      }
+      if (emptyActionRef.current && emptyActionRef.current.isConnected) {
+        emptyActionRef.current.focus();
+      } else if (searchInputRef.current && searchInputRef.current.isConnected) {
+        searchInputRef.current.focus();
+      } else if (selectButtonRef.current && selectButtonRef.current.isConnected) {
+        selectButtonRef.current.focus();
+      }
+    });
+  }, []);
+
   const fetchPosts = useCallback(async () => {
     const requestId = ++requestSequence.current;
     setLoading(true);
@@ -232,7 +277,24 @@ export const PostsList: React.FC<PostsListProps> = ({
   };
 
   const runConfirmedAction = async () => {
-    if (!confirmAction || processing || resolvedQueryKey !== queryKey || selectionRecord.viewKey !== viewKey) return;
+    if (
+      !confirmAction ||
+      processing ||
+      searchQuery.trim() !== debouncedSearch ||
+      resultsPending ||
+      confirmAction.viewKey !== viewKey ||
+      confirmAction.queryKey !== queryKey ||
+      confirmAction.searchSnapshot !== debouncedSearch ||
+      confirmAction.statusFilter !== statusFilter ||
+      confirmAction.sortBy !== sortBy ||
+      confirmAction.sortOrder !== sortOrder ||
+      confirmAction.page !== page ||
+      confirmAction.pageSize !== pageSize ||
+      selectionRecord.viewKey !== viewKey
+    ) {
+      setConfirmAction(null);
+      return;
+    }
     const action = confirmAction;
     const targets = posts.filter((post) => action.ids.includes(post.id)).filter((post) => {
       if (action.kind === "publish") return post.status !== "published";
@@ -243,6 +305,9 @@ export const PostsList: React.FC<PostsListProps> = ({
       setConfirmAction(null);
       return;
     }
+    const targetIndex = action.kind === "delete"
+      ? posts.findIndex((post) => action.ids.includes(post.id))
+      : -1;
     setProcessing(true);
     setActionFeedback(null);
     const results = await Promise.allSettled(targets.map((post) => {
@@ -266,14 +331,46 @@ export const PostsList: React.FC<PostsListProps> = ({
         : `${formatNumber(succeeded)} ${tr("items updated successfully")}.`,
     });
     await fetchPosts();
+    if (action.kind === "delete" && succeeded > 0 && targetIndex >= 0) {
+      restoreListFocus(targetIndex);
+    }
   };
 
-  const requestDelete = (id: string) => setConfirmAction({ kind: "delete", ids: [id] });
+  const requestDelete = (id: string) => {
+    if (searchQuery.trim() !== debouncedSearch || resultsPending) return;
+    setConfirmAction({
+      kind: "delete",
+      ids: [id],
+      viewKey,
+      queryKey,
+      searchSnapshot: debouncedSearch,
+      statusFilter,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    });
+  };
+
   const requestBulkAction = (kind: BulkAction) => {
+    if (searchQuery.trim() !== debouncedSearch || resultsPending) return;
     const ids = selectedPosts
       .filter((post) => kind === "publish" ? post.status !== "published" : kind === "unpublish" ? post.status === "published" : true)
       .map((post) => post.id);
-    if (ids.length) setConfirmAction({ kind, ids });
+    if (ids.length) {
+      setConfirmAction({
+        kind,
+        ids,
+        viewKey,
+        queryKey,
+        searchSnapshot: debouncedSearch,
+        statusFilter,
+        sortBy,
+        sortOrder,
+        page,
+        pageSize,
+      });
+    }
   };
 
   const handleToggleSelectionMode = () => {
@@ -298,8 +395,6 @@ export const PostsList: React.FC<PostsListProps> = ({
   const actionDescription = confirmAction
     ? `${tr("You are about to")} ${confirmAction.kind === "delete" ? tr("delete") : confirmAction.kind === "publish" ? tr("publish") : tr("unpublish")} ${formatNumber(confirmAction.ids.length)} ${tr("items on this page")}.`
     : "";
-
-  const resultsPending = loading || searchQuery.trim() !== debouncedSearch || resolvedQueryKey !== queryKey;
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
@@ -326,10 +421,17 @@ export const PostsList: React.FC<PostsListProps> = ({
           <div className="relative min-w-[9rem] flex-[1_1_13rem] sm:max-w-sm">
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
+              ref={searchInputRef}
               type="search"
               placeholder={tr("Search posts by title or slug...")}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setSearchQuery(next);
+                if (next.trim() !== debouncedSearch) {
+                  setConfirmAction(null);
+                }
+              }}
               aria-label={tr("Search posts by title or slug...")}
               className="min-h-11 w-full rounded-lg border-border/70 bg-card ps-9 text-sm"
             />
@@ -453,7 +555,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         )}
       </section>
 
-      <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Posts")}>
+      <section ref={listContainerRef} className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Posts")}>
         {resultsPending ? (
           <div role="status" aria-label={tr("Loading")} aria-busy="true">
             {[1, 2, 3, 4].map((item) => (
@@ -486,11 +588,15 @@ export const PostsList: React.FC<PostsListProps> = ({
                 ? tr("Try a different search or filter.")
                 : tr("Create your first post to get started.")}
             </p>
-            {(searchQuery || statusFilter !== "all") && (
-              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
+            {(searchQuery || statusFilter !== "all") ? (
+              <Button ref={emptyActionRef} type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
                 {tr("Clear filters")}
               </Button>
-            )}
+            ) : canCreate ? (
+              <Button ref={emptyActionRef} type="button" size="sm" variant="outline" className="min-h-11 gap-2" onClick={() => onNavigate("/admin/posts/new")}>
+                <Plus className="size-4" aria-hidden="true" />{tr("New Post")}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div role="list" aria-label={tr("Posts")} className="min-w-0">
@@ -535,6 +641,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         description={actionDescription}
         className="max-w-md"
         fallbackFocusRef={selectButtonRef}
+        restoreFocusOnClose={!processing}
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={processing} onClick={() => setConfirmAction(null)}>

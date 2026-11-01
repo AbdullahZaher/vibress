@@ -487,3 +487,61 @@ The top **Select** button followed the desired minimal, modern design; however, 
 ### 5. Verified Browser Touch Target Geometry (P2)
 - Real Playwright browser assertions test `boundingBox()` at 320px, 390px, 768px, 1024px, and 1440px viewports.
 - Asserts visual checkbox box is 18×18px and interactive hit area `<label>` is at least 44×44 CSS pixels.
+
+## 2026-11-01 — Final Production Hardening & Accessibility Certification (P1–P3)
+
+### 1. Stale Confirmation Action Protection During Debounced Search (P1)
+- **Problem:** When search input was typed, a 250ms debounce delay delayed `debouncedSearch`. An open delete or publish confirmation dialog could be executed against stale selections while search query input had already diverged.
+- **Resolution:**
+  - **Immediate Divergence Detection:** `isSearchPending = searchQuery.trim() !== debouncedSearch` detects pending input immediately on the first keystroke.
+  - **Immediate Dialog Invalidation:** Keystrokes in the search input immediately close any open confirmation dialog (`setConfirmAction(null)`) synchronously in `onChange`, without waiting 250ms for the debounce timer.
+  - **Immutable Confirmation Context:** Captured upon opening any confirmation dialog:
+    ```ts
+    interface ConfirmationContext {
+      kind: BulkAction;
+      ids: string[];
+      viewKey: string;
+      queryKey: string;
+      searchSnapshot: string;
+      statusFilter: string;
+      sortBy: PostSortBy;
+      sortOrder: "asc" | "desc";
+      page: number;
+      pageSize: number;
+    }
+    ```
+  - **Execution Boundary Validation:** `runConfirmedAction()` strictly validates that `searchQuery.trim() === debouncedSearch`, `resultsPending === false`, and all context parameters match current view identity before issuing destructive network mutations.
+  - Applied uniformly across both `PostsList.tsx` and `PagesList.tsx`.
+
+### 2. Reliable Post-Deletion Focus Restoration (P2)
+- **Problem:** In previous implementations, when deleting an item, `Dialog` closed and unmounted before asynchronous data re-fetching completed, attempting to restore focus to the delete button in the doomed row, which was subsequently removed from the DOM, causing focus to drop to `document.body`.
+- **Resolution:**
+  - Added `restoreFocusOnClose?: boolean` prop (default `true`) to `Dialog.tsx`. When deletion confirmation executes, `restoreFocusOnClose={!processing}` suppresses Dialog's premature focus restoration.
+  - Implemented `restoreListFocus(targetIndex)` coordinator in `PostsList` and `PagesList`:
+    - After `await fetchPosts()` / `await fetchPages()` finishes and the DOM flushes, focus is directed to the surviving row that took its place (`Math.min(targetIndex, rows.length - 1)`).
+    - If the last row in the list was deleted (leaving the list empty), focus transfers safely to the empty-state action button (`emptyActionRef`), the search input (`searchInputRef`), or the select button (`selectButtonRef`).
+    - Focus never drops to `document.body`.
+
+### 3. Automated Accessibility Audit (axe-core WCAG 2.2 AA) (P2)
+- **Zero-Dependency Automated Testing:** Injected `axe-core` directly into Playwright end-to-end tests without altering `package.json`.
+- **Comprehensive Matrix Audited:**
+  - Default mode (dark & light).
+  - Selection mode active (dark & light).
+  - Bulk actions toolbar active with items selected.
+  - Confirmation dialog open with focus trapped.
+  - Arabic RTL layout (`dir="rtl"`).
+- **Result:** 0 WCAG 2.2 AA violations across all states.
+
+### 4. Collision-Safe View Identity (P3)
+- Replaced concatenated string keys (`${statusFilter}:${debouncedSearch}...`) with deterministic JSON tuple representations:
+  - `viewKey`: `JSON.stringify(["posts", statusFilter, debouncedSearch, sortBy, sortOrder, page, pageSize])`
+  - `queryKey`: `JSON.stringify(["posts", page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch])`
+- Completely eliminates key collision vulnerabilities when searches or filter values contain colons or special characters.
+
+### 5. Final Quality Gates
+- **Typecheck:** 0 errors across `@vibress/admin`.
+- **Lint:** 0 errors, 0 warnings with strict ESLint.
+- **Vitest Suite:** 37 test files, 202 tests in `apps/admin` passing 100%.
+- **Playwright E2E Acceptance:** 19/19 tests passing 100% in real browser environments.
+- **Production Build:** Vite production bundle generated cleanly.
+

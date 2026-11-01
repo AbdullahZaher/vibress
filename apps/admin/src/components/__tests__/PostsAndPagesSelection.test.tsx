@@ -535,5 +535,194 @@ describe("Editorial Selection System — Posts and Pages lifecycle & stability",
       expect(menu).not.toBeNull();
       expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).toBeNull();
     });
+
+    it("immediately invalidates confirmation dialog when typing into search during debounced search", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Open delete dialog via More Actions -> Delete on first row
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      const deleteItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      expect(deleteItem).not.toBeUndefined();
+
+      await act(async () => {
+        deleteItem.click();
+      });
+
+      // Dialog is open
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      // User types into search input before the 250ms debounce window completes
+      const searchInput = element.querySelector('input[type="search"]') as HTMLInputElement;
+      expect(searchInput).not.toBeNull();
+
+      // Trigger change on search input
+      await act(async () => {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        nativeInputValueSetter?.call(searchInput, "breaking news");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        searchInput.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      // The open confirmation dialog is immediately closed / invalidated
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it("restores focus to surviving row after single row deletion", async () => {
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/posts/post-1")) {
+          return { success: true };
+        }
+        return { posts: mockPosts, total: 2 };
+      });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Open more actions on post-1 and click Delete
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      const deleteMenuItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem.click();
+      });
+
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      // Mock the subsequent fetchPosts to return only post-2
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/posts/post-1")) {
+          return { success: true };
+        }
+        return { posts: [mockPosts[1]], total: 1 };
+      });
+
+      // Confirm delete
+      const confirmBtn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        (b) => b.textContent?.includes("Confirm delete")
+      ) as HTMLButtonElement;
+      expect(confirmBtn).not.toBeUndefined();
+
+      await act(async () => {
+        confirmBtn.click();
+      });
+
+      // Allow requestAnimationFrame / DOM focus flush
+      await act(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+      });
+
+      // Focus should be restored to an interactive element within the surviving row, not body
+      expect(document.activeElement).not.toBe(document.body);
+      const survivingRow = element.querySelector('[role="listitem"]');
+      expect(survivingRow?.contains(document.activeElement)).toBe(true);
+    });
+
+    it("restores focus to empty-state action when the final item is deleted", async () => {
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/posts/post-1")) {
+          return { success: true };
+        }
+        return { posts: [mockPosts[0]], total: 1 };
+      });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit canCreate />);
+      });
+
+      // Delete the only post
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      const deleteMenuItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem.click();
+      });
+
+      // Subsequent fetch returns 0 posts
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/posts/post-1")) {
+          return { success: true };
+        }
+        return { posts: [], total: 0 };
+      });
+
+      const confirmBtn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        (b) => b.textContent?.includes("Confirm delete")
+      ) as HTMLButtonElement;
+
+      await act(async () => {
+        confirmBtn.click();
+      });
+
+      await act(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+      });
+
+      // Focus should not be on document.body, but on the empty state action button or search
+      expect(document.activeElement).not.toBe(document.body);
+      expect(
+        document.activeElement?.textContent?.includes("New Post") ||
+        document.activeElement?.getAttribute("type") === "search" ||
+        document.activeElement?.textContent?.includes("Select")
+      ).toBe(true);
+    });
+
+    it("PagesList: immediately invalidates confirmation dialog when typing into search", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ pages: mockPages, total: 2 });
+
+      await act(async () => {
+        root.render(<PagesList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      const deleteItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteItem.click();
+      });
+
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      const searchInput = element.querySelector('input[type="search"]') as HTMLInputElement;
+      await act(async () => {
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype,
+          "value"
+        )?.set;
+        nativeInputValueSetter?.call(searchInput, "terms of service");
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        searchInput.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
   });
 });

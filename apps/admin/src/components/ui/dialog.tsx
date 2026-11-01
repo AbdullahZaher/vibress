@@ -12,6 +12,7 @@ export function Dialog({
   children,
   className,
   fallbackFocusRef,
+  restoreFocusOnClose = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -20,6 +21,7 @@ export function Dialog({
   children: React.ReactNode;
   className?: string;
   fallbackFocusRef?: React.RefObject<HTMLElement | null> | undefined;
+  restoreFocusOnClose?: boolean | undefined;
 }) {
   const { tr } = useAdminLocale();
   const titleId = React.useId();
@@ -29,6 +31,11 @@ export function Dialog({
   React.useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  const restoreFocusRef = React.useRef(restoreFocusOnClose);
+  React.useEffect(() => {
+    restoreFocusRef.current = restoreFocusOnClose;
+  }, [restoreFocusOnClose]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -77,6 +84,7 @@ export function Dialog({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
+      if (!restoreFocusRef.current) return;
       if (previousFocus?.isConnected) {
         previousFocus.focus();
       } else if (fallbackFocusRef?.current?.isConnected) {
