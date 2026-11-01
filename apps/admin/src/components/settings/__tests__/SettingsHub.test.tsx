@@ -96,6 +96,27 @@ describe("SettingsHub Advanced Pillar - Content Models", () => {
     container.remove();
   });
 
+  it("keeps one horizontal category navigation and full-width settings content", async () => {
+    await act(async () => {
+      root.render(<SettingsHub initialSection="general" can={() => true} />);
+    });
+
+    const nav = container.querySelector('nav[aria-label="Settings sections"]');
+    expect(nav).not.toBeNull();
+    expect(container.querySelectorAll('nav[aria-label="Settings sections"]')).toHaveLength(1);
+    expect(nav?.querySelectorAll("a")).toHaveLength(5);
+    expect(container.querySelector("aside")).toBeNull();
+    expect(container.querySelector("#settings-results")).not.toBeNull();
+    expect(container.querySelector("#general")).not.toBeNull();
+    expect(container.querySelector("#site")).toBeNull();
+
+    const site = nav?.querySelector<HTMLAnchorElement>('a[href="/admin/settings/site"]');
+    await act(async () => { site?.click(); });
+    expect(container.querySelector("#site")).not.toBeNull();
+    expect(container.querySelector("#general")).toBeNull();
+    expect(site?.getAttribute("aria-current")).toBe("location");
+  });
+
   it("renders Content Models card row with an icon and navigates on manage click", async () => {
     const onNavigate = vi.fn();
 
