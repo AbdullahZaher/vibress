@@ -66,6 +66,34 @@ interface SettingsHubProps {
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
 
+const CARD_PERMISSIONS: Record<string, string> = {
+  "publication-info": "settings.manage",
+  "localization": "settings.manage",
+  "metadata-social": "settings.manage",
+  "site-privacy": "settings.manage",
+  "staff-overview": "users.read",
+  "design-branding": "settings.manage",
+  "navigation-manager": "settings.manage",
+  "social-links": "settings.manage",
+  "themes-manager": "themes.manage",
+  "announcement-bar": "settings.manage",
+  "portal-access": "members.manage",
+  "subscription-tiers": "billing.manage",
+  "offers-promotions": "offers.manage",
+  "newsletters-config": "email.manage",
+  "analytics-tracking": "analytics.read",
+  "community-discussions": "comments.manage",
+  "recommendations-card": "recommendations.manage",
+  "content-models": "posts.read",
+  "code-injection": "settings.manage",
+  "integrations-platform": "integrations.manage",
+  "system-diagnostics": "system.read",
+  "import-export": "imports.manage",
+  "audit-logs": "audit.read",
+  "danger-zone": "system.manage",
+};
+
+
 const getPillarIcon = (iconName: string) => {
   switch (iconName) {
     case "Sliders":
@@ -105,10 +133,10 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
     discardAllDirty,
   } = useSettingsHub();
 
-  const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId } =
+  const { query, setQuery, filteredPillars, highlightedCardId } =
     useSettingsSearch();
 
-  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 48);
+  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 48, !loading, query);
 
   // Jump to initial anchor on load or route change
   useEffect(() => {
@@ -127,12 +155,21 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   }, [initialSection, scrollToSection]);
 
   const isCardVisible = (cardId: string) => {
-    return filteredPillars.some((p) => p.cards.some((c) => c.id === cardId));
+    const permission = CARD_PERMISSIONS[cardId];
+    return filteredPillars.some((p) => p.cards.some((card) => card.id === cardId))
+      && (!permission || !can || can(permission));
   };
 
   const isPillarVisible = (pillarId: string) => {
-    return filteredPillars.some((p) => p.id === pillarId);
+    return filteredPillars.some((p) =>
+      p.id === pillarId && p.cards.some((card) => isCardVisible(card.id)),
+    );
   };
+
+  const visibleResultCount = filteredPillars.reduce(
+    (count, pillar) => count + pillar.cards.filter((card) => isCardVisible(card.id)).length,
+    0,
+  );
 
   if (loading) {
     return (
@@ -238,7 +275,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </div>
       )}
 
-      {query.trim() && matchingCardsCount === 0 && (
+      {query.trim() && visibleResultCount === 0 && (
         <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
           <Search className="size-6 text-muted-foreground" aria-hidden="true" />
           <h2 className="text-base font-semibold">{tr("No settings found")}</h2>

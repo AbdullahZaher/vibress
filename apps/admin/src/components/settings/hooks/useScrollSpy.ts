@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 
-export function useScrollSpy(sectionIds: string[], offset = 100) {
+export function useScrollSpy(sectionIds: string[], offset = 100, ready = true, refreshKey = "") {
   const [activeSection, setActiveSection] = useState<string>(
     sectionIds[0] || "",
   );
@@ -18,6 +18,8 @@ export function useScrollSpy(sectionIds: string[], offset = 100) {
   }, []);
 
   useEffect(() => {
+    if (!ready || typeof IntersectionObserver === "undefined") return;
+
     // Check if browser supports IntersectionObserver for scroll spy
     const observers: IntersectionObserver[] = [];
 
@@ -51,7 +53,7 @@ export function useScrollSpy(sectionIds: string[], offset = 100) {
     return () => {
       observers.forEach((obs) => obs.disconnect());
     };
-  }, [sectionIds, offset]);
+  }, [sectionIds, offset, ready, refreshKey]);
 
   return { activeSection, scrollToSection };
 }
