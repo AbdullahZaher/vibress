@@ -188,7 +188,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
         {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
-        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 lg:hidden">
+        <nav aria-label={tr("Mobile settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 lg:hidden">
           {SETTINGS_REGISTRY.filter((pillar) => !query.trim() || filteredPillars.some((match) => match.id === pillar.id)).map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
@@ -244,7 +244,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
               return (
                 <div key={pillar.id}>
                   <a href={`/admin/settings/${pillar.id}`}
-                    aria-current={selected ? "page" : undefined}
+                    aria-current={selected ? "location" : undefined}
                     onClick={(event) => { event.preventDefault(); selectPillar(pillar.id); }}
                     className={cn("flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       selected ? "bg-primary/10 font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
