@@ -75,6 +75,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
 
       {/* Danger Zone Modal */}
       <SettingsModalPortal
+        title="Danger zone"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
