@@ -303,9 +303,9 @@ export const PagesList: React.FC<PagesListProps> = ({
       setConfirmAction(null);
       return;
     }
-    const targetIndex = action.kind === "delete"
-      ? pages.findIndex((item) => action.ids.includes(item.id))
-      : -1;
+    const targetIndex = action.ids.length > 0
+      ? Math.max(0, pages.findIndex((item) => action.ids.includes(item.id)))
+      : 0;
     setProcessing(true);
     setActionFeedback(null);
     const results = await Promise.allSettled(targets.map((item) => {
@@ -329,9 +329,7 @@ export const PagesList: React.FC<PagesListProps> = ({
         : `${formatNumber(succeeded)} ${tr("items updated successfully")}.`,
     });
     await fetchPages();
-    if (action.kind === "delete" && succeeded > 0 && targetIndex >= 0) {
-      restoreListFocus(targetIndex);
-    }
+    restoreListFocus(targetIndex);
   };
 
   const requestDelete = (id: string) => {

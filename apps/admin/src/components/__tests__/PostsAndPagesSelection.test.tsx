@@ -724,5 +724,248 @@ describe("Editorial Selection System — Posts and Pages lifecycle & stability",
 
       expect(document.querySelector('[role="dialog"]')).toBeNull();
     });
+
+    it("dialog cancellation via Escape, Cancel button, and Close button restores focus to trigger", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit canCreate />);
+      });
+
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      expect(moreActionsBtn).not.toBeNull();
+
+      // Case 1: Cancel via Escape
+      moreActionsBtn.focus();
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+      const deleteMenuItem1 = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem1.click();
+      });
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      });
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(moreActionsBtn);
+
+      // Case 2: Cancel via Cancel button
+      moreActionsBtn.focus();
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+      const deleteMenuItem2 = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem2.click();
+      });
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      const cancelBtn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        (b) => b.textContent?.trim() === "Cancel"
+      ) as HTMLButtonElement;
+      await act(async () => {
+        cancelBtn.click();
+      });
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(moreActionsBtn);
+
+      // Case 3: Cancel via Close (X) button
+      moreActionsBtn.focus();
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+      const deleteMenuItem3 = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem3.click();
+      });
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      const closeBtn = document.querySelector('[role="dialog"] button[aria-label="Close dialog"]') as HTMLButtonElement;
+      await act(async () => {
+        closeBtn.click();
+      });
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(moreActionsBtn);
+    });
+
+    it("dialog traps keyboard focus with Tab and Shift+Tab", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      const deleteMenuItem = Array.from(document.querySelectorAll('[role="menuitem"]')).find(
+        (item) => item.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteMenuItem.click();
+      });
+
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog).not.toBeNull();
+
+      const buttons = Array.from(dialog!.querySelectorAll<HTMLButtonElement>("button"));
+      expect(buttons.length).toBeGreaterThanOrEqual(2);
+      const firstButton = buttons[0]!;
+      const lastButton = buttons[buttons.length - 1]!;
+
+      // When active is on the last button, Tab wraps to the first button
+      lastButton.focus();
+      expect(document.activeElement).toBe(lastButton);
+
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+      });
+      expect(document.activeElement).toBe(firstButton);
+
+      // When active is on the first button, Shift+Tab wraps to the last button
+      await act(async () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true }));
+      });
+      expect(document.activeElement).toBe(lastButton);
+    });
+
+    it("restores focus to surviving row after publish and unpublish operations", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode
+      const selectBtn = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        selectBtn.click();
+      });
+
+      // Select draft post (post-2)
+      const checkboxes = element.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      await act(async () => {
+        checkboxes[2]?.click(); // index 0 is select all, 1 is post-1, 2 is post-2
+      });
+
+      // Click Publish in bulk actions toolbar
+      const publishBtn = Array.from(element.querySelectorAll('[role="group"] button')).find(
+        (b) => b.textContent?.includes("Publish")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        publishBtn.click();
+      });
+
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+      // Mock successful publish
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/publish")) {
+          return { success: true };
+        }
+        return {
+          posts: [
+            mockPosts[0],
+            { ...mockPosts[1], status: "published" },
+          ],
+          total: 2,
+        };
+      });
+
+      const confirmBtn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        (b) => b.textContent?.includes("Confirm publish")
+      ) as HTMLButtonElement;
+
+      await act(async () => {
+        confirmBtn.click();
+      });
+
+      await act(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+      });
+
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).not.toBe(document.body);
+      const survivingRows = element.querySelectorAll('[role="listitem"]');
+      const focusedRow = Array.from(survivingRows).find((r) => r.contains(document.activeElement));
+      expect(focusedRow).not.toBeUndefined();
+    });
+
+    it("restores focus and preserves selection on mutation failure so user can retry", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode
+      const selectBtn = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        selectBtn.click();
+      });
+
+      // Select post-1
+      const checkboxes = element.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+      await act(async () => {
+        checkboxes[1]?.click();
+      });
+
+      // Bulk Delete
+      const deleteBulkBtn = Array.from(element.querySelectorAll('[role="group"] button')).find(
+        (b) => b.textContent?.includes("Delete")
+      ) as HTMLButtonElement;
+      await act(async () => {
+        deleteBulkBtn.click();
+      });
+
+      // Mock API rejection (server error)
+      vi.mocked(apiRequest).mockImplementation(async (url) => {
+        if (typeof url === "string" && url.includes("/posts/post-1")) {
+          throw new Error("Server error: failed to delete");
+        }
+        return { posts: mockPosts, total: 2 };
+      });
+
+      const confirmBtn = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+        (b) => b.textContent?.includes("Confirm delete")
+      ) as HTMLButtonElement;
+
+      await act(async () => {
+        confirmBtn.click();
+      });
+
+      await act(async () => {
+        await new Promise((r) => requestAnimationFrame(r));
+      });
+
+      // Dialog is closed
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+      // Error message is displayed
+      expect(element.textContent).toContain("failed");
+
+      // Failed item selection is preserved for retry
+      const bulkGroup = element.querySelector('[role="group"][aria-label="Bulk actions"]');
+      expect(bulkGroup).not.toBeNull();
+      expect(bulkGroup?.textContent).toContain("1 selected on this page");
+
+      // Focus is not lost to document.body
+      expect(document.activeElement).not.toBe(document.body);
+    });
   });
 });

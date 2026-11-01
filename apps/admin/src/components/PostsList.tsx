@@ -305,9 +305,9 @@ export const PostsList: React.FC<PostsListProps> = ({
       setConfirmAction(null);
       return;
     }
-    const targetIndex = action.kind === "delete"
-      ? posts.findIndex((post) => action.ids.includes(post.id))
-      : -1;
+    const targetIndex = action.ids.length > 0
+      ? Math.max(0, posts.findIndex((post) => action.ids.includes(post.id)))
+      : 0;
     setProcessing(true);
     setActionFeedback(null);
     const results = await Promise.allSettled(targets.map((post) => {
@@ -331,9 +331,7 @@ export const PostsList: React.FC<PostsListProps> = ({
         : `${formatNumber(succeeded)} ${tr("items updated successfully")}.`,
     });
     await fetchPosts();
-    if (action.kind === "delete" && succeeded > 0 && targetIndex >= 0) {
-      restoreListFocus(targetIndex);
-    }
+    restoreListFocus(targetIndex);
   };
 
   const requestDelete = (id: string) => {

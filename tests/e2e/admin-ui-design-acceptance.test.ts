@@ -3,6 +3,12 @@ import path from "node:path";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 function getAxeSource(): string {
+  try {
+    const directResolved = require.resolve("axe-core/axe.min.js");
+    if (fs.existsSync(directResolved)) return fs.readFileSync(directResolved, "utf-8");
+  } catch {
+    // Fallback to pnpm resolution paths
+  }
   const direct = path.resolve(process.cwd(), "node_modules/.pnpm/axe-core@4.13.0/node_modules/axe-core/axe.min.js");
   if (fs.existsSync(direct)) return fs.readFileSync(direct, "utf-8");
   const pnpmDir = path.resolve(process.cwd(), "node_modules/.pnpm");
@@ -294,7 +300,7 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
         { id: `geo-post-1`, title: "Geometry post one", slug: "geo-one", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", scheduledAt: null, updatedAt: "2026-10-30T10:00:00.000Z", authors: [] },
         { id: `geo-post-2`, title: "Geometry post two", slug: "geo-two", status: "draft", publishedAt: null, scheduledAt: null, updatedAt: "2026-10-29T10:00:00.000Z", authors: [] },
       ];
-      await page.route("**/api/admin/v1/posts*", async (route) => {
+      await page.route("**/api/admin/v1/posts**", async (route) => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -389,7 +395,7 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
       { id: "axe-post-1", title: "Accessibility verified post one", slug: "axe-post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", scheduledAt: null, updatedAt: "2026-10-30T10:00:00.000Z", authors: [] },
       { id: "axe-post-2", title: "Accessibility verified post two", slug: "axe-post-2", status: "draft", publishedAt: null, scheduledAt: null, updatedAt: "2026-10-29T10:00:00.000Z", authors: [] },
     ];
-    await page.route("**/api/admin/v1/posts*", async (route) => {
+    await page.route("**/api/admin/v1/posts**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -460,7 +466,7 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
       { id: "debounce-post-1", title: "First confirmation race post", slug: "post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
       { id: "debounce-post-2", title: "Second confirmation race post", slug: "post-2", status: "draft", publishedAt: null, updatedAt: "2026-10-29T10:00:00.000Z" },
     ];
-    await page.route("**/api/admin/v1/posts*", async (route) => {
+    await page.route("**/api/admin/v1/posts**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -487,5 +493,307 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
 
     // Dialog must immediately close without waiting for debounce timeout
     await expect(dialog).toHaveCount(0);
+  });
+
+  test("accessibility: portaled confirmation dialogs achieve 0 WCAG 2.2 AA violations across actions and themes", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page);
+
+    const testPosts = [
+      { id: "dialog-post-1", title: "Dialog accessibility post one", slug: "post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
+      { id: "dialog-post-2", title: "Dialog accessibility post two", slug: "post-2", status: "draft", publishedAt: null, updatedAt: "2026-10-29T10:00:00.000Z" },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: testPosts, total: testPosts.length }),
+      });
+    });
+
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText("Dialog accessibility post one")).toBeVisible();
+
+    // 1. Single delete confirmation dialog (dark mode)
+    const moreBtn = page.getByRole("button", { name: /More actions: Dialog accessibility post one/i });
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "single delete dialog (dark)", '[role="dialog"]');
+
+    // 2. Single delete dialog in light theme
+    const cancelBtn = dialog.getByRole("button", { name: /Cancel|إلغاء/i });
+    await cancelBtn.click();
+    await expect(dialog).toHaveCount(0);
+
+    const themeToggle = page.locator("aside").getByRole("button", { name: /toggle theme/i });
+    await themeToggle.click();
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+    await page.waitForTimeout(350);
+
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "single delete dialog (light)", '[role="dialog"]');
+
+    await dialog.getByRole("button", { name: /Cancel|إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // Switch back to dark theme
+    await themeToggle.click();
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await page.waitForTimeout(350);
+
+    // 3. Enter selection mode and test Bulk Delete dialog
+    const selectBtn = page.getByRole("button", { name: /Select|تحديد/i });
+    await selectBtn.click();
+    await expect(page.getByRole("button", { name: /Done|تم/i })).toBeVisible();
+
+    const firstCheckbox = page.locator('[role="listitem"] input[type="checkbox"]').first();
+    await firstCheckbox.check();
+    const secondCheckbox = page.locator('[role="listitem"] input[type="checkbox"]').nth(1);
+    await secondCheckbox.check();
+
+    const bulkDeleteBtn = page.getByRole("group", { name: /Bulk actions|إجراءات/i }).getByRole("button", { name: /Delete|حذف/i });
+    await bulkDeleteBtn.click();
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "bulk delete dialog (dark)", '[role="dialog"]');
+    await dialog.getByRole("button", { name: /Cancel|إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // 4. Bulk Publish dialog (post-2 is draft)
+    await firstCheckbox.uncheck();
+    const bulkPublishBtn = page.getByRole("group", { name: /Bulk actions|إجراءات/i }).getByRole("button", { name: /Publish|نشر/i });
+    await bulkPublishBtn.click();
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "bulk publish dialog (dark)", '[role="dialog"]');
+    await dialog.getByRole("button", { name: /Cancel|إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // 5. Bulk Unpublish dialog (post-1 is published)
+    await secondCheckbox.uncheck();
+    await firstCheckbox.check();
+    const bulkUnpublishBtn = page.getByRole("group", { name: /Bulk actions|إجراءات/i }).getByRole("button", { name: /Unpublish|إلغاء النشر/i });
+    await bulkUnpublishBtn.click();
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "bulk unpublish dialog (dark)", '[role="dialog"]');
+    await dialog.getByRole("button", { name: /Cancel|إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("dialog lifecycle: cancellation via Escape, Cancel, and Close buttons with focus restoration", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page);
+
+    const testPosts = [
+      { id: "cancel-post-1", title: "Cancelable dialog test post", slug: "post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: testPosts, total: testPosts.length }),
+      });
+    });
+
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText("Cancelable dialog test post")).toBeVisible();
+
+    const moreBtn = page.getByRole("button", { name: /More actions: Cancelable dialog test post/i });
+    const dialog = page.getByRole("dialog");
+
+    // 1. Cancel via Escape key
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(moreBtn).toBeFocused();
+
+    // 2. Cancel via Cancel button
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /Cancel|إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(moreBtn).toBeFocused();
+
+    // 3. Cancel via Close (X) button
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /Close dialog|إغلاق النافذة/i }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(moreBtn).toBeFocused();
+  });
+
+  test("dialog lifecycle: keyboard focus trapping with Tab and Shift+Tab", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page);
+
+    const testPosts = [
+      { id: "trap-post-1", title: "Focus trapping test post", slug: "post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: testPosts, total: testPosts.length }),
+      });
+    });
+
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText("Focus trapping test post")).toBeVisible();
+
+    const moreBtn = page.getByRole("button", { name: /More actions: Focus trapping test post/i });
+    await moreBtn.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    const closeBtn = dialog.getByRole("button", { name: /Close dialog|إغلاق النافذة/i });
+    const confirmBtn = dialog.getByRole("button", { name: /Confirm delete|تأكيد الحذف/i });
+
+    // Focus starts inside dialog; press Tab to move into first focusable control
+    await page.keyboard.press("Tab");
+    const isInsideDialog = await page.evaluate(() => {
+      const active = document.activeElement;
+      const dlg = document.querySelector('[role="dialog"]');
+      return dlg?.contains(active) ?? false;
+    });
+    expect(isInsideDialog).toBe(true);
+
+    // Focus last button (confirmBtn) and press Tab -> should wrap to closeBtn
+    await confirmBtn.focus();
+    await expect(confirmBtn).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(closeBtn).toBeFocused();
+
+    // From closeBtn, press Shift+Tab -> should wrap back to confirmBtn
+    await page.keyboard.press("Shift+Tab");
+    await expect(confirmBtn).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("accessibility: Arabic RTL posts editorial selection and portaled dialog", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.route("**/api/admin/v1/locales/context", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "cache-control": "no-store" },
+        body: JSON.stringify({ primaryLocale: "ar", enabledLocales: ["en", "ar"] }),
+      }),
+    );
+    await login(page);
+
+    const testPosts = [
+      { id: "ar-post-1", title: "مقال تجريبي باللغة العربية", slug: "arabic-post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
+      { id: "ar-post-2", title: "مسودة مقال باللغة العربية", slug: "arabic-post-2", status: "draft", publishedAt: null, updatedAt: "2026-10-29T10:00:00.000Z" },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: testPosts, total: testPosts.length }),
+      });
+    });
+
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await expect(page.getByText("مقال تجريبي باللغة العربية")).toBeVisible();
+
+    // 1. Audit RTL default mode
+    await assertZeroAxeViolations(page, "arabic rtl posts default mode");
+
+    // 2. Audit RTL selection mode
+    const selectBtn = page.getByRole("button", { name: /تحديد/i });
+    await selectBtn.click();
+    await expect(page.getByRole("button", { name: /تم/i })).toBeVisible();
+    await assertZeroAxeViolations(page, "arabic rtl posts selection mode");
+
+    // 3. Audit RTL bulk action toolbar & portaled dialog
+    const firstCheckbox = page.locator('[role="listitem"] input[type="checkbox"]').first();
+    await firstCheckbox.check();
+    await expect(page.getByRole("group", { name: /إجراءات/i })).toBeVisible();
+
+    const bulkDeleteBtn = page.getByRole("group", { name: /إجراءات/i }).getByRole("button", { name: /حذف/i });
+    await bulkDeleteBtn.click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.waitForTimeout(200);
+    await assertZeroAxeViolations(page, "arabic rtl confirmation dialog", '[role="dialog"]');
+
+    await dialog.getByRole("button", { name: /إلغاء/i }).click();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("focus lifecycle: mutation success and failure deterministic focus management", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page);
+
+    let postsData = [
+      { id: "mut-post-1", title: "Mutation focus post one", slug: "post-1", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", updatedAt: "2026-10-30T10:00:00.000Z" },
+      { id: "mut-post-2", title: "Mutation focus post two", slug: "post-2", status: "draft", publishedAt: null, updatedAt: "2026-10-29T10:00:00.000Z" },
+    ];
+    await page.route("**/api/admin/v1/posts**", async (route) => {
+      const method = route.request().method();
+      const url = route.request().url();
+      if (method === "DELETE") {
+        postsData = postsData.filter((p) => !url.includes(p.id));
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true }) });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ posts: postsData, total: postsData.length }),
+      });
+    });
+
+    await page.goto(`${BASE}/admin/posts`);
+    await expect(page.getByText("Mutation focus post one")).toBeVisible();
+
+    // 1. Delete first post -> focus should move to surviving second post row
+    const moreBtn1 = page.getByRole("button", { name: /More actions: Mutation focus post one/i });
+    await moreBtn1.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /Confirm delete|تأكيد الحذف/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // Focus is on surviving item row, NOT document.body
+    await expect(page.getByText("Mutation focus post one")).toHaveCount(0);
+    await page.waitForFunction(() => document.activeElement !== document.body);
+    const activeElementTag = await page.evaluate(() => document.activeElement?.tagName);
+    expect(["A", "BUTTON", "INPUT", "DIV"]).toContain(activeElementTag);
+
+    // 2. Delete the last remaining post -> focus should transfer to empty state action or search
+    const moreBtn2 = page.getByRole("button", { name: /More actions: Mutation focus post two/i });
+    await moreBtn2.click();
+    await page.getByRole("menuitem", { name: /Delete/i }).click();
+
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: /Confirm delete|تأكيد الحذف/i }).click();
+    await expect(dialog).toHaveCount(0);
+
+    // List is now empty
+    await expect(page.getByText("No posts yet")).toBeVisible();
+    await page.waitForFunction(() => document.activeElement !== document.body);
+    const emptyActiveElementTag = await page.evaluate(() => document.activeElement?.tagName);
+    expect(["BUTTON", "INPUT"]).toContain(emptyActiveElementTag);
   });
 });

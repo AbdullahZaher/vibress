@@ -538,10 +538,42 @@ The top **Select** button followed the desired minimal, modern design; however, 
   - `queryKey`: `JSON.stringify(["posts", page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch])`
 - Completely eliminates key collision vulnerabilities when searches or filter values contain colons or special characters.
 
-### 5. Final Quality Gates
+### 5. Quality Gates
 - **Typecheck:** 0 errors across `@vibress/admin`.
 - **Lint:** 0 errors, 0 warnings with strict ESLint.
-- **Vitest Suite:** 37 test files, 202 tests in `apps/admin` passing 100%.
-- **Playwright E2E Acceptance:** 19/19 tests passing 100% in real browser environments.
+- **Vitest Suite:** 37 test files, 206 tests in `apps/admin` passing 100%.
+- **Playwright E2E Acceptance:** 24/24 tests passing 100% in real browser environments.
 - **Production Build:** Vite production bundle generated cleanly.
+
+## 2026-11-01 — PR #104 Final Accessibility Gap Closure & Production Readiness
+
+### 1. Portaled Dialog Accessibility Verification
+- **Portaled Architecture Coverage:** Playwright accessibility testing explicitly inspects `[role="dialog"]` and `document.body` across all mutation dialog states (single delete, bulk delete, bulk publish, and bulk unpublish).
+- **Axe-Core Results:** 0 WCAG 2.2 AA violations in light and dark themes across all confirmation dialog types.
+- **Touch Target Compliance:** The dialog close button (`Dialog.tsx`) enforces a full 44×44px (`size-11 min-h-11 min-w-11`) touch target and localized accessible label (`aria-label={tr("Close dialog")}`). The dialog header adds `pe-12` clearance so title text never encroaches on the dismiss control.
+
+### 2. Dialog Keyboard Navigation & Focus Trapping
+- **Focus Invariant:** Upon opening, the confirmation dialog receives focus inside the dialog (`tabIndex={-1}` content container or first focusable control).
+- **Focus Trapping:** Pressing `Tab` from the final interactive control wraps forward to the initial control (Close button). Pressing `Shift+Tab` from the initial control wraps backward to the final interactive control. Focus cannot escape into the background while modal.
+- **Deterministic Dismissal:** Canceling the dialog via `Escape`, the Cancel button, or the Close button immediately unmounts the modal and restores focus directly to the original connected trigger (e.g. More Actions button or bulk toolbar action).
+
+### 3. Complete Focus Restoration Lifecycle Across All Mutations
+- **Deletion (Single & Bulk):** After deletion network requests complete and the list re-renders, focus is directed to the surviving row replacement element at `Math.min(targetIndex, rows.length - 1)`.
+- **Final Item Deletion (Empty State):** When the last remaining row is deleted, focus transfers safely to the empty-state action button (`New Post` / `Clear filters`), search input, or select button. Focus never drops to `document.body`.
+- **Publish & Unpublish:** Applied `restoreListFocus(targetIndex)` universally to Publish and Unpublish operations. Focus reliably lands on the affected or surviving item row rather than being lost.
+- **Mutation Failure & Error States:** When an API mutation fails, error feedback is announced, failed item IDs are preserved in selection for instant retry, and focus is restored to the list row rather than dropping to `document.body`.
+
+### 4. Arabic RTL & Localization Parity
+- **Localization Integration:** All selection, dialog, status, and error strings use the unified `admin-locale.tsx` localization dictionary.
+- **RTL Accessibility:** Playwright test suites explicitly assert zero WCAG 2.2 AA violations in Arabic RTL (`dir="rtl"`) mode for posts selection, bulk action groups, and portaled dialogs.
+- **Touch Targets in RTL:** Checked and verified that 44×44px touch targets and focus rings function correctly in RTL layout without clipping or horizontal overflow.
+
+### 5. Automated vs. Manual Accessibility Verification Boundaries
+- **Automated Verification:** 0 WCAG 2.2 AA violations detected via real browser `axe-core` across:
+  - Posts / Pages default mode (Dark & Light)
+  - Posts / Pages selection mode (Dark & Light)
+  - Bulk actions toolbar (Dark & Light)
+  - Portaled confirmation dialogs (Single delete, Bulk delete, Publish, Unpublish in Dark & Light)
+  - Arabic RTL layout (`dir="rtl"`)
+- **Manual Assistive Technology Status:** While automated axe-core coverage confirms 100% compliance across mechanical accessibility rules (color contrast, ARIA roles, valid IDs, accessible names, focusable target sizes), end-to-end screen-reader behavior in VoiceOver (macOS/iOS) and NVDA (Windows) must be audited through hands-on testing before final human certification. Automated test passes do not replace physical screen-reader verification.
 
