@@ -147,7 +147,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     onClick={handleAddPrimary}
                     className="h-7 text-xs gap-1 cursor-pointer"
                   >
-                    <Plus className="h-3 w-3" /> Add Link
+                    <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
                 </div>
 
@@ -203,7 +203,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     onClick={handleAddSecondary}
                     className="h-7 text-xs gap-1 cursor-pointer"
                   >
-                    <Plus className="h-3 w-3" /> Add Link
+                    <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
                 </div>
 

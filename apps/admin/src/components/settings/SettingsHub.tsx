@@ -64,6 +64,21 @@ interface SettingsHubProps {
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
+const SETTINGS_CARD_PERMISSIONS: Record<string, string> = {
+  "publication-info": "settings.manage", localization: "settings.manage",
+  "metadata-social": "settings.manage", "site-privacy": "settings.manage",
+  "staff-overview": "users.read", "design-branding": "settings.manage",
+  "navigation-manager": "settings.manage", "social-links": "settings.manage",
+  "themes-manager": "themes.manage", "announcement-bar": "settings.manage",
+  "portal-access": "members.manage", "subscription-tiers": "billing.manage",
+  "offers-promotions": "offers.manage", "newsletters-config": "email.manage",
+  "analytics-tracking": "analytics.read", "community-discussions": "comments.manage",
+  "recommendations-card": "recommendations.manage", "content-models": "posts.read",
+  "code-injection": "settings.manage", "integrations-platform": "integrations.manage",
+  "system-diagnostics": "system.read", "import-export": "imports.manage",
+  "audit-logs": "audit.read", "danger-zone": "system.manage",
+};
+
 
 const getPillarIcon = (iconName: string) => {
   switch (iconName) {
@@ -236,11 +251,11 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   >
                     {getPillarIcon(pillar.iconName)}
                     <span className="flex-1">{tr(pillar.title)}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">{pillar.cards.length}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{pillar.cards.filter((card) => !can || can(SETTINGS_CARD_PERMISSIONS[card.id] ?? "settings.manage")).length}</span>
                   </a>
                   {selected && (
                     <div className="mb-2 ms-6 border-s border-border/60 ps-3">
-                      {pillar.cards.filter((card) => !can || can(card.requiredPermission ?? "settings.manage") || can("settings.manage")).map((card) => (
+                      {pillar.cards.filter((card) => !can || can(SETTINGS_CARD_PERMISSIONS[card.id] ?? "settings.manage")).map((card) => (
                         <button key={card.id} type="button"
                           onClick={() => jumpToCard(pillar.id, card.id, card.anchor)}
                           className="block w-full rounded-md px-2 py-2 text-start text-xs leading-5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -253,7 +268,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
             })}
           </nav>
         </aside>
-        <main id="settings-results" className="min-w-0 space-y-8">
+        <div id="settings-results" className="min-w-0 space-y-8">
           {query.trim() && (
             <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
               {matchingCardsCount} {tr("matching settings")}
@@ -584,7 +599,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </SettingsSection>
       )}
 
-        </main>
+        </div>
       </div>
 
       {/* Floating Save / Discard Action Bar */}

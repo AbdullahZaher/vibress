@@ -4,8 +4,10 @@ import { useSiteSettings } from "./useSiteSettings";
 import { useMembershipSettings } from "./useMembershipSettings";
 import { useGrowthSettings } from "./useGrowthSettings";
 import { useAdvancedSettings } from "./useAdvancedSettings";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 export function useSettingsHub() {
+  const { tr } = useAdminLocale();
   const general = useGeneralSettings();
   const site = useSiteSettings();
   const membership = useMembershipSettings();
@@ -70,28 +72,26 @@ export function useSettingsHub() {
   const saveAllDirty = useCallback(async () => {
     setGlobalError(null);
     setGlobalSuccess(null);
+    const tasks: Array<{ label: string; save: () => Promise<boolean> }> = [];
+    if (general.isDirty) tasks.push({ label: tr("General settings"), save: general.save });
+    if (site.isDirty) tasks.push({ label: tr("Site"), save: site.save });
+    if (membership.isDirty) tasks.push({ label: tr("Membership"), save: membership.save });
+    if (growth.isDirty) tasks.push({ label: tr("Growth"), save: growth.save });
+    if (advanced.isDirty) tasks.push({ label: tr("Advanced"), save: advanced.save });
 
-    const saves: Promise<boolean>[] = [];
-    if (general.isDirty) saves.push(general.save());
-    if (site.isDirty) saves.push(site.save());
-    if (membership.isDirty) saves.push(membership.save());
-    if (growth.isDirty) saves.push(growth.save());
-    if (advanced.isDirty) saves.push(advanced.save());
-
-    const results = await Promise.all(saves);
-    const allPassed = results.every(Boolean);
-
-    if (allPassed) {
-      setGlobalSuccess("Settings saved successfully.");
+    const results = await Promise.allSettled(tasks.map((task) => task.save()));
+    const failed = tasks.filter((_, index) => {
+      const result = results[index];
+      return !result || result.status !== "fulfilled" || result.value !== true;
+    });
+    if (!failed.length) {
+      setGlobalSuccess(tr("Settings saved successfully."));
       setTimeout(() => setGlobalSuccess(null), 4000);
       return true;
-    } else {
-      setGlobalError(
-        "Some settings could not be saved. Please check the affected cards.",
-      );
-      return false;
     }
-  }, [general, site, membership, growth, advanced]);
+    setGlobalError(`${tr("Unable to save these sections:")} ${failed.map((task) => task.label).join(", ")}`);
+    return false;
+  }, [general, site, membership, growth, advanced, tr]);
 
   const discardAllDirty = useCallback(() => {
     if (general.isDirty) general.discard();
