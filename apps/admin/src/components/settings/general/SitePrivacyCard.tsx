@@ -56,7 +56,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
               <p className="text-xs font-semibold text-foreground">
                 Enable site password protection
               </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 All public routes will be locked behind a password screen.
                 Search engines will not index content.
               </p>
@@ -66,7 +66,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
               aria-label="Enable site password protection"
               checked={isPrivate}
               onChange={(e) => onChange?.("isPrivate", e.target.checked)}
-              className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+              className="size-6 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
             />
           </div>
 

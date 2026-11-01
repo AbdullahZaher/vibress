@@ -130,6 +130,26 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
 
             {/* Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              <section aria-label={tr("Navigation preview")} className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-semibold text-foreground">{tr("Navigation preview")}</h4>
+                  <span className="text-xs text-muted-foreground">{tr("Changes shown before saving")}</span>
+                </div>
+                <div className="space-y-3 rounded-lg border border-border/70 bg-card px-3 py-3">
+                  <div className="flex min-w-0 items-center justify-between gap-4">
+                    <span className="shrink-0 text-xs font-semibold text-foreground">Vibress</span>
+                    <div className="flex min-w-0 gap-3 overflow-x-auto whitespace-nowrap text-xs text-muted-foreground">
+                      {primaryNav.length ? primaryNav.map((item) => <span key={item.id}>{item.label || tr("Untitled link")}</span>) : <span>{tr("No header links")}</span>}
+                    </div>
+                  </div>
+                  <div className="border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    <div className="flex gap-3 overflow-x-auto whitespace-nowrap">
+                      {secondaryNav.length ? secondaryNav.map((item) => <span key={item.id}>{item.label || tr("Untitled link")}</span>) : <span>{tr("No footer links")}</span>}
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{tr("Layout preview only; your active theme controls the final appearance.")}</p>
+              </section>
               {/* Primary Header Links */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -137,7 +157,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     <h4 className="text-xs font-semibold text-foreground">
                       Primary Navigation (Header)
                     </h4>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Displayed in the main top navigation menu.
                     </p>
                   </div>
@@ -145,7 +165,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={handleAddPrimary}
-                    className="h-7 text-xs gap-1 cursor-pointer"
+                    className="min-h-9 text-xs gap-1 cursor-pointer"
                   >
                     <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
@@ -159,6 +179,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "label", e.target.value)
                         }
+                        aria-label={`${tr("Link label")} ${index + 1}`}
                         placeholder="Label"
                         className="min-w-0 h-10 text-sm"
                       />
@@ -167,6 +188,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "url", e.target.value)
                         }
+                        aria-label={`${tr("Link URL")} ${index + 1}`}
                         placeholder="/url"
                         className="col-start-1 row-start-2 min-w-0 h-10 text-sm font-mono sm:col-auto sm:row-auto"
                       />
@@ -193,7 +215,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     <h4 className="text-xs font-semibold text-foreground">
                       Secondary Navigation (Footer)
                     </h4>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Displayed in the publication footer section.
                     </p>
                   </div>
@@ -201,7 +223,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={handleAddSecondary}
-                    className="h-7 text-xs gap-1 cursor-pointer"
+                    className="min-h-9 text-xs gap-1 cursor-pointer"
                   >
                     <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
@@ -219,6 +241,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                             e.target.value,
                           )
                         }
+                        aria-label={`${tr("Link label")} ${index + 1}`}
                         placeholder="Label"
                         className="min-w-0 h-10 text-sm"
                       />
@@ -227,6 +250,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         onChange={(e) =>
                           handleUpdateSecondary(item.id, "url", e.target.value)
                         }
+                        aria-label={`${tr("Link URL")} ${index + 1}`}
                         placeholder="/url"
                         className="col-start-1 row-start-2 min-w-0 h-10 text-sm font-mono sm:col-auto sm:row-auto"
                       />

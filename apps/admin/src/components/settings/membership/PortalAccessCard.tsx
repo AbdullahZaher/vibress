@@ -95,7 +95,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
                 <p className="text-xs font-semibold text-foreground">
                   Allow new member signups
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   When enabled, anyone can register and subscribe through your
                   site's member portal.
                 </p>
@@ -105,7 +105,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
                 aria-label="Allow new member signups"
                 checked={signupEnabled}
                 onChange={(e) => onChange("signupEnabled", e.target.checked)}
-                className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+                className="size-6 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
               />
             </div>
 
@@ -114,7 +114,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
                 <p className="text-xs font-semibold text-foreground">
                   Default newsletter opt-in
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   Automatically subscribe newly registered members to default
                   newsletters.
                 </p>
@@ -126,7 +126,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
                 onChange={(e) =>
                   onChange("defaultNewsletterOptIn", e.target.checked)
                 }
-                className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+                className="size-6 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
               />
             </div>
           </div>
@@ -152,7 +152,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
               }
               className="bg-card text-xs h-8.5"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Default is 720 hours (30 days).
             </p>
           </div>

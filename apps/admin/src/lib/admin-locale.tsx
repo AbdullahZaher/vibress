@@ -24,6 +24,14 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Navigation preview": "معاينة القوائم",
+  "Changes shown before saving": "معاينة التغييرات قبل الحفظ",
+  "Untitled link": "رابط بدون عنوان",
+  "No header links": "لا توجد روابط في الترويسة",
+  "No footer links": "لا توجد روابط في التذييل",
+  "Layout preview only; your active theme controls the final appearance.": "هذه معاينة توضيحية؛ يحدد القالب النشط المظهر النهائي.",
+  "Link label": "اسم الرابط",
+  "Link URL": "رابط URL",
   "Search settings": "البحث في الإعدادات",
   "Settings categories": "فئات الإعدادات",
   "matching settings": "إعدادات مطابقة",

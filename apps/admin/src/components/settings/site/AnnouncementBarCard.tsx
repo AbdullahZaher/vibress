@@ -73,11 +73,17 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
               onChange={(e) =>
                 onChange?.("announcementEnabled", e.target.checked)
               }
-              className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+              className="size-6 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
             />
           </div>
 
           {enabled && (
+            <div aria-label="Announcement preview" className="rounded-lg border border-border/60 bg-card p-3">
+              <div className="rounded-md px-3 py-2 text-center text-xs font-medium text-primary-foreground bg-primary">
+                {text || "Your announcement will appear here."}
+              </div>
+              {url && <p className="mt-2 truncate text-xs text-muted-foreground" dir="auto">{url}</p>}
+            </div>
             <div className="space-y-3 pt-1 animate-in fade-in duration-150">
               <div className="space-y-1.5">
                 <label
