@@ -7,6 +7,7 @@ export interface SettingsCardRowProps {
   icon?: React.ReactNode | undefined;
   title: string;
   description?: string | undefined;
+  /** Legacy value summaries are intentionally hidden beside row actions. */
   currentValue?: React.ReactNode | undefined;
   actionLabel?: string | undefined;
   actionVariant?:
@@ -20,7 +21,6 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
   icon,
   title,
   description,
-  currentValue,
   actionLabel = "Edit",
   actionVariant = "outline",
   isExpanded,
@@ -48,14 +48,8 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
         </div>
       </div>
 
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 sm:shrink-0 sm:justify-end sm:border-t-0 sm:pt-0">
-        {currentValue && (
-          <div className="min-w-0 break-words text-end text-sm font-medium text-muted-foreground">
-            {currentValue}
-          </div>
-        )}
-
-        {onAction && (
+      {onAction && (
+        <div className="flex min-w-0 items-center justify-end border-t border-border/40 pt-3 sm:shrink-0 sm:border-0 sm:pt-0">
           <Button
             type="button"
             size="sm"
@@ -63,18 +57,18 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
             onClick={onAction}
             disabled={disabled}
             aria-expanded={isExpanded}
-            className="min-h-10 shrink-0 gap-1.5 px-3 text-sm"
+            className="min-h-11 shrink-0 gap-1.5 px-4 text-sm"
           >
             <span>{tr(actionLabel)}</span>
             {isExpanded !== undefined &&
               (isExpanded ? (
-                <ChevronUp className="h-3 w-3" />
+                <ChevronUp className="size-3.5" aria-hidden="true" />
               ) : (
-                <ChevronDown className="h-3 w-3" />
+                <ChevronDown className="size-3.5" aria-hidden="true" />
               ))}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

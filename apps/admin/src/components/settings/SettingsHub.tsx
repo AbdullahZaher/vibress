@@ -10,8 +10,7 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
-import { Button, buttonVariants } from "../ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -108,7 +107,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId } =
     useSettingsSearch();
 
-  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 120);
+  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 48);
 
   // Jump to initial anchor on load or route change
   useEffect(() => {
@@ -157,12 +156,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         description={tr("Manage publication preferences, membership, theme, and system options.")}
       />
 
-      {/* Search and Section Sticky Filter Bar */}
-      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
-        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+      {/* In-flow section navigation: no sticky overlay, blur, or translucent content. */}
+      <div className="flex min-w-0 flex-col gap-3 border-b border-border/70 pb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+        <nav
+          aria-label={tr("Settings sections")}
+          className="flex min-w-0 flex-1 items-center gap-5 overflow-x-auto no-scrollbar"
+        >
           {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
-            const isActive = activeSection === pillar.id;
+            const isActive = activeSection === pillar.id && !query.trim();
             return (
               <a
                 key={pillar.id}
@@ -172,7 +173,11 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   event.preventDefault();
                   scrollToSection(pillar.id, true);
                 }}
-                className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
+                className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-medium whitespace-nowrap transition-colors focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  isActive
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+                }`}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
@@ -181,15 +186,18 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           })}
         </nav>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <div className="relative w-full shrink-0 lg:w-64">
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
-            type="text"
+            type="search"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder={tr("Filter settings...")}
-            className="min-h-11 border-border bg-card ps-9 pe-12 text-sm"
+            aria-label={tr("Filter settings...")}
+            className="min-h-11 rounded-lg border-border bg-background ps-10 pe-11 text-sm"
           />
           {query && (
             <Button
