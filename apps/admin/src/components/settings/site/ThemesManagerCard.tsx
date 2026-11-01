@@ -12,6 +12,7 @@ import {
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
+import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
@@ -38,6 +39,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   isHighlighted,
 }) => {
   const { tr } = useAdminLocale();
+  const { confirm, confirmationDialog, isConfirmOpen } = useSettingsConfirmation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [themes, setThemes] = useState<ApiThemeSummary[]>([]);
   const [active, setActive] = useState<ApiActiveTheme | null>(null);
@@ -73,6 +75,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   useEffect(() => {
     if (!isDrawerOpen) return;
+    if (isConfirmOpen) return;
     const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
     if (isUploadOpen) {
       focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
@@ -100,7 +103,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     };
     document.addEventListener("keydown", trapTab);
     return () => document.removeEventListener("keydown", trapTab);
-  }, [isDrawerOpen, isUploadOpen]);
+  }, [isDrawerOpen, isUploadOpen, isConfirmOpen]);
 
 
 
@@ -125,16 +128,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     }
   }, []);
 
-  const handleEditorBack = () => {
+  const handleEditorBack = async () => {
     if (editorSaving) return;
-    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
   };
 
-  const handleCloseDrawer = () => {
+  const handleCloseDrawer = async () => {
     if (editorSaving) return;
-    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
     setIsDrawerOpen(false);
@@ -165,7 +168,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(`Are you sure you want to uninstall theme "${id}"?`)) {
+    if (!(await confirm(`Are you sure you want to uninstall theme "${id}"?`, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
     setDeleting(id);
@@ -578,6 +581,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           </div>
         )}
       </SettingsModalPortal>
+      {confirmationDialog}
     </>
   );
 };
