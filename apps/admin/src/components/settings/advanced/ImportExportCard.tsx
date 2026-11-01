@@ -110,6 +110,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
 
       {/* Import & Export Modal */}
       <SettingsModalPortal
+        label="Import and export"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -124,6 +125,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings dialog"
                 onClick={() => setIsModalOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >

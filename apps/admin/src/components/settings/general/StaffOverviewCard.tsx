@@ -107,6 +107,7 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({
 
       {/* Staff Management & Invite Modal */}
       <SettingsModalPortal
+        label="Staff and permissions"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -121,6 +122,7 @@ export const StaffOverviewCard: React.FC<StaffOverviewCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings dialog"
                 onClick={() => setIsModalOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >

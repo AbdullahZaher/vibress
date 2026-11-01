@@ -110,6 +110,7 @@ export const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
 
       {/* Recommendations Modal */}
       <SettingsModalPortal
+        label="Recommendations"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -124,6 +125,7 @@ export const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings dialog"
                 onClick={() => setIsModalOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >

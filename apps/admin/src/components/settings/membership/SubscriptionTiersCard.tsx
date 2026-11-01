@@ -104,6 +104,7 @@ export const SubscriptionTiersCard: React.FC<SubscriptionTiersCardProps> = ({
 
       {/* Subscription Tiers & Billing Modal */}
       <SettingsModalPortal
+        label="Subscription tiers"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -118,6 +119,7 @@ export const SubscriptionTiersCard: React.FC<SubscriptionTiersCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings dialog"
                 onClick={() => setIsModalOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >

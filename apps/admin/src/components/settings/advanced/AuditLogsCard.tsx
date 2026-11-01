@@ -53,11 +53,12 @@ export const AuditLogsCard: React.FC<AuditLogsCardProps> = ({
 
       {/* Audit Logs Drawer */}
       <SettingsModalPortal
+        label="Audit logs"
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
       >
         <div className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
+          <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in ltr:slide-in-from-right rtl:slide-in-from-left duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
               <div className="flex items-center gap-2">
@@ -68,6 +69,7 @@ export const AuditLogsCard: React.FC<AuditLogsCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings panel"
                 onClick={() => setIsDrawerOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >

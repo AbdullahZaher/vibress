@@ -127,6 +127,7 @@ export const OffersPromotionsCard: React.FC<OffersPromotionsCardProps> = ({
 
       {/* Offers & Discounts Modal */}
       <SettingsModalPortal
+        label="Offers and promotions"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -141,6 +142,7 @@ export const OffersPromotionsCard: React.FC<OffersPromotionsCardProps> = ({
               </div>
               <button
                 type="button"
+                aria-label="Close settings dialog"
                 onClick={() => setIsModalOpen(false)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
               >
