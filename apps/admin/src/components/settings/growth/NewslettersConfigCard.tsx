@@ -85,7 +85,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
       >
-        <div className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
@@ -98,7 +98,8 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                aria-label={tr("Close editor")}
+                className="inline-flex size-11 items-center justify-center text-muted-foreground hover:text-foreground rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -229,13 +230,14 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 bg-muted/20 p-4">
+              <p className="max-w-sm text-xs text-muted-foreground">{tr("Changes are saved using the main Save changes bar.")}</p>
               <Button
                 size="sm"
                 onClick={() => setIsDrawerOpen(false)}
                 className="min-h-11 text-sm"
               >
-                Done
+                {tr("Close editor")}
               </Button>
             </div>
           </div>

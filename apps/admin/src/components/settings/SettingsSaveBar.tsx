@@ -2,12 +2,13 @@ import React, { useEffect } from "react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
-  Sparkles,
+  Save,
   CheckCircle2,
   AlertCircle,
   RotateCcw,
 } from "lucide-react";
 import { useUnsavedChanges } from "./hooks/useUnsavedChanges";
+import { useSettingsConfirmation } from "./hooks/useSettingsConfirmation";
 import { useAdminLocale } from "../../lib/admin-locale";
 
 interface SettingsSaveBarProps {
@@ -30,6 +31,13 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
   errorMsg,
 }) => {
   const { tr } = useAdminLocale();
+  const { confirm, confirmationDialog } = useSettingsConfirmation();
+  const confirmDiscard = async () => {
+    if (!saving && await confirm(tr("Discard all unsaved settings changes?"), {
+      destructive: true,
+      confirmLabel: tr("Discard changes"),
+    })) onDiscard();
+  };
   const shortcut = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘S" : "Ctrl+S";
   // Guard window navigation / tab close
   useUnsavedChanges(isDirty);
@@ -76,12 +84,9 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
       {isDirty && (
         <div className="fixed bottom-4 sm:bottom-6 inset-x-0 z-40 flex justify-center px-4 pointer-events-none animate-in slide-in-from-bottom-5 duration-200">
           <div role="region" aria-label={tr("Unsaved changes")}
-            className="pointer-events-auto flex flex-col min-[420px]:flex-row items-stretch min-[420px]:items-center gap-3 px-4 py-3 rounded-2xl bg-card/95 border border-primary/30 shadow-2xl backdrop-blur-md text-foreground max-w-lg w-full justify-between">
+            className="pointer-events-auto flex flex-col min-[420px]:flex-row items-stretch min-[420px]:items-center gap-3 px-4 py-3 rounded-2xl bg-card border border-border shadow-xl text-foreground max-w-lg w-full justify-between">
             <div className="flex min-w-0 items-center gap-2.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-              </span>
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-amber-500" />
               <span className="text-xs font-medium">{tr("Unsaved changes")}</span>
               {dirtyCount > 0 && (
                 <Badge
@@ -97,7 +102,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
               <Button
                 variant="outline"
                 size="default"
-                onClick={onDiscard}
+                onClick={() => void confirmDiscard()}
                 disabled={saving}
                 className="w-full min-w-0 gap-2"
               >
@@ -111,13 +116,14 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 loadingLabel={tr("Saving...")}
                 className="w-full min-w-0 gap-2"
               >
-                <Sparkles className="size-4 shrink-0" aria-hidden="true" />
+                <Save className="size-4 shrink-0" aria-hidden="true" />
                 {tr("Save changes")} <kbd className="text-xs opacity-75" dir="ltr">{shortcut}</kbd>
               </Button>
             </div>
           </div>
         </div>
       )}
+      {confirmationDialog}
     </>
   );
 };

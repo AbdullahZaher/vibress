@@ -218,6 +218,7 @@ export function PublicationLanguagesManager({ onSaved }: { onSaved?: ((primaryLo
               : label("One active language: translation tools remain hidden.",
                 "لغة واحدة مفعّلة: أدوات الترجمة مخفية.")}
           </p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{label("Publication languages are saved separately from other settings.", "تُحفظ لغات الموقع بصورة مستقلة عن بقية الإعدادات.")}</p>
           <Button type="button" onClick={() => void save()}
             disabled={!dirty || working || config.needsReconciliation}>
             {working ? label("Saving…", "جارٍ الحفظ…") : label("Save publication languages", "حفظ لغات الموقع")}

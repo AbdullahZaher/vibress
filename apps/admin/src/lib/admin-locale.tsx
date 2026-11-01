@@ -24,6 +24,10 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Discard all unsaved settings changes?": "هل تريد تجاهل جميع تغييرات الإعدادات غير المحفوظة؟",
+  "Discard changes": "تجاهل التغييرات",
+  "Back to settings sections": "العودة إلى أقسام الإعدادات",
+  "Close manager": "إغلاق الإدارة",
   "The details used to identify your publication around the web and in search results.": "البيانات التي تعرّف بمنشورك في المواقع ومحركات البحث.",
   "Search engine & social cards": "الظهور في البحث ووسائل التواصل",
   "Preview how your publication appears in Google search engine results and social media embeds.": "عاين طريقة ظهور منشورك في نتائج Google وبطاقات المشاركة.",

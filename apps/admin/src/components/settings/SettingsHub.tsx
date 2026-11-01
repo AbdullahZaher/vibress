@@ -53,6 +53,7 @@ import {
   Sparkles,
   Cpu,
   Search,
+  ArrowUp,
   X,
   Database,
 } from "lucide-react";
@@ -157,7 +158,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       />
 
       {/* In-flow section navigation: no sticky overlay, blur, or translucent content. */}
-      <div className="flex min-w-0 flex-col gap-3 border-b border-border/70 pb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+      <div id="settings-section-navigation" className="flex min-w-0 flex-col gap-3 border-b border-border/70 pb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
         <nav
           aria-label={tr("Settings sections")}
           className="flex min-w-0 flex-1 items-center gap-5 overflow-x-auto no-scrollbar"
@@ -563,7 +564,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </SettingsSection>
       )}
 
-      {/* Floating Save / Discard Action Bar */}
+      <div className="flex justify-center pb-3">
+        <a href="#settings-section-navigation" className="inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <ArrowUp className="size-4" aria-hidden="true" />
+          {tr("Back to settings sections")}
+        </a>
+      </div>
+
+      {/* Floating Save / Discard Action Bar */
       <SettingsSaveBar
         isDirty={isDirty}
         dirtyCount={dirtyCount}

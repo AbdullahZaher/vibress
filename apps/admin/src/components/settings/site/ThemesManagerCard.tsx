@@ -265,7 +265,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         isOpen={isDrawerOpen}
         onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
             {/* Drawer Header */}
             <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
@@ -473,7 +473,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 disabled={editorSaving}
                 className="min-h-11 text-sm"
               >
-                {editingTheme ? tr("Back to themes") : "Done"}
+                {editingTheme ? tr("Back to themes") : tr("Close manager")}
               </Button>
             </div>
           </div>
