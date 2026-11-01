@@ -153,7 +153,7 @@ describe("ThemesManagerCard", () => {
   });
 
   it("prompts for confirmation before discarding unsaved theme settings", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm");
+    // The theme manager uses the accessible confirmation dialog, not window.confirm.
     await act(async () => root.render(<ThemesManagerCard />));
     const open = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("Change theme"),
@@ -175,19 +175,28 @@ describe("ThemesManagerCard", () => {
     });
 
     // 1. Cancel discard -> stays in editor
-    confirmSpy.mockReturnValueOnce(false);
     const backButton = document.querySelector<HTMLButtonElement>(
       'button[aria-label="Back to themes"]',
     );
     expect(backButton).not.toBeNull();
     await act(async () => { backButton?.click(); });
 
-    expect(confirmSpy).toHaveBeenCalledWith("Discard unsaved theme settings changes?");
+    let confirmation = document.querySelector<HTMLElement>(".settings-confirmation-dialog");
+    expect(confirmation?.textContent).toContain("Discard unsaved theme settings changes?");
+    const cancel = Array.from(confirmation?.querySelectorAll("button") ?? []).find(
+      button => button.textContent?.trim() === "Cancel",
+    );
+    await act(async () => { cancel?.click(); });
     expect(document.querySelector<HTMLSelectElement>("select")).not.toBeNull();
 
     // 2. Confirm discard -> returns to theme list
-    confirmSpy.mockReturnValueOnce(true);
     await act(async () => { backButton?.click(); });
+    confirmation = document.querySelector<HTMLElement>(".settings-confirmation-dialog");
+    const proceed = Array.from(confirmation?.querySelectorAll("button") ?? []).find(
+      button => button.textContent?.trim() === "Continue",
+    );
+    expect(proceed).toBeTruthy();
+    await act(async () => { proceed?.click(); });
     expect(document.querySelector<HTMLSelectElement>("select")).toBeNull();
     expect(document.querySelector('button[aria-label="Settings Retro Creator"]')).not.toBeNull();
   });
