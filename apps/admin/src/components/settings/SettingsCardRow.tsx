@@ -1,6 +1,7 @@
 import React from "react";
 import { Button } from "../ui/button";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useAdminLocale } from "../../lib/admin-locale";
 
 export interface SettingsCardRowProps {
   icon?: React.ReactNode | undefined;
@@ -26,6 +27,7 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
   onAction,
   disabled = false,
 }) => {
+  const { tr } = useAdminLocale();
   return (
     <div className="flex min-w-0 flex-col justify-between gap-4 px-4 py-4 transition-colors sm:flex-row sm:items-center sm:px-5">
       <div className="flex min-w-0 max-w-2xl items-start gap-3">
@@ -36,11 +38,11 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
         )}
         <div className="min-w-0 space-y-1">
           <h4 className="text-sm font-semibold text-foreground tracking-tight">
-            {title}
+            {tr(title)}
           </h4>
           {description && (
             <p className="text-sm leading-relaxed text-muted-foreground">
-              {description}
+              {tr(description)}
             </p>
           )}
         </div>
@@ -60,9 +62,10 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
             variant={actionVariant}
             onClick={onAction}
             disabled={disabled}
+            aria-expanded={isExpanded}
             className="min-h-11 shrink-0 gap-1.5 px-3 text-sm"
           >
-            <span>{actionLabel}</span>
+            <span>{tr(actionLabel)}</span>
             {isExpanded !== undefined &&
               (isExpanded ? (
                 <ChevronUp className="h-3 w-3" />

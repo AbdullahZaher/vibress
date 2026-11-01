@@ -102,6 +102,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
               </div>
               <input
                 type="checkbox"
+                aria-label="Allow new member signups"
                 checked={signupEnabled}
                 onChange={(e) => onChange("signupEnabled", e.target.checked)}
                 className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
@@ -120,6 +121,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
               </div>
               <input
                 type="checkbox"
+                aria-label="Default newsletter opt-in"
                 checked={defaultNewsletterOptIn}
                 onChange={(e) =>
                   onChange("defaultNewsletterOptIn", e.target.checked)

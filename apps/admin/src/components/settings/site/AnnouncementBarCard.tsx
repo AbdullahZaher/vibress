@@ -68,6 +68,7 @@ export const AnnouncementBarCard: React.FC<AnnouncementBarCardProps> = ({
             </div>
             <input
               type="checkbox"
+              aria-label="Show announcement bar"
               checked={enabled}
               onChange={(e) =>
                 onChange?.("announcementEnabled", e.target.checked)

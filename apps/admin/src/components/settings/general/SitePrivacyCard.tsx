@@ -63,6 +63,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
             </div>
             <input
               type="checkbox"
+              aria-label="Enable site password protection"
               checked={isPrivate}
               onChange={(e) => onChange?.("isPrivate", e.target.checked)}
               className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"

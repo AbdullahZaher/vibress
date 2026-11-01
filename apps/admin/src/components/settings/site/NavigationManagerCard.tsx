@@ -5,8 +5,19 @@ import { SettingsModalPortal } from "../SettingsModalPortal";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { Menu, Plus, Trash2, GripVertical, X } from "lucide-react";
+import { Menu, Plus, Trash2, ArrowUp, ArrowDown, X } from "lucide-react";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import { NavItem } from "../hooks/useSiteSettings";
+
+export function moveNavigationItem(items: NavItem[], index: number, direction: -1 | 1): NavItem[] {
+  const destination = index + direction;
+  if (index < 0 || destination < 0 || index >= items.length || destination >= items.length) return items;
+  const updated = [...items];
+  const [item] = updated.splice(index, 1);
+  if (!item) return items;
+  updated.splice(destination, 0, item);
+  return updated;
+}
 
 interface NavigationManagerCardProps {
   primaryNav: NavItem[];
@@ -23,6 +34,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
   onChangeSecondary,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const handleAddPrimary = () => {
@@ -140,16 +152,15 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  {primaryNav.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0" />
+                  {primaryNav.map((item, index) => (
+                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-border/60 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                       <Input
                         value={item.label}
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "label", e.target.value)
                         }
                         placeholder="Label"
-                        className="text-xs h-8 flex-1"
+                        className="min-w-0 h-10 text-sm"
                       />
                       <Input
                         value={item.url}
@@ -157,16 +168,19 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           handleUpdatePrimary(item.id, "url", e.target.value)
                         }
                         placeholder="/url"
-                        className="text-xs h-8 flex-1 font-mono"
+                        className="col-start-1 row-start-2 min-w-0 h-10 text-sm font-mono sm:col-auto sm:row-auto"
                       />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemovePrimary(item.id)}
-                        className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="col-start-2 row-span-2 flex items-center gap-1 sm:col-auto sm:row-auto">
+                        <Button size="sm" variant="ghost" aria-label={tr("Move link up")}
+                          disabled={index === 0} onClick={() => onChangePrimary(moveNavigationItem(primaryNav, index, -1))}
+                          className="size-9 p-0"><ArrowUp className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" aria-label={tr("Move link down")}
+                          disabled={index === primaryNav.length - 1} onClick={() => onChangePrimary(moveNavigationItem(primaryNav, index, 1))}
+                          className="size-9 p-0"><ArrowDown className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" aria-label={tr("Remove navigation link")}
+                          onClick={() => handleRemovePrimary(item.id)}
+                          className="size-9 p-0 text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -194,9 +208,8 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  {secondaryNav.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab shrink-0" />
+                  {secondaryNav.map((item, index) => (
+                    <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-lg border border-border/60 p-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
                       <Input
                         value={item.label}
                         onChange={(e) =>
@@ -207,7 +220,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           )
                         }
                         placeholder="Label"
-                        className="text-xs h-8 flex-1"
+                        className="min-w-0 h-10 text-sm"
                       />
                       <Input
                         value={item.url}
@@ -215,22 +228,26 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           handleUpdateSecondary(item.id, "url", e.target.value)
                         }
                         placeholder="/url"
-                        className="text-xs h-8 flex-1 font-mono"
+                        className="col-start-1 row-start-2 min-w-0 h-10 text-sm font-mono sm:col-auto sm:row-auto"
                       />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleRemoveSecondary(item.id)}
-                        className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="col-start-2 row-span-2 flex items-center gap-1 sm:col-auto sm:row-auto">
+                        <Button size="sm" variant="ghost" aria-label={tr("Move link up")}
+                          disabled={index === 0} onClick={() => onChangeSecondary(moveNavigationItem(secondaryNav, index, -1))}
+                          className="size-9 p-0"><ArrowUp className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" aria-label={tr("Move link down")}
+                          disabled={index === secondaryNav.length - 1} onClick={() => onChangeSecondary(moveNavigationItem(secondaryNav, index, 1))}
+                          className="size-9 p-0"><ArrowDown className="size-4" /></Button>
+                        <Button size="sm" variant="ghost" aria-label={tr("Remove navigation link")}
+                          onClick={() => handleRemoveSecondary(item.id)}
+                          className="size-9 p-0 text-muted-foreground hover:text-destructive"><Trash2 className="size-4" /></Button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
+            <p className="px-5 text-xs leading-5 text-muted-foreground">{tr("Changes are saved using the Settings save bar.")}</p>
             {/* Footer */}
             <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
               <Button
@@ -238,7 +255,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                 onClick={() => setIsDrawerOpen(false)}
                 className="text-xs cursor-pointer"
               >
-                Done Editing
+                {tr("Close editor")}
               </Button>
             </div>
           </div>

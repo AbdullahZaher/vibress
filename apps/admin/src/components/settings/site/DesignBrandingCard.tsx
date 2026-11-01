@@ -45,6 +45,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -136,6 +137,41 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
             </div>
           </div>
 
+          {/* Inline approximation of the branding; never presented as the real active theme. */}
+          <div className="space-y-3" aria-label="Branding preview">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground">Brand preview</h4>
+                <p className="mt-1 text-xs text-muted-foreground">Updates instantly. Final appearance depends on the active theme.</p>
+              </div>
+              <div role="group" aria-label="Preview device" className="inline-flex rounded-lg border border-border bg-card p-1">
+                {(["desktop", "mobile"] as const).map((mode) => (
+                  <button key={mode} type="button" aria-pressed={previewMode === mode}
+                    onClick={() => setPreviewMode(mode)}
+                    className={`min-h-9 rounded-md px-3 text-xs font-medium capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${previewMode === mode ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>{mode}</button>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-center overflow-hidden rounded-xl border border-border bg-neutral-200 p-3 dark:bg-neutral-900">
+              <div className={`w-full overflow-hidden rounded-lg border border-neutral-200 bg-white text-neutral-900 shadow-sm transition-[max-width] duration-200 ${previewMode === "mobile" ? "max-w-[260px]" : "max-w-full"}`}>
+                <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {logoUrl ? <img src={logoUrl} alt="Preview logo" className="h-6 max-w-24 object-contain" /> : iconUrl ? <img src={iconUrl} alt="Preview icon" className="size-6 rounded object-cover" /> : <span className="size-5 rounded-md" style={{ backgroundColor: accentColor }} aria-hidden="true" />}
+                    <span className="truncate text-xs font-semibold">{logoUrl ? "" : "Your publication"}</span>
+                  </div>
+                  <span className="h-1.5 w-12 rounded-full bg-neutral-200" aria-hidden="true" />
+                </div>
+                <div className="space-y-3 px-5 py-7 text-center">
+                  <span className="text-[10px] font-semibold uppercase tracking-[.2em]" style={{ color: "#525252" }}>Editorial preview</span>
+                  <h5 className={`font-semibold tracking-tight ${previewMode === "mobile" ? "text-lg" : "text-2xl"}`}>Ideas worth sharing.</h5>
+                  <p className="mx-auto max-w-sm text-xs leading-5 text-neutral-600">A glimpse of your publication's visual language.</p>
+                  <div className="mx-auto h-1 w-16 rounded-full" style={{ backgroundColor: accentColor }} aria-label="Selected accent color" />
+                  <div className="mx-auto inline-flex min-h-9 items-center rounded-md border-2 px-4 text-xs font-semibold" style={{ borderColor: accentColor }}>Explore stories</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Accent Color Picker */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-foreground">
@@ -149,9 +185,11 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                     key={c}
                     type="button"
                     onClick={() => handleColorSelect(c)}
-                    className="size-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-xs cursor-pointer relative"
+                    className="size-9 rounded-full flex items-center justify-center transition-transform hover:scale-105 shadow-xs cursor-pointer relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     style={{ backgroundColor: c }}
                     title={c}
+                    aria-label={`Select accent color ${c}`}
+                    aria-pressed={accentColor.toLowerCase() === c.toLowerCase()}
                   >
                     {accentColor.toLowerCase() === c.toLowerCase() && (
                       <Check className="h-3.5 w-3.5 text-white drop-shadow-md" />
@@ -163,6 +201,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
               {/* Hex Input with Indicator */}
               <div className="flex items-center gap-2">
                 <Input
+                  aria-label="Custom accent color (hex)"
                   value={accentColor}
                   onChange={(e) => handleColorSelect(e.target.value)}
                   placeholder="#6366f1"
