@@ -7,6 +7,7 @@ import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Mail, Send, Server, X, Sparkles, RefreshCw } from "lucide-react";
 import { testSmtpApi } from "../../../lib/api/operations";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface NewslettersConfigCardProps {
   fromName: string;
@@ -23,6 +24,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
   onChange,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
   const [testResult, setTestResult] = useState<{
@@ -147,8 +149,8 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                     <label htmlFor="settings-mail-from-email" className="text-sm font-medium text-foreground block mb-1">From Email Address</label>
                     <Input
                       id="settings-mail-from-email"
-                     type="email"
-                     value={fromEmail}
+                      type="email"
+                      value={fromEmail}
                       onChange={(e) => onChange("fromEmail", e.target.value)}
                       placeholder="noreply@domain.com"
                       className="text-sm min-h-10 font-mono"
@@ -166,16 +168,16 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   </h4>
                   <Badge
                     variant="outline"
-                    className="text-[10px] font-mono text-emerald-500 border-emerald-500/30"
+                    className={`text-xs font-medium ${smtpHost ? "text-emerald-700 dark:text-emerald-400 border-emerald-500/30" : "text-muted-foreground border-border"}`}
                   >
-                    {smtpHost ? "Configured" : "Not configured"}
+                    {tr(smtpHost ? "Configured" : "Not configured")}
                   </Badge>
                 </div>
                 <div>
                   <label htmlFor="settings-mail-smtp-host" className="text-sm font-medium text-foreground block mb-1">SMTP Host</label>
                   <Input
                     id="settings-mail-smtp-host"
-                     value={smtpHost}
+                      value={smtpHost}
                     onChange={(e) => onChange("smtpHost", e.target.value)}
                     placeholder="mailpit (port 1025)"
                     className="text-sm min-h-10 font-mono"
@@ -216,6 +218,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   </Button>
                   {testResult && (
                     <p
+                      role={testResult.success ? "status" : "alert"}
                       className={`text-xs font-medium ${testResult.success ? "text-emerald-500" : "text-destructive"} animate-in fade-in`}
                     >
                       {testResult.message}
