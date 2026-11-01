@@ -94,3 +94,7 @@ Responsibilities:
 - subscription management
 - comment identity
 - member preferences
+
+## React state management
+
+For React-based admin, portal and Vibress-owned Studio integration UI, follow the [Vibress React State Management Standard](react-state-management.md), [upstream Markdown notes](react-state-reference-notes.md) and [review checklist](react-state-review-checklist.md). Reuse each app's actual API and state/query patterns rather than assuming identical dependencies.

@@ -11,6 +11,9 @@ vibress-documentation/
 │   ├── repository-structure.md
 ├── 02-apps/
 │   ├── apps-overview.md
+│   ├── react-state-management.md
+│   ├── react-state-reference-notes.md
+│   ├── react-state-review-checklist.md
 ├── 03-domains/
 │   ├── analytics.md
 │   ├── audit.md

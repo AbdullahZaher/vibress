@@ -19,6 +19,12 @@ This policy is **adopted as the target contract**, not yet implemented or certif
 - [Liquid theme developer guide](themes/developer-guide.md) · [Templating reference](themes/templating.md) · [Public site API](10-api/themes-api.md).
 - Default, Minimal and Molten render the social icons in their footers. Custom themes choose where to place them.
 
+## React state management
+
+- [Vibress React State Management Standard](02-apps/react-state-management.md) — local/server state, Hooks, security boundaries and UI behavior.
+- [Annotated React source Markdown notes](02-apps/react-state-reference-notes.md) — verified upstream source files, ESLint guidance, TanStack Query and research.
+- [React state review checklist](02-apps/react-state-review-checklist.md) — implementation review and validation coverage.
+
 ## Core principles
 
 1. **Modular monolith first**

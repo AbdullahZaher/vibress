@@ -558,6 +558,8 @@ Keep business logic out of UI components.
 
 Use established API, router, query, and state patterns in the owning app.
 
+For React state-related work in admin, portal or other React-based Vibress UI, read the [Vibress React State Management Standard](docs/02-apps/react-state-management.md) before changing Hooks, state ownership, cache or form behavior. Use its [review checklist](docs/02-apps/react-state-review-checklist.md) during review, and its [annotated Markdown source notes](docs/02-apps/react-state-reference-notes.md) for upstream references. Client state and cache keys never replace server authorization or publication isolation.
+
 Relevant flows should handle:
 
 - loading;
