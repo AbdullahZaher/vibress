@@ -126,7 +126,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     <h4 className="text-xs font-semibold text-foreground">
                       Primary Navigation (Header)
                     </h4>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Displayed in the main top navigation menu.
                     </p>
                   </div>
@@ -151,7 +151,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           handleUpdatePrimary(item.id, "label", e.target.value)
                         }
                         placeholder="Label"
-                        className="text-xs h-8 flex-1"
+                        className="text-sm min-h-10 flex-1"
                       />
                       <Input
                         aria-label={`${tr("Header link")} ${index + 1} URL`}
@@ -160,14 +160,14 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           handleUpdatePrimary(item.id, "url", e.target.value)
                         }
                         placeholder="/url"
-                        className="text-xs h-8 flex-1 font-mono"
+                        className="text-sm min-h-10 flex-1 font-mono"
                       />
                       <Button
                         size="sm"
                         variant="ghost"
                         aria-label={`${tr("Remove")} ${tr("Header link")} ${index + 1}`}
                         onClick={() => handleRemovePrimary(item.id)}
-                        className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="min-h-10 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -183,7 +183,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     <h4 className="text-xs font-semibold text-foreground">
                       Secondary Navigation (Footer)
                     </h4>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Displayed in the publication footer section.
                     </p>
                   </div>
@@ -212,7 +212,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           )
                         }
                         placeholder="Label"
-                        className="text-xs h-8 flex-1"
+                        className="text-sm min-h-10 flex-1"
                       />
                       <Input
                         aria-label={`${tr("Footer link")} ${index + 1} URL`}
@@ -221,14 +221,14 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                           handleUpdateSecondary(item.id, "url", e.target.value)
                         }
                         placeholder="/url"
-                        className="text-xs h-8 flex-1 font-mono"
+                        className="text-sm min-h-10 flex-1 font-mono"
                       />
                       <Button
                         size="sm"
                         variant="ghost"
                         aria-label={`${tr("Remove")} ${tr("Footer link")} ${index + 1}`}
                         onClick={() => handleRemoveSecondary(item.id)}
-                        className="h-8 px-2 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="min-h-10 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

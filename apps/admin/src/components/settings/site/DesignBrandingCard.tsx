@@ -120,7 +120,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
                 Live Brand Style & Palette
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Accent colors are applied throughout themes, buttons, links, and
                 newsletters.
               </p>
@@ -191,7 +191,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                 <span className="text-xs font-semibold text-foreground">
                   Publication Icon
                 </span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Square PNG (min 60x60)
                 </span>
               </div>
@@ -239,7 +239,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                 <span className="text-xs font-semibold text-foreground">
                   Publication Logo
                 </span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Transparent SVG / PNG
                 </span>
               </div>

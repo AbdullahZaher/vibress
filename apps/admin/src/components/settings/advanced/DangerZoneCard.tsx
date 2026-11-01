@@ -120,7 +120,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     <h4 className="text-xs font-bold text-foreground">
                       Purge All Dynamic Caches
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Flushes Redis cache keys for public posts, settings
                       namespaces, and author listings.
                     </p>
@@ -130,7 +130,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     variant="outline"
                     disabled={runningOp !== null}
                     onClick={() => handleExecuteMaintenance("cache-purge")}
-                    className="shrink-0 text-xs gap-1.5 cursor-pointer h-8"
+                    className="min-h-11 shrink-0 text-sm gap-1.5"
                   >
                     <RefreshCw
                       className={`h-3 w-3 ${runningOp === "cache-purge" ? "animate-spin" : ""}`}
@@ -144,7 +144,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     <h4 className="text-xs font-bold text-foreground">
                       Rebuild Search Indices
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       Reindexes all published articles and pages into the search
                       document database.
                     </p>
@@ -154,7 +154,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     variant="outline"
                     disabled={runningOp !== null}
                     onClick={() => handleExecuteMaintenance("search-reindex")}
-                    className="shrink-0 text-xs gap-1.5 cursor-pointer h-8"
+                    className="min-h-11 shrink-0 text-sm gap-1.5"
                   >
                     <Database
                       className={`h-3 w-3 ${runningOp === "search-reindex" ? "animate-spin" : ""}`}
@@ -172,12 +172,12 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                   <ShieldAlert className="h-4 w-4" />
                   <span>Database Purge & Reset Policy</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Direct HTTP deletion of all publication records is
                   intentionally restricted in production to prevent catastrophic
                   data loss. To wipe or reset test databases, use the
                   authenticated CLI command{" "}
-                  <code className="font-mono text-primary text-[10px]">
+                  <code className="font-mono text-primary text-xs">
                     pnpm db:reset
                   </code>
                   .
@@ -189,7 +189,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                   size="sm"
                   variant="ghost"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-xs cursor-pointer"
+                  className="min-h-11 text-sm"
                 >
                   Close
                 </Button>

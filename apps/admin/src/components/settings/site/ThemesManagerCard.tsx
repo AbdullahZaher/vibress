@@ -287,7 +287,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-xs h-8"
+                  className="gap-1.5 text-sm min-h-10
                 >
                   <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
                 </Button>
@@ -296,7 +296,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-xs h-8"
+                  className="gap-1.5 text-sm min-h-10
                   title="Reload registry themes from backend"
                 >
                   <RefreshCw
@@ -325,7 +325,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <div className="flex items-center gap-2">
                   <Badge
                     variant="outline"
-                    className="text-[10px] font-mono border-primary/30 text-primary"
+                    className="text-xs font-mono border-primary/30 text-primary"
                   >
                     Zero-Rebuild Theme System
                   </Badge>
@@ -378,7 +378,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             <div className="flex items-center gap-1">
                               <Badge
                                 variant="secondary"
-                                className="text-[10px] font-mono"
+                                className="text-xs font-mono"
                               >
                                 v{theme.manifest.version}
                               </Badge>
@@ -392,7 +392,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               )}
                             </div>
                           </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                             {theme.manifest.description ||
                               "Responsive publishing theme optimized for modern publications."}
                           </p>
@@ -405,7 +405,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               isCurrent || activating === theme.manifest.id
                             }
                             onClick={() => handleActivate(theme.manifest.id)}
-                            className="text-xs h-7 flex-1 cursor-pointer"
+                            className="text-sm min-h-10 flex-1 cursor-pointer"
                             variant={isCurrent ? "outline" : "default"}
                           >
                             {isCurrent ? (
@@ -425,7 +425,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             size="sm"
                             variant="ghost"
                             onClick={() => handlePreview(theme.manifest.id)}
-                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
                             title="Preview theme in new tab"
                           >
                             <Eye className="h-3.5 w-3.5" />
@@ -438,7 +438,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               setEditorDirty(false);
                               setEditingTheme(theme);
                             }}
-                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
                             title={tr("Theme settings")}
                             aria-label={`${tr("Settings")} ${theme.manifest.name}`}
                           >
@@ -471,7 +471,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 size="sm"
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 disabled={editorSaving}
-                className="text-xs cursor-pointer"
+                className="min-h-11 text-sm"
               >
                 {editingTheme ? tr("Back to themes") : "Done"}
               </Button>
@@ -548,7 +548,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
                         <span className="text-xs font-semibold">Drop theme.zip here</span>
-                        <span className="text-[10px] text-muted-foreground">or click to browse</span>
+                        <span className="text-xs text-muted-foreground">or click to browse</span>
                       </div>
                     )}
                   </div>
@@ -568,7 +568,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   size="sm"
                   disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
                   onClick={handleUploadSubmit}
-                  className="text-xs h-7 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="text-sm min-h-10 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />

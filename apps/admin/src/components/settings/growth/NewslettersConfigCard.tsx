@@ -112,7 +112,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   <span className="font-semibold text-foreground">
                     {fromName || "Vibress"} Newsletter
                   </span>
-                  <span className="font-mono text-[10px]">
+                  <span className="font-mono text-xs">
                     &lt;{fromEmail || "noreply@vibress.org"}&gt;
                   </span>
                 </div>
@@ -120,11 +120,11 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   <p className="text-xs font-bold text-foreground">
                     Weekly Digest: Your latest updates
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Sent to all registered subscribers.
                   </p>
                 </div>
-                <p className="text-[10px] text-muted-foreground flex items-center justify-center gap-1 pt-0.5">
+                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1 pt-0.5">
                   <Sparkles className="h-3 w-3 text-primary" /> Live Email
                   Header Preview
                 </p>
@@ -182,7 +182,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                     placeholder="mailpit (port 1025)"
                     className="text-sm min-h-10 font-mono"
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Integrated with internal MailPit SMTP relay for
                     transactional and newsletter broadcasts.
                   </p>
@@ -195,7 +195,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   <Sparkles className="h-3.5 w-3.5 text-primary" /> Test SMTP
                   Delivery
                 </h4>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Send a live test email to verify DNS records, SMTP relay, and
                   template styling.
                 </p>
@@ -233,7 +233,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
               <Button
                 size="sm"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-xs cursor-pointer"
+                className="min-h-11 text-sm"
               >
                 Done
               </Button>

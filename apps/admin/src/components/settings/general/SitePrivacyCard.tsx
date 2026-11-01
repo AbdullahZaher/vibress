@@ -34,14 +34,14 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
           isPrivate ? (
             <Badge
               variant="destructive"
-              className="text-[10px] gap-1 px-2 py-0.5"
+              className="text-xs gap-1 px-2 py-0.5"
             >
               <Lock className="h-3 w-3" /> Password Protected
             </Badge>
           ) : (
             <Badge
               variant="outline"
-              className="text-[10px] gap-1 px-2 py-0.5 text-muted-foreground"
+              className="text-xs gap-1 px-2 py-0.5 text-muted-foreground"
             >
               <Unlock className="h-3 w-3 text-emerald-500" /> Public Access
             </Badge>
@@ -59,7 +59,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
           <div className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border/50 bg-card">
             <div>
               <label htmlFor="site-private-toggle" className="block text-sm font-semibold text-foreground">{tr("Enable site password protection")}</label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 All public routes will be locked behind a password screen.
                 Search engines will not index content.
               </p>
@@ -89,7 +89,7 @@ export const SitePrivacyCard: React.FC<SitePrivacyCardProps> = ({
                 placeholder="Min 6 characters"
                 className="bg-card text-sm min-h-10"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Password will be securely hashed with Argon2id on save.
               </p>
             </div>

@@ -81,7 +81,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                 id="card-site-tz"
                 value={timezone}
                 onChange={(e) => onChange("timezone", e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full min-h-11 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="UTC">UTC (Coordinated Universal Time)</option>
                 <option value="Asia/Riyadh">Asia/Riyadh (UTC+3)</option>
@@ -94,7 +94,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                   America/Los_Angeles (PST/PDT)
                 </option>
               </select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {tr("Used for post scheduling and date formatting.")}
               </p>
             </div>

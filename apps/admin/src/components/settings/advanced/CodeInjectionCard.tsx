@@ -90,7 +90,7 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
                   value={headerCode}
                   onChange={(e) => onChange?.("headerCode", e.target.value)}
                   rows={8}
-                  className="w-full rounded-lg border border-input bg-muted/30 px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="w-full rounded-lg border border-input bg-muted/30 px-3.5 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   placeholder="<!-- Add custom <style>, <meta>, or <script> tags here -->"
                 />
               </div>
@@ -108,7 +108,7 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
                   value={footerCode}
                   onChange={(e) => onChange?.("footerCode", e.target.value)}
                   rows={8}
-                  className="w-full rounded-lg border border-input bg-muted/30 px-3.5 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="w-full rounded-lg border border-input bg-muted/30 px-3.5 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   placeholder="<!-- Add custom tracking scripts or chat widgets here -->"
                 />
               </div>
@@ -119,7 +119,7 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
               <Button
                 size="sm"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-xs cursor-pointer"
+                className="min-h-11 text-sm"
               >
                 Done Editing
               </Button>
