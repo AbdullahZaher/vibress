@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import {
@@ -32,6 +32,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const { confirm, confirmationDialog } = useSettingsConfirmation();
+  const navigationPromptOpen = useRef(false);
   const confirmDiscard = async () => {
     if (!saving && await confirm(tr("Discard all unsaved settings changes?"), {
       destructive: true,
@@ -41,6 +42,33 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
   const shortcut = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘S" : "Ctrl+S";
   // Guard window navigation / tab close
   useUnsavedChanges(isDirty);
+
+  // Guard in-app sidebar navigation and browser back/forward, not only tab close.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleNavigation = (event: Event) => {
+      const request = event as CustomEvent<{ path: string }>;
+      const path = request.detail?.path;
+      if (!path || navigationPromptOpen.current) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      navigationPromptOpen.current = true;
+      void confirm(tr("Leave settings without saving changes?"), {
+        destructive: true,
+        confirmLabel: tr("Leave settings"),
+      }).then(approved => {
+        if (approved) {
+          window.dispatchEvent(new CustomEvent("vibress:confirmed-settings-navigation", {
+            detail: { path },
+          }));
+        }
+      }).finally(() => { navigationPromptOpen.current = false; });
+    };
+    window.addEventListener("vibress:before-settings-navigation", handleNavigation);
+    return () => window.removeEventListener("vibress:before-settings-navigation", handleNavigation);
+  }, [isDirty, confirm, tr]);
 
   // Global ⌘S / Ctrl+S keyboard shortcut to save
   useEffect(() => {

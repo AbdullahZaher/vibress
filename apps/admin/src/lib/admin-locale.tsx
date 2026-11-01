@@ -24,6 +24,8 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Leave settings without saving changes?": "هل تريد مغادرة الإعدادات دون حفظ التغييرات؟",
+  "Leave settings": "مغادرة الإعدادات",
   "Code Injection Editor": "محرر الأكواد المخصصة",
   "Site header code": "كود ترويسة الموقع",
   "Site footer code": "كود تذييل الموقع",
