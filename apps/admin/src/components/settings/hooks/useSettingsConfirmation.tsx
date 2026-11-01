@@ -45,5 +45,5 @@ export function useSettingsConfirmation() {
       </div>
     </Dialog>
   );
-  return { confirm, confirmationDialog };
+  return { confirm, confirmationDialog, isConfirmOpen: pending !== null };
 }
