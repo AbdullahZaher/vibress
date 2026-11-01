@@ -402,7 +402,11 @@ The top **Select** button followed the desired minimal, modern design; however, 
 
 ### 1. Checkbox Touch Targets (P1)
 - **Problem:** `EditorialSelectionCheckbox` specified a 44×44px interactive target, but `EditorialListRow.tsx` applied `size-8 min-h-8 min-w-8` override, constraining the actual hit area to 32×32px.
-- **Resolution:** Removed conflicting local size overrides. The wrapping `<label>` provides an unconstrained 44×44px (`min-h-11 min-w-11`) touch target meeting WCAG 2.2 AA target size criteria while keeping an 18×18px visual checkbox centered within the interaction area.
+- **Resolution:** Removed conflicting local size overrides. The wrapping `<label>` provides an unconstrained 44×44px (`min-h-11 min-w-11`) touch target.
+- **Accessibility Standard Specification:**
+  - **WCAG 2.2 AA (Criterion 2.5.8 Target Size - Minimum):** Requires a minimum touch target size of 24×24 CSS pixels, subject to documented exceptions (inline targets, spacing, essential presentation).
+  - **WCAG 2.2 AAA (Criterion 2.5.5 Target Size - Enhanced):** Recommends 44×44 CSS pixels.
+  - **Vibress Internal Design Standard:** Enforces a minimum 44×44 CSS pixel interactive target for all primary touch and selection controls, surpassing WCAG 2.2 AA and aligning with WCAG 2.2 AAA, while keeping an 18×18px visual checkbox centered within the hit area. Avoid claiming formal WCAG certification based only on component dimensions or unit tests.
 
 ### 2. Native Checkbox Accessibility (P1)
 - **Problem:** Native checkboxes with redundant `aria-checked` attributes caused conflicts with browser accessibility trees.
@@ -455,3 +459,31 @@ The top **Select** button followed the desired minimal, modern design; however, 
 - **Persistent Result Counts:** Result counts (`Showing X posts/pages`) remain permanently visible and are never replaced or hidden by transient notices.
 - **Dedicated Feedback & Politeness:** Selection clearing messages appear in a dedicated, non-disruptive feedback container (`text-xs font-medium text-muted-foreground`) alongside the count, paired with a dedicated `<div role="status" aria-live="polite" aria-atomic="true">` live region for screen readers.
 - **Timer Lifecycle & Cleanup:** Notification timers are tracked via `noticeTimerRef`, canceled on subsequent view changes, and cleaned up on unmount.
+
+## 2026-11-01 — Final Selection System Production Hardening
+
+### 1. Elimination of Render-Time Ref Mutations (P1)
+- **Problem:** `selectedCountRef.current = selectedIds.size` mutated a React ref during render in both `PostsList.tsx` and `PagesList.tsx`, violating React rendering purity expectations under Concurrent Mode and React Strict Mode.
+- **Resolution:** Completely removed `selectedCountRef`. Implemented a pure, React-safe state architecture where selection state is modeled atomically with view identity. Zero ref mutations occur during render.
+
+### 2. Atomic Selection State with View Identity (P2)
+- **Atomic Architecture:** Selection state is stored as `{ viewKey: string, ids: Set<string> }`.
+- **Derived Active Selection:** Active selected IDs are derived during render via:
+  `selectedIds = selectionRecord.viewKey === viewKey ? selectionRecord.ids : EMPTY_SELECTION_SET`.
+- **Zero Intermediate Stale Render:** Changing filters, search, sort order, pagination, or page size immediately evaluates `selectedIds` as empty during the *exact same render*. Outdated selections cannot leak into bulk action controls or confirmation dialogs.
+- **Immunity Across Language & Theme Changes:** Because `viewKey` is composed purely of data query parameters (`statusFilter:debouncedSearch:sortBy:sortOrder:page:pageSize`), switching interface language (`en` <-> `ar`) or theme (`light` <-> `dark`) never alters `viewKey`, guaranteeing 100% selection preservation.
+- **Async Mutation Guard:** Bulk mutation execution verifies `selectionRecord.viewKey === viewKey && resolvedQueryKey === queryKey` prior to dispatching actions, preventing destructive operations against outdated views.
+
+### 3. Improved Result Count & Screen Reader Announcement UX (P2)
+- **Duplicate Prevention:** Visual notices are marked with `aria-hidden="true"` so assistive technologies announce messages exclusively via the dedicated `<div role="status" aria-live="polite" aria-atomic="true">` region, preventing double announcements.
+- **Layout Shift Prevention:** Total counts and notices are styled with dedicated flex anchoring and smooth CSS transitions respecting `motion-reduce`.
+- **Unbroken Result Counts:** Total item counts (`Showing X posts/pages`) remain permanently displayed and are never displaced or replaced by status notices.
+
+### 4. Keyboard Focus Restoration (P2)
+- **Select / Done Toggle:** Focus is maintained directly on the button across state transitions.
+- **Confirmation Dialogs:** Added `fallbackFocusRef` to `Dialog.tsx`. When a dialog closes after deleting an item or unmounting an action trigger, focus gracefully falls back to the list header Select/Done button rather than dropping to `document.body`.
+- **Row More Actions Menu:** Focus returns to the row's `More Actions` trigger upon action activation or menu dismissal.
+
+### 5. Verified Browser Touch Target Geometry (P2)
+- Real Playwright browser assertions test `boundingBox()` at 320px, 390px, 768px, 1024px, and 1440px viewports.
+- Asserts visual checkbox box is 18×18px and interactive hit area `<label>` is at least 44×44 CSS pixels.

@@ -51,6 +51,8 @@ const STATUS_FILTERS = [
   { value: "published", label: "Published" },
 ] as const;
 
+const EMPTY_SELECTION_SET = new Set<string>();
+
 export const PagesList: React.FC<PagesListProps> = ({
   onNavigate,
   canPublish,
@@ -74,7 +76,13 @@ export const PagesList: React.FC<PagesListProps> = ({
   const [pageSize, setPageSize] = useState(initialView.pageSize);
   const [sortBy, setSortBy] = useState<PageSortBy>(initialView.sortBy);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialView.sortOrder);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}`;
+  const [selectionRecord, setSelectionRecord] = useState<{ viewKey: string; ids: Set<string> }>(() => ({
+    viewKey,
+    ids: new Set<string>(),
+  }));
+  const selectedIds = selectionRecord.viewKey === viewKey ? selectionRecord.ids : EMPTY_SELECTION_SET;
+  const selectButtonRef = useRef<HTMLButtonElement>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -125,23 +133,20 @@ export const PagesList: React.FC<PagesListProps> = ({
     };
   }, []);
 
-  const viewKey = `${statusFilter}:${debouncedSearch}:${sortBy}:${sortOrder}:${page}:${pageSize}`;
   const previousViewKey = useRef(viewKey);
-  const selectedCountRef = useRef(selectedIds.size);
-  selectedCountRef.current = selectedIds.size;
-
   useEffect(() => {
     if (previousViewKey.current === viewKey) {
       return;
     }
+    const oldKey = previousViewKey.current;
     previousViewKey.current = viewKey;
 
-    if (selectedCountRef.current > 0) {
-      setSelectedIds(new Set());
+    if (selectionRecord.viewKey === oldKey && selectionRecord.ids.size > 0) {
       showClearedNotice();
     }
+    setSelectionRecord({ viewKey, ids: new Set() });
     setConfirmAction(null);
-  }, [viewKey, showClearedNotice]);
+  }, [viewKey, selectionRecord, showClearedNotice]);
 
   const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
   const fetchPages = useCallback(async () => {
@@ -165,12 +170,12 @@ export const PagesList: React.FC<PagesListProps> = ({
       setResolvedQueryKey(queryKey);
     } catch (err: unknown) {
       if (requestId !== requestSequence.current) return;
-      setError(err instanceof Error ? err.message : tr("Failed to fetch pages"));
+      setError(err instanceof Error ? err.message : trRef.current("Failed to fetch pages"));
       setResolvedQueryKey(queryKey);
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, queryKey, tr]);
+  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, queryKey]);
 
   useEffect(() => {
     void fetchPages();
@@ -190,14 +195,15 @@ export const PagesList: React.FC<PagesListProps> = ({
   const selectionEnabled = canDelete || canPublish;
 
   const toggleSelection = (id: string, selected: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
+    setSelectionRecord((current) => {
+      const base = current.viewKey === viewKey ? current.ids : EMPTY_SELECTION_SET;
+      const next = new Set(base);
       if (selected) {
         next.add(id);
       } else {
         next.delete(id);
       }
-      return next;
+      return { viewKey, ids: next };
     });
   };
 
@@ -224,7 +230,7 @@ export const PagesList: React.FC<PagesListProps> = ({
   };
 
   const runConfirmedAction = async () => {
-    if (!confirmAction || processing || resolvedQueryKey !== queryKey) return;
+    if (!confirmAction || processing || resolvedQueryKey !== queryKey || selectionRecord.viewKey !== viewKey) return;
     const action = confirmAction;
     const targets = pages.filter((item) => action.ids.includes(item.id)).filter((item) => {
       if (action.kind === "publish") return item.status !== "published";
@@ -249,7 +255,7 @@ export const PagesList: React.FC<PagesListProps> = ({
     const failed = failedIds.length;
     const succeeded = results.length - failed;
     setConfirmAction(null);
-    setSelectedIds(new Set(failedIds));
+    setSelectionRecord({ viewKey, ids: new Set(failedIds) });
     setProcessing(false);
     setActionFeedback({
       type: failed ? "error" : "success",
@@ -271,7 +277,7 @@ export const PagesList: React.FC<PagesListProps> = ({
   const handleToggleSelectionMode = () => {
     if (selectionMode) {
       setSelectionMode(false);
-      setSelectedIds(new Set());
+      setSelectionRecord({ viewKey, ids: new Set() });
       setClearedNotice(null);
       if (noticeTimerRef.current !== null) {
         window.clearTimeout(noticeTimerRef.current);
@@ -357,6 +363,7 @@ export const PagesList: React.FC<PagesListProps> = ({
           />
           {selectionEnabled && (
             <Button
+              ref={selectButtonRef}
               type="button"
               variant={selectionMode ? "subtle" : "ghost"}
               size="sm"
@@ -398,7 +405,10 @@ export const PagesList: React.FC<PagesListProps> = ({
               indeterminate={isIndeterminate}
               disabled={resultsPending || pages.length === 0}
               onChange={(next) => {
-                setSelectedIds(next ? new Set(visibleIds) : new Set());
+                setSelectionRecord({
+                  viewKey,
+                  ids: next ? new Set(visibleIds) : new Set(),
+                });
               }}
               label={tr("Select all on this page")}
               showLabel
@@ -406,7 +416,10 @@ export const PagesList: React.FC<PagesListProps> = ({
             />
             <div className="flex items-center gap-3">
               {clearedNotice && (
-                <span className="text-xs font-medium text-muted-foreground animate-in fade-in motion-reduce:animate-none">
+                <span
+                  aria-hidden="true"
+                  className="text-xs font-medium text-muted-foreground animate-in fade-in motion-reduce:animate-none"
+                >
                   {clearedNotice}
                 </span>
               )}
@@ -433,7 +446,7 @@ export const PagesList: React.FC<PagesListProps> = ({
             showUnpublish={canPublish && selectedPages.some((item) => item.status === "published")}
             showDelete={canDelete}
             onAction={requestBulkAction}
-            onClear={() => setSelectedIds(new Set())}
+            onClear={() => setSelectionRecord({ viewKey, ids: new Set() })}
           />
         )}
       </section>
@@ -517,6 +530,7 @@ export const PagesList: React.FC<PagesListProps> = ({
         title={actionTitle}
         description={actionDescription}
         className="max-w-md"
+        fallbackFocusRef={selectButtonRef}
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={processing} onClick={() => setConfirmAction(null)}>

@@ -11,6 +11,7 @@ export function Dialog({
   description,
   children,
   className,
+  fallbackFocusRef,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -18,13 +19,16 @@ export function Dialog({
   description?: string;
   children: React.ReactNode;
   className?: string;
+  fallbackFocusRef?: React.RefObject<HTMLElement | null> | undefined;
 }) {
   const { tr } = useAdminLocale();
   const titleId = React.useId();
   const descriptionId = React.useId();
   const contentRef = React.useRef<HTMLDivElement>(null);
   const onCloseRef = React.useRef(onClose);
-  onCloseRef.current = onClose;
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -73,9 +77,13 @@ export function Dialog({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (previousFocus?.isConnected) {
+        previousFocus.focus();
+      } else if (fallbackFocusRef?.current?.isConnected) {
+        fallbackFocusRef.current.focus();
+      }
     };
-  }, [isOpen]);
+  }, [isOpen, fallbackFocusRef]);
 
   if (!isOpen || typeof document === "undefined") return null;
 

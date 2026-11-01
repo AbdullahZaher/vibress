@@ -6,15 +6,27 @@ import { PostsList } from "../PostsList";
 import { PagesList } from "../PagesList";
 import { apiRequest } from "../../lib/api";
 
-const tr = (value: string) => value;
+let currentLocale = "en";
+let currentDirection: "ltr" | "rtl" = "ltr";
+
 const formatDate = (d: string) => d;
 const formatNumber = (n: number) => String(n);
+const tr = (value: string) => {
+  if (currentLocale === "ar") {
+    if (value === "Select") return "تحديد";
+    if (value === "Done") return "تم";
+    if (value === "Showing") return "عرض";
+    if (value === "posts") return "مقالات";
+    if (value === "pages") return "صفحات";
+  }
+  return value;
+};
 
 vi.mock("../../lib/admin-locale", () => ({
   useAdminLocale: () => ({
     tr,
-    locale: "en",
-    direction: "ltr",
+    locale: currentLocale,
+    direction: currentDirection,
     formatDate,
     formatNumber,
   }),
@@ -73,6 +85,8 @@ describe("Editorial Selection System — Posts and Pages lifecycle & stability",
   ];
 
   beforeEach(() => {
+    currentLocale = "en";
+    currentDirection = "ltr";
     element = document.createElement("div");
     document.body.appendChild(element);
     root = createRoot(element);
@@ -197,8 +211,52 @@ describe("Editorial Selection System — Posts and Pages lifecycle & stability",
       const politeRegion = element.querySelector('[role="status"][aria-live="polite"]');
       expect(politeRegion?.textContent).toContain("Selection cleared for new view");
 
-      // Visual cleared notice is rendered separately alongside the count
-      expect(element.textContent).toContain("Selection cleared for new view");
+      // Visual cleared notice is rendered separately alongside the count with aria-hidden="true" to prevent double screen reader announcement
+      const visualNotice = element.querySelector('span[aria-hidden="true"]');
+      expect(visualNotice?.textContent).toContain("Selection cleared for new view");
+    });
+
+    it("preserves selection state across language/theme changes without clearing", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      // Select first post
+      const firstRow = element.querySelectorAll('[role="listitem"]')[0];
+      await act(async () => {
+        firstRow?.querySelector("h3")?.click();
+      });
+      expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).not.toBeNull();
+
+      // Switch language to Arabic RTL
+      currentLocale = "ar";
+      currentDirection = "rtl";
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Selection mode is still active: button shows Arabic "تم" (Done)
+      expect(
+        Array.from(element.querySelectorAll("button")).find((b) =>
+          b.textContent?.trim().includes("تم")
+        )
+      ).not.toBeUndefined();
+
+      // Bulk actions group is still rendered with 1 item selected!
+      expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).not.toBeNull();
+      const firstCheckbox = element.querySelectorAll<HTMLInputElement>('[role="listitem"] input[type="checkbox"]')[0];
+      expect(firstCheckbox?.checked).toBe(true);
     });
 
     it("survives React Strict Mode with pure state updaters and no double-effect bugs", async () => {
@@ -387,6 +445,95 @@ describe("Editorial Selection System — Posts and Pages lifecycle & stability",
       // Live region announcement
       const politeRegion = element.querySelector('[role="status"][aria-live="polite"]');
       expect(politeRegion?.textContent).toContain("Selection cleared for new view");
+    });
+
+    it("guards against executing confirmed mutations if view parameters changed", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      // Select post-1
+      const firstRow = element.querySelectorAll('[role="listitem"]')[0];
+      await act(async () => {
+        firstRow?.querySelector("h3")?.click();
+      });
+
+      // Click Delete in bulk toolbar to open confirmation dialog
+      const bulkGroup = element.querySelector('[role="group"][aria-label="Bulk actions"]');
+      expect(bulkGroup).not.toBeNull();
+      const bulkDeleteBtn = Array.from(bulkGroup?.querySelectorAll("button") ?? []).find(
+        (b) => b.textContent?.trim().includes("Delete")
+      );
+      expect(bulkDeleteBtn).not.toBeUndefined();
+      await act(async () => {
+        bulkDeleteBtn?.click();
+      });
+
+      // Dialog is open
+      const dialog = document.querySelector('[role="dialog"]');
+      expect(dialog).not.toBeNull();
+
+      // Now filter changes while dialog is open
+      const filterButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Filter"
+      );
+      await act(async () => {
+        filterButton?.click();
+      });
+      const draftOption = Array.from(document.querySelectorAll('[role="menuitemradio"]')).find(
+        (item) => item.textContent?.includes("Drafts")
+      ) as HTMLButtonElement | undefined;
+      await act(async () => {
+        draftOption?.click();
+      });
+
+      // Dialog is automatically dismissed and safe from accidental confirmation
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      // No DELETE API request was fired
+      expect(vi.mocked(apiRequest)).not.toHaveBeenCalledWith(
+        expect.stringContaining("/posts/post-1"),
+        expect.objectContaining({ method: "DELETE" })
+      );
+    });
+
+    it("isolates More Actions trigger clicks from row selection toggles", async () => {
+      vi.mocked(apiRequest).mockResolvedValue({ posts: mockPosts, total: 2 });
+
+      await act(async () => {
+        root.render(<PostsList onNavigate={vi.fn()} canPublish canDelete canEdit />);
+      });
+
+      // Enter selection mode
+      const selectButton = Array.from(element.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim().includes("Select")
+      );
+      await act(async () => {
+        selectButton?.click();
+      });
+
+      // Target row's more actions button
+      const moreActionsBtn = element.querySelector('button[aria-label*="More actions"]') as HTMLButtonElement;
+      expect(moreActionsBtn).not.toBeNull();
+
+      // Click More Actions
+      await act(async () => {
+        moreActionsBtn.click();
+      });
+
+      // More actions menu should open, but the row should NOT be selected
+      const menu = document.querySelector('[role="menu"]');
+      expect(menu).not.toBeNull();
+      expect(element.querySelector('[role="group"][aria-label="Bulk actions"]')).toBeNull();
     });
   });
 });

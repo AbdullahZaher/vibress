@@ -242,7 +242,11 @@ export function EditorialListRow({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => { setActionsOpen(false); onPublishToggle(); }}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    triggerRef.current?.focus();
+                    onPublishToggle();
+                  }}
                   className="flex min-h-10 w-full items-center rounded-md px-3 text-start text-sm hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {publishLabel}
@@ -252,7 +256,11 @@ export function EditorialListRow({
                 <button
                   type="button"
                   role="menuitem"
-                  onClick={() => { setActionsOpen(false); onDelete(); }}
+                  onClick={() => {
+                    setActionsOpen(false);
+                    triggerRef.current?.focus();
+                    onDelete();
+                  }}
                   className="flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-start text-sm text-destructive hover:bg-destructive/10 focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   <Trash2 className="size-4" aria-hidden="true" />

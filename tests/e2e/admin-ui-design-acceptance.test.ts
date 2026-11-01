@@ -250,6 +250,62 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
     await expect(page.getByText(/No posts (found|yet)/)).toBeVisible();
   });
 
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    test(`posts: verified touch target geometry at ${width}px (18x18 visual box, >=44x44 target, no overlap)`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await login(page);
+      const items = [
+        { id: `geo-post-1`, title: "Geometry post one", slug: "geo-one", status: "published", publishedAt: "2026-10-30T10:00:00.000Z", scheduledAt: null, updatedAt: "2026-10-30T10:00:00.000Z", authors: [] },
+        { id: `geo-post-2`, title: "Geometry post two", slug: "geo-two", status: "draft", publishedAt: null, scheduledAt: null, updatedAt: "2026-10-29T10:00:00.000Z", authors: [] },
+      ];
+      await page.route("**/api/admin/v1/posts*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ posts: items, total: items.length }),
+        });
+      });
+      await page.goto(`${BASE}/admin/posts`);
+      await expect(page.getByText("Geometry post one")).toBeVisible();
+
+      // Default mode: no checkboxes rendered
+      await expect(page.locator('[role="listitem"] input[type="checkbox"]')).toHaveCount(0);
+
+      // Enter selection mode
+      const selectBtn = page.getByRole("button", { name: /Select|تحديد/i });
+      await selectBtn.click();
+
+      // Check row checkbox geometry
+      const rowCheckbox = page.locator('[role="listitem"] input[type="checkbox"]').first();
+      await expect(rowCheckbox).toBeVisible();
+      const rowLabel = page.locator('[role="listitem"] label:has(input[type="checkbox"])').first();
+      await expect(rowLabel).toBeVisible();
+
+      // Measure actual bounding boxes
+      const labelBox = await rowLabel.boundingBox();
+      expect(labelBox).not.toBeNull();
+      expect(labelBox!.width).toBeGreaterThanOrEqual(44);
+      expect(labelBox!.height).toBeGreaterThanOrEqual(44);
+
+      const visualBox = await rowCheckbox.boundingBox();
+      expect(visualBox).not.toBeNull();
+      expect(Math.round(visualBox!.width)).toBe(18);
+      expect(Math.round(visualBox!.height)).toBe(18);
+
+      // Verify no overlap with thumbnail container
+      const thumbnail = page.locator('[role="listitem"] div[aria-hidden="true"]').first();
+      const thumbBox = await thumbnail.boundingBox();
+      expect(thumbBox).not.toBeNull();
+
+      const isRtl = (await page.locator("html").getAttribute("dir")) === "rtl";
+      if (!isRtl) {
+        expect(labelBox!.x + labelBox!.width).toBeLessThanOrEqual(thumbBox!.x + 2);
+      } else {
+        expect(thumbBox!.x + thumbBox!.width).toBeLessThanOrEqual(labelBox!.x + 2);
+      }
+    });
+  }
+
   test("staff interface language preference is independent and persists per account", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page);

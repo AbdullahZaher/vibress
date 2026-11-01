@@ -17,7 +17,8 @@ export interface EditorialSelectionCheckboxProps {
 /**
  * Shared minimal, theme-aware selection checkbox for Vibress Admin.
  * Replaces white floating cards and shadows with a clean, token-integrated box.
- * Satisfies WCAG 2.2 AA (44px touch target, visible focus, aria-checked support).
+ * Vibress internal touch target standard: minimum 44×44px interactive target (surpasses WCAG 2.2 AA 24×24px, aligns with WCAG 2.2 AAA 44×44px).
+ * Features visible focus ring and native checkbox state synchronization.
  */
 export const EditorialSelectionCheckbox: React.FC<EditorialSelectionCheckboxProps> = ({
   checked,
