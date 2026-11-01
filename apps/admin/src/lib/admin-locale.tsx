@@ -24,6 +24,7 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Some settings need attention": "تحتاج بعض الإعدادات إلى مراجعة",
   "Confirm settings change": "تأكيد تغيير الإعدادات",
   "Uninstall theme": "إلغاء تثبيت القالب",
   "Manage navigation": "إدارة قوائم التنقل",
