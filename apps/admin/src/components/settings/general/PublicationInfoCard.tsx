@@ -58,7 +58,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={title}
               onChange={(e) => onChange("title", e.target.value)}
               placeholder="e.g. The Daily Drop"
-              className="bg-card text-xs h-9"
+              className="bg-card text-sm min-h-10"
               required
             />
             <p className="text-[11px] text-muted-foreground">
@@ -78,7 +78,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={tagline}
               onChange={(e) => onChange("tagline", e.target.value)}
               placeholder="e.g. Thoughts, stories and ideas"
-              className="bg-card text-xs h-9"
+              className="bg-card text-sm min-h-10"
             />
             <p className="text-[11px] text-muted-foreground">
               A memorable short description of your site.
@@ -97,7 +97,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={description}
               onChange={(e) => onChange("description", e.target.value)}
               rows={3}
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full min-h-24 rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               placeholder="Describe what your publication is about..."
             />
             <p className="text-[11px] text-muted-foreground">

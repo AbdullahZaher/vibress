@@ -4,6 +4,7 @@ import { SettingsCardRow } from "../SettingsCardRow";
 import { Input } from "../../ui/input";
 import { UserCheck, UserX, Sparkles, Mail } from "lucide-react";
 import { Badge } from "../../ui/badge";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface PortalAccessCardProps {
   signupEnabled: boolean;
@@ -23,6 +24,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
   onChange,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -48,7 +50,7 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
             </Badge>
           )
         }
-        actionLabel={isExpanded ? "Close" : "Configure"}
+        actionLabel={isExpanded ? tr("Close") : tr("Configure")}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
@@ -102,9 +104,10 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
               </div>
               <input
                 type="checkbox"
+                aria-label={tr("Allow new member signups")}
                 checked={signupEnabled}
                 onChange={(e) => onChange("signupEnabled", e.target.checked)}
-                className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+                className="size-5 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
               />
             </div>
 
@@ -120,11 +123,12 @@ export const PortalAccessCard: React.FC<PortalAccessCardProps> = ({
               </div>
               <input
                 type="checkbox"
+                aria-label={tr("Default newsletter opt-in")}
                 checked={defaultNewsletterOptIn}
                 onChange={(e) =>
                   onChange("defaultNewsletterOptIn", e.target.checked)
                 }
-                className="size-4 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
+                className="size-5 shrink-0 rounded border-border text-primary focus:ring-primary mt-1 cursor-pointer"
               />
             </div>
           </div>

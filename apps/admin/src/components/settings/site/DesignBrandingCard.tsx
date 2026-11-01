@@ -149,7 +149,9 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                     key={c}
                     type="button"
                     onClick={() => handleColorSelect(c)}
-                    className="size-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-xs cursor-pointer relative"
+                    aria-label={`Select accent color ${c}`}
+                     aria-pressed={accentColor.toLowerCase() === c.toLowerCase()}
+                     className="size-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-xs cursor-pointer relative"
                     style={{ backgroundColor: c }}
                     title={c}
                   >
@@ -166,7 +168,8 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   value={accentColor}
                   onChange={(e) => handleColorSelect(e.target.value)}
                   placeholder="#6366f1"
-                  className="w-28 font-mono text-xs h-8 uppercase bg-card"
+                  aria-label="Accent color hex code"
+                   className="w-32 font-mono text-sm min-h-10 uppercase bg-card"
                 />
               </div>
             </div>
@@ -216,7 +219,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   variant="outline"
                   disabled={uploadingIcon}
                   onClick={() => iconInputRef.current?.click()}
-                  className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
+                  className="min-h-10 text-sm bg-card hover:bg-muted"
                 >
                   {uploadingIcon ? (
                     <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
@@ -261,7 +264,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   variant="outline"
                   disabled={uploadingLogo}
                   onClick={() => logoInputRef.current?.click()}
-                  className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
+                  className="min-h-10 text-sm bg-card hover:bg-muted"
                 >
                   {uploadingLogo ? (
                     <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
