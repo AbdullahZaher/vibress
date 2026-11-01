@@ -125,7 +125,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
           </Button>
           <div>
             <h4 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>
           </div>
@@ -160,7 +160,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                   {tr(definition.label || key)}
                 </label>
                 {definition.description && (
-                  <p id={descriptionId} className="text-xs text-muted-foreground">{tr(definition.description)}</p>
+                  <p id={descriptionId} className="text-sm leading-relaxed text-muted-foreground">{tr(definition.description)}</p>
                 )}
                 {definition.type === "boolean" ? (
                   <input

@@ -40,9 +40,9 @@ export const SettingsModalPortal: React.FC<SettingsModalPortalProps> = ({
       dialogRef.current?.focus();
     }
     const handleKeyDown = (event: KeyboardEvent) => {
+      // The topmost confirmation owns both Tab and Escape keyboard navigation.
+      if (document.querySelector(".settings-confirmation-dialog")) return;
       if (event.key === "Escape") {
-        // A nested accessible confirmation dialog owns Escape while it is open.
-        if (document.querySelector(".settings-confirmation-dialog")) return;
         event.preventDefault();
         closeRef.current?.();
         return;

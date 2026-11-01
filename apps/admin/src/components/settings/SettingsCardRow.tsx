@@ -50,7 +50,7 @@ export const SettingsCardRow: React.FC<SettingsCardRowProps> = ({
           {tr(title)}
         </span>
         {description && (
-          <span id={descriptionId} className="block text-sm font-normal leading-relaxed text-muted-foreground">
+          <span id={descriptionId} className="block max-w-[72ch] text-sm font-normal leading-relaxed text-muted-foreground">
             {tr(description)}
           </span>
         )}

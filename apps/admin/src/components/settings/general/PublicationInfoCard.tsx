@@ -52,7 +52,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-title"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site title
             </label>
@@ -64,7 +64,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               className="bg-card text-sm min-h-10"
               required
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               The name of your publication or brand.
             </p>
           </div>
@@ -72,7 +72,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-tagline"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site tagline
             </label>
@@ -83,7 +83,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               placeholder="e.g. Thoughts, stories and ideas"
               className="bg-card text-sm min-h-10"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               A memorable short description of your site.
             </p>
           </div>
@@ -91,7 +91,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-desc"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site description
             </label>
@@ -103,7 +103,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               className="w-full min-h-24 rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               placeholder="Describe what your publication is about..."
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Used in themes and search engine metadata descriptions.
             </p>
           </div>

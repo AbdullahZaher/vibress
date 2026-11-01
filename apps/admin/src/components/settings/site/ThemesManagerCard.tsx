@@ -268,8 +268,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
             {/* Drawer Header */}
-            <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-border/60 bg-muted/20">
+              <div className="flex flex-wrap items-center gap-2">
                 <Palette className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
                   Themes Manager
@@ -309,7 +309,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   aria-label="Close themes drawer"
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -385,7 +385,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               {!theme.isBuiltIn && (
                                 <Badge
                                   variant="outline"
-                                  className="text-[9px] font-mono text-purple-500 border-purple-500/30"
+                                  className="text-xs font-mono text-purple-700 dark:text-purple-300 border-purple-500/30"
                                 >
                                   ZIP
                                 </Badge>
@@ -451,7 +451,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               variant="ghost"
                               disabled={deleting === theme.manifest.id}
                               onClick={() => handleDelete(theme.manifest.id)}
-                              className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer"
+                              className="min-h-11 min-w-11 px-3 text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title="Uninstall theme"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -494,7 +494,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   type="button"
                   onClick={handleCloseUpload}
                   aria-label="Close theme upload"
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -560,7 +560,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={handleCloseUpload}
-                  className="text-xs h-7"
+                  className="min-h-11 text-sm"
                 >
                   Cancel
                 </Button>
