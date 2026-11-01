@@ -39,13 +39,13 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
       await testSmtpApi();
       setTestResult({
         success: true,
-        message: "Test email successfully queued & dispatched!",
+        message: tr("Test email successfully queued & dispatched!"),
       });
     } catch (err: unknown) {
       setTestResult({
         success: false,
         message:
-          err instanceof Error ? err.message : "Failed to send test email",
+          err instanceof Error ? err.message : tr("Failed to send test email"),
       });
     } finally {
       setSendingTest(false);
@@ -92,7 +92,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
-                  Email Delivery & Newsletters
+                  {tr("Email Delivery & Newsletters")}
                 </h3>
               </div>
               <button
@@ -119,35 +119,34 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                 </div>
                 <div className="p-3 bg-card rounded-lg border border-border/50 space-y-1">
                   <p className="text-xs font-bold text-foreground">
-                    Weekly Digest: Your latest updates
+                    {tr("Sample newsletter heading")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Sent to all registered subscribers.
+                    {tr("Example content only. No email has been sent.")}
                   </p>
                 </div>
                 <p className="text-xs text-muted-foreground flex items-center justify-center gap-1 pt-0.5">
-                  <Sparkles className="h-3 w-3 text-primary" /> Live Email
-                  Header Preview
+                  <Sparkles className="h-3 w-3 text-primary" /> {tr("Illustrative newsletter preview")}
                 </p>
               </div>
 
               <div className="space-y-3">
                 <h4 className="text-xs font-semibold text-foreground">
-                  Default Sender Identity
+                  {tr("Default Sender Identity")}
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <label htmlFor="settings-mail-from-name" className="text-sm font-medium text-foreground block mb-1">From Name</label>
+                    <label htmlFor="settings-mail-from-name" className="text-sm font-medium text-foreground block mb-1">{tr("From Name")}</label>
                     <Input
                       id="settings-mail-from-name"
                      value={fromName}
                       onChange={(e) => onChange("fromName", e.target.value)}
-                      placeholder="Publication Name"
+                      placeholder={tr("Publication Name")}
                       className="text-sm min-h-10"
                     />
                   </div>
                   <div>
-                    <label htmlFor="settings-mail-from-email" className="text-sm font-medium text-foreground block mb-1">From Email Address</label>
+                    <label htmlFor="settings-mail-from-email" className="text-sm font-medium text-foreground block mb-1">{tr("From Email Address")}</label>
                     <Input
                       id="settings-mail-from-email"
                       type="email"
@@ -164,8 +163,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
               <div className="space-y-3 pt-4 border-t border-border/50">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                    <Server className="h-3.5 w-3.5 text-primary" /> SMTP
-                    Delivery Server
+                    <Server className="h-3.5 w-3.5 text-primary" /> {tr("SMTP Delivery Server")}
                   </h4>
                   <Badge
                     variant="outline"
@@ -175,7 +173,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                   </Badge>
                 </div>
                 <div>
-                  <label htmlFor="settings-mail-smtp-host" className="text-sm font-medium text-foreground block mb-1">SMTP Host</label>
+                  <label htmlFor="settings-mail-smtp-host" className="text-sm font-medium text-foreground block mb-1">{tr("SMTP Host")}</label>
                   <Input
                     id="settings-mail-smtp-host"
                       value={smtpHost}
@@ -184,8 +182,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                     className="text-sm min-h-10 font-mono"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Integrated with internal MailPit SMTP relay for
-                    transactional and newsletter broadcasts.
+                    {tr("SMTP is configured for transactional and newsletter email delivery.")}
                   </p>
                 </div>
               </div>
@@ -193,12 +190,10 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
               {/* Test Email Dispatch */}
               <div className="space-y-3 pt-4 border-t border-border/50">
                 <h4 className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" /> Test SMTP
-                  Delivery
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> {tr("Test SMTP Delivery")}
                 </h4>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Send a live test email to verify DNS records, SMTP relay, and
-                  template styling.
+                  {tr("Send a test email to verify your SMTP delivery settings.")}
                 </p>
                 <div className="space-y-2">
                   <Button
@@ -214,7 +209,7 @@ export const NewslettersConfigCard: React.FC<NewslettersConfigCardProps> = ({
                       <Send className="h-3.5 w-3.5" />
                     )}
                     <span>
-                      {sendingTest ? "Sending..." : "Send test email"}
+                      {tr(sendingTest ? "Sending..." : "Send test email")}
                     </span>
                   </Button>
                   {testResult && (

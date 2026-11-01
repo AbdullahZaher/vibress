@@ -105,7 +105,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
               <div className="flex items-center gap-2">
                 <Menu className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
-                  Navigation Menus
+                  {tr("Navigation menus")}
                 </h3>
               </div>
               <button
@@ -122,13 +122,13 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
               {/* Primary Header Links */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h4 className="text-xs font-semibold text-foreground">
-                      Primary Navigation (Header)
+                      {tr("Primary Navigation (Header)")}
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Displayed in the main top navigation menu.
+                      {tr("Displayed in the main top navigation menu.")}
                     </p>
                   </div>
                   <Button
@@ -137,7 +137,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     onClick={handleAddPrimary}
                     className="min-h-10 text-sm gap-1"
                   >
-                    <Plus className="h-3 w-3" /> Add Link
+                    <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
                 </div>
 
@@ -151,7 +151,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         onChange={(e) =>
                           handleUpdatePrimary(item.id, "label", e.target.value)
                         }
-                        placeholder="Label"
+                        placeholder={tr("Label")}
                         className="text-sm min-h-10 flex-1"
                       />
                       <Input
@@ -168,7 +168,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         variant="ghost"
                         aria-label={`${tr("Remove")} ${tr("Header link")} ${index + 1}`}
                         onClick={() => handleRemovePrimary(item.id)}
-                        className="min-h-10 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="min-h-11 min-w-11 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -179,13 +179,13 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
 
               {/* Secondary Footer Links */}
               <div className="space-y-3 pt-4 border-t border-border/50">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h4 className="text-xs font-semibold text-foreground">
-                      Secondary Navigation (Footer)
+                      {tr("Secondary Navigation (Footer)")}
                     </h4>
                     <p className="text-xs text-muted-foreground">
-                      Displayed in the publication footer section.
+                      {tr("Displayed in the publication footer section.")}
                     </p>
                   </div>
                   <Button
@@ -194,7 +194,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                     onClick={handleAddSecondary}
                     className="min-h-10 text-sm gap-1"
                   >
-                    <Plus className="h-3 w-3" /> Add Link
+                    <Plus className="h-3 w-3" /> {tr("Add Link")}
                   </Button>
                 </div>
 
@@ -212,7 +212,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                             e.target.value,
                           )
                         }
-                        placeholder="Label"
+                        placeholder={tr("Label")}
                         className="text-sm min-h-10 flex-1"
                       />
                       <Input
@@ -229,7 +229,7 @@ export const NavigationManagerCard: React.FC<NavigationManagerCardProps> = ({
                         variant="ghost"
                         aria-label={`${tr("Remove")} ${tr("Footer link")} ${index + 1}`}
                         onClick={() => handleRemoveSecondary(item.id)}
-                        className="min-h-10 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
+                        className="min-h-11 min-w-11 px-3 text-muted-foreground hover:text-destructive cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

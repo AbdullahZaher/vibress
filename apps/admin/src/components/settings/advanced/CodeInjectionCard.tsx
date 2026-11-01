@@ -5,6 +5,7 @@ import { SettingsModalPortal } from "../SettingsModalPortal";
 import { Button } from "../../ui/button";
 import { Code2, Terminal, X } from "lucide-react";
 import { Badge } from "../../ui/badge";
+import { useAdminLocale } from "../../../lib/admin-locale";
 
 interface CodeInjectionCardProps {
   headerCode?: string | undefined;
@@ -20,6 +21,7 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
   onChange,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const hasCode = Boolean(headerCode || footerCode);
@@ -63,7 +65,7 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
               <div className="flex items-center gap-2">
                 <Code2 className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
-                  Code Injection Editor
+                  {tr("Code Injection Editor")}
                 </h3>
               </div>
               <button
@@ -81,10 +83,10 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
               <div className="space-y-1.5">
                 <label
                   htmlFor="card-code-head"
-                  className="text-xs font-semibold text-foreground flex items-center gap-1.5"
+                  className="text-sm font-semibold text-foreground flex items-center gap-1.5"
                 >
                   <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-                  Site Header Code (Injects into &lt;head&gt;)
+                  {tr("Site header code")} (&lt;head&gt;)
                 </label>
                 <textarea
                   id="card-code-head"
@@ -99,10 +101,10 @@ export const CodeInjectionCard: React.FC<CodeInjectionCardProps> = ({
               <div className="space-y-1.5 pt-2">
                 <label
                   htmlFor="card-code-foot"
-                  className="text-xs font-semibold text-foreground flex items-center gap-1.5"
+                  className="text-sm font-semibold text-foreground flex items-center gap-1.5"
                 >
                   <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
-                  Site Footer Code (Injects before &lt;/body&gt;)
+                  {tr("Site footer code")} (&lt;/body&gt;)
                 </label>
                 <textarea
                   id="card-code-foot"
