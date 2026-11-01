@@ -7,11 +7,12 @@ import { EditorialStatusFilter } from "./common/EditorialStatusFilter";
 import { EditorialChoiceMenu } from "./common/EditorialChoiceMenu";
 import { EditorialPagination } from "./common/EditorialPagination";
 import { EditorialBulkActions } from "./common/EditorialBulkActions";
+import { EditorialSelectionCheckbox } from "./common/EditorialSelectionCheckbox";
 import { readEditorialViewState, saveEditorialViewState } from "./common/editorial-view-state";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Dialog } from "./ui/dialog";
-import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2 } from "lucide-react";
+import { Plus, Search, FileText, AlertCircle, RefreshCw, X, ArrowDownUp, CheckSquare2, Check } from "lucide-react";
 
 interface PageSummary {
   id: string;
@@ -26,9 +27,17 @@ interface PageSummary {
 
 type PageSortBy = "updatedAt" | "createdAt" | "publishedAt" | "title";
 type BulkAction = "delete" | "publish" | "unpublish";
-interface ConfirmAction {
+interface ConfirmationContext {
   kind: BulkAction;
   ids: string[];
+  viewKey: string;
+  queryKey: string;
+  searchSnapshot: string;
+  statusFilter: string;
+  sortBy: PageSortBy;
+  sortOrder: "asc" | "desc";
+  page: number;
+  pageSize: number;
 }
 
 interface PagesListProps {
@@ -49,6 +58,8 @@ const STATUS_FILTERS = [
   { value: "scheduled", label: "Scheduled" },
   { value: "published", label: "Published" },
 ] as const;
+
+const EMPTY_SELECTION_SET = new Set<string>();
 
 export const PagesList: React.FC<PagesListProps> = ({
   onNavigate,
@@ -73,9 +84,18 @@ export const PagesList: React.FC<PagesListProps> = ({
   const [pageSize, setPageSize] = useState(initialView.pageSize);
   const [sortBy, setSortBy] = useState<PageSortBy>(initialView.sortBy);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialView.sortOrder);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const viewKey = JSON.stringify(["pages", statusFilter, debouncedSearch, sortBy, sortOrder, page, pageSize]);
+  const [selectionRecord, setSelectionRecord] = useState<{ viewKey: string; ids: Set<string> }>(() => ({
+    viewKey,
+    ids: new Set<string>(),
+  }));
+  const selectedIds = selectionRecord.viewKey === viewKey ? selectionRecord.ids : EMPTY_SELECTION_SET;
+  const selectButtonRef = useRef<HTMLButtonElement>(null);
+  const listContainerRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const emptyActionRef = useRef<HTMLButtonElement>(null);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmationContext | null>(null);
   const [processing, setProcessing] = useState(false);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const requestSequence = useRef(0);
@@ -86,6 +106,9 @@ export const PagesList: React.FC<PagesListProps> = ({
 
   const previousSearch = useRef(initialView.search);
   useEffect(() => {
+    if (searchQuery.trim() !== debouncedSearch) {
+      setConfirmAction(null);
+    }
     const timer = window.setTimeout(() => {
       const nextSearch = searchQuery.trim();
       if (nextSearch !== previousSearch.current) {
@@ -95,13 +118,82 @@ export const PagesList: React.FC<PagesListProps> = ({
       }
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, debouncedSearch]);
+
+  const [clearedNotice, setClearedNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const trRef = useRef(tr);
+  useEffect(() => {
+    trRef.current = tr;
+  }, [tr]);
+
+  const showClearedNotice = useCallback(() => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    setClearedNotice(trRef.current("Selection cleared for new view"));
+    noticeTimerRef.current = window.setTimeout(() => {
+      setClearedNotice(null);
+      noticeTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   useEffect(() => {
-    setSelectedIds(new Set());
-  }, [page, pageSize, statusFilter, debouncedSearch, sortBy, sortOrder]);
+    return () => {
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    };
+  }, []);
 
-  const queryKey = JSON.stringify([page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
+  const previousViewKey = useRef(viewKey);
+  useEffect(() => {
+    if (previousViewKey.current === viewKey) {
+      return;
+    }
+    const oldKey = previousViewKey.current;
+    previousViewKey.current = viewKey;
+
+    if (selectionRecord.viewKey === oldKey && selectionRecord.ids.size > 0) {
+      showClearedNotice();
+    }
+    setSelectionRecord({ viewKey, ids: new Set() });
+    setConfirmAction(null);
+  }, [viewKey, selectionRecord, showClearedNotice]);
+
+  const queryKey = JSON.stringify(["pages", page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch]);
+  const isSearchPending = searchQuery.trim() !== debouncedSearch;
+  const resultsPending = loading || isSearchPending || resolvedQueryKey !== queryKey;
+
+  const restoreListFocus = useCallback((targetIndex: number) => {
+    window.requestAnimationFrame(() => {
+      const container = listContainerRef.current;
+      if (!container) return;
+      const rows = container.querySelectorAll<HTMLElement>('[role="listitem"]');
+      if (rows.length > 0) {
+        const clampedIndex = Math.max(0, Math.min(targetIndex, rows.length - 1));
+        const targetRow = rows[clampedIndex];
+        const focusable = targetRow?.querySelector<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]'
+        );
+        if (focusable) {
+          focusable.focus();
+          return;
+        }
+        targetRow?.focus();
+        return;
+      }
+      if (emptyActionRef.current && emptyActionRef.current.isConnected) {
+        emptyActionRef.current.focus();
+      } else if (searchInputRef.current && searchInputRef.current.isConnected) {
+        searchInputRef.current.focus();
+      } else if (selectButtonRef.current && selectButtonRef.current.isConnected) {
+        selectButtonRef.current.focus();
+      }
+    });
+  }, []);
+
   const fetchPages = useCallback(async () => {
     const requestId = ++requestSequence.current;
     setLoading(true);
@@ -123,12 +215,12 @@ export const PagesList: React.FC<PagesListProps> = ({
       setResolvedQueryKey(queryKey);
     } catch (err: unknown) {
       if (requestId !== requestSequence.current) return;
-      setError(err instanceof Error ? err.message : tr("Failed to fetch pages"));
+      setError(err instanceof Error ? err.message : trRef.current("Failed to fetch pages"));
       setResolvedQueryKey(queryKey);
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, queryKey, tr]);
+  }, [page, pageSize, sortBy, sortOrder, statusFilter, debouncedSearch, queryKey]);
 
   useEffect(() => {
     void fetchPages();
@@ -143,14 +235,20 @@ export const PagesList: React.FC<PagesListProps> = ({
   const visibleIds = useMemo(() => pages.map((item) => item.id), [pages]);
   const selectedPages = useMemo(() => pages.filter((item) => selectedIds.has(item.id)), [pages, selectedIds]);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected = visibleIds.length > 0 && visibleIds.some((id) => selectedIds.has(id));
+  const isIndeterminate = someVisibleSelected && !allVisibleSelected;
   const selectionEnabled = canDelete || canPublish;
 
   const toggleSelection = (id: string, selected: boolean) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (selected) next.add(id);
-      else next.delete(id);
-      return next;
+    setSelectionRecord((current) => {
+      const base = current.viewKey === viewKey ? current.ids : EMPTY_SELECTION_SET;
+      const next = new Set(base);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return { viewKey, ids: next };
     });
   };
 
@@ -177,7 +275,24 @@ export const PagesList: React.FC<PagesListProps> = ({
   };
 
   const runConfirmedAction = async () => {
-    if (!confirmAction || processing) return;
+    if (
+      !confirmAction ||
+      processing ||
+      searchQuery.trim() !== debouncedSearch ||
+      resultsPending ||
+      confirmAction.viewKey !== viewKey ||
+      confirmAction.queryKey !== queryKey ||
+      confirmAction.searchSnapshot !== debouncedSearch ||
+      confirmAction.statusFilter !== statusFilter ||
+      confirmAction.sortBy !== sortBy ||
+      confirmAction.sortOrder !== sortOrder ||
+      confirmAction.page !== page ||
+      confirmAction.pageSize !== pageSize ||
+      selectionRecord.viewKey !== viewKey
+    ) {
+      setConfirmAction(null);
+      return;
+    }
     const action = confirmAction;
     const targets = pages.filter((item) => action.ids.includes(item.id)).filter((item) => {
       if (action.kind === "publish") return item.status !== "published";
@@ -188,6 +303,9 @@ export const PagesList: React.FC<PagesListProps> = ({
       setConfirmAction(null);
       return;
     }
+    const targetIndex = action.ids.length > 0
+      ? Math.max(0, pages.findIndex((item) => action.ids.includes(item.id)))
+      : 0;
     setProcessing(true);
     setActionFeedback(null);
     const results = await Promise.allSettled(targets.map((item) => {
@@ -202,7 +320,7 @@ export const PagesList: React.FC<PagesListProps> = ({
     const failed = failedIds.length;
     const succeeded = results.length - failed;
     setConfirmAction(null);
-    setSelectedIds(new Set(failedIds));
+    setSelectionRecord({ viewKey, ids: new Set(failedIds) });
     setProcessing(false);
     setActionFeedback({
       type: failed ? "error" : "success",
@@ -211,14 +329,58 @@ export const PagesList: React.FC<PagesListProps> = ({
         : `${formatNumber(succeeded)} ${tr("items updated successfully")}.`,
     });
     await fetchPages();
+    restoreListFocus(targetIndex);
   };
 
-  const requestDelete = (id: string) => setConfirmAction({ kind: "delete", ids: [id] });
+  const requestDelete = (id: string) => {
+    if (searchQuery.trim() !== debouncedSearch || resultsPending) return;
+    setConfirmAction({
+      kind: "delete",
+      ids: [id],
+      viewKey,
+      queryKey,
+      searchSnapshot: debouncedSearch,
+      statusFilter,
+      sortBy,
+      sortOrder,
+      page,
+      pageSize,
+    });
+  };
+
   const requestBulkAction = (kind: BulkAction) => {
+    if (searchQuery.trim() !== debouncedSearch || resultsPending) return;
     const ids = selectedPages
       .filter((item) => kind === "publish" ? item.status !== "published" : kind === "unpublish" ? item.status === "published" : true)
       .map((item) => item.id);
-    if (ids.length) setConfirmAction({ kind, ids });
+    if (ids.length) {
+      setConfirmAction({
+        kind,
+        ids,
+        viewKey,
+        queryKey,
+        searchSnapshot: debouncedSearch,
+        statusFilter,
+        sortBy,
+        sortOrder,
+        page,
+        pageSize,
+      });
+    }
+  };
+
+  const handleToggleSelectionMode = () => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectionRecord({ viewKey, ids: new Set() });
+      setClearedNotice(null);
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
+    } else {
+      setSelectionMode(true);
+    }
   };
 
   const actionTitle = confirmAction?.kind === "delete"
@@ -229,8 +391,6 @@ export const PagesList: React.FC<PagesListProps> = ({
   const actionDescription = confirmAction
     ? `${tr("You are about to")} ${confirmAction.kind === "delete" ? tr("delete") : confirmAction.kind === "publish" ? tr("publish") : tr("unpublish")} ${formatNumber(confirmAction.ids.length)} ${tr("items on this page")}.`
     : "";
-
-  const resultsPending = loading || searchQuery.trim() !== debouncedSearch || resolvedQueryKey !== queryKey;
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6">
@@ -257,10 +417,17 @@ export const PagesList: React.FC<PagesListProps> = ({
           <div className="relative min-w-[9rem] flex-[1_1_13rem] sm:max-w-sm">
             <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
             <Input
+              ref={searchInputRef}
               type="search"
               placeholder={tr("Search pages by title or slug...")}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setSearchQuery(next);
+                if (next.trim() !== debouncedSearch) {
+                  setConfirmAction(null);
+                }
+              }}
               aria-label={tr("Search pages by title or slug...")}
               className="min-h-11 w-full rounded-lg border-border/70 bg-card ps-9 text-sm"
             />
@@ -296,18 +463,20 @@ export const PagesList: React.FC<PagesListProps> = ({
           />
           {selectionEnabled && (
             <Button
+              ref={selectButtonRef}
               type="button"
-              variant={selectionMode || selectedIds.size > 0 ? "subtle" : "ghost"}
+              variant={selectionMode ? "subtle" : "ghost"}
               size="sm"
               className="min-h-11 gap-2"
               aria-pressed={selectionMode}
-              onClick={() => {
-                setSelectionMode((active) => !active);
-                setSelectedIds(new Set());
-              }}
+              onClick={handleToggleSelectionMode}
             >
-              <CheckSquare2 className="size-4" aria-hidden="true" />
-              {tr("Select")}
+              {selectionMode ? (
+                <Check className="size-4" aria-hidden="true" />
+              ) : (
+                <CheckSquare2 className="size-4" aria-hidden="true" />
+              )}
+              {tr(selectionMode ? "Done" : "Select")}
             </Button>
           )}
         </div>
@@ -329,41 +498,60 @@ export const PagesList: React.FC<PagesListProps> = ({
             )}
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
-          {selectionEnabled && !resultsPending && !error && pages.length > 0 && (
-            <label className="inline-flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={allVisibleSelected}
-                disabled={resultsPending || pages.length === 0}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setSelectedIds(next ? new Set(visibleIds) : new Set());
-                  if (next) setSelectionMode(true);
-                }}
-                aria-label={tr("Select all on this page")}
-                className="size-4 accent-primary"
-              />
-              {tr("Select all on this page")}
-            </label>
-          )}
-          <span aria-live="polite" className="text-sm text-muted-foreground">
-            {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}
-          </span>
+        {selectionMode && selectionEnabled && !resultsPending && !error && pages.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2">
+            <EditorialSelectionCheckbox
+              checked={allVisibleSelected}
+              indeterminate={isIndeterminate}
+              disabled={resultsPending || pages.length === 0}
+              onChange={(next) => {
+                setSelectionRecord({
+                  viewKey,
+                  ids: next ? new Set(visibleIds) : new Set(),
+                });
+              }}
+              label={tr("Select all on this page")}
+              showLabel
+              className="min-h-11 px-0"
+            />
+            <div className="flex items-center gap-3">
+              {clearedNotice && (
+                <span
+                  aria-hidden="true"
+                  className="text-xs font-medium text-muted-foreground animate-in fade-in motion-reduce:animate-none"
+                >
+                  {clearedNotice}
+                </span>
+              )}
+              <span className="text-sm text-muted-foreground">
+                {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : <>{tr("Showing")} {formatNumber(total)} {tr("pages")}</>}
+              </span>
+            </div>
+          </div>
+        )}
+        {!selectionMode && (
+          <div className="flex items-center justify-end">
+            <span aria-live="polite" className="sr-only">
+              {resultsPending ? tr("Loading") : error ? tr("Results unavailable") : `${tr("Showing")} ${formatNumber(total)} ${tr("pages")}`}
+            </span>
+          </div>
+        )}
+        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+          {clearedNotice || ""}
         </div>
-        {!resultsPending && !error && selectedIds.size > 0 && (
+        {selectionMode && !resultsPending && !error && selectedIds.size > 0 && (
           <EditorialBulkActions
             selectedCount={selectedIds.size}
             showPublish={canPublish && selectedPages.some((item) => item.status !== "published")}
             showUnpublish={canPublish && selectedPages.some((item) => item.status === "published")}
             showDelete={canDelete}
             onAction={requestBulkAction}
-            onClear={() => setSelectedIds(new Set())}
+            onClear={() => setSelectionRecord({ viewKey, ids: new Set() })}
           />
         )}
       </section>
 
-      <section className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Pages")}>
+      <section ref={listContainerRef} className="vibress-editorial-list min-w-0 overflow-visible bg-card" aria-label={tr("Pages")}>
         {resultsPending ? (
           <div role="status" aria-label={tr("Loading")} aria-busy="true">
             {[1, 2, 3, 4].map((item) => (
@@ -396,11 +584,15 @@ export const PagesList: React.FC<PagesListProps> = ({
                 ? tr("Try a different search or filter.")
                 : tr("Create your first page to get started.")}
             </p>
-            {(searchQuery || statusFilter !== "all") && (
-              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
+            {(searchQuery || statusFilter !== "all") ? (
+              <Button ref={emptyActionRef} type="button" size="sm" variant="outline" className="min-h-11" onClick={() => { setSearchQuery(""); setDebouncedSearch(""); setStatusFilter("all"); setPage(0); }}>
                 {tr("Clear filters")}
               </Button>
-            )}
+            ) : canCreate ? (
+              <Button ref={emptyActionRef} type="button" size="sm" variant="outline" className="min-h-11 gap-2" onClick={() => onNavigate("/admin/pages/new")}>
+                <Plus className="size-4" aria-hidden="true" />{tr("New Page")}
+              </Button>
+            ) : null}
           </div>
         ) : (
           <div role="list" aria-label={tr("Pages")} className="min-w-0">
@@ -416,9 +608,9 @@ export const PagesList: React.FC<PagesListProps> = ({
                 editHref={canEdit ? `/admin/pages/${item.id}` : undefined}
                 onPublishToggle={canPublish ? () => void handlePublishToggle(item) : undefined}
                 onDelete={canDelete ? () => requestDelete(item.id) : undefined}
-                onSelect={selectionEnabled ? (selected) => { toggleSelection(item.id, selected); if (selected) setSelectionMode(true); } : undefined}
+                onSelect={selectionEnabled && selectionMode ? (selected) => toggleSelection(item.id, selected) : undefined}
                 selectionMode={selectionMode}
-                selected={selectedIds.has(item.id)}
+                selected={selectionMode && selectedIds.has(item.id)}
                 selectionLabel={`${tr("Select")}: ${item.title || tr("(Untitled)")}`}
               />
             ))}
@@ -442,6 +634,8 @@ export const PagesList: React.FC<PagesListProps> = ({
         title={actionTitle}
         description={actionDescription}
         className="max-w-md"
+        fallbackFocusRef={selectButtonRef}
+        restoreFocusOnClose={!processing}
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" disabled={processing} onClick={() => setConfirmAction(null)}>

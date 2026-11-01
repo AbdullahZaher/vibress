@@ -111,12 +111,22 @@ describe("EditorialListRow", () => {
     expect(base.onEdit).not.toHaveBeenCalled();
   });
 
-  it("conceals row checkboxes until hover, keyboard focus or selection mode", () => {
+  it("hides selection checkbox completely when selection mode is inactive and reveals when active", () => {
     act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} />));
-    const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    expect(selection?.closest("label")?.className).toContain("opacity-0");
+    expect(container.querySelector('input[type="checkbox"]')).toBeNull();
     act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} selectionMode />));
-    expect(selection?.closest("label")?.className).toContain("opacity-100");
+    const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    expect(selection).not.toBeNull();
+    expect(selection?.closest("label")).not.toBeNull();
+  });
+
+  it("restores original row layout without reserved checkbox spacing when selection mode is inactive", () => {
+    act(() => root.render(<EditorialListRow {...base} onSelect={vi.fn()} selectionMode={false} />));
+    const row = container.querySelector('[role="listitem"]');
+    expect(row?.querySelector('input[type="checkbox"]')).toBeNull();
+    const thumbnail = row?.querySelector('div[aria-hidden="true"]');
+    expect(thumbnail).not.toBeNull();
+    expect(thumbnail?.previousElementSibling?.tagName.toLowerCase()).toBe("button");
   });
 
   it("preserves publish and delete actions behind an accessible menu", () => {
@@ -175,5 +185,51 @@ describe("EditorialListRow", () => {
     act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(trigger?.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(trigger);
+  });
+
+  describe("Selection Mode interactions (P1/P2 UX)", () => {
+    it("does not render edit link or button when selectionMode is active", () => {
+      act(() => root.render(<EditorialListRow {...base} selectionMode onSelect={vi.fn()} />));
+      expect(container.querySelector('button[aria-label="Edit: Hello there"]')).toBeNull();
+      expect(container.querySelector('a[aria-label="Edit: Hello there"]')).toBeNull();
+    });
+
+    it("toggles selection when clicking the row title or background in selection mode", () => {
+      const onSelect = vi.fn();
+      act(() => root.render(<EditorialListRow {...base} selectionMode onSelect={onSelect} selected={false} />));
+      const title = container.querySelector("h3");
+      act(() => title?.click());
+      expect(onSelect).toHaveBeenCalledWith(true);
+      expect(base.onEdit).not.toHaveBeenCalled();
+    });
+
+    it("toggles selection exactly once when clicking the checkbox itself", () => {
+      const onSelect = vi.fn();
+      act(() => root.render(<EditorialListRow {...base} selectionMode onSelect={onSelect} selected={false} />));
+      const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      expect(checkbox).not.toBeNull();
+      act(() => checkbox?.click());
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith(true);
+      expect(base.onEdit).not.toHaveBeenCalled();
+    });
+
+    it("does not toggle selection when clicking the More Actions menu trigger", () => {
+      const onSelect = vi.fn();
+      act(() => root.render(<EditorialListRow {...base} selectionMode onSelect={onSelect} selected={false} />));
+      const moreTrigger = container.querySelector<HTMLButtonElement>('button[aria-label^="More actions"]');
+      act(() => moreTrigger?.click());
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(moreTrigger?.getAttribute("aria-expanded")).toBe("true");
+    });
+
+    it("ensures checkbox touch target is at least 44x44px without shrinking overrides", () => {
+      act(() => root.render(<EditorialListRow {...base} selectionMode onSelect={vi.fn()} />));
+      const label = container.querySelector("label");
+      expect(label?.className).toContain("min-h-11");
+      expect(label?.className).toContain("min-w-11");
+      expect(label?.className).not.toContain("size-8");
+      expect(label?.className).not.toContain("min-h-8");
+    });
   });
 });

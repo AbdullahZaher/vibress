@@ -11,6 +11,8 @@ export function Dialog({
   description,
   children,
   className,
+  fallbackFocusRef,
+  restoreFocusOnClose = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -18,13 +20,22 @@ export function Dialog({
   description?: string;
   children: React.ReactNode;
   className?: string;
+  fallbackFocusRef?: React.RefObject<HTMLElement | null> | undefined;
+  restoreFocusOnClose?: boolean | undefined;
 }) {
   const { tr } = useAdminLocale();
   const titleId = React.useId();
   const descriptionId = React.useId();
   const contentRef = React.useRef<HTMLDivElement>(null);
   const onCloseRef = React.useRef(onClose);
-  onCloseRef.current = onClose;
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  const restoreFocusRef = React.useRef(restoreFocusOnClose);
+  React.useEffect(() => {
+    restoreFocusRef.current = restoreFocusOnClose;
+  }, [restoreFocusOnClose]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -38,7 +49,12 @@ export function Dialog({
       if (!content) return [];
       return Array.from(content.querySelectorAll<HTMLElement>(
         'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      )).filter((element) => element.getClientRects().length > 0);
+      )).filter((element) => {
+        if (element.getClientRects().length > 0) return true;
+        return typeof window !== "undefined" &&
+          (window.getComputedStyle(element).display !== "none" &&
+           window.getComputedStyle(element).visibility !== "hidden");
+      });
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,9 +89,14 @@ export function Dialog({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = originalOverflow;
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (!restoreFocusRef.current) return;
+      if (previousFocus?.isConnected) {
+        previousFocus.focus();
+      } else if (fallbackFocusRef?.current?.isConnected) {
+        fallbackFocusRef.current.focus();
+      }
     };
-  }, [isOpen]);
+  }, [isOpen, fallbackFocusRef]);
 
   if (!isOpen || typeof document === "undefined") return null;
 
@@ -99,7 +120,7 @@ export function Dialog({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 end-4 inline-flex size-10 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 hover:bg-muted text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer"
+          className="absolute top-4 end-4 inline-flex size-11 items-center justify-center rounded-md opacity-70 transition-opacity hover:opacity-100 hover:bg-muted text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring cursor-pointer"
           aria-label={tr("Close dialog")}
         >
           <X className="h-4 w-4" aria-hidden="true" />
@@ -107,7 +128,7 @@ export function Dialog({
         </button>
 
         {(title || description) && (
-          <div className="flex flex-col space-y-1.5 text-start mb-4 pe-10">
+          <div className="flex flex-col space-y-1.5 text-start mb-4 pe-12">
             {title && (
               <h2 id={titleId} className="text-base sm:text-lg font-semibold leading-tight tracking-tight text-foreground">
                 {title}
