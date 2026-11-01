@@ -54,6 +54,7 @@ export const SocialLinksCard: React.FC<SocialLinksCardProps> = ({
         isExpanded={expanded}
         onAction={() => setExpanded(!expanded)}
       />
+      {!expanded && <div id={panelId} hidden />}
       {expanded && (
         <div id={panelId} className="space-y-4 border-t border-border/50 p-5 bg-muted/10">
           <p className="text-xs text-muted-foreground">

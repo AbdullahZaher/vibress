@@ -43,6 +43,7 @@ export const MetadataSocialCard: React.FC<MetadataSocialCardProps> = ({
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
         <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="flex flex-wrap items-center justify-between gap-3">

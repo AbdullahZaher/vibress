@@ -110,6 +110,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
         <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-5 animate-in slide-in-from-top-2 duration-150">
           {/* Visual Theme Preview Mockup Banner */}
