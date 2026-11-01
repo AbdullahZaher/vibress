@@ -287,7 +287,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-sm min-h-10
+                  className="gap-1.5 text-sm min-h-10"
                 >
                   <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
                 </Button>
@@ -296,7 +296,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-sm min-h-10
+                  className="gap-1.5 text-sm min-h-10"
                   title="Reload registry themes from backend"
                 >
                   <RefreshCw

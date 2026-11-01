@@ -608,7 +608,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </a>
       </div>
 
-      {/* Floating Save / Discard Action Bar */
+      {/* Floating Save / Discard Action Bar */}
       <SettingsSaveBar
         isDirty={isDirty}
         dirtyCount={dirtyCount}
