@@ -1,8 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { useSettingsHub } from "./hooks/useSettingsHub";
 import { useSettingsSearch } from "./hooks/useSettingsSearch";
-import { useScrollSpy } from "./hooks/useScrollSpy";
 import { SETTINGS_REGISTRY } from "./settings.registry";
 import { SettingsSection } from "./SettingsSection";
 import { SettingsCard } from "./SettingsCard";
@@ -105,33 +104,47 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
     discardAllDirty,
   } = useSettingsHub();
 
-  const { query, setQuery, filteredPillars, highlightedCardId } =
+  const { query, setQuery, filteredPillars, matchingCardsCount, highlightedCardId, highlightCard } =
     useSettingsSearch();
 
-  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 120);
+  // One category at a time; global search temporarily shows matching categories.
+  const [activeSection, setActiveSection] = useState(() =>
+    initialSection && SECTION_IDS.includes(initialSection) ? initialSection : "general",
+  );
 
-  // Jump to initial anchor on load or route change
   useEffect(() => {
-    if (typeof window !== "undefined" && window.location.pathname.includes("localization")) {
-      setTimeout(() => {
-        const el = document.getElementById("general-localization");
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        } else if (initialSection && SECTION_IDS.includes(initialSection as any)) {
-          scrollToSection(initialSection, false);
-        }
-      }, 100);
-    } else if (initialSection && SECTION_IDS.includes(initialSection as any)) {
-      setTimeout(() => scrollToSection(initialSection, false), 50);
-    }
-  }, [initialSection, scrollToSection]);
+    if (initialSection && SECTION_IDS.includes(initialSection)) setActiveSection(initialSection);
+  }, [initialSection]);
+
+  useEffect(() => {
+    if (!window.location.pathname.includes("localization")) return;
+    setActiveSection("general");
+    const timer = window.setTimeout(() => {
+      document.getElementById("general-localization")?.scrollIntoView({ block: "center" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const selectPillar = (id: string) => {
+    setQuery("");
+    setActiveSection(id);
+    window.history.replaceState(null, "", `/admin/settings/${id}`);
+  };
+
+  const jumpToCard = (pillarId: string, cardId: string, anchor: string) => {
+    selectPillar(pillarId);
+    window.setTimeout(() => {
+      document.getElementById(anchor)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      highlightCard(cardId);
+    }, 0);
+  };
 
   const isCardVisible = (cardId: string) => {
     return filteredPillars.some((p) => p.cards.some((c) => c.id === cardId));
   };
 
   const isPillarVisible = (pillarId: string) => {
-    return filteredPillars.some((p) => p.id === pillarId);
+    return filteredPillars.some((p) => p.id === pillarId) && (query.trim().length > 0 || activeSection === pillarId);
   };
 
   if (loading) {
@@ -160,8 +173,8 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
       {/* Search and Section Sticky Filter Bar */}
       <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
         {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
-        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-          {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
+        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 lg:hidden">
+          {SETTINGS_REGISTRY.filter((pillar) => !query.trim() || filteredPillars.some((match) => match.id === pillar.id)).map((pillar) => {
             const isActive = activeSection === pillar.id;
             return (
               <a
@@ -170,7 +183,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                 aria-current={isActive ? "location" : undefined}
                 onClick={(event) => {
                   event.preventDefault();
-                  scrollToSection(pillar.id, true);
+                  selectPillar(pillar.id);
                 }}
                 className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
               >
@@ -182,10 +195,12 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </nav>
 
         {/* Search Input */}
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full sm:ms-auto sm:w-80">
           <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
           <Input
-            type="text"
+            type="search"
+            aria-label={tr("Search settings")}
+            aria-controls="settings-results"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("Filter settings...")}
@@ -206,6 +221,52 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </div>
       </div>
 
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <aside className="hidden lg:sticky lg:top-24 lg:block" aria-label={tr("Settings categories")}>
+          <nav aria-label={tr("Settings sections")} className="rounded-xl border border-border/70 bg-card p-2">
+            {SETTINGS_REGISTRY.map((pillar) => {
+              const selected = activeSection === pillar.id && !query.trim();
+              return (
+                <div key={pillar.id}>
+                  <a href={`/admin/settings/${pillar.id}`}
+                    aria-current={selected ? "page" : undefined}
+                    onClick={(event) => { event.preventDefault(); selectPillar(pillar.id); }}
+                    className={cn("flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      selected ? "bg-primary/10 font-semibold text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground")}
+                  >
+                    {getPillarIcon(pillar.iconName)}
+                    <span className="flex-1">{tr(pillar.title)}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{pillar.cards.length}</span>
+                  </a>
+                  {selected && (
+                    <div className="mb-2 ms-6 border-s border-border/60 ps-3">
+                      {pillar.cards.filter((card) => !can || can(card.requiredPermission ?? "settings.manage") || can("settings.manage")).map((card) => (
+                        <button key={card.id} type="button"
+                          onClick={() => jumpToCard(pillar.id, card.id, card.anchor)}
+                          className="block w-full rounded-md px-2 py-2 text-start text-xs leading-5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >{tr(card.title)}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </aside>
+        <main id="settings-results" className="min-w-0 space-y-8">
+          {query.trim() && (
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">
+              {matchingCardsCount} {tr("matching settings")}
+            </p>
+          )}
+          {query.trim() && matchingCardsCount === 0 && (
+            <div className="rounded-xl border border-dashed border-border p-10 text-center">
+              <Search className="mx-auto mb-3 size-6 text-muted-foreground" aria-hidden="true" />
+              <h2 className="font-semibold text-foreground">{tr("No matching settings")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{tr("Try another keyword or clear your search.")}</p>
+              <Button variant="outline" className="mt-5" onClick={() => setQuery("")}>{tr("Clear search")}</Button>
+            </div>
+          )}
       {/* ========================================================================= */}
       {/* 1. GENERAL SETTINGS PILLAR                                                */}
       {/* ========================================================================= */}
@@ -522,6 +583,9 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           )}
         </SettingsSection>
       )}
+
+        </main>
+      </div>
 
       {/* Floating Save / Discard Action Bar */}
       <SettingsSaveBar

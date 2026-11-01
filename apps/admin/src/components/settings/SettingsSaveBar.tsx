@@ -110,7 +110,7 @@ export const SettingsSaveBar: React.FC<SettingsSaveBarProps> = ({
                 className="w-full min-w-0 gap-2"
               >
                 <Sparkles className="size-4 shrink-0" aria-hidden="true" />
-                {tr("Save (⌘S)")}
+                {tr("Save changes")}
               </Button>
             </div>
           </div>
