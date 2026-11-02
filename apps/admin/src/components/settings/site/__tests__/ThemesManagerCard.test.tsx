@@ -133,8 +133,7 @@ describe("ThemesManagerCard", () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it("opens a validated preview URL instead of query-string theme selection", async () => {
-    const mockOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("embeds a validated preview URL instead of query-string theme selection", async () => {
     vi.mocked(createThemePreviewApi).mockResolvedValue({
       previewToken: "a".repeat(64),
       expiresAt: new Date().toISOString(),
@@ -147,10 +146,11 @@ describe("ThemesManagerCard", () => {
     await act(async () => { open?.click(); });
     const previewButton = document.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
     await act(async () => { previewButton?.click(); });
-    expect(mockOpen).toHaveBeenCalledWith(
-      `/preview/${"a".repeat(64)}`, "_blank", "noopener,noreferrer",
-    );
-    mockOpen.mockRestore();
+    const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Theme preview Retro Creator"]');
+    expect(iframe?.getAttribute("src")).toBe("/preview/" + "a".repeat(64));
+    const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toContain("noopener");
   });
 
   it("prompts for confirmation before discarding unsaved theme settings", async () => {
@@ -229,8 +229,7 @@ describe("ThemesManagerCard", () => {
     expect(container.textContent).toContain("Vibress Default");
   });
 
-  it("shows a clear preview link when the browser blocks a new preview tab", async () => {
-    const blocked = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("provides a user-controlled external preview link beside an in-studio preview", async () => {
     vi.mocked(createThemePreviewApi).mockResolvedValue({
       previewToken: "b".repeat(64),
       expiresAt: new Date().toISOString(),
@@ -249,7 +248,7 @@ describe("ThemesManagerCard", () => {
     const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
     expect(link?.getAttribute("href")).toBe("/preview/" + "b".repeat(64));
     expect(link?.textContent).toContain("Open preview");
-    blocked.mockRestore();
+    expect(document.querySelector('iframe[title="Theme preview Retro Creator"]')).not.toBeNull();
   });
 
 });
