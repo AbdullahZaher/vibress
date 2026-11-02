@@ -50,7 +50,7 @@ function ChangeBadge({
     return (
       <Badge
         variant="outline"
-        className="text-xs font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+        className="text-xs font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
       >
         {tr("New")}
       </Badge>
@@ -72,7 +72,7 @@ function ChangeBadge({
       variant="outline"
       className={`text-xs font-medium px-2 py-0.5 ${
         positive
-          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
           : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
       }`}
     >
@@ -644,7 +644,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Top Content */}
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-foreground">
                       {tr("Top Content")}
                     </h3>
@@ -715,11 +715,11 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                           key={r.name}
                           className="flex items-center justify-between py-1 border-b border-border/40 last:border-b-0"
                         >
-                          <span className="font-medium text-foreground flex items-center gap-2">
-                            <Globe className="h-3.5 w-3.5 text-muted-foreground" />{" "}
-                            {r.name}
+                          <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                            <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{" "}
+                            <span className="min-w-0 truncate" dir="auto" title={r.name}>{r.name}</span>
                           </span>
-                          <span className="font-mono text-muted-foreground">
+                          <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
                             {r.views.toLocaleString(locale)}
                           </span>
                         </div>
