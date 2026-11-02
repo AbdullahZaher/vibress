@@ -23,59 +23,14 @@ export interface StagingEnvironmentIdentity {
   provisionedAt: Date;
 }
 
-/**
- * Creates and records an explicit cryptographic environment identity marker
- * on a disposable development or ephemeral test database.
- */
-export async function provisionStagingMarker(
-  client: Pick<Client, "query">,
-  options: {
-    markerToken?: string;
-    targetPublicationId?: string;
-    environmentType?: StagingEnvType;
-  } = {},
-): Promise<{ markerToken: string; targetPublicationId: string; environmentType: StagingEnvType }> {
-  const markerToken = options.markerToken || crypto.randomBytes(32).toString("hex");
-  const targetPublicationId = options.targetPublicationId || "pub_default";
-  const environmentType = options.environmentType || "disposable_development";
-
-  if (!AUTHORIZED_STAGING_ENV_TYPES.includes(environmentType)) {
-    throw new StagingIsolationError(
-      `Invalid environment type for staging marker provisioning: ${environmentType}`,
-    );
-  }
-
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS ${STAGING_IDENTITY_TABLE} (
-      id text PRIMARY KEY DEFAULT 'singleton',
-      environment_type text NOT NULL,
-      marker_token text NOT NULL,
-      authorized_target_publication_id text NOT NULL,
-      provisioned_at timestamptz NOT NULL DEFAULT now()
-    );
-  `);
-
-  await client.query(
-    `
-    INSERT INTO ${STAGING_IDENTITY_TABLE} (id, environment_type, marker_token, authorized_target_publication_id, provisioned_at)
-    VALUES ('singleton', $1, $2, $3, now())
-    ON CONFLICT (id) DO UPDATE SET
-      environment_type = EXCLUDED.environment_type,
-      marker_token = EXCLUDED.marker_token,
-      authorized_target_publication_id = EXCLUDED.authorized_target_publication_id,
-      provisioned_at = now();
-  `,
-    [environmentType, markerToken, targetPublicationId],
-  );
-
-  return { markerToken, targetPublicationId, environmentType };
-}
+export { provisionStagingMarker } from "./provision-staging-marker";
 
 /**
  * Verifies that the connected database is an explicitly authorized disposable staging/test database.
  * Executes on the EXACT SAME database connection that will be used for mutations.
  * Fails closed if the identity marker table is missing, the row is absent, the environment
- * type is not an authorized staging type, the token mismatches, or the target publication mismatches.
+ * type is not an authorized staging type, the expected token is missing or malformed, the token
+ * mismatches, or the target publication mismatches.
  */
 export async function verifyStagingMarker(
   client: Pick<Client, "query">,
@@ -126,7 +81,22 @@ export async function verifyStagingMarker(
     }
   }
 
-  // 4. Query the connected database for the staging identity marker
+  // 4. Fail-closed: require externally supplied expected marker token
+  const expectedToken = expected.markerToken || env.VIBRESS_STAGING_MARKER_TOKEN;
+  if (!expectedToken || typeof expectedToken !== "string" || !expectedToken.trim()) {
+    throw new StagingIsolationError(
+      "Missing expected staging marker token. An explicit 64-character hexadecimal token must be supplied via options.markerToken or VIBRESS_STAGING_MARKER_TOKEN.",
+    );
+  }
+
+  const cleanExpectedToken = expectedToken.trim();
+  if (!/^[a-f0-9]{64}$/i.test(cleanExpectedToken)) {
+    throw new StagingIsolationError(
+      "Malformed staging marker token. Token must be a 64-character hexadecimal string.",
+    );
+  }
+
+  // 5. Query the connected database for the staging identity marker
   let result;
   try {
     result = await client.query(
@@ -155,22 +125,21 @@ export async function verifyStagingMarker(
     provisionedAt: row.provisioned_at,
   };
 
-  // 5. Verify environment type is strictly authorized (never 'production' or unknown)
+  // 6. Verify environment type is strictly authorized (never 'production' or unknown)
   if (!AUTHORIZED_STAGING_ENV_TYPES.includes(identity.environmentType as any)) {
     throw new StagingIsolationError(
       `Invalid staging database environment type: "${identity.environmentType}". Only ${AUTHORIZED_STAGING_ENV_TYPES.join(", ")} permitted.`,
     );
   }
 
-  // 6. Verify marker token if expected token provided or configured
-  const expectedToken = expected.markerToken || env.VIBRESS_STAGING_MARKER_TOKEN;
-  if (expectedToken && identity.markerToken !== expectedToken) {
+  // 7. Verify marker token strictly matches the external expected token
+  if (identity.markerToken !== cleanExpectedToken) {
     throw new StagingIsolationError(
-      `Staging environment marker token mismatch. Target database marker does not match authorized execution token.`,
+      "Staging environment marker token mismatch. Target database marker does not match authorized execution token.",
     );
   }
 
-  // 7. Verify authorized publication ID
+  // 8. Verify authorized publication ID
   const expectedPubId = expected.targetPublicationId || "pub_default";
   if (identity.authorizedTargetPublicationId !== expectedPubId) {
     throw new StagingIsolationError(
@@ -178,7 +147,7 @@ export async function verifyStagingMarker(
     );
   }
 
-  // 8. Confirm target publication actually exists in the authorized database
+  // 9. Confirm target publication actually exists in the authorized database
   const pubResult = await client.query(
     "SELECT id, name FROM publications WHERE id = $1;",
     [expectedPubId],
@@ -208,10 +177,7 @@ export const seedStatements: string[] = [
   `UPDATE settings SET value = '""' WHERE publication_id = 'pub_default' AND key = 'footerCode';`,
 
   // 3. Authors
-  `UPDATE users SET name = 'Elena Vance' WHERE id = '500bfa35-d947-437b-b4ae-87e75812b915';`,
-  `UPDATE users SET name = 'Marcus Thorne' WHERE id = 'e60b1072-4c90-489d-b067-5c098ca4e6b1';`,
-  `UPDATE users SET name = 'Julian Ross' WHERE id = '517cb15c-a6e8-4b45-af0d-89f411b43d59';`,
-  `UPDATE users SET name = 'Sophia Chen' WHERE id = '8acc5bf6-41f5-43e2-8c61-936870c3836f';`,
+  `UPDATE users SET name = 'Elena Vance' WHERE id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1));`,
 
   // 4. Editorial media assets
   `INSERT INTO media_assets (
@@ -261,7 +227,7 @@ export const seedStatements: string[] = [
     slug = 'the-architecture-of-quiet-interfaces',
     excerpt = 'How intentional whitespace, typographic restraint, and optical grid alignment elevate digital readability.',
     feature_image_id = 'asset-editorial-arch',
-    primary_author_id = '500bfa35-d947-437b-b4ae-87e75812b915',
+    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
     featured = true,
     status = 'published',
     published_at = NOW() - interval '2 hours'
@@ -272,7 +238,7 @@ export const seedStatements: string[] = [
     slug = 'principles-of-minimalist-typography',
     excerpt = 'The enduring principles of lead type continue to govern reading comfort on modern high-density displays.',
     feature_image_id = 'asset-editorial-typo',
-    primary_author_id = 'e60b1072-4c90-489d-b067-5c098ca4e6b1',
+    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '1 day'
@@ -283,7 +249,7 @@ export const seedStatements: string[] = [
     slug = 'designing-for-focus-in-the-modern-web',
     excerpt = 'Reclaiming human attention through calm, purposeful interface design and quiet digital architecture.',
     feature_image_id = 'asset-editorial-work',
-    primary_author_id = '8acc5bf6-41f5-43e2-8c61-936870c3836f',
+    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '2 days'
@@ -294,19 +260,23 @@ export const seedStatements: string[] = [
     slug = 'the-renaissance-of-independent-media',
     excerpt = 'Why focused, ad-free editorial publications are winning the attention of discerning readers worldwide.',
     feature_image_id = 'asset-editorial-abstr',
-    primary_author_id = '517cb15c-a6e8-4b45-af0d-89f411b43d59',
+    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '3 days'
   WHERE id = 'a1825127-6b22-4841-9152-4b37917d9501';`,
 
-  // Link tags
+  // Link tags for existing editorial posts
   `DELETE FROM post_tags WHERE publication_id = 'pub_default';`,
-  `INSERT INTO post_tags (post_id, tag_id, publication_id) VALUES
-    ('bb46491c-dd25-492c-a035-89745ceffd6c', 'tag-editorial-design', 'pub_default'),
-    ('18c6584c-385e-4340-ad06-4f3f6d4f74d4', 'tag-editorial-typo', 'pub_default'),
-    ('c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7', 'tag-editorial-arch', 'pub_default'),
-    ('a1825127-6b22-4841-9152-4b37917d9501', 'tag-editorial-craft', 'pub_default');`,
+  `INSERT INTO post_tags (post_id, tag_id, publication_id)
+   SELECT id, 'tag-editorial-design', 'pub_default' FROM posts WHERE id = 'bb46491c-dd25-492c-a035-89745ceffd6c'
+   UNION ALL
+   SELECT id, 'tag-editorial-typo', 'pub_default' FROM posts WHERE id = '18c6584c-385e-4340-ad06-4f3f6d4f74d4'
+   UNION ALL
+   SELECT id, 'tag-editorial-arch', 'pub_default' FROM posts WHERE id = 'c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7'
+   UNION ALL
+   SELECT id, 'tag-editorial-craft', 'pub_default' FROM posts WHERE id = 'a1825127-6b22-4841-9152-4b37917d9501'
+   ON CONFLICT DO NOTHING;`,
 ];
 
 /**
@@ -338,21 +308,23 @@ export async function seedEditorialContent(
 }
 
 export async function main() {
+  const markerToken = process.env.VIBRESS_STAGING_MARKER_TOKEN;
+  if (!markerToken) {
+    throw new StagingIsolationError(
+      "Seeding refused: VIBRESS_STAGING_MARKER_TOKEN must be explicitly supplied in the environment. Run scripts/provision-staging-marker.ts first in an authorized disposable development workflow.",
+    );
+  }
+
   const connectionString =
     process.env.DATABASE_URL || "postgresql://vibress:vibress@127.0.0.1:5433/vibress";
   const client = new Client({ connectionString });
   await client.connect();
 
   try {
-    if (process.env.VIBRESS_PROVISION_STAGING_MARKER === "true") {
-      const { markerToken } = await provisionStagingMarker(client);
-      console.log(`Provisioned staging environment marker: ${markerToken}`);
-    }
-
     console.log("Verifying staging database isolation...");
-    await verifyStagingMarker(client);
-    console.log("Staging database isolation verified. Seeding content...");
-    await seedEditorialContent(client);
+    await verifyStagingMarker(client, { markerToken });
+    console.log("Staging database isolation verified. Seeding content within transactional scope...");
+    await seedEditorialContent(client, { markerToken });
     console.log("Staging editorial content seeded successfully.");
   } finally {
     await client.end();

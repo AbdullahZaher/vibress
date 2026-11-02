@@ -1,15 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   verifyStagingMarker,
-  provisionStagingMarker,
+  seedEditorialContent,
   StagingIsolationError,
   STAGING_IDENTITY_TABLE,
 } from "../../scripts/seed-theme-editorial-content";
+import { provisionStagingMarker } from "../../scripts/provision-staging-marker";
 
 describe("Editorial Staging Database Isolation (P1)", () => {
+  const validToken = "a".repeat(64);
+  const differentValidToken = "b".repeat(64);
+
   const validEnv = {
     NODE_ENV: "development",
     VIBRESS_SEED_EDITORIAL_STAGING: "true",
+    VIBRESS_STAGING_MARKER_TOKEN: validToken,
     DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress",
   };
 
@@ -18,12 +23,14 @@ describe("Editorial Staging Database Isolation (P1)", () => {
 
     await expect(
       verifyStagingMarker(mockClient, {
+        markerToken: validToken,
         env: { NODE_ENV: "development", VIBRESS_SEED_EDITORIAL_STAGING: undefined },
       }),
     ).rejects.toThrow(StagingIsolationError);
 
     await expect(
       verifyStagingMarker(mockClient, {
+        markerToken: validToken,
         env: { NODE_ENV: "development", VIBRESS_SEED_EDITORIAL_STAGING: "false" },
       }),
     ).rejects.toThrow(StagingIsolationError);
@@ -36,6 +43,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
 
     await expect(
       verifyStagingMarker(mockClient, {
+        markerToken: validToken,
         env: { NODE_ENV: "production", VIBRESS_SEED_EDITORIAL_STAGING: "true" },
       }),
     ).rejects.toThrow(
@@ -59,6 +67,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     for (const url of cloudUrls) {
       await expect(
         verifyStagingMarker(mockClient, {
+          markerToken: validToken,
           env: {
             NODE_ENV: "development",
             VIBRESS_SEED_EDITORIAL_STAGING: "true",
@@ -69,13 +78,62 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     }
   });
 
+  it("fails closed when expected marker token is missing entirely", async () => {
+    const mockClient = { query: vi.fn() };
+
+    await expect(
+      verifyStagingMarker(mockClient, {
+        env: {
+          NODE_ENV: "development",
+          VIBRESS_SEED_EDITORIAL_STAGING: "true",
+          VIBRESS_STAGING_MARKER_TOKEN: undefined,
+        },
+      }),
+    ).rejects.toThrow(/Missing expected staging marker token/);
+
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when expected marker token is empty or whitespace", async () => {
+    const mockClient = { query: vi.fn() };
+
+    await expect(
+      verifyStagingMarker(mockClient, {
+        markerToken: "   ",
+        env: validEnv,
+      }),
+    ).rejects.toThrow(/Missing expected staging marker token/);
+
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when expected marker token is malformed (not 64 hex chars)", async () => {
+    const mockClient = { query: vi.fn() };
+
+    await expect(
+      verifyStagingMarker(mockClient, {
+        markerToken: "short-token-123",
+        env: validEnv,
+      }),
+    ).rejects.toThrow(/Malformed staging marker token/);
+
+    await expect(
+      verifyStagingMarker(mockClient, {
+        markerToken: "g".repeat(64), // invalid hex char
+        env: validEnv,
+      }),
+    ).rejects.toThrow(/Malformed staging marker token/);
+
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
   it("fails closed when staging identity table is missing from database", async () => {
     const mockClient = {
       query: vi.fn().mockRejectedValue(new Error(`relation "${STAGING_IDENTITY_TABLE}" does not exist`)),
     };
 
     await expect(
-      verifyStagingMarker(mockClient, { env: validEnv }),
+      verifyStagingMarker(mockClient, { markerToken: validToken, env: validEnv }),
     ).rejects.toThrow(/Staging identity table "_staging_environment_identity" is missing or inaccessible/);
   });
 
@@ -85,7 +143,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     };
 
     await expect(
-      verifyStagingMarker(mockClient, { env: validEnv }),
+      verifyStagingMarker(mockClient, { markerToken: validToken, env: validEnv }),
     ).rejects.toThrow("Database does not contain a verified staging environment identity marker row.");
   });
 
@@ -96,7 +154,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
           {
             id: "singleton",
             environment_type: "production",
-            marker_token: "token123",
+            marker_token: validToken,
             authorized_target_publication_id: "pub_default",
             provisioned_at: new Date(),
           },
@@ -105,7 +163,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     };
 
     await expect(
-      verifyStagingMarker(mockClient, { env: validEnv }),
+      verifyStagingMarker(mockClient, { markerToken: validToken, env: validEnv }),
     ).rejects.toThrow('Invalid staging database environment type: "production"');
   });
 
@@ -116,7 +174,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
           {
             id: "singleton",
             environment_type: "disposable_development",
-            marker_token: "expected-token-aaa",
+            marker_token: validToken,
             authorized_target_publication_id: "pub_default",
             provisioned_at: new Date(),
           },
@@ -126,7 +184,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
 
     await expect(
       verifyStagingMarker(mockClient, {
-        markerToken: "different-token-bbb",
+        markerToken: differentValidToken,
         env: validEnv,
       }),
     ).rejects.toThrow("Staging environment marker token mismatch.");
@@ -139,7 +197,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
           {
             id: "singleton",
             environment_type: "disposable_development",
-            marker_token: "token123",
+            marker_token: validToken,
             authorized_target_publication_id: "pub_other",
             provisioned_at: new Date(),
           },
@@ -149,7 +207,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
 
     await expect(
       verifyStagingMarker(mockClient, {
-        markerToken: "token123",
+        markerToken: validToken,
         targetPublicationId: "pub_default",
         env: validEnv,
       }),
@@ -164,7 +222,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
             {
               id: "singleton",
               environment_type: "disposable_development",
-              marker_token: "token123",
+              marker_token: validToken,
               authorized_target_publication_id: "pub_default",
               provisioned_at: new Date(),
             },
@@ -175,7 +233,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
 
     await expect(
       verifyStagingMarker(mockClient, {
-        markerToken: "token123",
+        markerToken: validToken,
         targetPublicationId: "pub_default",
         env: validEnv,
       }),
@@ -190,7 +248,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
             {
               id: "singleton",
               environment_type: "disposable_development",
-              marker_token: "token123",
+              marker_token: validToken,
               authorized_target_publication_id: "pub_default",
               provisioned_at: new Date(),
             },
@@ -202,29 +260,109 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     };
 
     const identity = await verifyStagingMarker(mockClient, {
-      markerToken: "token123",
+      markerToken: validToken,
       targetPublicationId: "pub_default",
       env: validEnv,
     });
 
     expect(identity.environmentType).toBe("disposable_development");
-    expect(identity.markerToken).toBe("token123");
+    expect(identity.markerToken).toBe(validToken);
     expect(identity.authorizedTargetPublicationId).toBe("pub_default");
   });
 
-  it("provisions staging marker with valid schema and inserts singleton row", async () => {
-    const mockClient = { query: vi.fn().mockResolvedValue({}) };
+  it("provisions staging marker in dedicated workflow only when explicitly authorized", async () => {
+    const mockClient = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ id: "pub_default" }] }) // check publication
+        .mockResolvedValueOnce({}) // CREATE TABLE
+        .mockResolvedValueOnce({}), // INSERT INTO
+    };
 
     const result = await provisionStagingMarker(mockClient, {
-      markerToken: "custom-token-xyz",
+      markerToken: validToken,
       targetPublicationId: "pub_default",
       environmentType: "ephemeral_test",
+      env: {
+        NODE_ENV: "development",
+        VIBRESS_PROVISION_STAGING_MARKER: "true",
+        DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress",
+      },
     });
 
-    expect(result.markerToken).toBe("custom-token-xyz");
+    expect(result.markerToken).toBe(validToken);
     expect(result.environmentType).toBe("ephemeral_test");
-    expect(mockClient.query).toHaveBeenCalledTimes(2);
-    expect(mockClient.query.mock.calls[0][0]).toContain("CREATE TABLE IF NOT EXISTS _staging_environment_identity");
-    expect(mockClient.query.mock.calls[1][0]).toContain("INSERT INTO _staging_environment_identity");
+    expect(mockClient.query).toHaveBeenCalledTimes(3);
+    expect(mockClient.query.mock.calls[0][0]).toContain("SELECT id FROM publications");
+    expect(mockClient.query.mock.calls[1][0]).toContain("CREATE TABLE IF NOT EXISTS _staging_environment_identity");
+    expect(mockClient.query.mock.calls[2][0]).toContain("INSERT INTO _staging_environment_identity");
+  });
+
+  it("rejects staging marker provisioning without VIBRESS_PROVISION_STAGING_MARKER=true", async () => {
+    const mockClient = { query: vi.fn() };
+
+    await expect(
+      provisionStagingMarker(mockClient, {
+        markerToken: validToken,
+        env: {
+          NODE_ENV: "development",
+          VIBRESS_PROVISION_STAGING_MARKER: "false",
+        },
+      }),
+    ).rejects.toThrow(/Staging marker provisioning requires deliberate opt-in/);
+
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
+  it("rejects staging marker provisioning in production environments", async () => {
+    const mockClient = { query: vi.fn() };
+
+    await expect(
+      provisionStagingMarker(mockClient, {
+        markerToken: validToken,
+        env: {
+          NODE_ENV: "production",
+          VIBRESS_PROVISION_STAGING_MARKER: "true",
+        },
+      }),
+    ).rejects.toThrow(/Provisioning a staging marker is strictly forbidden when NODE_ENV=production/);
+
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
+  it("rolls back transactions on error during editorial seeding", async () => {
+    const mockClient = {
+      query: vi.fn()
+        // verifyStagingMarker queries:
+        .mockResolvedValueOnce({
+          rows: [
+            {
+              id: "singleton",
+              environment_type: "disposable_development",
+              marker_token: validToken,
+              authorized_target_publication_id: "pub_default",
+              provisioned_at: new Date(),
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ rows: [{ id: "pub_default" }] })
+        // BEGIN
+        .mockResolvedValueOnce({})
+        // First statement fails
+        .mockRejectedValueOnce(new Error("Database connection interrupted during mutation"))
+        // ROLLBACK
+        .mockResolvedValueOnce({}),
+    };
+
+    await expect(
+      seedEditorialContent(mockClient, {
+        markerToken: validToken,
+        env: validEnv,
+      }),
+    ).rejects.toThrow("Database connection interrupted during mutation");
+
+    const queryCalls = mockClient.query.mock.calls.map((c) => c[0]);
+    expect(queryCalls).toContain("BEGIN;");
+    expect(queryCalls).toContain("ROLLBACK;");
+    expect(queryCalls).not.toContain("COMMIT;");
   });
 });

@@ -4,15 +4,17 @@
  * Editor, Schema Validation error states, Upload Dialog, and real Theme Preview Workspaces.
  *
  * Guarantees exactly 60 core studio screenshots and 12 preview workspace screenshots (72 total)
- * with explicit automated integrity assertions (PNG decoding, SHA-256 checksums, overflow checks,
- * non-blank size validation) and generates a machine-readable manifest.json separating automated
- * capture success from documented design review approval.
+ * with explicit automated integrity assertions (full PNG zlib decompression, CRC32 checks,
+ * viewport dimension matching, SHA-256 checksums, non-blank variance validation, overflow checks)
+ * and generates an evidence-based manifest.json separating automated capture success from
+ * independent visual review approval.
  */
 import { chromium, type Page } from "playwright";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
+import { validateImageIntegrity, type ImageIntegrityReport } from "./lib/png-integrity";
 
 const base = process.env.THEME_STUDIO_BASE_URL || "http://localhost:7777";
 const email = process.env.THEME_STUDIO_ADMIN_EMAIL;
@@ -27,25 +29,13 @@ interface CapturedEntry {
   locale: "en" | "ar";
   appearance: "dark" | "light";
   scenario: string;
+  isFullPage?: boolean;
   imageDimensions?: { width: number; height: number };
   sizeBytes?: number;
   sha256?: string;
   automatedChecksPassed?: boolean;
-}
-
-/** Decodes PNG magic header and IHDR chunk dimensions from buffer without native bindings. */
-function parsePng(buffer: Buffer): { width: number; height: number; isPng: boolean } {
-  const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-  if (buffer.length < 24 || !buffer.subarray(0, 8).equals(PNG_MAGIC)) {
-    return { width: 0, height: 0, isPng: false };
-  }
-  const chunkType = buffer.toString("ascii", 12, 16);
-  if (chunkType !== "IHDR") {
-    return { width: 0, height: 0, isPng: false };
-  }
-  const width = buffer.readUInt32BE(16);
-  const height = buffer.readUInt32BE(20);
-  return { width, height, isPng: true };
+  decompressedBytes?: number;
+  pixelStats?: ImageIntegrityReport["pixelStats"];
 }
 
 /** Asserts horizontal overflow is absent on the page. */
@@ -68,6 +58,14 @@ async function capture() {
 
   const capturedEntries: CapturedEntry[] = [];
   const browser = await chromium.launch({ headless: true });
+
+  const automatedSecurityAssertions = {
+    iframeSandboxRestricted: false,
+    iframeReferrerPolicyRestricted: false,
+    externalLinkRelNoopener: false,
+    externalLinkTargetBlank: false,
+    noHorizontalOverflowDetected: true,
+  };
 
   try {
     // =========================================================================
@@ -116,6 +114,7 @@ async function capture() {
             locale,
             appearance,
             scenario: `Site Settings Page at ${width}px`,
+            isFullPage: true,
           });
         }
 
@@ -137,6 +136,7 @@ async function capture() {
             locale,
             appearance,
             scenario: `Theme Studio Gallery at ${width}px`,
+            isFullPage: false,
           });
         }
 
@@ -154,6 +154,7 @@ async function capture() {
           locale,
           appearance,
           scenario: "Theme Studio 320px with 200% root text scaling",
+          isFullPage: false,
         });
         await page.evaluate(() => {
           document.documentElement.style.fontSize = "";
@@ -179,6 +180,7 @@ async function capture() {
           locale,
           appearance,
           scenario: "Theme ZIP Upload Modal Dialog",
+          isFullPage: false,
         });
 
         const closeUploadBtn = page.locator('[data-theme-upload-close="true"]');
@@ -210,6 +212,7 @@ async function capture() {
           locale,
           appearance,
           scenario: "Theme Settings Customization Editor Desktop 1440px",
+          isFullPage: false,
         });
 
         // Editor Mobile (390px)
@@ -224,6 +227,7 @@ async function capture() {
           locale,
           appearance,
           scenario: "Theme Settings Customization Editor Mobile 390px",
+          isFullPage: false,
         });
 
         // 6. Schema Validation Error State with Accessible Alerts (4 total across matrix)
@@ -255,6 +259,7 @@ async function capture() {
           locale,
           appearance,
           scenario: "Theme Settings Editor Accessible Validation Error State",
+          isFullPage: false,
         });
 
         // Discard changes & restore state
@@ -275,7 +280,7 @@ async function capture() {
     }
 
     // =========================================================================
-    // PART 2: THEME PREVIEW WORKSPACE MATRIX (12 DEDICATED SCREENSHOTS)
+    // PART 2: THEME PREVIEW WORKSPACE MATRIX (12 GENUINE COMPONENT STATES)
     // =========================================================================
     const previewContext = await browser.newContext({
       viewport: { width: 1440, height: 900 },
@@ -299,14 +304,18 @@ async function capture() {
 
     // 1. Theme Preview Workspace — Desktop (1440px viewport, 1200px preview canvas)
     const previewDefaultBtn = drawer
-      .locator('article[data-theme-id="vibress-default"] button:has-text("Preview"), article[data-theme-id="vibress-default"] button:has-text("معاينة")')
+      .locator(
+        'article[data-theme-id="vibress-default"] button:has-text("Preview"), article[data-theme-id="vibress-default"] button:has-text("معاينة")',
+      )
       .first();
     await previewDefaultBtn.click();
 
     const workspace = drawer.locator('section[aria-label*="Theme preview"]');
     await workspace.waitFor({ state: "visible", timeout: 15000 });
 
-    const desktopPill = workspace.locator('button[aria-pressed="true"]:has-text("Desktop"), button[aria-pressed="true"]:has-text("سطح المكتب")');
+    const desktopPill = workspace.locator(
+      'button[aria-pressed="true"]:has-text("Desktop"), button[aria-pressed="true"]:has-text("سطح المكتب")',
+    );
     await desktopPill.waitFor({ state: "visible", timeout: 10000 });
 
     const previewIframe = workspace.locator("iframe");
@@ -321,6 +330,7 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Desktop 1440px with 1200px Device Canvas",
+      isFullPage: false,
     });
 
     // 2. Theme Preview Workspace — Tablet (1024px viewport with 768px tablet canvas)
@@ -338,13 +348,16 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Tablet 1024px with 768px Device Canvas",
+      isFullPage: false,
     });
 
     // 3. Theme Preview Workspace — Mobile (390px viewport with mobile canvas)
     await previewPage.setViewportSize({ width: 390, height: 900 });
     const mobileBtn = workspace.locator('button:has-text("Mobile"), button:has-text("محمول")').first();
     await mobileBtn.click();
-    await workspace.locator('span:has-text("Up to 390px"), span:has-text("390")').waitFor({ state: "visible", timeout: 5000 });
+    await workspace
+      .locator('span:has-text("Up to 390px"), span:has-text("390")')
+      .waitFor({ state: "visible", timeout: 5000 });
 
     const p3Filename = "preview-workspace-mobile.png";
     await previewPage.screenshot({ path: path.join(output, p3Filename) });
@@ -355,11 +368,14 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Mobile 390px with Responsive Phone Shell",
+      isFullPage: false,
     });
 
     // 4. Real vibress-default preview
     await previewPage.setViewportSize({ width: 1440, height: 900 });
-    const desktopBtn = workspace.locator('button:has-text("Desktop"), button:has-text("سطح المكتب")').first();
+    const desktopBtn = workspace
+      .locator('button:has-text("Desktop"), button:has-text("سطح المكتب")')
+      .first();
     await desktopBtn.click();
     const p4Filename = "preview-workspace-theme-default.png";
     await previewPage.screenshot({ path: path.join(output, p4Filename) });
@@ -370,20 +386,27 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Rendering Authentic Vibress Default Theme",
+      isFullPage: false,
     });
 
     // Back to themes
-    const backToThemes = workspace.locator('button[aria-label*="Back to themes"], button[aria-label*="العودة"]').first();
+    const backToThemes = workspace
+      .locator('button[aria-label*="Back to themes"], button[aria-label*="العودة"]')
+      .first();
     await backToThemes.click();
     await workspace.waitFor({ state: "detached", timeout: 10000 });
 
     // 5. Real vibress-minimal preview
     const previewMinBtn = drawer
-      .locator('article[data-theme-id="vibress-minimal"] button:has-text("Preview"), article[data-theme-id="vibress-minimal"] button:has-text("معاينة")')
+      .locator(
+        'article[data-theme-id="vibress-minimal"] button:has-text("Preview"), article[data-theme-id="vibress-minimal"] button:has-text("معاينة")',
+      )
       .first();
     await previewMinBtn.click();
     await workspace.waitFor({ state: "visible", timeout: 15000 });
-    await workspace.locator('h3:has-text("Vibress Minimal"), h3:has-text("Minimal")').waitFor({ state: "visible", timeout: 10000 });
+    await workspace
+      .locator('h3:has-text("Vibress Minimal"), h3:has-text("Minimal")')
+      .waitFor({ state: "visible", timeout: 10000 });
 
     const p5Filename = "preview-workspace-theme-minimal.png";
     await previewPage.screenshot({ path: path.join(output, p5Filename) });
@@ -394,6 +417,7 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Rendering Authentic Vibress Minimal Theme",
+      isFullPage: false,
     });
 
     await backToThemes.click();
@@ -401,11 +425,15 @@ async function capture() {
 
     // 6. Real vibress-molten preview
     const previewMoltenBtn = drawer
-      .locator('article[data-theme-id="vibress-molten"] button:has-text("Preview"), article[data-theme-id="vibress-molten"] button:has-text("معاينة")')
+      .locator(
+        'article[data-theme-id="vibress-molten"] button:has-text("Preview"), article[data-theme-id="vibress-molten"] button:has-text("معاينة")',
+      )
       .first();
     await previewMoltenBtn.click();
     await workspace.waitFor({ state: "visible", timeout: 15000 });
-    await workspace.locator('h3:has-text("Vibress Molten"), h3:has-text("Molten")').waitFor({ state: "visible", timeout: 10000 });
+    await workspace
+      .locator('h3:has-text("Vibress Molten"), h3:has-text("Molten")')
+      .waitFor({ state: "visible", timeout: 10000 });
 
     const p6Filename = "preview-workspace-theme-molten.png";
     await previewPage.screenshot({ path: path.join(output, p6Filename) });
@@ -416,19 +444,25 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Rendering Authentic Vibress Molten Theme",
+      isFullPage: false,
     });
 
-    // 7. Preview Loading State
-    await previewPage.evaluate(() => {
-      const loader = document.createElement("div");
-      loader.id = "qa-preview-loading-overlay";
-      loader.setAttribute("role", "status");
-      loader.className =
-        "pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/95 backdrop-blur-sm text-sm text-muted-foreground animate-in fade-in";
-      loader.innerHTML = '<span class="size-6 animate-spin border-2 border-primary border-t-transparent rounded-full"></span><span>Loading preview...</span>';
-      const frameContainer = document.querySelector('section[aria-label*="Theme preview"] .relative');
-      frameContainer?.appendChild(loader);
+    // 7. Genuine Component Loading State
+    // Delay preview network route to capture real React ThemePreviewWorkspace loading overlay
+    let continuePreview: (() => void) | null = null;
+    await previewPage.route("**/preview/**", async (route) => {
+      await new Promise<void>((resolve) => {
+        continuePreview = resolve;
+      });
+      try {
+        await route.continue();
+      } catch {}
     });
+
+    // Trigger viewport toggle to initiate genuine loading state in ThemePreviewWorkspace
+    await tabletBtn.click();
+    const loadingOverlay = workspace.locator('div[role="status"]');
+    await loadingOverlay.waitFor({ state: "visible", timeout: 8000 });
 
     const p7Filename = "preview-workspace-loading-state.png";
     await previewPage.screenshot({ path: path.join(output, p7Filename) });
@@ -439,30 +473,30 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Polite Accessible Loading State Overlay",
+      isFullPage: false,
     });
 
+    if (continuePreview) {
+      (continuePreview as () => void)();
+    }
+    await previewPage.unroute("**/preview/**");
+
+    // 8. Genuine Component Unavailable State
+    // Trigger the real React component's onError handler on the iframe element
     await previewPage.evaluate(() => {
-      document.getElementById("qa-preview-loading-overlay")?.remove();
+      const iframe = document.querySelector('section[aria-label*="Theme preview"] iframe') as any;
+      if (iframe) {
+        const errorEvent = new Event("error", { bubbles: true });
+        iframe.dispatchEvent(errorEvent);
+        const propKey = Object.keys(iframe).find((k) => k.startsWith("__reactProps"));
+        if (propKey && typeof iframe[propKey]?.onError === "function") {
+          iframe[propKey].onError(errorEvent);
+        }
+      }
     });
 
-    // 8. Expired / Unavailable preview state with actionable guidance
-    await previewPage.evaluate(() => {
-      const alertState = document.createElement("div");
-      alertState.id = "qa-preview-unavailable-overlay";
-      alertState.setAttribute("role", "alert");
-      alertState.className =
-        "absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center text-sm shadow-md rounded-xl";
-      alertState.innerHTML = `
-        <p class="font-semibold text-foreground">Inline preview could not be displayed.</p>
-        <p class="max-w-sm text-muted-foreground">Try the full preview in a new tab or refresh your preview link.</p>
-        <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-          <button class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-medium">Refresh preview</button>
-          <a class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 font-semibold text-foreground">Open preview in new tab</a>
-        </div>
-      `;
-      const frameContainer = document.querySelector('section[aria-label*="Theme preview"] .relative');
-      frameContainer?.appendChild(alertState);
-    });
+    const unavailableAlert = workspace.locator('div[role="alert"]');
+    await unavailableAlert.waitFor({ state: "visible", timeout: 8000 });
 
     const p8Filename = "preview-workspace-unavailable-state.png";
     await previewPage.screenshot({ path: path.join(output, p8Filename) });
@@ -473,15 +507,14 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Expired / Unavailable Actionable Recovery State",
+      isFullPage: false,
     });
 
-    await previewPage.evaluate(() => {
-      document.getElementById("qa-preview-unavailable-overlay")?.remove();
-    });
-
-    // 9. Retry Action Button (Focus & hover indication)
-    const refreshBtn = workspace.locator('button:has-text("Refresh preview"), button:has-text("تحديث المعاينة")').first();
-    await refreshBtn.focus();
+    // 9. Retry Action Button (Focus and ergonomics on real alert state button)
+    const alertRetryBtn = unavailableAlert
+      .locator('button:has-text("Refresh preview"), button:has-text("تحديث المعاينة")')
+      .first();
+    await alertRetryBtn.focus();
 
     const p9Filename = "preview-workspace-retry-action.png";
     await previewPage.screenshot({ path: path.join(output, p9Filename) });
@@ -492,16 +525,24 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Refresh Action Button Ergonomics & Focus State",
+      isFullPage: false,
     });
 
-    // 10. External Preview Link (Safe new-tab attributes)
-    const extLink = workspace.locator('a:has-text("Open preview in new tab"), a:has-text("فتح المعاينة")').first();
+    // 10. External Preview Link (Safe new-tab attributes verified on real component anchor)
+    const extLink = workspace
+      .locator('a:has-text("Open preview in new tab"), a:has-text("فتح المعاينة")')
+      .first();
     const targetAttr = await extLink.getAttribute("target");
     const relAttr = await extLink.getAttribute("rel");
     if (targetAttr !== "_blank" || !relAttr?.includes("noopener")) {
-      throw new Error("Security assertion failed: external preview link must have target=_blank and rel=noopener");
+      throw new Error(
+        "Security assertion failed: external preview link must have target=_blank and rel=noopener",
+      );
     }
+    automatedSecurityAssertions.externalLinkTargetBlank = targetAttr === "_blank";
+    automatedSecurityAssertions.externalLinkRelNoopener = !!relAttr?.includes("noopener");
 
+    await extLink.focus();
     const p10Filename = "preview-workspace-external-link.png";
     await previewPage.screenshot({ path: path.join(output, p10Filename) });
     capturedEntries.push({
@@ -511,16 +552,50 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Full External Preview Link and Iconography",
+      isFullPage: false,
     });
 
-    // 11. Arabic RTL Controls
-    await previewPage.evaluate(() => {
-      document.documentElement.setAttribute("dir", "rtl");
-      document.documentElement.setAttribute("lang", "ar");
+    // 11. Arabic RTL Controls via Genuine Localization Session
+    // Mount a true Arabic session to ensure real Arabic strings, RTL mirrored icons, and typography
+    const arabicContext = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      reducedMotion: "reduce",
     });
+    await arabicContext.addInitScript({
+      content:
+        'try { localStorage.setItem("vibress-admin-ui-locale", "ar"); localStorage.setItem("vibress-admin-theme", "light"); } catch {}',
+    });
+
+    const arabicPage = await arabicContext.newPage();
+    await arabicPage.goto(new URL("/admin/login", base).toString());
+    await arabicPage.locator("#email").fill(email);
+    await arabicPage.locator("#password").fill(password);
+    await arabicPage.locator('button[type="submit"]').click();
+    await arabicPage.waitForURL((url) => !url.pathname.includes("/admin/login"));
+    await arabicPage.goto(new URL("/admin/settings/site", base).toString());
+
+    const arChangeThemeBtn = arabicPage.getByRole("button", { name: "تغيير القالب" });
+    await arChangeThemeBtn.waitFor({ state: "visible", timeout: 15000 });
+    await arChangeThemeBtn.click();
+
+    const arDrawer = arabicPage.locator('[role="dialog"][aria-modal="true"]').first();
+    await arDrawer.waitFor({ state: "visible", timeout: 15000 });
+
+    const arPreviewBtn = arDrawer
+      .locator('article[data-theme-id="vibress-default"] button:has-text("معاينة")')
+      .first();
+    await arPreviewBtn.click();
+
+    const arWorkspace = arDrawer.locator(
+      'section[aria-label*="معاينة القالب"], section[aria-label*="Theme preview"]',
+    );
+    await arWorkspace.waitFor({ state: "visible", timeout: 15000 });
+    await arWorkspace
+      .locator('button:has-text("كمبيوتر"), button:has-text("Desktop")')
+      .waitFor({ state: "visible", timeout: 10000 });
 
     const p11Filename = "preview-workspace-arabic-rtl.png";
-    await previewPage.screenshot({ path: path.join(output, p11Filename) });
+    await arabicPage.screenshot({ path: path.join(output, p11Filename) });
     capturedEntries.push({
       filename: p11Filename,
       category: "preview_workspace",
@@ -528,18 +603,19 @@ async function capture() {
       locale: "ar",
       appearance: "light",
       scenario: "Theme Preview Workspace Arabic RTL Mirrored Controls & Typography",
+      isFullPage: false,
     });
 
-    await previewPage.evaluate(() => {
-      document.documentElement.setAttribute("dir", "ltr");
-      document.documentElement.setAttribute("lang", "en");
-    });
+    await arabicContext.close();
 
-    // 12. Safe iframe sandbox verification
+    // 12. Safe iframe sandbox verification (Functional security assertion)
     const sandboxAttr = await previewIframe.getAttribute("sandbox");
+    const referrerPolicyAttr = await previewIframe.getAttribute("referrerPolicy");
     if (sandboxAttr !== "allow-forms allow-popups") {
       throw new Error(`Security sandbox violation: expected "allow-forms allow-popups", got "${sandboxAttr}"`);
     }
+    automatedSecurityAssertions.iframeSandboxRestricted = sandboxAttr === "allow-forms allow-popups";
+    automatedSecurityAssertions.iframeReferrerPolicyRestricted = referrerPolicyAttr === "no-referrer";
 
     const p12Filename = "preview-workspace-sandbox-isolated.png";
     await previewPage.screenshot({ path: path.join(output, p12Filename) });
@@ -550,6 +626,7 @@ async function capture() {
       locale: "en",
       appearance: "light",
       scenario: "Theme Preview Workspace Sandboxed Safe Iframe Security Isolation",
+      isFullPage: false,
     });
 
     await previewContext.close();
@@ -558,7 +635,7 @@ async function capture() {
   }
 
   // =========================================================================
-  // PART 3: AUTOMATED INTEGRITY & DIMENSION CHECKS
+  // PART 3: AUTOMATED FULL-STREAM PNG INTEGRITY & CHECKSUM VERIFICATION
   // =========================================================================
   const coreStudioCount = capturedEntries.filter((e) => e.category === "core_studio").length;
   const previewWorkspaceCount = capturedEntries.filter((e) => e.category === "preview_workspace").length;
@@ -580,40 +657,38 @@ async function capture() {
   for (const entry of capturedEntries) {
     const fullPath = path.join(output, entry.filename);
     const fileStat = await stat(fullPath);
-    if (!fileStat.isFile() || fileStat.size < 5000) {
-      throw new Error(
-        `Corrupted or blank screenshot file detected: ${entry.filename} (${fileStat.size} bytes). Minimum expected size is 5,000 bytes.`,
-      );
-    }
     entry.sizeBytes = fileStat.size;
 
     const fileBuffer = await readFile(fullPath);
-    const parsed = parsePng(fileBuffer);
-    if (!parsed.isPng || parsed.width === 0 || parsed.height === 0) {
-      throw new Error(`Invalid or corrupt PNG header in file: ${entry.filename}`);
+
+    const report = validateImageIntegrity(fileBuffer, entry.filename, {
+      expectedWidth: entry.viewport.width,
+      expectedHeight: entry.viewport.height,
+      allowFullPageHeight: entry.isFullPage,
+      minSizeBytes: 5000,
+      minStandardDeviation: 1.5,
+    });
+
+    if (!report.isValid) {
+      throw new Error(`Image integrity verification failed for ${entry.filename}: ${report.error}`);
     }
 
-    // Verify width conforms to intended viewport
-    if (parsed.width !== entry.viewport.width) {
-      throw new Error(
-        `PNG dimension mismatch in ${entry.filename}: expected width ${entry.viewport.width}, decoded ${parsed.width}`,
-      );
-    }
-
-    entry.imageDimensions = { width: parsed.width, height: parsed.height };
-    const hash = crypto.createHash("sha256").update(fileBuffer).digest("hex");
-    entry.sha256 = hash;
+    entry.imageDimensions = { width: report.width, height: report.height };
+    entry.sha256 = report.sha256;
+    entry.decompressedBytes = report.decompressedBytes;
+    entry.pixelStats = report.pixelStats;
     entry.automatedChecksPassed = true;
-    checksums.add(hash);
+    checksums.add(report.sha256);
   }
 
-  // Ensure high visual diversity across distinct scenarios (no identical duplicates across differing dimensions)
+  // Ensure high visual diversity across distinct scenarios
   if (checksums.size < capturedEntries.length * 0.85) {
     throw new Error(
       `High duplicate visual artifact rate detected: only ${checksums.size} unique hashes across ${capturedEntries.length} captures.`,
     );
   }
 
+  // Default every new capture to decoupled pending visual review
   const manifest = {
     generatedAt: new Date().toISOString(),
     commitSha:
@@ -632,38 +707,18 @@ async function capture() {
     status: {
       capture_completed: true,
       automated_checks_passed: true,
-      visual_review_pending: false,
-      visual_review_approved: true,
-      overallStatus: "verified_production_ready",
+      visual_review_pending: true,
+      visual_review_approved: false,
+      overall_status: "automated_checks_passed",
     },
-    designAudit: {
-      auditorRole: "Principal Product Designer & Accessibility Specialist",
-      auditTargetScore: 9.7,
-      certifiedScore: 9.8,
-      certifiedStandards: [
-        "Apple Human Interface Guidelines (Restraint & Typography)",
-        "Ghost Admin (Editorial Minimalism)",
-        "Shopify Theme Editor (Ergonomics & Layout)",
-        "WCAG 2.2 Level AA (Contrast, 44px Touch Targets, 200% Text Scaling)",
-      ],
-      manualInspectionSignoff: {
-        visualIdentityAndPolish: "Approved (Authentic editorial assets, subtle borders, high clarity)",
-        visualHierarchyAndComposition: "Approved (Hero card proportions, action pairing, badge prominence)",
-        themeGalleryAndImagery: "Approved (Sharp authentic previews, 44px clear button, responsive search)",
-        previewExperience: "Approved (3 device frames, robust error recovery, sandboxed tokens)",
-        customizationEditor: "Approved (Unified schema validation, ARIA alerts, swatch alpha preservation)",
-        responsiveDesign: "Approved (Flawless 320px–1440px reflow, zero horizontal scrollbar)",
-        arabicRtlAndA11y: "Approved (100% Arabic coverage, mirrored icons, bdi isolation, 44px targets)",
-        interactionDetails: "Approved (Reduced-motion fallbacks, disabled states, live swatch updates)",
-      },
-    },
+    automatedSecurityAssertions,
     screenshots: capturedEntries,
   };
 
   const manifestPath = path.join(output, "manifest.json");
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
   console.log(
-    `Visual QA matrix complete: ${capturedEntries.length} screenshots (${coreStudioCount} core + ${previewWorkspaceCount} preview) verified. All PNGs decoded and checked. Manifest written to ${manifestPath}`,
+    `Visual QA matrix complete: ${capturedEntries.length} screenshots (${coreStudioCount} core + ${previewWorkspaceCount} preview) verified. All PNGs decoded, checksummed, and validated. Manifest written to ${manifestPath}`,
   );
 }
 
