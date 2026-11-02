@@ -17,16 +17,12 @@ import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
 import { ThemeGallery } from "./ThemeGallery";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
-import { Badge } from "../../ui/badge";
 import {
   Palette,
   CheckCircle2,
-  Eye,
   RefreshCw,
   X,
   UploadCloud,
-  Trash2,
-  Settings2,
   FileArchive,
   Loader2,
   AlertCircle,
@@ -246,7 +242,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         setUploadFile(file);
         setUploadError(null);
       } else {
-        setUploadError("Please select a valid .zip archive file.");
+        setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
   };
@@ -258,7 +254,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         setUploadFile(file);
         setUploadError(null);
       } else {
-        setUploadError("Please select a valid .zip archive file.");
+        setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
   };
@@ -281,7 +277,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     } catch (err: unknown) {
       setUploadProgress("error");
       const e = err as { message?: string };
-      setUploadError(e.message || "Failed to install theme package.");
+      setUploadError(e.message || tr("Failed to install theme package."));
     }
   };
 
@@ -476,7 +472,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   <div className="py-6 flex flex-col items-center justify-center gap-2 text-center">
                     <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                     <p className="text-xs font-bold text-foreground">
-                      Theme Installed Successfully!
+                      {tr("Theme Installed Successfully!")}
                     </p>
                   </div>
                 ) : (
@@ -488,6 +484,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleFileDrop}
                     onClick={() => fileInputRef.current?.click()}
+                    role="group"
+                    aria-label={tr("Upload Theme Package")}
                     className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer ${
                       dragOver
                         ? "border-primary bg-primary/5"
@@ -511,8 +509,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     ) : (
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
-                        <span className="text-xs font-semibold">Drop theme.zip here</span>
-                        <span className="text-xs text-muted-foreground">or click to browse</span>
+                        <span className="text-xs font-semibold">{tr("Drop theme.zip here")}</span>
+                        <span className="text-xs text-muted-foreground">{tr("or click to browse")}</span>
                       </div>
                     )}
                   </div>
@@ -526,7 +524,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   onClick={handleCloseUpload}
                   className="min-h-11 text-sm"
                 >
-                  Cancel
+                  {tr("Cancel")}
                 </Button>
                 <Button
                   size="sm"
@@ -537,7 +535,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    "Install"
+                    tr("Install")
                   )}
                 </Button>
               </div>
