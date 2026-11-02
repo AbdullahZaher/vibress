@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -39,6 +39,21 @@ describe("Accessible Tabs", () => {
     expect(panel?.getAttribute("aria-labelledby")).toBe(selected?.id);
     expect(container.querySelectorAll('[role="tabpanel"]').length).toBe(1);
     expect(container.querySelectorAll('[role="tab"][tabindex="0"]').length).toBe(1);
+  });
+  it("scrolls activated tabs into view without forcing the page to scroll", () => {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+    const scroll = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scroll });
+    try {
+      act(() => root.render(<TestTabs />));
+      const growth = container.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1];
+      act(() => growth?.click());
+      expect(scroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+      expect(growth?.getAttribute("aria-selected")).toBe("true");
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, "scrollIntoView", original);
+      else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+    }
   });
   it("supports arrow keys and corrects direction for RTL", () => {
     act(() => root.render(<TestTabs />));
