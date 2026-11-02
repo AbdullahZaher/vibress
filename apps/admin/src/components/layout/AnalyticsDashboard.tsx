@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
   ChevronDown,
+  ChevronRight,
   Globe,
   Eye,
   FileText,
@@ -464,6 +465,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="relative w-full min-w-0 max-w-full sm:w-auto">
         <TabsList className="w-full min-w-0 max-w-full border-0 bg-transparent p-0 sm:w-auto" ariaLabel={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
@@ -471,6 +473,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
             </TabsTrigger>
           ))}
         </TabsList>
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 end-0 z-10 flex w-7 items-center justify-end bg-gradient-to-l from-card to-transparent rtl:bg-gradient-to-r sm:hidden">
+          <ChevronRight className="size-4 text-muted-foreground rtl:rotate-180" />
+        </span>
+        </div>
 
         <div className="relative w-full shrink-0 sm:w-auto">
           <Calendar className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
