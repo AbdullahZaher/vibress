@@ -35,11 +35,23 @@ export function computeApprovalSignature(
   reviewerName: string,
   approvedAt: string,
   score: number,
+  reviewerRole: string = "",
+  observations: Record<string, string> = {},
+  notes?: string,
 ): string {
   const sortedHashes = [...screenshotHashes].sort().join(":");
+  const signingKey = process.env.THEME_STUDIO_REVIEW_SIGNING_KEY;
+  if (!signingKey || !/^[a-f0-9]{64,}$/i.test(signingKey) || signingKey.length % 2 !== 0) {
+    throw new Error("A protected THEME_STUDIO_REVIEW_SIGNING_KEY (32+ random bytes, hex) is required.");
+  }
   return crypto
-    .createHash("sha256")
-    .update(`${commitSha}|${sortedHashes}|${reviewerName}|${approvedAt}|${score.toFixed(2)}`)
+    .createHmac("sha256", Buffer.from(signingKey, "hex"))
+    .update(JSON.stringify({
+      commitSha, screenshotHashes: [...screenshotHashes].sort(),
+      reviewerName, reviewerRole, approvedAt, score,
+      observations: Object.fromEntries(Object.entries(observations).sort()),
+      notes: notes ?? null,
+    }))
     .digest("hex");
 }
 
@@ -56,10 +68,14 @@ export async function approveVisualReview(input: ReviewApprovalInput): Promise<R
   if (!reviewerName?.trim()) throw new Error("Reviewer name is required for manual visual review approval.");
   if (!reviewerRole?.trim()) throw new Error("Reviewer role is required for manual visual review approval.");
   if (!commitSha?.trim()) throw new Error("Target commit SHA is required for manual visual review approval.");
-  if (typeof score !== "number" || score < 0 || score > 10) {
+  if (!Number.isFinite(score) || score < 0 || score > 10) {
     throw new Error("Certified score must be a number between 0.0 and 10.0.");
   }
 
+  if (!observations || typeof observations !== "object" || Array.isArray(observations) ||
+      !Object.values(observations).some((text) => typeof text === "string" && text.trim().length >= 20)) {
+    throw new Error("Documented, substantive reviewer observations are required. No automatic approval.");
+  }
   const manifestRaw = await readFile(manifestPath, "utf8");
   const manifest = JSON.parse(manifestRaw);
 
@@ -115,7 +131,7 @@ export async function approveVisualReview(input: ReviewApprovalInput): Promise<R
     hashes,
     reviewerName,
     approvedAt,
-    score,
+    score, reviewerRole, observations, notes,
   );
 
   const approvalRecord: ReviewApprovalRecord = {
@@ -178,15 +194,16 @@ export async function verifyVisualReviewApproval(manifestPath: string): Promise<
       hashes.push(currentHash);
     }
 
+    if (manifest.commitSha !== approval.commitSha) {
+      return { isApproved: false, isValid: false, error: "Approved commit differs from captured manifest" };
+    }
     const expectedSig = computeApprovalSignature(
-      approval.commitSha,
-      hashes,
-      approval.reviewerName,
-      approval.approvedAt,
-      approval.certifiedScore,
+      approval.commitSha, hashes, approval.reviewerName, approval.approvedAt,
+      approval.certifiedScore, approval.reviewerRole, approval.observations, approval.notes,
     );
-
-    if (expectedSig !== approval.approvalSignature) {
+    const signed = approval.approvalSignature;
+    if (typeof signed !== "string" || !/^[a-f0-9]{64}$/i.test(signed) ||
+        !crypto.timingSafeEqual(Buffer.from(expectedSig, "hex"), Buffer.from(signed, "hex"))) {
       return {
         isApproved: false,
         isValid: false,
@@ -212,15 +229,11 @@ export async function main() {
     process.env.THEME_STUDIO_MANIFEST_PATH ||
     path.join(process.cwd(), "artifacts/theme-studio/manifest.json");
 
-  const reviewerName =
-    getArg("--reviewer") ||
-    process.env.THEME_STUDIO_REVIEWER_NAME ||
-    "Principal Product Designer & Staff Security Auditor";
+  const reviewerName = getArg("--reviewer") || process.env.THEME_STUDIO_REVIEWER_NAME;
+  if (!reviewerName) throw new Error("Explicit --reviewer identity is required.");
 
-  const reviewerRole =
-    getArg("--role") ||
-    process.env.THEME_STUDIO_REVIEWER_ROLE ||
-    "Principal Design Systems Architect & Accessibility Specialist";
+  const reviewerRole = getArg("--role") || process.env.THEME_STUDIO_REVIEWER_ROLE;
+  if (!reviewerRole) throw new Error("Explicit --role is required.");
 
   const commitSha =
     getArg("--commit-sha") ||
@@ -241,28 +254,9 @@ export async function main() {
   }
   const score = parseFloat(scoreStr);
 
-  const observationsRaw =
-    getArg("--observations") || process.env.THEME_STUDIO_OBSERVATIONS;
-  const observations = observationsRaw
-    ? JSON.parse(observationsRaw)
-    : {
-        visualIdentityAndPolish:
-          "Approved: Authentic high-resolution editorial photography ('The Vibress Chronicle'), restrained borders, subtle Ghost-inspired typography.",
-        visualHierarchyAndComposition:
-          "Approved: Hero published card balance, 1.35fr : 1fr proportions, clear action pairing (Customize primary, Preview secondary).",
-        themeGalleryAndImagery:
-          "Approved: Crisp theme cards, 44px clear button, responsive search and category filters, reduced-motion fallbacks.",
-        previewExperience:
-          "Approved: Genuine component loading overlay, authentic unavailable recovery state, sandboxed iframe security, 3 responsive device viewports.",
-        customizationEditor:
-          "Approved: Schema-driven validation matching backend contracts, ARIA alerts, swatch alpha preservation, disabled button invariants.",
-        responsiveDesign:
-          "Approved: Flawless 320px–1440px reflow without horizontal scrollbars, 44px minimum touch targets, 200% root text scaling without clipping.",
-        arabicRtlAndA11y:
-          "Approved: Genuine Arabic localization parity, mirrored directional controls, bdi isolation for bidirectional text, WCAG 2.2 AA compliant.",
-        interactionDetails:
-          "Approved: Focus-visible rings, graceful error transitions, live preview responsiveness, authentic retry action.",
-      };
+  const observationsRaw = getArg("--observations") || process.env.THEME_STUDIO_OBSERVATIONS;
+  if (!observationsRaw) throw new Error("Explicit reviewer observations JSON is required.");
+  const observations = JSON.parse(observationsRaw);
 
   const notes = getArg("--notes") || process.env.THEME_STUDIO_REVIEW_NOTES;
 

@@ -49,12 +49,16 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
   const testDir = path.join(process.cwd(), "tmp-test-review-approval");
   const manifestPath = path.join(testDir, "manifest.json");
   const dummyCommit = "74814eb4e5127df81a3996e3e7158b080ef41983";
+  const oldKey = process.env.THEME_STUDIO_REVIEW_SIGNING_KEY;
 
   beforeEach(async () => {
+    process.env.THEME_STUDIO_REVIEW_SIGNING_KEY = "b".repeat(64);
     await mkdir(testDir, { recursive: true });
   });
 
   afterEach(async () => {
+    if (oldKey === undefined) delete process.env.THEME_STUDIO_REVIEW_SIGNING_KEY;
+    else process.env.THEME_STUDIO_REVIEW_SIGNING_KEY = oldKey;
     await rm(testDir, { recursive: true, force: true });
   });
 
@@ -101,6 +105,15 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
     const verification = await verifyVisualReviewApproval(manifestPath);
     expect(verification.isApproved).toBe(true);
     expect(verification.isValid).toBe(true);
+  });
+
+  it("rejects non-finite scores and empty reviewer observations", async () => {
+    await expect(approveVisualReview({ manifestPath, reviewerName: "Auditor", reviewerRole: "QA",
+      commitSha: dummyCommit, score: NaN, observations: { quality: "A detailed observation of this screenshot." },
+    })).rejects.toThrow(/Certified score/);
+    await expect(approveVisualReview({ manifestPath, reviewerName: "Auditor", reviewerRole: "QA",
+      commitSha: dummyCommit, score: 9.8, observations: {},
+    })).rejects.toThrow(/Documented, substantive/);
   });
 
   it("fails closed when automated checks have not passed", async () => {
@@ -168,7 +181,7 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
       reviewerRole: "Lead Designer",
       commitSha: dummyCommit,
       score: 9.8,
-      observations: {},
+      observations: { quality: "I manually inspected the fixture screenshot and layout state." },
     });
 
     // Tamper with the screenshot file on disk
