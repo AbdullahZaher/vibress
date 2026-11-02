@@ -14,7 +14,7 @@ import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
 import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
-import { ThemeGallery } from "./ThemeGallery";
+import { ThemeGallery, safeThemePreviewImage } from "./ThemeGallery";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import {
@@ -126,8 +126,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     } catch (error: unknown) {
       if (requestId !== requestSequence.current) return;
       setCatalogError(error instanceof Error ? error.message : "Failed to load themes.");
-      setThemes([]);
-      setActive(null);
+      // Preserve the last server-confirmed theme within this publication during transient refresh errors.
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
@@ -143,6 +142,10 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setActionSuccess(null);
       setIsDrawerOpen(false);
       setEditingTheme(null);
+      setPreviewFallbackUrl(null);
+      setPreviewError(null);
+      setActivating(null);
+      setDeleting(null);
       void load();
     };
     window.addEventListener("vibress:publication-changed", onPublicationChange);
@@ -184,19 +187,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     const selected = themes.find((theme) => theme.manifest.id === id);
     if (!selected || active?.themeId === id || activating || deleting) return;
     if (!(await confirm(
-      tr("Publish this theme to your live website?") + " " + selected.manifest.name,
+      tr("Publish this theme to your live website?") + " " + selected.manifest.name + ". " + tr("This replaces the currently published theme:") + " " + (themes.find((theme) => theme.manifest.id === active?.themeId)?.manifest.name || active?.themeId || "—"),
       { confirmLabel: tr("Publish theme") },
     ))) return;
+    const scope = requestSequence.current;
     setActivating(id);
     setActionError(null);
     setActionSuccess(null);
     try {
       const result = await activateThemeApi(id);
+      if (scope !== requestSequence.current) return;
       setActive(result.theme);
       setActionSuccess(tr("Theme published successfully."));
       await load();
     } catch (error: unknown) {
-      setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
+      if (scope === requestSequence.current) setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
     } finally {
       setActivating(null);
     }
@@ -206,15 +211,17 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (!(await confirm(tr("Uninstall this theme?") + " " + id, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
+    const scope = requestSequence.current;
     setDeleting(id);
     setActionError(null);
     setActionSuccess(null);
     try {
       await deleteThemeApi(id);
+      if (scope !== requestSequence.current) return;
       setActionSuccess(tr("Theme uninstalled."));
       await load();
     } catch (error: unknown) {
-      setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
+      if (scope === requestSequence.current) setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
     } finally {
       setDeleting(null);
     }
@@ -223,13 +230,17 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handlePreview = async (themeId: string) => {
     setPreviewError(null);
     setPreviewFallbackUrl(null);
+    const scope = requestSequence.current;
     try {
       const res = await createThemePreviewApi(themeId);
+      if (scope !== requestSequence.current) return;
       const url = "/preview/" + encodeURIComponent(res.previewToken);
-      const opened = window.open(url, "_blank", "noopener,noreferrer");
-      if (!opened) setPreviewFallbackUrl(url);
+      window.open(url, "_blank", "noopener,noreferrer");
+      // Some browsers return null for noopener even when the tab opened. Provide an
+      // optional explicit link without falsely claiming the popup was blocked.
+      setPreviewFallbackUrl(url);
     } catch (error: unknown) {
-      setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
+      if (scope === requestSequence.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     }
   };
 
@@ -309,6 +320,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           ) : active ? (
             <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-foreground">
               <CheckCircle2 aria-hidden="true" className="size-4 text-emerald-600 dark:text-emerald-400" />
+              {(() => {
+                const current = themes.find((theme) => theme.manifest.id === active.themeId);
+                const previewImage = current ? safeThemePreviewImage(current) : null;
+                return previewImage ? <img src={previewImage} alt="" aria-hidden="true" className="size-9 rounded-md border border-border object-cover object-top"
+                  onError={(event) => { event.currentTarget.hidden = true; }} /> : null;
+              })()}
               <bdi>{themes.find((theme) => theme.manifest.id === active.themeId)?.manifest.name || active.themeId}</bdi>
               <span className="font-normal text-muted-foreground">v{active.themeVersion}</span>
             </span>
@@ -380,7 +397,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               {actionError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{actionError}</p>}
               {actionSuccess && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-foreground">{actionSuccess}</p>}
               {previewFallbackUrl && <p role="status" className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                {tr("Your browser blocked the preview tab.")}{" "}
+                {tr("If the preview did not open, use this link.")}{" "}
                 <a href={previewFallbackUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-4">{tr("Open preview")}</a>
               </p>
               {editingTheme ? (
