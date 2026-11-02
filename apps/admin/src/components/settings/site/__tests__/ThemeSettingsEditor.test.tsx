@@ -314,25 +314,122 @@ describe("ThemeSettingsEditor", () => {
 
     const tr = (s: string) => s;
     // Color
-    expect(validateThemeSetting({ type: "color" }, "#abc", tr)).toBeNull();
-    expect(validateThemeSetting({ type: "color" }, "#abcd", tr)).toBeNull();
-    expect(validateThemeSetting({ type: "color" }, "#aabbcc", tr)).toBeNull();
-    expect(validateThemeSetting({ type: "color" }, "#aabbccdd", tr)).toBeNull();
-    expect(validateThemeSetting({ type: "color" }, "not-a-color", tr)).toContain("Invalid HEX format");
-    expect(validateThemeSetting({ type: "color" }, "#12", tr)).toContain("Invalid HEX format");
-    expect(validateThemeSetting({ type: "color" }, "#12345", tr)).toContain("Invalid HEX format");
-    expect(validateThemeSetting({ type: "color" }, "#1234567", tr)).toContain("Invalid HEX format");
-    expect(validateThemeSetting({ type: "color" }, "#123456789", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color", default: "#abc" }, "#abc", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color", default: "#abcd" }, "#abcd", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color", default: "#aabbcc" }, "#aabbcc", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color", default: "#aabbccdd" }, "#aabbccdd", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "not-a-color", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "#12", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "#12345", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "#1234567", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "#123456789", tr)).toContain("Invalid HEX format");
+    // Empty color validation
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "", tr)).toContain("A valid HEX color is required.");
+    expect(validateThemeSetting({ type: "color", default: "#111" }, "   ", tr)).toContain("A valid HEX color is required.");
+    expect(validateThemeSetting({ type: "color", default: "#111", optional: true } as any, "", tr)).toBeNull();
 
     // Number
     expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 10, tr)).toBeNull();
+    expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 5, tr)).toBeNull();
+    expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 20, tr)).toBeNull();
     expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 4, tr)).toContain("Value must be at least 5");
     expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 25, tr)).toContain("Value must be at most 20");
     expect(validateThemeSetting({ type: "number" }, "abc", tr)).toContain("Please enter a valid number.");
+    expect(validateThemeSetting({ type: "number", default: 10 }, "", tr)).toContain("Please enter a valid number.");
+    expect(validateThemeSetting({ type: "number", default: 10 }, Infinity, tr)).toContain("Please enter a valid number.");
+    expect(validateThemeSetting({ type: "number", default: 10, optional: true } as any, "", tr)).toBeNull();
 
     // String
     expect(validateThemeSetting({ type: "string", maxLength: 10 }, "hello", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "string", maxLength: 10 }, "", tr)).toBeNull();
     expect(validateThemeSetting({ type: "string", maxLength: 4 }, "hello world", tr)).toContain("Maximum length is 4");
+    expect(validateThemeSetting({ type: "string", minLength: 3 } as any, "hi", tr)).toContain("Minimum length is 3");
+    expect(validateThemeSetting({ type: "string", minLength: 3 } as any, "hey", tr)).toBeNull();
+
+    // Select
+    expect(validateThemeSetting({ type: "select", options: ["light", "dark"] }, "dark", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "select", options: ["light", "dark"] }, "sepia", tr)).toContain("Please select a valid option.");
+  });
+
+  it("handles clearing a number input with aria-invalid, error feedback, and disabled save", async () => {
+    const numTheme: ApiThemeSummary = {
+      manifest: {
+        id: "num-test",
+        name: "Number Test Theme",
+        version: "1.0.0",
+        themeApi: 1,
+        capabilities: [],
+        settingsSchemaVersion: 1,
+      },
+      isActive: false,
+      settingsSchema: {
+        itemsCount: { type: "number", label: "Items Count", default: 10, min: 1, max: 50 },
+      },
+    };
+
+    vi.mocked(getThemeApi).mockResolvedValue({
+      ...numTheme,
+      settings: { itemsCount: 10 },
+    });
+
+    await act(async () => {
+      root.render(
+        <ThemeSettingsEditor
+          theme={numTheme}
+          onBack={vi.fn()}
+          onDirtyChange={vi.fn()}
+          onSaved={vi.fn()}
+        />,
+      );
+    });
+
+    const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement | null;
+    expect(numberInput?.value).toBe("10");
+    expect(numberInput?.getAttribute("aria-invalid")).toBeNull();
+
+    // Clear the number input
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      if (numberInput && nativeSetter) {
+        nativeSetter.call(numberInput, "");
+        numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(numberInput?.getAttribute("aria-invalid")).toBe("true");
+    const errorEl = container.querySelector(`p[role="alert"]`);
+    expect(errorEl).not.toBeNull();
+    expect(errorEl?.textContent).toContain("Please enter a valid number.");
+
+    // Save must be disabled
+    const save = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Save Settings"),
+    );
+    expect(save?.disabled).toBe(true);
+
+    // Type a number out of range
+    await act(async () => {
+      if (numberInput && nativeSetter) {
+        nativeSetter.call(numberInput, "99");
+        numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(errorEl?.textContent).toContain("Value must be at most 50");
+    expect(save?.disabled).toBe(true);
+
+    // Restore to a valid number
+    await act(async () => {
+      if (numberInput && nativeSetter) {
+        nativeSetter.call(numberInput, "25");
+        numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(numberInput?.getAttribute("aria-invalid")).toBeNull();
+    expect(container.querySelector(`p[role="alert"]`)).toBeNull();
+    expect(save?.disabled).toBe(false);
   });
 
   it("handles color input validation with aria-invalid, error description, and preserves swatch on invalid input", async () => {

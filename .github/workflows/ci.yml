@@ -277,6 +277,9 @@ jobs:
             npx playwright test
           fi
 
+          # Capture reproducible Theme Studio visual evidence matrix (60 screenshots across viewports, locales, themes, editor, upload dialog)
+          THEME_STUDIO_BASE_URL="http://127.0.0.1:7777" THEME_STUDIO_ADMIN_EMAIL="owner@example.com" THEME_STUDIO_ADMIN_PASSWORD="OwnerPass123!" THEME_STUDIO_OUTPUT="artifacts/theme-studio-ci" pnpm exec tsx scripts/capture-theme-studio-qa.ts
+
       - name: Upload Playwright failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7

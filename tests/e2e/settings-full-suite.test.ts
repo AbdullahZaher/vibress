@@ -29,6 +29,18 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       headers: { Origin: BASE_URL },
       data: { value: false },
     }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/title`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "The Vibress Chronicle" },
+    }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/description`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "An independent journal of architecture, design, and editorial craftsmanship." },
+    }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`, {
+      headers: { Origin: BASE_URL },
+      data: { value: false },
+    }).catch(() => {});
   });
 
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -156,6 +168,15 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       const bar = page.locator("#vb-announcement-bar");
       return (await bar.isVisible()) && (await bar.innerText()).includes(announcementText);
     }, { timeout: 35000, intervals: [1000, 2000, 3000] }).toBe(true);
+
+    // Clean up temporary announcement so subsequent preview and visual tests observe clean editorial state
+    await request.put(
+      `${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`,
+      {
+        headers: { Origin: BASE_URL },
+        data: { value: false },
+      },
+    );
   });
 
   test("4. Site Privacy: End-to-End public protection barrier & unlock flow", async ({
@@ -340,7 +361,22 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await anonContext.close();
   });
 
-  test("9. Theme Studio responsive review & Danger Zone UI Execution", async ({ page }) => {
+  test("9. Theme Studio responsive review & Danger Zone UI Execution", async ({ page, request }) => {
+    await loginAsStaff(request);
+    // Restore clean editorial staging title and description before capturing preview screenshots
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/title`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "The Vibress Chronicle" },
+    });
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/description`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "An independent journal of architecture, design, and editorial craftsmanship." },
+    });
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`, {
+      headers: { Origin: BASE_URL },
+      data: { value: false },
+    });
+
     await loginAsAdmin(page);
     await page.goto(`${BASE_URL}/admin/settings/site#site`);
     await page.waitForLoadState("networkidle");
@@ -391,6 +427,9 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
         const result = await previewPage.goto(BASE_URL + previewPath, { waitUntil: "domcontentloaded" });
         expect(result?.ok()).toBe(true);
         await previewPage.waitForLoadState("networkidle").catch(() => {});
+        await previewPage.addStyleTag({
+          content: "nextjs-portal, [data-nextjs-toast], [data-next-badge] { display: none !important; }",
+        });
         await previewPage.screenshot({ path: "artifacts/theme-studio-ci/design-theme-" + id + ".png", animations: "disabled" });
       } finally {
         await previewPage.close();

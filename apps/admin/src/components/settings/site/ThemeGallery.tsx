@@ -132,14 +132,14 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-1 pt-0.5">
               <Button type="button" size="sm" variant="ghost" onClick={() => onCustomize(theme)}
                 title={tr("Theme settings")} aria-label={tr("Settings") + " " + title}
-                className="min-h-10 gap-1.5 text-xs text-muted-foreground hover:text-foreground">
+                className="min-h-11 rounded-xl gap-1.5 text-xs text-muted-foreground hover:text-foreground">
                 <Settings2 aria-hidden="true" className="size-3.5" />{tr("Customize")}
               </Button>
               {!theme.isBuiltIn && (
                 <Button type="button" size="sm" variant="ghost" disabled={busy || isDeleting}
                   onClick={() => onDelete(id)} title="Uninstall theme"
                   aria-label={tr("Uninstall theme") + " " + title}
-                  className="min-h-10 text-xs text-destructive/80 hover:text-destructive hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring">
+                  className="min-h-11 rounded-xl text-xs text-destructive/80 hover:text-destructive hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring">
                   <Trash2 aria-hidden="true" className="size-3.5 me-1" />{tr("Uninstall")}
                 </Button>
               )}
@@ -183,11 +183,11 @@ export const ThemeGallery: React.FC<ThemeGalleryProps> = ({
             <span className="sr-only">{tr("Search themes")}</span>
             <input type="search" value={query} onChange={(event) => setQuery(event.target.value)}
               placeholder={tr("Search themes...")} aria-label={tr("Search themes")}
-              className="min-h-11 w-full rounded-xl border border-border bg-card pe-8 ps-9 text-sm text-foreground shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              className="min-h-11 w-full rounded-xl border border-border bg-card pe-11 ps-9 text-sm text-foreground shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
             {query && (
               <button type="button" onClick={() => setQuery("")} aria-label={tr("Clear search")}
-                className="absolute end-2 top-2.5 inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
-                <X aria-hidden="true" className="size-3.5" />
+                className="absolute end-0 top-0 inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <X aria-hidden="true" className="size-4" />
               </button>
             )}
           </label>

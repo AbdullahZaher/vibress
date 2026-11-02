@@ -34,29 +34,61 @@ export function validateThemeSetting(
   value: unknown,
   tr: (s: string) => string,
 ): string | null {
+  const isOptional = (definition as { optional?: boolean }).optional === true;
+  const isDefined = value !== undefined && value !== null;
+  const stringVal = isDefined ? String(value).trim() : "";
+
   if (definition.type === "color") {
-    if (value === undefined || value === null || String(value).trim() === "") {
-      return null;
+    if (!isDefined || stringVal === "") {
+      if (isOptional) return null;
+      return tr("A valid HEX color is required.");
     }
     if (!isValidHexColor(value)) {
       return tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.");
     }
   } else if (definition.type === "number") {
-    if (value !== undefined && value !== null && value !== "") {
-      const num = Number(value);
-      if (Number.isNaN(num)) {
-        return tr("Please enter a valid number.");
-      }
-      if (definition.min !== undefined && num < definition.min) {
-        return `${tr("Value must be at least")} ${definition.min}`;
-      }
-      if (definition.max !== undefined && num > definition.max) {
-        return `${tr("Value must be at most")} ${definition.max}`;
-      }
+    if (!isDefined || (typeof value === "string" && stringVal === "")) {
+      if (isOptional) return null;
+      return tr("Please enter a valid number.");
+    }
+    const num = typeof value === "number" ? value : Number(value);
+    if (Number.isNaN(num) || !Number.isFinite(num)) {
+      return tr("Please enter a valid number.");
+    }
+    if (definition.min !== undefined && num < definition.min) {
+      return `${tr("Value must be at least")} ${definition.min}`;
+    }
+    if (definition.max !== undefined && num > definition.max) {
+      return `${tr("Value must be at most")} ${definition.max}`;
     }
   } else if (definition.type === "string") {
-    if (definition.maxLength !== undefined && String(value ?? "").length > definition.maxLength) {
+    const isRequired = (definition as { required?: boolean }).required === true;
+    if (!isDefined || stringVal === "") {
+      if (isRequired) {
+        return tr("This field is required.");
+      }
+      const minLength = (definition as { minLength?: number }).minLength;
+      if (minLength !== undefined && minLength > 0) {
+        return `${tr("Minimum length is")} ${minLength}`;
+      }
+      return null;
+    }
+    const str = String(value);
+    if (definition.maxLength !== undefined && str.length > definition.maxLength) {
       return `${tr("Maximum length is")} ${definition.maxLength}`;
+    }
+    const minLength = (definition as { minLength?: number }).minLength;
+    if (minLength !== undefined && str.length < minLength) {
+      return `${tr("Minimum length is")} ${minLength}`;
+    }
+  } else if (definition.type === "select") {
+    if (definition.options && definition.options.length > 0) {
+      const allowed = definition.options.map((opt) =>
+        typeof opt === "string" ? opt : opt.value,
+      );
+      if (!allowed.includes(String(value ?? ""))) {
+        return tr("Please select a valid option.");
+      }
     }
   }
   return null;
@@ -208,7 +240,18 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
     setError(null);
     setSuccess(false);
     try {
-      const result = await updateThemeSettingsApi(theme.manifest.id, draft, {
+      const payload: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(draft)) {
+        const def = detail.settingsSchema[key];
+        if (def?.type === "number" && typeof val === "string" && val.trim() !== "") {
+          payload[key] = Number(val);
+        } else if (def?.type === "color" && typeof val === "string") {
+          payload[key] = val.trim();
+        } else {
+          payload[key] = val;
+        }
+      }
+      const result = await updateThemeSettingsApi(theme.manifest.id, payload, {
         themeVersion: detail.manifest.version,
         settingsSchemaVersion: detail.manifest.settingsSchemaVersion,
       });

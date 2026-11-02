@@ -1,5 +1,10 @@
 import { execSync } from "node:child_process";
 
+// Ensure staging seeding cannot modify production publications or real user data.
+if (process.env.NODE_ENV === "production" && !process.env.ALLOW_EDITORIAL_SEED) {
+  throw new Error("Editorial staging seeder cannot run in production environments.");
+}
+
 function runSql(sql: string) {
   execSync('docker exec -i vibress-postgres-1 psql -U vibress -d vibress', {
     input: sql,
