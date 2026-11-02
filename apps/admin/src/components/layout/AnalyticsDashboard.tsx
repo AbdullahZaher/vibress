@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Users,
   Calendar,
   ChevronDown,
   Globe,
@@ -296,6 +295,11 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** Only internal publication routes may become public content links. */
+function isSafePublicPath(path: string): boolean {
+  return /^\/(?!\/)[^\r\n]*$/.test(path);
+}
+
 /** Period metrics and all-time totals must never share an unlabeled denominator. */
 function MetricCard({
   label,
@@ -523,9 +527,14 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
               {/* Latest Post Performance */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                  {tr("Latest post performance")}
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold tracking-tight text-foreground">{tr("Latest post performance")}</h3>
+                  {data.latestPost && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate(`/admin/posts/${data.latestPost!.id}`)}>
+                      {tr("Open published post")}
+                    </Button>
+                  )}
+                </div>
                 {data.latestPost ? (
                   <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center shadow-2xs">
                     <div className="flex items-center gap-4 min-w-0">
@@ -587,9 +596,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                             <FileText className="size-4" />
                           </div>
                           <div className="truncate">
-                            <h4 className="font-semibold text-sm text-foreground truncate">
-                              {post.title}
-                            </h4>
+                            {isSafePublicPath(post.path) ? (
+                              <a href={post.path} target="_blank" rel="noopener noreferrer" dir="auto" className="block truncate rounded-sm text-sm font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring" title={tr("Open published post")}>
+                                {post.title}
+                              </a>
+                            ) : (
+                              <h4 className="truncate text-sm font-semibold text-foreground" dir="auto">{post.title}</h4>
+                            )}
                             <p className="text-xs text-muted-foreground truncate">
                               {post.path}
                             </p>
@@ -613,17 +626,18 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <ToggleButton pressed={trafficMetric === "views"} onClick={() => setTrafficMetric("views")}>
-                    {tr("Total views")} ({formatCompact(totalViews)})
+                    {tr("Total views")} ({formatNumber(totalViews, { notation: "compact", maximumFractionDigits: 1 })})
                   </ToggleButton>
                   <ToggleButton pressed={trafficMetric === "visitors"} onClick={() => setTrafficMetric("visitors")}>
-                    {tr("Unique visitors")} ({formatCompact(totalVisitors)})
+                    {tr("Unique visitors")} ({formatNumber(totalVisitors, { notation: "compact", maximumFractionDigits: 1 })})
                   </ToggleButton>
                 </div>
 
                 <AreaChart
                   points={data.timeseries}
                   metric={trafficMetric}
-                  color="#3eb083"
+                  color="#047857"
+                  size="large"
                 />
               </Card>
 
@@ -656,18 +670,20 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       {topContent.map((item) => (
                         <div key={item.path} className="space-y-1">
                           <div className="flex justify-between font-medium gap-2">
-                            <span className="text-foreground truncate">
-                              {item.path}
-                            </span>
+                            {isSafePublicPath(item.path) ? (
+                              <a href={item.path} target="_blank" rel="noopener noreferrer" dir="auto" className="truncate rounded-sm text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring" title={tr("Open published content")}>
+                                {item.title || item.path}
+                              </a>
+                            ) : <span className="truncate text-foreground" dir="auto">{item.title || item.path}</span>}
                             <span className="font-mono text-muted-foreground shrink-0">
                               {item.views.toLocaleString(locale)} {tr("views")}
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-indigo-500 rounded-full"
+                              className="h-full bg-blue-700 dark:bg-blue-400 rounded-full"
                               style={{
-                                width: `${Math.round((item.views / (topContent[0]?.views || 1)) * 100)}%`,
+                                width: `${Math.round((item.views / maxTopContentViews) * 100)}%`,
                               }}
                             />
                           </div>
@@ -716,6 +732,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
           {/* TAB 3: NEWSLETTERS */}
           <TabsContent value="newsletters" className="mt-0 space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">{tr("Newsletter performance")}</h2>
+                <p className="text-sm text-muted-foreground">{tr("Newsletter metrics reflect the selected date range.")} · {tr(dateLabel)}</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -746,6 +766,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
           {/* TAB 4: GROWTH */}
           <TabsContent value="growth" className="mt-0 space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">{tr("Member acquisition")}</h2>
+                <p className="text-sm text-muted-foreground">{tr("Membership totals are current and not limited by the date filter.")}</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
