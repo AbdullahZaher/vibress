@@ -57,6 +57,13 @@ export async function verifyStagingMarker(
 
   // 3. Fail-closed: database URL inspection for cloud or production indicators
   const dbUrl = env.DATABASE_URL;
+  if (!dbUrl) throw new StagingIsolationError("An explicit disposable localhost DATABASE_URL is required.");
+  let url: URL;
+  try { url = new URL(dbUrl); } catch { throw new StagingIsolationError("Invalid staging DATABASE_URL."); }
+  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new StagingIsolationError("Editorial seeding requires a dedicated localhost PostgreSQL database.");
+  }
   if (dbUrl) {
     const forbiddenPatterns = [
       /prod/i,
@@ -312,8 +319,8 @@ export async function main() {
     );
   }
 
-  const connectionString =
-    process.env.DATABASE_URL || "postgresql://vibress:vibress@127.0.0.1:5433/vibress";
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new StagingIsolationError("Explicit DATABASE_URL is required for staging seeding.");
   const client = new Client({ connectionString });
   await client.connect();
 

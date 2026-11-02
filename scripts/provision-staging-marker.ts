@@ -43,7 +43,8 @@ export async function provisionStagingMarker(
   if (!dbUrl) throw new StagingIsolationError("An explicit DATABASE_URL for a disposable local database is required.");
   let url: URL;
   try { url = new URL(dbUrl); } catch { throw new StagingIsolationError("Invalid staging DATABASE_URL."); }
-  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
     throw new StagingIsolationError("Marker provisioning is permitted only for an explicitly selected localhost disposable database.");
   }
   if (dbUrl) {
@@ -125,8 +126,8 @@ export async function provisionStagingMarker(
 }
 
 export async function main() {
-  const connectionString =
-    process.env.DATABASE_URL || "postgresql://vibress:vibress@127.0.0.1:5433/vibress";
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) throw new StagingIsolationError("Explicit disposable DATABASE_URL is required for marker provisioning.");
   const client = new Client({ connectionString });
   await client.connect();
 

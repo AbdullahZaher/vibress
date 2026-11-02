@@ -78,6 +78,14 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     }
   });
 
+  it("denies unidentified remote seeding targets before reading their database identity", async () => {
+    const mockClient = { query: vi.fn() };
+    await expect(verifyStagingMarker(mockClient, { markerToken: validToken,
+      env: { ...validEnv, DATABASE_URL: "postgresql://user:pass@customer.internal.example:5432/db" },
+    })).rejects.toThrow(/dedicated localhost/);
+    expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
   it("fails closed when expected marker token is missing entirely", async () => {
     const mockClient = { query: vi.fn() };
 

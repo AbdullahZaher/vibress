@@ -251,7 +251,7 @@ export async function main() {
       "Missing required --score argument. Manual review must explicitly provide the independently calculated score.",
     );
   }
-  const score = parseFloat(scoreStr);
+  const score = Number(scoreStr);
 
   const observationsRaw = getArg("--observations") || process.env.THEME_STUDIO_OBSERVATIONS;
   if (!observationsRaw) throw new Error("Explicit reviewer observations JSON is required.");
