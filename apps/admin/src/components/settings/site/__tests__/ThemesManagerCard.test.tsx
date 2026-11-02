@@ -144,7 +144,8 @@ describe("ThemesManagerCard", () => {
       (button) => button.textContent?.includes("Change theme"),
     );
     await act(async () => { open?.click(); });
-    const previewButton = document.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
+    const retroCard = [...document.querySelectorAll("article")].find((node) => node.textContent?.includes("Retro Creator"));
+    const previewButton = retroCard?.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
     await act(async () => { previewButton?.click(); });
     const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Theme preview Retro Creator"]');
     expect(iframe?.getAttribute("src")).toBe("/preview/" + "a".repeat(64));
