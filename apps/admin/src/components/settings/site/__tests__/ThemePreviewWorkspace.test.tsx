@@ -179,4 +179,37 @@ describe("ThemePreviewWorkspace", () => {
     expect(container.querySelector('div[role="status"]')).toBeNull();
     expect(container.querySelector('div[role="alert"]')).not.toBeNull();
   });
+
+  it("retains unavailable state and does not let a delayed iframe load overwrite the error alert", async () => {
+    await act(async () => {
+      root.render(
+        <ThemePreviewWorkspace
+          themeName="Vibress Default"
+          url="/preview/token-interrupted"
+          onBack={vi.fn()}
+          onRefresh={vi.fn()}
+        />,
+      );
+    });
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe).not.toBeNull();
+
+    // Trigger error on iframe
+    await act(async () => {
+      iframe?.dispatchEvent(new Event("error", { bubbles: true }));
+      vi.advanceTimersByTime(16000);
+    });
+
+    expect(container.querySelector('div[role="alert"]')).not.toBeNull();
+
+    // Now simulate a delayed load event from late response arriving after error
+    await act(async () => {
+      iframe?.dispatchEvent(new Event("load"));
+    });
+
+    // Alert MUST remain present and not reverted to ready
+    expect(container.querySelector('div[role="alert"]')).not.toBeNull();
+    expect(container.textContent).toContain("Inline preview could not be displayed.");
+  });
 });

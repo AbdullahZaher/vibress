@@ -114,7 +114,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
             </div>
           )}
           <iframe key={url + ":" + selected} src={url} title={tr("Theme preview") + " " + themeName}
-            onLoad={() => setFrameStatus("ready")}
+            onLoad={() => setFrameStatus((s) => s === "unavailable" ? s : "ready")}
             onError={() => setFrameStatus("unavailable")}
             sandbox="allow-forms allow-popups"
             referrerPolicy="no-referrer"

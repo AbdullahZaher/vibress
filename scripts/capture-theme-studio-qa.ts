@@ -480,6 +480,8 @@ async function capture() {
       (continuePreview as () => void)();
     }
     await previewPage.unroute("**/preview/**");
+    // Allow the in-flight preview iframe route to settle before testing failure recovery
+    await loadingOverlay.waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
 
     // 8. Genuine Component Unavailable State
     // Trigger the real React component's onError handler on the iframe element
@@ -496,7 +498,7 @@ async function capture() {
     });
 
     const unavailableAlert = workspace.locator('div[role="alert"]');
-    await unavailableAlert.waitFor({ state: "visible", timeout: 8000 });
+    await unavailableAlert.waitFor({ state: "visible", timeout: 15000 });
 
     const p8Filename = "preview-workspace-unavailable-state.png";
     await previewPage.screenshot({ path: path.join(output, p8Filename) });
@@ -514,6 +516,7 @@ async function capture() {
     const alertRetryBtn = unavailableAlert
       .locator('button:has-text("Refresh preview"), button:has-text("تحديث المعاينة")')
       .first();
+    await alertRetryBtn.waitFor({ state: "visible", timeout: 15000 });
     await alertRetryBtn.focus();
 
     const p9Filename = "preview-workspace-retry-action.png";
@@ -532,6 +535,7 @@ async function capture() {
     const extLink = workspace
       .locator('a:has-text("Open preview in new tab"), a:has-text("فتح المعاينة")')
       .first();
+    await extLink.waitFor({ state: "visible", timeout: 15000 });
     const targetAttr = await extLink.getAttribute("target");
     const relAttr = await extLink.getAttribute("rel");
     if (targetAttr !== "_blank" || !relAttr?.includes("noopener")) {
