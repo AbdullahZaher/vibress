@@ -51,6 +51,11 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewFallbackUrl, setPreviewFallbackUrl] = useState<string | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const requestSequence = useRef(0);
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
@@ -109,12 +114,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
+    setCatalogError(null);
     try {
-      const [themesRes, activeRes] = await Promise.all([
-        listThemesApi(),
-        getActiveThemeApi(),
-      ]);
+      const [themesRes, activeRes] = await Promise.all([listThemesApi(), getActiveThemeApi()]);
+      if (requestId !== requestSequence.current) return;
       setThemes(themesRes.themes || []);
       setActive({
         themeId: activeRes.themeId,
@@ -122,12 +127,34 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         settings: activeRes.settings,
         settingsSchemaVersion: activeRes.settingsSchemaVersion,
       });
-    } catch {
-      // Ignored
+    } catch (error: unknown) {
+      if (requestId !== requestSequence.current) return;
+      setCatalogError(error instanceof Error ? error.message : "Failed to load themes.");
+      setThemes([]);
+      setActive(null);
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void load();
+    const onPublicationChange = () => {
+      requestSequence.current += 1;
+      setActive(null);
+      setThemes([]);
+      setActionError(null);
+      setActionSuccess(null);
+      setIsDrawerOpen(false);
+      setEditingTheme(null);
+      void load();
+    };
+    window.addEventListener("vibress:publication-changed", onPublicationChange);
+    return () => {
+      requestSequence.current += 1;
+      window.removeEventListener("vibress:publication-changed", onPublicationChange);
+    };
+  }, [load]);
 
   const handleEditorBack = async () => {
     if (editorSaving) return;
@@ -152,32 +179,46 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleOpen = () => {
     openingControlRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsDrawerOpen(true);
-    load();
+    setActionError(null);
+    setActionSuccess(null);
+    void load();
   };
 
   const handleActivate = async (id: string) => {
+    const selected = themes.find((theme) => theme.manifest.id === id);
+    if (!selected || active?.themeId === id || activating || deleting) return;
+    if (!(await confirm(
+      tr("Publish this theme to your live website?") + " " + selected.manifest.name,
+      { confirmLabel: tr("Publish theme") },
+    ))) return;
     setActivating(id);
+    setActionError(null);
+    setActionSuccess(null);
     try {
-      const res = await activateThemeApi(id);
-      setActive(res.theme);
+      const result = await activateThemeApi(id);
+      setActive(result.theme);
+      setActionSuccess(tr("Theme published successfully."));
       await load();
-    } catch {
-      // Error handled
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
     } finally {
       setActivating(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!(await confirm(`Are you sure you want to uninstall theme "${id}"?`, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
+    if (!(await confirm(tr("Uninstall this theme?") + " " + id, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
     setDeleting(id);
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await deleteThemeApi(id);
+      setActionSuccess(tr("Theme uninstalled."));
       await load();
-    } catch {
-      // Error handled
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
     } finally {
       setDeleting(null);
     }
@@ -185,9 +226,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   const handlePreview = async (themeId: string) => {
     setPreviewError(null);
+    setPreviewFallbackUrl(null);
     try {
       const res = await createThemePreviewApi(themeId);
-      window.open(`/preview/${encodeURIComponent(res.previewToken)}`, "_blank", "noopener,noreferrer");
+      const url = "/preview/" + encodeURIComponent(res.previewToken);
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) setPreviewFallbackUrl(url);
     } catch (error: unknown) {
       setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     }
@@ -257,6 +301,23 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           actionLabel="Change theme"
           onAction={handleOpen}
         />
+        <div role="status" className="flex flex-wrap items-center gap-2 border-t border-border/50 px-4 py-3 text-sm sm:px-5">
+          <span className="text-muted-foreground">{tr("Published theme")}:</span>
+          {loading && !active ? (
+            <span className="text-muted-foreground">{tr("Loading themes...")}</span>
+          ) : catalogError ? (
+            <>
+              <span className="text-destructive">{tr("Unable to load published theme.")}</span>
+              <Button size="sm" variant="outline" onClick={() => void load()}>{tr("Retry")}</Button>
+            </>
+          ) : active ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-foreground">
+              <CheckCircle2 aria-hidden="true" className="size-4 text-emerald-600 dark:text-emerald-400" />
+              <bdi>{themes.find((theme) => theme.manifest.id === active.themeId)?.manifest.name || active.themeId}</bdi>
+              <span className="font-normal text-muted-foreground">v{active.themeVersion}</span>
+            </span>
+          ) : <span className="text-muted-foreground">{tr("No active theme found.")}</span>}
+        </div>
       </SettingsCard>
 
       {/* Themes Manager Slide-over Drawer */}
@@ -319,9 +380,13 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
             {/* Drawer Body */}
             <div className="min-h-0 p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
-              {previewError && (
-                <p role="alert" className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
-              )}
+              {previewError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{previewError}</p>}
+              {actionError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{actionError}</p>}
+              {actionSuccess && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-foreground">{actionSuccess}</p>}
+              {previewFallbackUrl && <p role="status" className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                {tr("Your browser blocked the preview tab.")}{" "}
+                <a href={previewFallbackUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-4">{tr("Open preview")}</a>
+              </p>
               {editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
@@ -338,11 +403,17 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               ) : loading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                   <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                  <p className="text-xs">Loading theme catalog...</p>
+                  <p className="text-sm">{tr("Loading theme catalog...")}</p>
+                </div>
+              ) : catalogError ? (
+                <div role="alert" className="rounded-xl border border-destructive/20 p-6 text-sm">
+                  <p className="font-semibold">{tr("Failed to load themes.")}</p>
+                  <p className="my-3 text-muted-foreground">{catalogError}</p>
+                  <Button size="sm" variant="outline" onClick={() => void load()}>{tr("Retry")}</Button>
                 </div>
               ) : themes.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No themes discovered.
+                <div className="py-12 text-center text-muted-foreground text-sm">
+                  {tr("No themes discovered.")}
                 </div>
               ) : (
                 <ThemeGallery
