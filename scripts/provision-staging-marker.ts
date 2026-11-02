@@ -43,10 +43,6 @@ export async function provisionStagingMarker(
   if (!dbUrl) throw new StagingIsolationError("An explicit DATABASE_URL for a disposable local database is required.");
   let url: URL;
   try { url = new URL(dbUrl); } catch { throw new StagingIsolationError("Invalid staging DATABASE_URL."); }
-  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
-      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
-    throw new StagingIsolationError("Marker provisioning is permitted only for an explicitly selected localhost disposable database.");
-  }
   if (dbUrl) {
     const forbiddenPatterns = [
       /prod/i,
@@ -68,6 +64,11 @@ export async function provisionStagingMarker(
         );
       }
     }
+  }
+  // Require an explicitly selected, local PostgreSQL endpoint even if no known provider name appears.
+  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new StagingIsolationError("Marker provisioning is permitted only for an explicitly selected localhost disposable database.");
   }
 
   // Token is created by an independent trusted provisioning workflow, not by this database operation.

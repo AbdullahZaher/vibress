@@ -60,10 +60,6 @@ export async function verifyStagingMarker(
   if (!dbUrl) throw new StagingIsolationError("An explicit disposable localhost DATABASE_URL is required.");
   let url: URL;
   try { url = new URL(dbUrl); } catch { throw new StagingIsolationError("Invalid staging DATABASE_URL."); }
-  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
-      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
-    throw new StagingIsolationError("Editorial seeding requires a dedicated localhost PostgreSQL database.");
-  }
   if (dbUrl) {
     const forbiddenPatterns = [
       /prod/i,
@@ -85,6 +81,11 @@ export async function verifyStagingMarker(
         );
       }
     }
+  }
+  // Require an explicitly selected, local PostgreSQL endpoint even if no known provider name appears.
+  if (!["postgresql:", "postgres:"].includes(url.protocol) ||
+      !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new StagingIsolationError("Editorial seeding requires a dedicated localhost PostgreSQL database.");
   }
 
   // 4. Fail-closed: require externally supplied expected marker token
