@@ -452,7 +452,8 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                           <div className="space-y-1">
                             <Input
                               id={inputId}
-                              type={definition.type === "number" ? "number" : "text"}
+                              type="text"
+                              inputMode={definition.type === "number" ? "decimal" : undefined}
                               aria-describedby={describedBy}
                               aria-invalid={isInvalid ? "true" : undefined}
                               disabled={saving}
@@ -462,9 +463,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                               value={String(value ?? "")}
                               onChange={(event) => updateField(
                                 key,
-                                definition.type === "number"
-                                  ? (event.target.value === "" ? "" : Number(event.target.value))
-                                  : event.target.value,
+                                event.target.value,
                               )}
                               className={"min-h-11 rounded-xl text-sm shadow-xs " +
                                 (isInvalid ? "border-destructive focus-visible:ring-destructive" : "")}

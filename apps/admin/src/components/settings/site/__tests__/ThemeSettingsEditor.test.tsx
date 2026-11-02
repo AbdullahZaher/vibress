@@ -217,7 +217,7 @@ describe("ThemeSettingsEditor", () => {
 
     const colorPicker = container.querySelector('input[type="color"]') as HTMLInputElement | null;
     const colorHexInput = container.querySelector('input[aria-label*="hex value"]') as HTMLInputElement | null;
-    const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement | null;
+    const numberInput = container.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null;
     const textInput = container.querySelector('input[maxlength="60"]') as HTMLInputElement | null;
 
     expect(colorPicker).not.toBeNull();
@@ -227,6 +227,7 @@ describe("ThemeSettingsEditor", () => {
     expect(numberInput?.value).toBe("12");
     expect(numberInput?.getAttribute("min")).toBe("1");
     expect(numberInput?.getAttribute("max")).toBe("48");
+    expect(numberInput?.getAttribute("type")).toBe("text");
     expect(numberInput?.getAttribute("aria-describedby")).toBeTruthy();
     expect(textInput).not.toBeNull();
     expect(textInput?.value).toBe("Modern Publishing");
@@ -383,7 +384,7 @@ describe("ThemeSettingsEditor", () => {
       );
     });
 
-    const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement | null;
+    const numberInput = container.querySelector('input[inputmode="decimal"]') as HTMLInputElement | null;
     expect(numberInput?.value).toBe("10");
     expect(numberInput?.getAttribute("aria-invalid")).toBeNull();
 
@@ -419,6 +420,23 @@ describe("ThemeSettingsEditor", () => {
     });
     expect(errorEl?.textContent).toContain("Value must be at most 50");
     expect(save?.disabled).toBe(true);
+
+    // Intermediate edits must not be coerced to NaN or truncated while typing.
+    await act(async () => {
+      if (numberInput && nativeSetter) {
+        nativeSetter.call(numberInput, "-");
+        numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(numberInput?.value).toBe("-");
+    expect(save?.disabled).toBe(true);
+    await act(async () => {
+      if (numberInput && nativeSetter) {
+        nativeSetter.call(numberInput, "1.");
+        numberInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+    expect(numberInput?.value).toBe("1.");
 
     // Restore to a valid number
     await act(async () => {
