@@ -195,10 +195,16 @@ function AreaChart({
             {activeCoord && (
               <>
                 <line x1={activeCoord.x} x2={activeCoord.x} y1="0" y2="100" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                <circle cx={activeCoord.x} cy={activeCoord.y} r="2.5" fill={color} stroke="var(--color-card)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
               </>
             )}
           </svg>
+          {activeCoord && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-card shadow-sm"
+              style={{ left: `${activeCoord.x}%`, top: `${activeCoord.y}%`, backgroundColor: color }}
+            />
+          )}
           {activePoint && activeCoord && (
             <div
               aria-live="polite"
