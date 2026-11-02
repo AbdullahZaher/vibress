@@ -69,7 +69,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   useEffect(() => {
     if (!isDrawerOpen) return;
-    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]')?.focus();
+    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label={tr("Close themes drawer")}]')?.focus();
     return () => {
       openingControlRef.current?.focus();
     };
@@ -80,7 +80,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (isConfirmOpen) return;
     const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
     if (isUploadOpen) {
-      focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
+      focusRoot?.querySelector<HTMLButtonElement>('[aria-label={tr("Close theme upload")}]')?.focus();
     }
     const trapTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || !focusRoot) return;
@@ -171,6 +171,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handleCloseUpload = () => {
+    if (uploadProgress === "validating" || uploadProgress === "installing") return;
     setIsUploadOpen(false);
     uploadControlRef.current?.focus();
   };
@@ -249,7 +250,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.name.endsWith(".zip")) {
+      if (/\.zip$/i.test(file.name)) {
         setUploadFile(file);
         setUploadError(null);
       } else {
@@ -261,7 +262,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.name.endsWith(".zip")) {
+      if (/\.zip$/i.test(file.name)) {
         setUploadFile(file);
         setUploadError(null);
       } else {
@@ -372,7 +373,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   onClick={load}
                   disabled={loading || editingTheme !== null}
                   className="gap-1.5 text-sm min-h-10"
-                  title="Reload registry themes from backend"
+                  title={tr("Refresh themes")}
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
@@ -470,7 +471,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseUpload}
-                  aria-label="Close theme upload"
+                  aria-label={tr("Close theme upload")}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
