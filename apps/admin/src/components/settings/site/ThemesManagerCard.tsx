@@ -14,6 +14,7 @@ import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
 import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
+import { ThemeGallery } from "./ThemeGallery";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
@@ -265,14 +266,14 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         isOpen={isDrawerOpen}
         onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-7xl bg-card border border-border/80 shadow-2xl h-full sm:h-[min(94dvh,1100px)] sm:rounded-2xl overflow-hidden flex flex-col justify-between animate-in fade-in duration-200">
             {/* Drawer Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-border/60 bg-muted/20">
               <div className="flex flex-wrap items-center gap-2">
                 <Palette className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
-                  Themes Manager
+                  {tr("Theme Studio")}
                 </h3>
               </div>
               <div className="flex items-center gap-2">
@@ -289,7 +290,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   }}
                   className="gap-1.5 text-sm min-h-10"
                 >
-                  <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
+                  <UploadCloud className="h-3.5 w-3.5" /> {tr("Upload ZIP")}
                 </Button>
                 <Button
                   size="sm"
@@ -302,7 +303,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   <RefreshCw
                     className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
                   />{" "}
-                  Refresh
+                  {tr("Refresh")}
                 </Button>
                 <button
                   type="button"
@@ -317,24 +318,10 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             </div>
 
             {/* Drawer Body */}
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+            <div className="min-h-0 p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
               {previewError && (
                 <p role="alert" className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
               )}
-              <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="text-xs font-mono border-primary/30 text-primary"
-                  >
-                    Zero-Rebuild Theme System
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Upload external Liquid theme ZIPs or switch between built-in themes. All changes take effect immediately without recompilation or server restart.
-                </p>
-              </div>
-
               {editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
@@ -358,110 +345,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   No themes discovered.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {themes.map((theme) => {
-                    const isCurrent = active?.themeId === theme.manifest.id;
-                    return (
-                      <div
-                        key={theme.manifest.id}
-                        className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${
-                          isCurrent
-                            ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30 shadow-xs"
-                            : "border-border/70 hover:border-border hover:bg-muted/10"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-foreground">
-                              {theme.manifest.name}
-                            </h4>
-                            <div className="flex items-center gap-1">
-                              <Badge
-                                variant="secondary"
-                                className="text-xs font-mono"
-                              >
-                                v{theme.manifest.version}
-                              </Badge>
-                              {!theme.isBuiltIn && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs font-mono text-purple-700 dark:text-purple-300 border-purple-500/30"
-                                >
-                                  ZIP
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                            {theme.manifest.description ||
-                              "Responsive publishing theme optimized for modern publications."}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-4 border-t border-border/40 mt-4">
-                          <Button
-                            size="sm"
-                            disabled={
-                              isCurrent || activating === theme.manifest.id
-                            }
-                            onClick={() => handleActivate(theme.manifest.id)}
-                            className="text-sm min-h-10 flex-1 cursor-pointer"
-                            variant={isCurrent ? "outline" : "default"}
-                          >
-                            {isCurrent ? (
-                              <span className="flex items-center gap-1 text-emerald-500 font-medium">
-                                <CheckCircle2 className="h-3 w-3" /> Active
-                              </span>
-                            ) : activating === theme.manifest.id ? (
-                              <span className="flex items-center gap-1">
-                                <RefreshCw className="h-3 w-3 animate-spin" />{" "}
-                                Activating...
-                              </span>
-                            ) : (
-                              "Activate"
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handlePreview(theme.manifest.id)}
-                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title="Preview theme in new tab"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditorDirty(false);
-                              setEditingTheme(theme);
-                            }}
-                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title={tr("Theme settings")}
-                            aria-label={`${tr("Settings")} ${theme.manifest.name}`}
-                          >
-                            <Settings2 className="h-3.5 w-3.5" />
-                          </Button>
-
-                          {!theme.isBuiltIn && !isCurrent && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={deleting === theme.manifest.id}
-                              onClick={() => handleDelete(theme.manifest.id)}
-                              className="min-h-11 min-w-11 px-3 text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              title="Uninstall theme"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <ThemeGallery
+                  themes={themes}
+                  activeThemeId={active?.themeId}
+                  activating={activating}
+                  deleting={deleting}
+                  onPreview={(id) => void handlePreview(id)}
+                  onActivate={(id) => void handleActivate(id)}
+                  onCustomize={(theme) => { setEditorDirty(false); setEditingTheme(theme); }}
+                  onDelete={(id) => void handleDelete(id)}
+                />
               )}
             </div>
 
