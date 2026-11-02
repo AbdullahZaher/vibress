@@ -379,7 +379,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </Button>
                 <button
                   type="button"
-                  data-theme-studio-close
+                  data-theme-studio-close="true"
                   aria-label={tr("Close themes drawer")}
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
@@ -469,7 +469,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseUpload}
-                  data-theme-upload-close
+                  data-theme-upload-close="true"
                   aria-label={tr("Close theme upload")}
                   disabled={uploadProgress === "validating" || uploadProgress === "installing"}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
