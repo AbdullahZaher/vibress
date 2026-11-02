@@ -1,5 +1,4 @@
 import { Client } from "@vibress/database";
-import crypto from "node:crypto";
 
 export class StagingIsolationError extends Error {
   constructor(message: string) {
