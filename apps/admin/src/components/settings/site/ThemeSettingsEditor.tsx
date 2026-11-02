@@ -32,9 +32,11 @@ export function themeFieldLabel(key: string): string {
 export function themeSettingCategory(key: string): string {
   if (/color|background|accent|palette/i.test(key)) return "Colors";
   if (/font|typography|typeface/i.test(key)) return "Typography";
-  // Footer text is content, while footer/header styling belongs to layout.
+  // Dimensions and styles are layout even when their name includes "content".
+  if (/width|layout|headerStyle|footerStyle|navigation|spacing|columns|align|sidebar/i.test(key)) return "Layout";
+  // Footer text, content visibility and copy belong to content, not layout.
   if (/show|visible|display|content|author|date|related|cover|excerpt|tagline|description|copyright|bio|footer.*text|header.*text|social/i.test(key)) return "Content";
-  if (/layout|width|header|footer|navigation|spacing|columns|align|sidebar/i.test(key)) return "Layout";
+  if (/header|footer/i.test(key)) return "Layout";
   return "General";
 }
 function groupedThemeSettings(schema: Record<string, ApiThemeSettingDefinition>) {
