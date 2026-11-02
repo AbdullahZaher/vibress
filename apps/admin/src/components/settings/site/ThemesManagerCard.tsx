@@ -297,12 +297,6 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           icon={<Palette className="h-4 w-4" />}
           title="Themes"
           description="Choose how your publication looks and feels with official and custom responsive themes."
-          currentValue={
-            <Badge variant="secondary" className="text-xs font-mono gap-1">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              {active ? active.themeId : "Vibress Default"} (Active)
-            </Badge>
-          }
           actionLabel="Change theme"
           onAction={handleOpen}
         />
