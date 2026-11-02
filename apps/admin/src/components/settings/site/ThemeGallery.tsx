@@ -144,7 +144,7 @@ export const ThemeGallery: React.FC<ThemeGalleryProps> = ({
   const matches = (theme: ApiThemeSummary) => (
     (theme.manifest.name + " " + (theme.manifest.description || "")).toLocaleLowerCase().includes(search)
   );
-  const featured = filter === "all" ? themes.find((theme) => theme.manifest.id === activeThemeId && matches(theme)) : undefined;
+  const featured = themes.find((theme) => theme.manifest.id === activeThemeId && matches(theme) && (filter === "all" || !theme.isBuiltIn));
   const otherThemes = themes.filter((theme) => theme.manifest.id !== featured?.manifest.id)
     .filter((theme) => (filter === "all" || !theme.isBuiltIn) && matches(theme));
   const busy = Boolean(activating || deleting);

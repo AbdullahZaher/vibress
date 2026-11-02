@@ -64,4 +64,17 @@ describe("Theme Studio Gallery", () => {
     expect(host.querySelectorAll("article")).toHaveLength(1);
     expect(host.textContent).toContain("Retro Creator");
   });
+  it("never offers Publish on a filtered custom theme that is already active", async () => {
+    const custom = makeTheme("retro-creator", true);
+    custom.isBuiltIn = false;
+    await act(async () => root.render(
+      <ThemeGallery themes={[custom, makeTheme("vibress-default", false)]}
+        activeThemeId="retro-creator" activating={null} deleting={null} onPreview={vi.fn()}
+        onActivate={vi.fn()} onCustomize={vi.fn()} onDelete={vi.fn()} />,
+    ));
+    const customFilter = [...host.querySelectorAll("button")].find((button) => button.textContent === "Custom themes");
+    await act(async () => { customFilter?.click(); });
+    expect(host.querySelector('section[aria-label="Currently published theme"] article[data-theme-id="retro-creator"]')).not.toBeNull();
+    expect([...host.querySelectorAll("button")].filter((b) => b.textContent?.trim() === "Publish")).toHaveLength(0);
+  });
 });

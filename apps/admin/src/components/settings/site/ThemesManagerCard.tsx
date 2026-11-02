@@ -60,6 +60,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
+  const previewReturnFocusId = useRef<string | null>(null);
   const uploadControlRef = useRef<HTMLButtonElement>(null);
 
   // Upload modal state inside drawer
@@ -246,6 +247,18 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     }
   };
 
+  useEffect(() => {
+    if (!isDrawerOpen || previewLoading || previewFallbackUrl) return;
+    const id = previewReturnFocusId.current;
+    if (!id) return;
+    const theme = themes.find((item) => item.manifest.id === id);
+    if (!theme) return;
+    previewReturnFocusId.current = null;
+    const container = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>("article[data-theme-id]") ?? [])
+      .find((item) => item.dataset.themeId === id);
+    container?.querySelector<HTMLButtonElement>("button[title]")?.focus();
+  }, [isDrawerOpen, previewFallbackUrl, previewLoading, themes]);
+
   const handlePreview = async (themeId: string) => {
     const theme = themes.find((item) => item.manifest.id === themeId);
     if (!theme || previewLoading) return;
@@ -426,7 +439,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               ) : previewFallbackUrl && previewThemeName ? (
                 <ThemePreviewWorkspace themeName={previewThemeName} url={previewFallbackUrl}
                   onRefresh={() => { if (previewThemeId) void handlePreview(previewThemeId); }}
-                  onBack={() => { setPreviewFallbackUrl(null); setPreviewThemeName(null); setPreviewThemeId(null); }} />
+                  onBack={() => { previewReturnFocusId.current = previewThemeId; setPreviewFallbackUrl(null); setPreviewThemeName(null); setPreviewThemeId(null); }} />
               ) : editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
