@@ -53,11 +53,27 @@ async function main() {
         const response = await page.goto(new URL(previewPath, origin).toString(), { waitUntil: "domcontentloaded" });
         if (!response?.ok()) throw new Error(id + " preview returned " + response?.status());
         await page.waitForLoadState("networkidle").catch(() => {});
-        await page.evaluate(async () => { await document.fonts.ready; });
+        await page.addStyleTag({
+          content: "nextjs-portal, [data-nextjs-toast], [data-next-badge] { display: none !important; }",
+        });
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+          const images = Array.from(document.querySelectorAll("img"));
+          await Promise.all(
+            images.map((img) => {
+              if (img.complete) return Promise.resolve();
+              return new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              });
+            }),
+          );
+        });
+        await page.waitForTimeout(500);
         await page.screenshot({
           path: resolve(output, id + ".jpg"),
           type: "jpeg",
-          quality: 88,
+          quality: 90,
           fullPage: false,
           animations: "disabled",
         });

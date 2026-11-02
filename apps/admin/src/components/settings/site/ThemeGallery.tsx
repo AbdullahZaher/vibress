@@ -35,7 +35,7 @@ const ThemeArtwork: React.FC<ArtworkProps> = ({ theme, className = "" }) => {
       {showImage ? (
         <img src={image!} alt={tr("Screenshot of") + " " + theme.manifest.name}
           loading="lazy" decoding="async" onError={() => setFailed(true)}
-          className="h-full w-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-[1.02]" />
+          className="h-full w-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-[1.02] motion-reduce:transform-none motion-reduce:transition-none" />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-muted/60 via-card to-muted/30 px-6 text-center">
           <div className="flex size-12 items-center justify-center rounded-xl border border-border/80 bg-card/90 shadow-xs">
@@ -77,11 +77,11 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
     <article data-theme-id={id}
       className={"group min-w-0 overflow-hidden rounded-2xl border bg-card transition-all duration-200 " + (
         featured
-          ? "grid border-primary/40 shadow-sm md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] hover:border-primary/60"
+          ? "grid border-primary/40 shadow-sm md:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] hover:border-primary/60"
           : "flex flex-col border-border/80 shadow-xs hover:border-foreground/30 hover:shadow-md"
       )}>
-      <ThemeArtwork theme={theme} className={featured ? "md:aspect-auto md:min-h-[19rem] md:border-b-0 md:border-e md:border-e-border/80" : ""} />
-      <div className={"flex min-w-0 flex-1 flex-col gap-3.5 " + (featured ? "p-6 sm:p-7 justify-between" : "p-4 sm:p-5")}>
+      <ThemeArtwork theme={theme} className={featured ? "md:aspect-auto md:min-h-[16.5rem] md:border-b-0 md:border-e md:border-e-border/80" : ""} />
+      <div className={"flex min-w-0 flex-1 flex-col gap-3.5 " + (featured ? "p-5 sm:p-6 justify-between" : "p-4 sm:p-5")}>
         <div className="min-w-0 space-y-2">
           {featured && (
             <Badge variant="secondary" className="w-fit gap-1.5 border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
@@ -89,7 +89,7 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
               {tr("Published on your site")}
             </Badge>
           )}
-          <h4 className={"break-words font-semibold tracking-tight text-foreground " + (featured ? "text-xl sm:text-2xl" : "text-base")}>
+          <h4 className={"break-words font-semibold tracking-tight text-foreground " + (featured ? "text-lg sm:text-xl" : "text-base")}>
             <bdi>{title}</bdi>
           </h4>
           <p className={(featured ? "text-sm leading-relaxed" : "line-clamp-2 min-h-10 text-sm leading-relaxed") + " text-muted-foreground"}>
@@ -191,7 +191,7 @@ export const ThemeGallery: React.FC<ThemeGalleryProps> = ({
               </button>
             )}
           </label>
-          <div role="group" aria-label={tr("Filter themes")} className="flex items-center gap-1.5 self-start sm:self-auto">
+          <div role="group" aria-label={tr("Filter themes")} className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
             <Button size="sm" variant={filter === "all" ? "secondary" : "outline"}
               aria-pressed={filter === "all"} onClick={() => setFilter("all")} className="min-h-11 text-sm font-medium">{tr("All themes")}</Button>
             <Button size="sm" variant={filter === "installed" ? "secondary" : "outline"}

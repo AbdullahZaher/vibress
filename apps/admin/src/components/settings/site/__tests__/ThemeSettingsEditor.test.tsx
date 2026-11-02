@@ -4,7 +4,13 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ThemeSettingsEditor, themeSettingCategory, toColorPickerHex } from "../ThemeSettingsEditor";
+import {
+  ThemeSettingsEditor,
+  isValidHexColor,
+  themeSettingCategory,
+  toColorPickerHex,
+  validateThemeSetting,
+} from "../ThemeSettingsEditor";
 import {
   type ApiThemeSummary,
   getThemeApi,
@@ -210,11 +216,13 @@ describe("ThemeSettingsEditor", () => {
     });
 
     const colorPicker = container.querySelector('input[type="color"]') as HTMLInputElement | null;
+    const colorHexInput = container.querySelector('input[aria-label*="hex value"]') as HTMLInputElement | null;
     const numberInput = container.querySelector('input[type="number"]') as HTMLInputElement | null;
-    const textInput = container.querySelector('input[type="text"]') as HTMLInputElement | null;
+    const textInput = container.querySelector('input[maxlength="60"]') as HTMLInputElement | null;
 
     expect(colorPicker).not.toBeNull();
     expect(colorPicker?.value).toBe("#5e81ac");
+    expect(colorHexInput?.value).toBe("#5e81ac");
     expect(numberInput).not.toBeNull();
     expect(numberInput?.value).toBe("12");
     expect(numberInput?.getAttribute("min")).toBe("1");
@@ -291,5 +299,186 @@ describe("ThemeSettingsEditor", () => {
     const heading = container.querySelector("h4");
     expect(heading).not.toBeNull();
     expect(document.activeElement).toBe(heading);
+  });
+
+  it("validates theme setting values against schemas accurately", () => {
+    expect(isValidHexColor("#abc")).toBe(true);
+    expect(isValidHexColor("#abcd")).toBe(true);
+    expect(isValidHexColor("#aabbcc")).toBe(true);
+    expect(isValidHexColor("#aabbccdd")).toBe(true);
+    expect(isValidHexColor("invalid")).toBe(false);
+    expect(isValidHexColor("#12")).toBe(false);
+    expect(isValidHexColor("#12345")).toBe(false);
+    expect(isValidHexColor("#1234567")).toBe(false);
+    expect(isValidHexColor("#123456789")).toBe(false);
+
+    const tr = (s: string) => s;
+    // Color
+    expect(validateThemeSetting({ type: "color" }, "#abc", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color" }, "#abcd", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color" }, "#aabbcc", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color" }, "#aabbccdd", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "color" }, "not-a-color", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color" }, "#12", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color" }, "#12345", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color" }, "#1234567", tr)).toContain("Invalid HEX format");
+    expect(validateThemeSetting({ type: "color" }, "#123456789", tr)).toContain("Invalid HEX format");
+
+    // Number
+    expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 10, tr)).toBeNull();
+    expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 4, tr)).toContain("Value must be at least 5");
+    expect(validateThemeSetting({ type: "number", min: 5, max: 20 }, 25, tr)).toContain("Value must be at most 20");
+    expect(validateThemeSetting({ type: "number" }, "abc", tr)).toContain("Please enter a valid number.");
+
+    // String
+    expect(validateThemeSetting({ type: "string", maxLength: 10 }, "hello", tr)).toBeNull();
+    expect(validateThemeSetting({ type: "string", maxLength: 4 }, "hello world", tr)).toContain("Maximum length is 4");
+  });
+
+  it("handles color input validation with aria-invalid, error description, and preserves swatch on invalid input", async () => {
+    const colorTheme: ApiThemeSummary = {
+      manifest: {
+        id: "color-test",
+        name: "Color Test Theme",
+        version: "1.0.0",
+        themeApi: 1,
+        capabilities: [],
+        settingsSchemaVersion: 1,
+      },
+      isActive: false,
+      settingsSchema: {
+        brandColor: { type: "color", label: "Brand Color", default: "#336699" },
+      },
+    };
+
+    vi.mocked(getThemeApi).mockResolvedValue({
+      ...colorTheme,
+      settings: { brandColor: "#336699" },
+    });
+
+    await act(async () => {
+      root.render(
+        <ThemeSettingsEditor
+          theme={colorTheme}
+          onBack={vi.fn()}
+          onDirtyChange={vi.fn()}
+          onSaved={vi.fn()}
+        />,
+      );
+    });
+
+    const textInput = container.querySelector('input[type="text"]') as HTMLInputElement | null;
+    expect(textInput?.value).toBe("#336699");
+    expect(textInput?.getAttribute("aria-invalid")).toBeNull();
+
+    // Type invalid color
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    await act(async () => {
+      if (textInput && nativeSetter) {
+        nativeSetter.call(textInput, "#invalid");
+        textInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect(textInput?.getAttribute("aria-invalid")).toBe("true");
+    const errorId = textInput?.getAttribute("aria-describedby");
+    expect(errorId).toBeTruthy();
+    const errorEl = container.querySelector(`p[role="alert"]`);
+    expect(errorEl).not.toBeNull();
+    expect(errorEl?.textContent).toContain("Invalid HEX format");
+
+    // Save button must be disabled
+    const save = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Save Settings"),
+    );
+    expect(save?.disabled).toBe(true);
+    expect(container.textContent).toContain("Fix validation errors before saving.");
+
+    // Color swatch in overview panel should NOT be black #000000; it preserves #336699
+    const swatch = container.querySelector('aside section div[aria-hidden="true"]') as HTMLDivElement | null;
+    expect(swatch?.style.backgroundColor).toBe("rgb(51, 102, 153)");
+
+    // Discarding changes resets the input and removes error
+    const discard = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Discard changes"),
+    );
+    await act(async () => {
+      discard?.click();
+    });
+    expect(textInput?.value).toBe("#336699");
+    expect(textInput?.getAttribute("aria-invalid")).toBeNull();
+    expect(container.querySelector(`p[role="alert"]`)).toBeNull();
+  });
+
+  it("preserves alpha channel when selecting a color via native color picker", async () => {
+    const alphaTheme: ApiThemeSummary = {
+      manifest: {
+        id: "alpha-test",
+        name: "Alpha Test Theme",
+        version: "1.0.0",
+        themeApi: 1,
+        capabilities: [],
+        settingsSchemaVersion: 1,
+      },
+      isActive: false,
+      settingsSchema: {
+        accentColor8: { type: "color", label: "Accent 8", default: "#11223380" },
+        accentColor4: { type: "color", label: "Accent 4", default: "#123c" },
+      },
+    };
+
+    vi.mocked(getThemeApi).mockResolvedValue({
+      ...alphaTheme,
+      settings: {
+        accentColor8: "#11223380",
+        accentColor4: "#123c",
+      },
+    });
+
+    await act(async () => {
+      root.render(
+        <ThemeSettingsEditor
+          theme={alphaTheme}
+          onBack={vi.fn()}
+          onDirtyChange={vi.fn()}
+          onSaved={vi.fn()}
+        />,
+      );
+    });
+
+    const colorPickers = container.querySelectorAll('input[type="color"]');
+    const textInputs = container.querySelectorAll('input[type="text"]');
+    expect(colorPickers.length).toBe(2);
+    expect(textInputs.length).toBe(2);
+
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+
+    // Change picker for 8-digit hex: should keep "80" alpha suffix
+    await act(async () => {
+      const picker1 = colorPickers[0] as HTMLInputElement;
+      if (picker1 && nativeSetter) {
+        nativeSetter.call(picker1, "#ff0000");
+        picker1.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect((textInputs[0] as HTMLInputElement).value).toBe("#ff000080");
+
+    // Change picker for 4-digit hex: should keep "cc" alpha suffix
+    await act(async () => {
+      const picker2 = colorPickers[1] as HTMLInputElement;
+      if (picker2 && nativeSetter) {
+        nativeSetter.call(picker2, "#00ff00");
+        picker2.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    expect((textInputs[1] as HTMLInputElement).value).toBe("#00ff00cc");
   });
 });

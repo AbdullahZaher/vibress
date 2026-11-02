@@ -28,6 +28,40 @@ export function isValidHexColor(color: unknown): boolean {
   return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color.trim());
 }
 
+/** Validates an individual setting against its schema definition. Returns null if valid, or a localized error message. */
+export function validateThemeSetting(
+  definition: ApiThemeSettingDefinition,
+  value: unknown,
+  tr: (s: string) => string,
+): string | null {
+  if (definition.type === "color") {
+    if (value === undefined || value === null || String(value).trim() === "") {
+      return null;
+    }
+    if (!isValidHexColor(value)) {
+      return tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.");
+    }
+  } else if (definition.type === "number") {
+    if (value !== undefined && value !== null && value !== "") {
+      const num = Number(value);
+      if (Number.isNaN(num)) {
+        return tr("Please enter a valid number.");
+      }
+      if (definition.min !== undefined && num < definition.min) {
+        return `${tr("Value must be at least")} ${definition.min}`;
+      }
+      if (definition.max !== undefined && num > definition.max) {
+        return `${tr("Value must be at most")} ${definition.max}`;
+      }
+    }
+  } else if (definition.type === "string") {
+    if (definition.maxLength !== undefined && String(value ?? "").length > definition.maxLength) {
+      return `${tr("Maximum length is")} ${definition.maxLength}`;
+    }
+  }
+  return null;
+}
+
 /** Schema keys may be camelCase; the UI must not show raw implementation identifiers. */
 export function themeFieldLabel(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -77,6 +111,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   const [detail, setDetail] = useState<ApiThemeDetail | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [initial, setInitial] = useState<Record<string, unknown>>({});
+  const [lastValidColors, setLastValidColors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -89,6 +124,15 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   const colorFields = detail ? Object.entries(detail.settingsSchema)
     .filter(([, definition]) => definition.type === "color")
     .slice(0, 6) : [];
+
+  const fieldErrors: Record<string, string> = {};
+  if (detail) {
+    for (const [key, definition] of Object.entries(detail.settingsSchema)) {
+      const err = validateThemeSetting(definition, draft[key] ?? definition.default, tr);
+      if (err) fieldErrors[key] = err;
+    }
+  }
+  const hasErrors = Object.keys(fieldErrors).length > 0;
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -116,9 +160,16 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             result.settings?.[key] ?? definition.default,
           ]),
         );
+        const validColors: Record<string, string> = {};
+        for (const [key, definition] of Object.entries(result.settingsSchema)) {
+          if (definition.type === "color" && isValidHexColor(values[key])) {
+            validColors[key] = String(values[key]).trim();
+          }
+        }
         setDetail(result);
         setDraft(values);
         setInitial(values);
+        setLastValidColors(validColors);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -134,11 +185,25 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
 
   const updateField = (key: string, value: unknown) => {
     setDraft((previous) => ({ ...previous, [key]: value }));
+    if (isValidHexColor(value)) {
+      setLastValidColors((previous) => ({ ...previous, [key]: String(value).trim() }));
+    }
     setSuccess(false);
   };
 
+  const handleColorPickerChange = (key: string, newHex6: string) => {
+    const previous = String(draft[key] ?? "");
+    let finalHex = newHex6;
+    if (/^#[0-9a-fA-F]{8}$/.test(previous)) {
+      finalHex = `${newHex6}${previous.slice(7, 9)}`;
+    } else if (/^#[0-9a-fA-F]{4}$/.test(previous)) {
+      finalHex = `${newHex6}${previous[4]}${previous[4]}`;
+    }
+    updateField(key, finalHex);
+  };
+
   const save = async () => {
-    if (!detail || saving || !dirty) return;
+    if (!detail || saving || !dirty || hasErrors) return;
     setSaving(true);
     setError(null);
     setSuccess(false);
@@ -177,12 +242,30 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {hasErrors && (
+            <span className="text-xs text-destructive font-medium">
+              {tr("Fix validation errors before saving.")}
+            </span>
+          )}
           <Button size="sm" variant="outline" className="min-h-11 rounded-xl font-medium" disabled={!dirty || saving || loading}
-            onClick={() => { setDraft({ ...initial }); setError(null); setSuccess(false); }}>
+            onClick={() => {
+              setDraft({ ...initial });
+              const validColors: Record<string, string> = {};
+              if (detail) {
+                for (const [key, definition] of Object.entries(detail.settingsSchema)) {
+                  if (definition.type === "color" && isValidHexColor(initial[key])) {
+                    validColors[key] = String(initial[key]).trim();
+                  }
+                }
+              }
+              setLastValidColors(validColors);
+              setError(null);
+              setSuccess(false);
+            }}>
             <RotateCcw className="size-3.5 me-1 text-muted-foreground" />
             {tr("Discard changes")}
           </Button>
-          <Button size="sm" className="min-h-11 rounded-xl font-semibold shadow-xs" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
+          <Button size="sm" className="min-h-11 rounded-xl font-semibold shadow-xs" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0 || hasErrors}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {saving ? tr("Saving...") : tr("Save Settings")}
           </Button>
@@ -231,14 +314,20 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                   {fields.map(([key, definition]) => {
                     const inputId = `${idPrefix}-${Object.keys(detail.settingsSchema).indexOf(key)}`;
                     const descriptionId = `${inputId}-description`;
+                    const errorId = `${inputId}-error`;
                     const value = draft[key] ?? definition.default;
-                    const describedBy = definition.description ? descriptionId : undefined;
+                    const fieldError = fieldErrors[key];
+                    const isInvalid = Boolean(fieldError);
+                    const describedBy = [
+                      definition.description ? descriptionId : null,
+                      isInvalid ? errorId : null,
+                    ].filter(Boolean).join(" ") || undefined;
                     const isColorType = definition.type === "color";
                     const isColorValid = isColorType ? isValidHexColor(value) : true;
                     return (
                       <div key={key} className="min-w-0 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
+                          <label htmlFor={isColorType ? `${inputId}-text` : inputId} className="block text-sm font-semibold text-foreground">
                             {tr(definition.label || themeFieldLabel(key))}
                           </label>
                           {definition.type === "string" && definition.maxLength && (
@@ -290,29 +379,32 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                               <input
                                 id={inputId}
                                 type="color"
-                                title={tr("Choosing a color with this picker replaces its alpha value.")}
+                                title={tr("Choose color (transparency is preserved).")}
                                 disabled={saving}
                                 aria-label={`${tr("Choose")} ${tr(definition.label || themeFieldLabel(key))}`}
                                 aria-describedby={describedBy}
-                                value={toColorPickerHex(value)}
-                                onChange={(event) => updateField(key, event.target.value)}
+                                value={toColorPickerHex(isColorValid ? value : (lastValidColors[key] ?? initial[key] ?? definition.default ?? "#000000"))}
+                                onChange={(event) => handleColorPickerChange(key, event.target.value)}
                                 className="size-11 shrink-0 cursor-pointer rounded-xl border border-border bg-card p-1 shadow-xs"
                               />
                               <Input
+                                id={`${inputId}-text`}
+                                type="text"
                                 aria-label={`${tr(definition.label || themeFieldLabel(key))} ${tr("hex value")}`}
                                 aria-describedby={describedBy}
+                                aria-invalid={isInvalid ? "true" : undefined}
                                 value={String(value ?? "")}
                                 maxLength={9}
                                 disabled={saving}
                                 onChange={(event) => updateField(key, event.target.value)}
                                 className={"min-h-11 rounded-xl font-mono text-sm shadow-xs " +
-                                  (!isColorValid && String(value ?? "").trim() ? "border-amber-500 focus-visible:ring-amber-500" : "")}
+                                  (isInvalid ? "border-destructive focus-visible:ring-destructive" : "")}
                               />
                             </div>
-                            {!isColorValid && String(value ?? "").trim() && (
-                              <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                            {isInvalid && (
+                              <p id={errorId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
                                 <AlertCircle className="size-3.5 shrink-0" />
-                                {tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.")}
+                                <span>{fieldError}</span>
                               </p>
                             )}
                           </div>
@@ -322,6 +414,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                               id={inputId}
                               type={definition.type === "number" ? "number" : "text"}
                               aria-describedby={describedBy}
+                              aria-invalid={isInvalid ? "true" : undefined}
                               disabled={saving}
                               min={definition.type === "number" ? definition.min : undefined}
                               max={definition.type === "number" ? definition.max : undefined}
@@ -333,8 +426,15 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                                   ? (event.target.value === "" ? "" : Number(event.target.value))
                                   : event.target.value,
                               )}
-                              className="min-h-11 rounded-xl text-sm shadow-xs"
+                              className={"min-h-11 rounded-xl text-sm shadow-xs " +
+                                (isInvalid ? "border-destructive focus-visible:ring-destructive" : "")}
                             />
+                            {isInvalid && (
+                              <p id={errorId} role="alert" className="flex items-center gap-1.5 text-xs text-destructive">
+                                <AlertCircle className="size-3.5 shrink-0" />
+                                <span>{fieldError}</span>
+                              </p>
+                            )}
                             {definition.type === "number" && (definition.min !== undefined || definition.max !== undefined) && (
                               <p className="text-xs text-muted-foreground font-mono">
                                 {definition.min !== undefined && definition.max !== undefined
@@ -363,6 +463,13 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                 {tr("This panel reflects field values only, not a live website preview. Save settings to preview the published rendering.")}
               </p>
             </div>
+
+            {hasErrors && (
+              <div role="alert" className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+                <AlertCircle className="size-4 shrink-0" />
+                <span>{tr("Some settings require correction before saving.")}</span>
+              </div>
+            )}
 
             <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs" role="status">
               <p className="text-sm font-semibold text-foreground flex items-center justify-between">
@@ -396,17 +503,21 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                   {colorFields.map(([key, definition]) => {
                     const rawVal = draft[key] ?? definition.default;
                     const valid = isValidHexColor(rawVal);
+                    const swatchColor = valid
+                      ? toColorPickerHex(rawVal)
+                      : toColorPickerHex(lastValidColors[key] ?? initial[key] ?? definition.default ?? "#000000");
                     return (
                       <div key={key} className="min-w-0 space-y-1.5">
                         <div
-                          className="h-14 rounded-xl border border-border/80 shadow-xs transition-colors"
+                          className={"h-14 rounded-xl border shadow-xs transition-colors " +
+                            (valid ? "border-border/80" : "border-destructive/60 ring-2 ring-destructive/20")}
                           aria-hidden="true"
-                          style={{ backgroundColor: valid ? toColorPickerHex(rawVal) : "#000000" }}
+                          style={{ backgroundColor: swatchColor }}
                         />
                         <p className="truncate text-xs font-semibold text-foreground">
                           {tr(definition.label || themeFieldLabel(key))}
                         </p>
-                        <p className="font-mono text-[11px] text-muted-foreground break-all">
+                        <p className={"font-mono text-[11px] break-all " + (valid ? "text-muted-foreground" : "text-destructive font-medium")}>
                           {String(rawVal)}
                         </p>
                       </div>

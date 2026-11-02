@@ -92,7 +92,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
           className={"relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden bg-background shadow-md transition-all " +
             (selected === "mobile" ? "rounded-3xl border-4 border-foreground/15 ring-1 ring-border" : "rounded-xl border border-border/80")}>
           {frameStatus === "loading" && (
-            <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 backdrop-blur-xs text-sm text-muted-foreground animate-in fade-in">
+            <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 backdrop-blur-sm text-sm text-muted-foreground animate-in fade-in">
               <RefreshCw className="size-6 animate-spin text-primary" />
               <span>{tr("Loading preview...")}</span>
             </div>
@@ -101,11 +101,16 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
             <div role="alert" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center text-sm">
               <p className="font-semibold text-foreground">{tr("Inline preview could not be displayed.")}</p>
               <p className="max-w-sm text-muted-foreground">{tr("Try the full preview in a new tab or refresh your preview link.")}</p>
-              <a href={url} target="_blank" rel="noopener noreferrer"
-                 className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 font-semibold text-foreground shadow-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                <ExternalLink className="size-4" />
-                {tr("Open preview in new tab")}
-              </a>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={onRefresh} className="min-h-11 gap-2 text-sm font-medium">
+                  <RefreshCw aria-hidden="true" className="size-4" />{tr("Refresh preview")}
+                </Button>
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 font-semibold text-foreground shadow-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ExternalLink aria-hidden="true" className="size-4 text-muted-foreground" />
+                  {tr("Open preview in new tab")}
+                </a>
+              </div>
             </div>
           )}
           <iframe key={url + ":" + selected} src={url} title={tr("Theme preview") + " " + themeName}
