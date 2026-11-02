@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ArrowLeft, ExternalLink, Laptop, Monitor, RefreshCw, Smartphone } from "lucide-react";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
@@ -27,7 +27,14 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [selected, setSelected] = useState<(typeof VIEWPORTS)[number]["id"]>("desktop");
-  const [loaded, setLoaded] = useState(false);
+  const [frameStatus, setFrameStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  useEffect(() => {
+    setFrameStatus("loading");
+    // iframe onLoad is not sufficient to detect denied embedding. Keep an
+    // actionable external preview available when rendering hangs.
+    const timeout = window.setTimeout(() => setFrameStatus((s) => s === "loading" ? "unavailable" : s), 15000);
+    return () => window.clearTimeout(timeout);
+  }, [url, selected]);
   const viewport = VIEWPORTS.find((item) => item.id === selected) || VIEWPORTS[0];
 
   return (
@@ -58,7 +65,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
         <div role="group" aria-label={tr("Preview device size")} className="flex flex-wrap items-center gap-1">
           {VIEWPORTS.map(({ id, name, Icon }) => (
             <Button key={id} size="sm" variant={selected === id ? "secondary" : "ghost"}
-              aria-pressed={selected === id} onClick={() => { setSelected(id); setLoaded(false); }}
+              aria-pressed={selected === id} onClick={() => setSelected(id)}
               className="min-h-11 gap-2 text-sm">
               <Icon aria-hidden="true" className="size-4" />{tr(name)}
             </Button>
@@ -69,13 +76,24 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
       <div className="flex min-h-[55dvh] w-full justify-start overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4 2xl:justify-center">
         <div style={{ width: viewport.width, minWidth: viewport.width }}
           className="relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-          {!loaded && (
-            <div role="status" className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground">
+          {frameStatus === "loading" && (
+            <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background text-sm text-muted-foreground">
               {tr("Loading preview...")}
             </div>
           )}
+          {frameStatus === "unavailable" && (
+            <div role="alert" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background p-5 text-center text-sm">
+              <p className="font-semibold">{tr("Inline preview could not be displayed.")}</p>
+              <p className="max-w-sm text-muted-foreground">{tr("Try the full preview in a new tab or refresh your preview link.")}</p>
+              <a href={url} target="_blank" rel="noopener noreferrer"
+                 className="inline-flex min-h-11 items-center rounded-lg border border-border bg-card px-4 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                {tr("Open preview in new tab")}
+              </a>
+            </div>
+          )}
           <iframe key={url + ":" + selected} src={url} title={tr("Theme preview") + " " + themeName}
-            onLoad={() => setLoaded(true)}
+            onLoad={() => setFrameStatus("ready")}
+            onError={() => setFrameStatus("unavailable")}
             sandbox="allow-forms allow-popups"
             referrerPolicy="no-referrer"
             className="h-full w-full border-0 bg-background" />
@@ -83,6 +101,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
         {tr("The preview uses saved theme settings. Unsaved edits are not shown. Preview links expire automatically.")}
+        {" "}{tr("Inline preview is limited; use the new-tab link for interactive features.")}
       </p>
     </section>
   );
