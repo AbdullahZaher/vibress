@@ -28,6 +28,7 @@ interface AnalyticsDashboardProps {
   onNavigate: (path: string) => void;
   canReadAnalytics: boolean;
   canReadPosts: boolean;
+  canEditPosts?: boolean;
 }
 
 const DATE_OPTIONS: Array<{ label: string; range: AnalyticsRange }> = [
@@ -82,17 +83,17 @@ function ChangeBadge({
   );
 }
 
-function displayAnalyticsDate(value: string, locale: string) {
+function displayAnalyticsDate(value: string, locale: string, showYear = false) {
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const date = new Date(isDateOnly ? `${value}T00:00:00Z` : value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-ca-gregory" : "en-US", {
     day: "numeric", month: "short",
+    ...(showYear ? { year: "numeric" as const } : {}),
     ...(isDateOnly ? { timeZone: "UTC" } : {}),
   }).format(date);
 }
 
-/** Lightweight data-driven area chart (no chart dependency). */
 /**
  * Compact, keyboard-explorable area chart. The SVG is visual only: one keyboard
  * stop per chart and a complete semantic data table keep 90-day views usable.
@@ -105,7 +106,7 @@ function AreaChart({
 }: {
   points: AnalyticsTimeseriesPoint[];
   metric: "views" | "visitors" | "members";
-  color: string;
+  color: "green" | "blue";
   size?: "compact" | "large";
 }) {
   const { tr, locale, formatNumber } = useAdminLocale();
@@ -127,6 +128,7 @@ function AreaChart({
   const area = coords.length ? `${line} L 100 100 L 0 100 Z` : "";
   const start = points[0]?.date;
   const end = points[points.length - 1]?.date;
+  const crossesYear = Boolean(start && end && start.slice(0, 4) !== end.slice(0, 4));
   const activePoint = activeIndex === null ? null : points[activeIndex];
   const activeCoord = activeIndex === null ? null : coords[activeIndex];
 
@@ -169,7 +171,7 @@ function AreaChart({
           ))}
         </div>
         <div
-          className={`relative min-w-0 flex-1 cursor-crosshair rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}
+          className={`relative min-w-0 flex-1 cursor-crosshair rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${color === "blue" ? "text-blue-700 dark:text-blue-400" : "text-emerald-700 dark:text-emerald-400"} ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}
           role="group"
           tabIndex={0}
           aria-label={`${tr("Activity trend")}: ${metricLabel}. ${tr("Use arrow keys to inspect daily values.")}`}
@@ -186,12 +188,12 @@ function AreaChart({
           <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity="0.18" />
-                <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0.01" />
               </linearGradient>
             </defs>
             <path d={area} fill={`url(#${gradientId})`} />
-            <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
             {activeCoord && (
               <>
                 <line x1={activeCoord.x} x2={activeCoord.x} y1="0" y2="100" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -202,16 +204,20 @@ function AreaChart({
             <span
               aria-hidden="true"
               className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-card shadow-sm"
-              style={{ left: `${activeCoord.x}%`, top: `${activeCoord.y}%`, backgroundColor: color }}
+              style={{ left: `${activeCoord.x}%`, top: `${activeCoord.y}%`, backgroundColor: "currentColor" }}
             />
           )}
           {activePoint && activeCoord && (
             <div
               aria-live="polite"
-              className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground shadow-md"
-              style={{ left: `${Math.max(13, Math.min(87, activeCoord.x))}%` }}
+              className="pointer-events-none absolute top-1 z-10 box-border w-max min-w-0 break-words rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground shadow-md"
+              style={{
+                left: `${activeCoord.x}%`,
+                maxWidth: `${activeCoord.x <= 50 ? 100 - activeCoord.x : activeCoord.x}%`,
+                transform: activeCoord.x <= 50 ? "translateX(0)" : "translateX(-100%)",
+              }}
             >
-              <span className="block text-muted-foreground">{displayAnalyticsDate(activePoint.date, locale)}</span>
+              <span className="block text-muted-foreground">{displayAnalyticsDate(activePoint.date, locale, true)}</span>
               <strong className="block text-sm tabular-nums">{formatNumber(activePoint[metric])} {metricLabel}</strong>
             </div>
           )}
@@ -219,8 +225,8 @@ function AreaChart({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 tabular-nums" dir="ltr">
-          {start && <time dateTime={start}>{displayAnalyticsDate(start, locale)}</time>}
-          {end && <><span aria-hidden="true">—</span><time dateTime={end}>{displayAnalyticsDate(end, locale)}</time></>}
+          {start && <time dateTime={start}>{displayAnalyticsDate(start, locale, crossesYear)}</time>}
+          {end && <><span aria-hidden="true">—</span><time dateTime={end}>{displayAnalyticsDate(end, locale, crossesYear)}</time></>}
         </div>
         <button
           type="button"
@@ -244,7 +250,7 @@ function AreaChart({
             <tbody>
               {points.map((point, index) => (
                 <tr key={`${point.date}-${index}`} className="border-t border-border/60">
-                  <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale)}</time></td>
+                  <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale, true)}</time></td>
                   <td className="px-3 py-2 text-end tabular-nums">{formatNumber(point[metric])}</td>
                 </tr>
               ))}
@@ -338,6 +344,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   onNavigate,
   canReadAnalytics,
   canReadPosts,
+  canEditPosts = false,
 }) => {
   const { tr, locale, formatDate, formatNumber } = useAdminLocale();
   const [analyticsTab, setAnalyticsTab] = useState<
@@ -385,12 +392,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const topContent = useMemo(() => {
     if (!data) return [];
     if (topContentType === "all") return data.topContent;
-    return data.topContent.filter((c) => c.type === topContentType);
+    return data.topContent.filter((c) => c.type === (topContentType === "posts" ? "post" : "page"));
   }, [data, topContentType]);
 
   const totalViews = data?.summary.views ?? 0;
   const totalVisitors = data?.summary.visitors ?? 0;
   const maxTopContentViews = Math.max(1, ...topContent.map((item) => item.views));
+  const paidMemberShare = data?.summary.members ? Math.min(100, (data.growth.paidMembers / data.summary.members) * 100) : 0;
 
   return (
     <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl min-w-0 space-y-8">
@@ -525,7 +533,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   <AreaChart
                     points={data.timeseries}
                     metric={overviewMetric}
-                    color={overviewMetric === "members" ? "#1d4ed8" : "#047857"}
+                    color={overviewMetric === "members" ? "blue" : "green"}
                     size="large"
                   />
                 </Card>
@@ -535,7 +543,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold tracking-tight text-foreground">{tr("Latest post performance")}</h3>
-                  {data.latestPost && (
+                  {canEditPosts && data.latestPost && (
                     <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate(`/admin/posts/${data.latestPost!.id}`)}>
                       {tr("Open published post")}
                     </Button>
@@ -642,7 +650,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                 <AreaChart
                   points={data.timeseries}
                   metric={trafficMetric}
-                  color="#047857"
+                  color="green"
                   size="large"
                 />
               </Card>
