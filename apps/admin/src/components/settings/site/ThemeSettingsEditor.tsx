@@ -23,6 +23,12 @@ export function toColorPickerHex(color: unknown): string {
 }
 
 /** Groups only actual schema-defined settings; no fabricated design controls. */
+/** Schema keys may be camelCase; the UI must not show raw implementation identifiers. */
+export function themeFieldLabel(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 export function themeSettingCategory(key: string): string {
   if (/color|background|accent|palette/i.test(key)) return "Colors";
   if (/font|typography|typeface/i.test(key)) return "Typography";
@@ -190,7 +196,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             return (
               <div key={key} className="space-y-1.5 min-w-0">
                 <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
-                  {tr(definition.label || key)}
+                  {tr(definition.label || themeFieldLabel(key))}
                 </label>
                 {definition.description && (
                   <p id={descriptionId} className="text-sm leading-relaxed text-muted-foreground">{tr(definition.description)}</p>
@@ -227,14 +233,14 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                       type="color"
                       title={tr("Choosing a color with this picker replaces its alpha value.")}
                       disabled={saving}
-                      aria-label={`${tr("Choose")} ${tr(definition.label || key)}`}
+                      aria-label={`${tr("Choose")} ${tr(definition.label || themeFieldLabel(key))}`}
                       aria-describedby={describedBy}
                       value={toColorPickerHex(value)}
                       onChange={(event) => updateField(key, event.target.value)}
                       className="h-11 w-11 shrink-0 cursor-pointer"
                     />
                     <Input
-                      aria-label={`${tr(definition.label || key)} ${tr("hex value")}`}
+                      aria-label={`${tr(definition.label || themeFieldLabel(key))} ${tr("hex value")}`}
                       aria-describedby={describedBy}
                       value={String(value ?? "")}
                       maxLength={9}
