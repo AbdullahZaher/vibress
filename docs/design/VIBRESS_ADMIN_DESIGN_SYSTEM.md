@@ -577,3 +577,19 @@ The top **Select** button followed the desired minimal, modern design; however, 
   - Arabic RTL layout (`dir="rtl"`)
 - **Manual Assistive Technology Status:** While automated axe-core coverage confirms 100% compliance across mechanical accessibility rules (color contrast, ARIA roles, valid IDs, accessible names, focusable target sizes), end-to-end screen-reader behavior in VoiceOver (macOS/iOS) and NVDA (Windows) must be audited through hands-on testing before final human certification. Automated test passes do not replace physical screen-reader verification.
 
+
+
+## Theme Studio — Design Contract (2026-11-02)
+
+See [Theme Studio Roadmap](./VIBRESS_THEME_STUDIO_ROADMAP_2026-11-02.md). This extends, not replaces, the shared Admin design system.
+
+- **One navigation system:** preserve the sole Admin sidebar and Settings categories. Theme Studio is a focused full-width management surface, not nested navigation.
+- **Always reveal publication state:** Settings → Site → Themes must communicate the server-confirmed published theme (name/version) and report loading/failure without assuming a default.
+- **Image-led, not image-faked:** a stable 16:10 image panel represents each theme, using only `previewImage` from the theme contract. Absent/failed images are explicitly labeled unavailable. Never use marketing stock images as if they were live theme screenshots.
+- **Action hierarchy:** Preview (safe, nonpublishing), Publish (explicit confirmation), Customize (saved theme schema), Uninstall (destructive secondary). One visually prominent publishing action per card.
+- **No unsaved-live-preview fiction:** publication-bound preview tokens show persisted theme settings. Draft preview requires a separate authenticated draft-preview backend contract.
+- **Save vs publish:** `ThemeSettingsEditor` persists configuration but does not activate inactive themes. Publishing is a distinct, confirmed action that changes public presentation immediately.
+- **State & recovery:** every network lifecycle has loading, error and server-confirmed success UI. Never swallow activation, catalog or uninstall errors.
+- **Touch and keyboard:** prefer 44px actions, accessible names for all icon actions, focus trap/restore, modal priority, keyboard-operable file picker/drop zone. Reduced motion and 200% zoom must be verified in browser.
+- **Arabic and RTL:** translate the entire Theme Studio lifecycle; use logical start/end placement, natural Arabic wording and direction-neutral visuals.
+- **Release threshold:** weighted design score 9.5/10 is a QA target only. Typecheck/Lint/Vitest/Playwright, browser screenshots and assistive technology review are required before certifying.
