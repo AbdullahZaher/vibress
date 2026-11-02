@@ -504,7 +504,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       <h3 className="text-sm font-semibold text-foreground">{tr("Views and visitors over time")}</h3>
                       <p className="text-xs text-muted-foreground">{tr("Daily activity")} · {tr(dateLabel)}</p>
                     </div>
-                    <div className="flex max-w-full flex-wrap gap-1.5" aria-label={tr("Traffic and audience")}>
+                    <div role="group" className="flex max-w-full flex-wrap gap-1.5" aria-label={tr("Traffic and audience")}>
                       {(["views", "visitors", "members"] as const).map((metric) => (
                         <ToggleButton
                           key={metric}
