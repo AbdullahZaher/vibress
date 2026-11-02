@@ -374,15 +374,19 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         isOpen={isDrawerOpen}
         onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-150">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150">
           <div className="w-full max-w-7xl bg-card border border-border/80 shadow-2xl h-full sm:h-[min(94dvh,1100px)] sm:rounded-2xl overflow-hidden flex flex-col justify-between animate-in fade-in duration-200">
             {/* Drawer Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-border/60 bg-muted/20">
-              <div className="flex flex-wrap items-center gap-2">
-                <Palette className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">
-                  {tr("Theme Studio")}
-                </h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 border-b border-border/60 bg-muted/20">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-border/80 bg-background shadow-xs">
+                  <Palette className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold tracking-tight text-foreground">
+                    {tr("Theme Studio")}
+                  </h3>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -396,20 +400,20 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-sm min-h-11"
+                  className="gap-1.5 text-sm min-h-11 rounded-xl font-medium"
                 >
-                  <UploadCloud className="h-3.5 w-3.5" /> {tr("Upload ZIP")}
+                  <UploadCloud className="h-4 w-4" /> {tr("Upload ZIP")}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-sm min-h-11"
+                  className="gap-1.5 text-sm min-h-11 rounded-xl font-medium"
                   title={tr("Refresh themes")}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+                    className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
                   />{" "}
                   {tr("Refresh")}
                 </Button>
@@ -419,7 +423,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   aria-label={tr("Close themes drawer")}
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
-                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -483,12 +487,13 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
+            <div className="p-3.5 sm:p-4 border-t border-border/60 bg-muted/20 flex justify-end">
               <Button
                 size="sm"
+                variant="outline"
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 disabled={editorSaving}
-                className="min-h-11 text-sm"
+                className="min-h-11 text-sm rounded-xl font-medium"
               >
                 {editingTheme ? tr("Back to themes") : tr("Close manager")}
               </Button>
@@ -498,7 +503,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
         {/* Inner Upload Modal */}
         {isUploadOpen && (
-          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
+          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
             <div className="w-full max-w-md bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                 <div className="flex items-center gap-2">

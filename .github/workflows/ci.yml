@@ -260,6 +260,7 @@ jobs:
           # Apps are started above in this same CI step; Playwright must not
           # run its fallback pnpm dev webServer and collide with ports.
           export PLAYWRIGHT_SKIP_WEBSERVER=1
+          mkdir -p artifacts/theme-studio-ci
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             # PR gate: gateway health, upload/traversal regressions and a real
             # authenticated collaboration WebSocket handshake via Nginx.
@@ -291,6 +292,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: admin-ui-design-review-${{ github.run_id }}
-          path: artifacts/theme-studio-ci/design-*.png
+          path: |
+            artifacts/theme-studio-ci/**
+            artifacts/theme-studio/**
+            test-results/**/design-*.png
           if-no-files-found: ignore
           retention-days: 7

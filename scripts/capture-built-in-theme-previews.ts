@@ -40,6 +40,7 @@ async function main() {
     await admin.locator('[role="dialog"][aria-label]').waitFor();
     for (const id of themeIds) {
       const card = admin.locator('article[data-theme-id="' + id + '"]');
+      await card.waitFor({ state: "visible", timeout: 10000 });
       if (await card.count() !== 1) throw new Error("Built-in theme missing from catalog: " + id);
       await card.locator("button").first().click();
       const frame = admin.locator('iframe[src^="/preview/"]');

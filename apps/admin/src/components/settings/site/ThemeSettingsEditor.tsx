@@ -9,7 +9,7 @@ import {
 import { Button } from "../../ui/button";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Input } from "../../ui/input";
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Save } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RotateCcw, Save } from "lucide-react";
 
 /** Native color inputs support 6-digit RGB only; keep stored alpha/text intact. */
 export function toColorPickerHex(color: unknown): string {
@@ -22,12 +22,19 @@ export function toColorPickerHex(color: unknown): string {
   return "#000000";
 }
 
+/** Check if color string is a valid CSS hexadecimal color (#RGB, #RGBA, #RRGGBB, #RRGGBBAA). */
+export function isValidHexColor(color: unknown): boolean {
+  if (typeof color !== "string") return false;
+  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color.trim());
+}
+
 /** Schema keys may be camelCase; the UI must not show raw implementation identifiers. */
 export function themeFieldLabel(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
+
 /** Groups only actual schema-defined settings; no fabricated design controls. */
 export function themeSettingCategory(key: string): string {
   if (/color|background|accent|palette/i.test(key)) return "Colors";
@@ -39,6 +46,7 @@ export function themeSettingCategory(key: string): string {
   if (/header|footer/i.test(key)) return "Layout";
   return "General";
 }
+
 function groupedThemeSettings(schema: Record<string, ApiThemeSettingDefinition>) {
   const groups: Record<string, Array<[string, ApiThemeSettingDefinition]>> = {};
   for (const [key, definition] of Object.entries(schema)) {
@@ -152,179 +160,264 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   };
 
   return (
-    <section aria-label={`${tr("Theme settings for")} ${theme.manifest.name}`} className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 lg:sticky lg:top-0 lg:z-10 lg:rounded-xl lg:border lg:border-border/70 lg:bg-card/95 lg:p-4 lg:shadow-sm lg:backdrop-blur-sm">
+    <section aria-label={`${tr("Theme settings for")} ${theme.manifest.name}`} className="space-y-6 pb-4">
+      {/* Sticky action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4 lg:sticky lg:top-0 lg:z-10 lg:rounded-2xl lg:border lg:border-border/80 lg:bg-card/95 lg:p-4 lg:shadow-xs lg:backdrop-blur-md">
         <div className="flex min-w-0 items-center gap-3">
-          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={onBack} disabled={saving} aria-label={tr("Back to themes")}>
+          <Button size="sm" variant="outline" className="min-h-11 min-w-11 rounded-xl" onClick={onBack} disabled={saving} aria-label={tr("Back to themes")}>
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
           <div className="min-w-0">
-            <h4 ref={headingRef} tabIndex={-1} className="text-base font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
-            <p className="text-sm leading-relaxed text-muted-foreground">
+            <h4 ref={headingRef} tabIndex={-1} className="text-base sm:text-lg font-bold tracking-tight text-foreground outline-none">
+              {theme.manifest.name} {tr("Settings")}
+            </h4>
+            <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
               {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" className="min-h-11" disabled={!dirty || saving || loading}
+          <Button size="sm" variant="outline" className="min-h-11 rounded-xl font-medium" disabled={!dirty || saving || loading}
             onClick={() => { setDraft({ ...initial }); setError(null); setSuccess(false); }}>
+            <RotateCcw className="size-3.5 me-1 text-muted-foreground" />
             {tr("Discard changes")}
           </Button>
-        <Button size="sm" className="min-h-11" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saving ? tr("Saving...") : tr("Save Settings")}
-        </Button>
+          <Button size="sm" className="min-h-11 rounded-xl font-semibold shadow-xs" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? tr("Saving...") : tr("Save Settings")}
+          </Button>
         </div>
       </div>
 
-      {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/20 p-3 text-sm text-destructive">
-        <AlertCircle className="size-4 shrink-0" />{tr(error)}
-        {!detail && !loading && <Button variant="outline" size="sm" className="min-h-11" onClick={() => setRetry((value) => value + 1)}>{tr("Retry")}</Button>}
-      </div>}
-      {success && <p role="status" className="flex gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="size-4 shrink-0" />
+            <span>{tr(error)}</span>
+          </div>
+          {!detail && !loading && (
+            <Button variant="outline" size="sm" className="min-h-11 rounded-xl" onClick={() => setRetry((value) => value + 1)}>
+              {tr("Retry")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {success && (
+        <p role="status" className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-sm font-medium text-emerald-800 dark:text-emerald-300 shadow-xs">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          {tr("Theme settings saved.")}
+        </p>
+      )}
 
       {loading ? (
-        <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />{tr("Loading settings...")}
-        </p>
+        <div role="status" className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <p className="text-sm font-medium">{tr("Loading settings...")}</p>
+        </div>
       ) : detail && Object.keys(detail.settingsSchema).length === 0 ? (
-        <p className="rounded-lg border border-border p-4 text-xs text-muted-foreground">
+        <div className="rounded-2xl border border-border/80 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
           {tr("This theme does not define any customizable fields in settings.json.")}
-        </p>
+        </div>
       ) : detail ? (
-        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.85fr)]">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(18rem,0.85fr)]">
           <div className="min-w-0 space-y-6">
-          {groupedThemeSettings(detail.settingsSchema).map(([category, fields]) => (
-            <section key={category} aria-label={tr(category)} className="space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
-              <h5 className="border-b border-border/60 pb-3 text-base font-semibold text-foreground">{tr(category)}</h5>
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {fields.map(([key, definition]) => {
-            const inputId = `${idPrefix}-${Object.keys(detail.settingsSchema).indexOf(key)}`;
-            const descriptionId = `${inputId}-description`;
-            const value = draft[key] ?? definition.default;
-            const describedBy = definition.description ? descriptionId : undefined;
-            return (
-              <div key={key} className="min-w-0 space-y-2">
-                <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
-                  {tr(definition.label || themeFieldLabel(key))}
-                </label>
-                {definition.description && (
-                  <p id={descriptionId} className="text-sm leading-relaxed text-muted-foreground">{tr(definition.description)}</p>
-                )}
-                {definition.type === "boolean" ? (
-                  <input
-                    id={inputId}
-                    type="checkbox"
-                    aria-describedby={describedBy}
-                    disabled={saving}
-                    checked={value === true}
-                    onChange={(event) => updateField(key, event.target.checked)}
-                    className="size-5 accent-primary"
-                  />
-                ) : definition.type === "select" ? (
-                  <select
-                    id={inputId}
-                    aria-describedby={describedBy}
-                    disabled={saving}
-                    value={String(value ?? "")}
-                    onChange={(event) => updateField(key, event.target.value)}
-                    className="w-full min-h-11 rounded-md border border-border bg-card px-3 text-sm text-foreground"
-                  >
-                    {(definition.options || []).map((option) => {
-                      const optionValue = typeof option === "string" ? option : option.value;
-                      const optionLabel = typeof option === "string" ? option : option.label;
-                      return <option key={optionValue} value={optionValue}>{tr(optionLabel)}</option>;
-                    })}
-                  </select>
-                ) : definition.type === "color" ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      id={inputId}
-                      type="color"
-                      title={tr("Choosing a color with this picker replaces its alpha value.")}
-                      disabled={saving}
-                      aria-label={`${tr("Choose")} ${tr(definition.label || themeFieldLabel(key))}`}
-                      aria-describedby={describedBy}
-                      value={toColorPickerHex(value)}
-                      onChange={(event) => updateField(key, event.target.value)}
-                      className="h-11 w-11 shrink-0 cursor-pointer"
-                    />
-                    <Input
-                      aria-label={`${tr(definition.label || themeFieldLabel(key))} ${tr("hex value")}`}
-                      aria-describedby={describedBy}
-                      value={String(value ?? "")}
-                      maxLength={9}
-                      disabled={saving}
-                      onChange={(event) => updateField(key, event.target.value)}
-                      className="min-h-11 font-mono text-sm"
-                    />
-                  </div>
-                ) : (
-                  <Input
-                    id={inputId}
-                    type={definition.type === "number" ? "number" : "text"}
-                    aria-describedby={describedBy}
-                    disabled={saving}
-                    min={definition.type === "number" ? definition.min : undefined}
-                    max={definition.type === "number" ? definition.max : undefined}
-                    maxLength={definition.type === "string" ? definition.maxLength : undefined}
-                    value={String(value ?? "")}
-                    onChange={(event) => updateField(
-                      key,
-                      definition.type === "number"
-                        ? (event.target.value === "" ? "" : Number(event.target.value))
-                        : event.target.value,
-                    )}
-                    className="min-h-11 text-sm"
-                  />
-                )}
-              </div>
-            );
-          })}
-              </div>
-            </section>
-          ))}
+            {groupedThemeSettings(detail.settingsSchema).map(([category, fields]) => (
+              <section key={category} aria-label={tr(category)} className="space-y-5 rounded-2xl border border-border/80 bg-card p-5 sm:p-6 shadow-xs">
+                <div className="border-b border-border/60 pb-3">
+                  <h5 className="text-base font-bold tracking-tight text-foreground">{tr(category)}</h5>
+                </div>
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  {fields.map(([key, definition]) => {
+                    const inputId = `${idPrefix}-${Object.keys(detail.settingsSchema).indexOf(key)}`;
+                    const descriptionId = `${inputId}-description`;
+                    const value = draft[key] ?? definition.default;
+                    const describedBy = definition.description ? descriptionId : undefined;
+                    const isColorType = definition.type === "color";
+                    const isColorValid = isColorType ? isValidHexColor(value) : true;
+                    return (
+                      <div key={key} className="min-w-0 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
+                            {tr(definition.label || themeFieldLabel(key))}
+                          </label>
+                          {definition.type === "string" && definition.maxLength && (
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {String(value ?? "").length}/{definition.maxLength}
+                            </span>
+                          )}
+                        </div>
+
+                        {definition.description && (
+                          <p id={descriptionId} className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
+                            {tr(definition.description)}
+                          </p>
+                        )}
+
+                        {definition.type === "boolean" ? (
+                          <div className="flex items-center gap-3 pt-1">
+                            <input
+                              id={inputId}
+                              type="checkbox"
+                              aria-describedby={describedBy}
+                              disabled={saving}
+                              checked={value === true}
+                              onChange={(event) => updateField(key, event.target.checked)}
+                              className="size-5 rounded border-border accent-primary focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                            />
+                            <span className="text-sm font-medium text-foreground/80">
+                              {value === true ? tr("Enabled") : tr("Disabled")}
+                            </span>
+                          </div>
+                        ) : definition.type === "select" ? (
+                          <select
+                            id={inputId}
+                            aria-describedby={describedBy}
+                            disabled={saving}
+                            value={String(value ?? "")}
+                            onChange={(event) => updateField(key, event.target.value)}
+                            className="w-full min-h-11 rounded-xl border border-border bg-card px-3.5 text-sm text-foreground shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {(definition.options || []).map((option) => {
+                              const optionValue = typeof option === "string" ? option : option.value;
+                              const optionLabel = typeof option === "string" ? option : option.label;
+                              return <option key={optionValue} value={optionValue}>{tr(optionLabel)}</option>;
+                            })}
+                          </select>
+                        ) : isColorType ? (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <input
+                                id={inputId}
+                                type="color"
+                                title={tr("Choosing a color with this picker replaces its alpha value.")}
+                                disabled={saving}
+                                aria-label={`${tr("Choose")} ${tr(definition.label || themeFieldLabel(key))}`}
+                                aria-describedby={describedBy}
+                                value={toColorPickerHex(value)}
+                                onChange={(event) => updateField(key, event.target.value)}
+                                className="size-11 shrink-0 cursor-pointer rounded-xl border border-border bg-card p-1 shadow-xs"
+                              />
+                              <Input
+                                aria-label={`${tr(definition.label || themeFieldLabel(key))} ${tr("hex value")}`}
+                                aria-describedby={describedBy}
+                                value={String(value ?? "")}
+                                maxLength={9}
+                                disabled={saving}
+                                onChange={(event) => updateField(key, event.target.value)}
+                                className={"min-h-11 rounded-xl font-mono text-sm shadow-xs " +
+                                  (!isColorValid && String(value ?? "").trim() ? "border-amber-500 focus-visible:ring-amber-500" : "")}
+                              />
+                            </div>
+                            {!isColorValid && String(value ?? "").trim() && (
+                              <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                                <AlertCircle className="size-3.5 shrink-0" />
+                                {tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.")}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <Input
+                              id={inputId}
+                              type={definition.type === "number" ? "number" : "text"}
+                              aria-describedby={describedBy}
+                              disabled={saving}
+                              min={definition.type === "number" ? definition.min : undefined}
+                              max={definition.type === "number" ? definition.max : undefined}
+                              maxLength={definition.type === "string" ? definition.maxLength : undefined}
+                              value={String(value ?? "")}
+                              onChange={(event) => updateField(
+                                key,
+                                definition.type === "number"
+                                  ? (event.target.value === "" ? "" : Number(event.target.value))
+                                  : event.target.value,
+                              )}
+                              className="min-h-11 rounded-xl text-sm shadow-xs"
+                            />
+                            {definition.type === "number" && (definition.min !== undefined || definition.max !== undefined) && (
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {definition.min !== undefined && definition.max !== undefined
+                                  ? `${tr("Range")}: ${definition.min} – ${definition.max}`
+                                  : definition.min !== undefined
+                                    ? `${tr("Minimum")}: ${definition.min}`
+                                    : `${tr("Maximum")}: ${definition.max}`}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
-          <aside className="min-w-0 space-y-5 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5 xl:sticky xl:top-3"
+
+          {/* Design changes overview panel */}
+          <aside className="min-w-0 space-y-5 rounded-2xl border border-border/80 bg-muted/20 p-5 sm:p-6 shadow-xs xl:sticky xl:top-4"
             aria-label={tr("Design changes overview")}>
-            <div className="space-y-1">
-              <h5 className="text-base font-semibold text-foreground">{tr("Design changes overview")}</h5>
-              <p className="text-sm leading-relaxed text-muted-foreground">
+            <div className="space-y-1.5 border-b border-border/60 pb-3">
+              <h5 className="text-base font-bold tracking-tight text-foreground">{tr("Design changes overview")}</h5>
+              <p className="text-xs sm:text-sm leading-relaxed text-muted-foreground">
                 {tr("This panel reflects field values only, not a live website preview. Save settings to preview the published rendering.")}
               </p>
             </div>
-            <div className="rounded-lg border border-border bg-card px-3 py-3 text-sm" role="status">
-              <p className="font-medium text-foreground">
-                {dirty ? tr("Unsaved changes") + ": " + changedKeys.length : tr("All changes saved")}
+
+            <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs" role="status">
+              <p className="text-sm font-semibold text-foreground flex items-center justify-between">
+                <span>{dirty ? tr("Unsaved changes") : tr("All changes saved")}</span>
+                {dirty ? (
+                  <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {changedKeys.length}
+                  </span>
+                ) : (
+                  <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
+                )}
               </p>
               {changedKeys.length > 0 && (
-                <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
+                <ul className="mt-3 space-y-2 border-t border-border/50 pt-2.5 text-xs sm:text-sm text-muted-foreground">
                   {changedKeys.map((key) => (
                     <li key={key} className="flex items-start gap-2">
-                      <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
-                      <span className="break-words">{tr(detail.settingsSchema[key]?.label || themeFieldLabel(key))}</span>
+                      <span aria-hidden="true" className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
+                      <span className="break-words font-medium text-foreground/80">
+                        {tr(detail.settingsSchema[key]?.label || themeFieldLabel(key))}
+                      </span>
                     </li>
                   ))}
                 </ul>
               )}
             </div>
+
             {colorFields.length > 0 && (
-              <section aria-label={tr("Selected colors")} className="space-y-3">
-                <h6 className="text-sm font-semibold text-foreground">{tr("Selected colors")}</h6>
+              <section aria-label={tr("Selected colors")} className="space-y-3 border-t border-border/60 pt-4">
+                <h6 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tr("Selected colors")}</h6>
                 <div className="grid grid-cols-2 gap-3">
-                  {colorFields.map(([key, definition]) => (
-                    <div key={key} className="min-w-0 space-y-1.5">
-                      <div className="h-14 rounded-lg border border-border shadow-xs" aria-hidden="true"
-                        style={{ backgroundColor: toColorPickerHex(draft[key] ?? definition.default) }} />
-                      <p className="break-words text-xs font-medium text-foreground">{tr(definition.label || themeFieldLabel(key))}</p>
-                      <p className="break-all font-mono text-xs text-muted-foreground">{String(draft[key] ?? definition.default)}</p>
-                    </div>
-                  ))}
+                  {colorFields.map(([key, definition]) => {
+                    const rawVal = draft[key] ?? definition.default;
+                    const valid = isValidHexColor(rawVal);
+                    return (
+                      <div key={key} className="min-w-0 space-y-1.5">
+                        <div
+                          className="h-14 rounded-xl border border-border/80 shadow-xs transition-colors"
+                          aria-hidden="true"
+                          style={{ backgroundColor: valid ? toColorPickerHex(rawVal) : "#000000" }}
+                        />
+                        <p className="truncate text-xs font-semibold text-foreground">
+                          {tr(definition.label || themeFieldLabel(key))}
+                        </p>
+                        <p className="font-mono text-[11px] text-muted-foreground break-all">
+                          {String(rawVal)}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}
+
             {Object.keys(detail.settingsSchema).length > 0 && (
-              <p className="text-xs leading-relaxed text-muted-foreground">
+              <p className="border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
                 {tr("Theme layout and script behavior must be checked in the full preview.")}
               </p>
             )}
