@@ -39,7 +39,7 @@ describe("ThemePreviewWorkspace", () => {
     expect(onBack).toHaveBeenCalledTimes(1);
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
-  it("switches to a real 390px mobile preview width without publishing", async () => {
+  it("shows a responsive mobile canvas capped at 390px without publishing", async () => {
     await act(async () => {
       root.render(<ThemePreviewWorkspace themeName="Minimal" url="/preview/token-456"
         onBack={vi.fn()} onRefresh={vi.fn()} />);
@@ -48,7 +48,9 @@ describe("ThemePreviewWorkspace", () => {
     expect(frame.style.width).toBe("1200px");
     const mobile = [...container.querySelectorAll("button")].find(x => x.textContent?.includes("Mobile"));
     await act(async () => { mobile?.click(); });
-    expect(container.querySelector("iframe")?.parentElement?.style.width).toBe("390px");
+    expect(container.querySelector("iframe")?.parentElement?.style.width).toBe("min(100%, 390px)");
+    expect(container.querySelector("iframe")?.parentElement?.style.minWidth).toBe("0px");
+    expect(container.textContent).toContain("Up to 390px");
     expect(mobile?.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).toContain("Saved theme settings");
   });

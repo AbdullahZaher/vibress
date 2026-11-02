@@ -4,7 +4,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ThemeSettingsEditor, toColorPickerHex } from "../ThemeSettingsEditor";
+import { ThemeSettingsEditor, themeSettingCategory, toColorPickerHex } from "../ThemeSettingsEditor";
 import {
   type ApiThemeSummary,
   getThemeApi,
@@ -43,6 +43,15 @@ const theme: ApiThemeSummary = {
 };
 
 describe("ThemeSettingsEditor", () => {
+  it("groups text and visibility fields under Content, not Layout", () => {
+    expect(themeSettingCategory("footerText")).toBe("Content");
+    expect(themeSettingCategory("showRelatedPosts")).toBe("Content");
+    expect(themeSettingCategory("siteTagline")).toBe("Content");
+    expect(themeSettingCategory("headerStyle")).toBe("Layout");
+    expect(themeSettingCategory("contentWidth")).toBe("Layout");
+    expect(themeSettingCategory("accentColor")).toBe("Colors");
+    expect(themeSettingCategory("titleFont")).toBe("Typography");
+  });
   it("shows short and transparent hexadecimal colors without changing stored values", () => {
     expect(toColorPickerHex("#abc")).toBe("#aabbcc");
     expect(toColorPickerHex("#abcd")).toBe("#aabbcc");
@@ -95,6 +104,7 @@ describe("ThemeSettingsEditor", () => {
     const preset = container.querySelector("select") as HTMLSelectElement | null;
     const bio = container.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
     expect(preset?.value).toBe("neon");
+    expect(container.querySelector('section[aria-label="Content"]')?.textContent).toContain("Display Bio");
     expect(bio?.checked).toBe(false);
     expect(container.textContent).toContain("Retro Theme Preset");
 

@@ -120,7 +120,7 @@ const ThemeCard: React.FC<ThemeCardProps> = ({
             <Settings2 aria-hidden="true" className="size-4" />{tr("Customize")}
           </Button>
           {!theme.isBuiltIn && !featured && (
-            <Button type="button" size="sm" variant="ghost" disabled={busy}
+            <Button type="button" size="sm" variant="ghost" disabled={busy || isDeleting}
               onClick={() => onDelete(id)} title="Uninstall theme"
               aria-label={tr("Uninstall theme") + " " + title}
               className="min-h-11 min-w-11 text-destructive hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring">

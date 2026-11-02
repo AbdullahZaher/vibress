@@ -32,8 +32,9 @@ export function themeFieldLabel(key: string): string {
 export function themeSettingCategory(key: string): string {
   if (/color|background|accent|palette/i.test(key)) return "Colors";
   if (/font|typography|typeface/i.test(key)) return "Typography";
-  if (/layout|width|header|footer|navigation|spacing|columns/i.test(key)) return "Layout";
-  if (/show|visible|display|content|author|date|related/i.test(key)) return "Content";
+  // Footer text is content, while footer/header styling belongs to layout.
+  if (/show|visible|display|content|author|date|related|cover|excerpt|tagline|description|copyright|bio|footer.*text|header.*text|social/i.test(key)) return "Content";
+  if (/layout|width|header|footer|navigation|spacing|columns|align|sidebar/i.test(key)) return "Layout";
   return "General";
 }
 function groupedThemeSettings(schema: Record<string, ApiThemeSettingDefinition>) {
@@ -150,13 +151,13 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
 
   return (
     <section aria-label={`${tr("Theme settings for")} ${theme.manifest.name}`} className="space-y-5">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Button size="sm" variant="outline" onClick={onBack} disabled={saving} aria-label={tr("Back to themes")}>
+      <div className="flex flex-wrap items-center justify-between gap-3 lg:sticky lg:top-0 lg:z-10 lg:rounded-xl lg:border lg:border-border/70 lg:bg-card/95 lg:p-4 lg:shadow-sm lg:backdrop-blur-sm">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button size="sm" variant="outline" className="min-h-11 min-w-11" onClick={onBack} disabled={saving} aria-label={tr("Back to themes")}>
             <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           </Button>
-          <div>
-            <h4 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
+          <div className="min-w-0">
+            <h4 ref={headingRef} tabIndex={-1} className="text-base font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
             <p className="text-sm leading-relaxed text-muted-foreground">
               {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>

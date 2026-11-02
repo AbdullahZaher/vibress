@@ -71,10 +71,16 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
             </Button>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">{viewport.width}px · {tr("Saved theme settings")}</p>
+        <p className="text-xs text-muted-foreground">
+          {selected === "mobile" ? tr("Up to 390px") : viewport.width + "px"} · {tr("Saved theme settings")}
+        </p>
       </div>
-      <div className="flex min-h-[55dvh] w-full justify-start overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4 2xl:justify-center">
-        <div style={{ width: viewport.width, minWidth: viewport.width }}
+      <div className={"flex min-h-[55dvh] w-full overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4 " +
+        (selected === "mobile" ? "justify-center" : "justify-start 2xl:justify-center")}>
+        <div style={{
+          width: selected === "mobile" ? "min(100%, 390px)" : viewport.width,
+          minWidth: selected === "mobile" ? 0 : viewport.width,
+        }}
           className="relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
           {frameStatus === "loading" && (
             <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-background text-sm text-muted-foreground">
@@ -99,6 +105,9 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
             className="h-full w-full border-0 bg-background" />
         </div>
       </div>
+      {selected !== "mobile" && (
+        <p className="text-xs text-muted-foreground">{tr("Scroll horizontally to inspect large preview widths.")}</p>
+      )}
       <p className="text-sm leading-relaxed text-muted-foreground">
         {tr("The preview uses saved theme settings. Unsaved edits are not shown. Preview links expire automatically.")}
         {" "}{tr("Inline preview is limited; use the new-tab link for interactive features.")}
