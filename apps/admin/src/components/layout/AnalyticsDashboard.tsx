@@ -263,33 +263,35 @@ function AreaChart({
 }
 
 function LoadingState() {
+  const { tr } = useAdminLocale();
   return (
-    <div className="space-y-6 w-full animate-pulse">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
-          <div className="flex justify-between">
-            <div className="space-y-2">
-              <div className="h-3 w-20 bg-muted rounded" />
-              <div className="h-7 w-24 bg-muted rounded" />
-            </div>
-            <div className="h-6 w-16 bg-muted rounded" />
-          </div>
-          <div className="h-28 w-full bg-muted/40 rounded-lg" />
+    <div role="status" aria-busy="true" aria-label={tr("Loading analytics")} className="w-full space-y-8 animate-pulse">
+      <div className="space-y-4">
+        <div className="h-5 w-40 rounded bg-muted" aria-hidden="true" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => (
+            <Card key={item} className="flex min-h-36 flex-col justify-between gap-4 border-border/70 p-5" aria-hidden="true">
+              <div className="h-3 w-24 rounded bg-muted" />
+              <div className="h-8 w-28 rounded bg-muted" />
+              <div className="h-3 w-36 max-w-full rounded bg-muted" />
+            </Card>
+          ))}
         </div>
-        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
-          <div className="flex justify-between">
-            <div className="space-y-2">
-              <div className="h-3 w-24 bg-muted rounded" />
-              <div className="h-7 w-28 bg-muted rounded" />
-            </div>
-            <div className="h-6 w-16 bg-muted rounded" />
+        <Card className="space-y-5 border-border/70 p-4 sm:p-6" aria-hidden="true">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="h-4 w-48 max-w-full rounded bg-muted" />
+            <div className="h-9 w-36 rounded-lg bg-muted" />
           </div>
-          <div className="h-28 w-full bg-muted/40 rounded-lg" />
-        </div>
+          <div className="h-52 w-full rounded-lg bg-muted/50 sm:h-60" />
+          <div className="flex justify-between">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="h-3 w-16 rounded bg-muted" />
+          </div>
+        </Card>
       </div>
-      <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-3">
-        <div className="h-3 w-40 bg-muted rounded" />
-        <div className="h-20 w-full bg-muted/40 rounded-lg" />
+      <div className="space-y-3" aria-hidden="true">
+        <div className="h-4 w-44 rounded bg-muted" />
+        <div className="h-24 rounded-xl border border-border/70 bg-muted/30" />
       </div>
     </div>
   );
@@ -799,6 +801,40 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.growth.paidMembers.toLocaleString(locale)}
+                  </div>
+                </Card>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card className="space-y-5 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">{tr("Daily new members")}</h3>
+                    <p className="text-xs text-muted-foreground">{tr("Selected period")} · {tr(dateLabel)}</p>
+                  </div>
+                  <AreaChart points={data.timeseries} metric="members" color="blue" size="large" />
+                </Card>
+                <Card className="flex flex-col justify-between gap-6 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">{tr("Paid membership share")}</h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{tr("Membership totals are current and not limited by the date filter.")}</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <strong className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+                        {formatNumber(paidMemberShare, { maximumFractionDigits: 1 })}%
+                      </strong>
+                      <span className="text-sm text-muted-foreground">{formatNumber(data.growth.paidMembers)} / {formatNumber(data.summary.members)}</span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label={tr("Paid membership share")}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(paidMemberShare)}
+                      className="h-2.5 overflow-hidden rounded-full bg-muted"
+                    >
+                      <div className="h-full rounded-full bg-emerald-700 dark:bg-emerald-400" style={{ width: `${paidMemberShare}%` }} />
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{tr("Current paid members as a share of current members.")}</p>
                   </div>
                 </Card>
               </div>
