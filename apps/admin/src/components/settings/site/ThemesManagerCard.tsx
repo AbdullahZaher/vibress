@@ -15,6 +15,7 @@ import { SettingsModalPortal } from "../SettingsModalPortal";
 import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
 import { ThemeGallery, safeThemePreviewImage } from "./ThemeGallery";
+import { ThemePreviewWorkspace } from "./ThemePreviewWorkspace";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import {
@@ -48,6 +49,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [editorSaving, setEditorSaving] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewFallbackUrl, setPreviewFallbackUrl] = useState<string | null>(null);
+  const [previewThemeName, setPreviewThemeName] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -143,7 +146,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setIsDrawerOpen(false);
       setEditingTheme(null);
       setPreviewFallbackUrl(null);
+      setPreviewThemeName(null);
       setPreviewError(null);
+      setPreviewLoading(false);
       setActivating(null);
       setDeleting(null);
       void load();
@@ -167,6 +172,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
+    setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
     setIsDrawerOpen(false);
   };
 
@@ -181,6 +188,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setIsDrawerOpen(true);
     setActionError(null);
     setActionSuccess(null);
+    setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
     void load();
   };
 
@@ -229,19 +238,22 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handlePreview = async (themeId: string) => {
+    const theme = themes.find((item) => item.manifest.id === themeId);
+    if (!theme || previewLoading) return;
     setPreviewError(null);
     setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
+    setPreviewLoading(true);
     const scope = requestSequence.current;
     try {
       const res = await createThemePreviewApi(themeId);
       if (scope !== requestSequence.current) return;
-      const url = "/preview/" + encodeURIComponent(res.previewToken);
-      window.open(url, "_blank", "noopener,noreferrer");
-      // Some browsers return null for noopener even when the tab opened. Provide an
-      // optional explicit link without falsely claiming the popup was blocked.
-      setPreviewFallbackUrl(url);
+      setPreviewFallbackUrl("/preview/" + encodeURIComponent(res.previewToken));
+      setPreviewThemeName(theme.manifest.name);
     } catch (error: unknown) {
       if (scope === requestSequence.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
+    } finally {
+      if (scope === requestSequence.current) setPreviewLoading(false);
     }
   };
 
@@ -389,11 +401,15 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               {previewError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{previewError}</p>}
               {actionError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{actionError}</p>}
               {actionSuccess && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-foreground">{actionSuccess}</p>}
-              {previewFallbackUrl && <p role="status" className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                {tr("If the preview did not open, use this link.")}{" "}
-                <a href={previewFallbackUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-4">{tr("Open preview")}</a>
-              </p>}
-              {editingTheme ? (
+
+              {previewLoading ? (
+                <p role="status" className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 aria-hidden="true" className="size-5 animate-spin" />{tr("Preparing preview...")}
+                </p>
+              ) : previewFallbackUrl && previewThemeName ? (
+                <ThemePreviewWorkspace themeName={previewThemeName} url={previewFallbackUrl}
+                  onBack={() => { setPreviewFallbackUrl(null); setPreviewThemeName(null); }} />
+              ) : editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
                   theme={editingTheme}
