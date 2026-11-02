@@ -24,6 +24,9 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Loading analytics": "جارٍ تحميل التحليلات",
+  "Paid membership share": "نسبة العضويات المدفوعة",
+  "Current paid members as a share of current members.": "نسبة الأعضاء المدفوعين إلى إجمالي الأعضاء الحاليين.",
   "Performance overview": "نظرة عامة على الأداء",
   "Key metrics for the selected period.": "أبرز المؤشرات خلال الفترة المحددة.",
   "New members": "الأعضاء الجدد",
