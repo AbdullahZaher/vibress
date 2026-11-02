@@ -407,6 +407,7 @@ const translations: Record<string, string> = {
   "Plugin record saved.": "تم حفظ سجل الإضافة.",
   "No plugin data available.": "لا تتوفر بيانات للإضافة.",
   "Themes Manager": "إدارة القوالب",
+  "Installing theme...": "جارٍ تثبيت القالب...",
   "Close themes drawer": "إغلاق استوديو القوالب",
   "Close theme upload": "إغلاق نافذة رفع القالب",
   "Refresh themes": "تحديث قائمة القوالب",
