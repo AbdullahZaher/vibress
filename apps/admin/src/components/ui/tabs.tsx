@@ -64,6 +64,7 @@ export function TabsList({
     event.preventDefault();
     tabs[targetIndex]?.focus();
     tabs[targetIndex]?.click();
+    tabs[targetIndex]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   };
 
   return (
@@ -96,16 +97,29 @@ export function TabsTrigger({
   if (!context) throw new Error("TabsTrigger must be used within Tabs");
 
   const isActive = context.value === value;
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
+
+  React.useEffect(() => {
+    const trigger = triggerRef.current;
+    const list = trigger?.parentElement;
+    if (isActive && list && list.scrollWidth > list.clientWidth) {
+      trigger.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    }
+  }, [isActive]);
 
   return (
     <button
+      ref={triggerRef}
       type="button"
       role="tab"
       id={`${context.baseId}-tab-${value}`}
       aria-controls={`${context.baseId}-panel-${value}`}
       aria-selected={isActive}
       tabIndex={isActive ? 0 : -1}
-      onClick={() => context.onValueChange(value)}
+      onClick={() => {
+        context.onValueChange(value);
+        triggerRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+      }}
       className={cn(
         "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all duration-150 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none",
         isActive

@@ -147,7 +147,7 @@ export class AnalyticsOverviewService {
       this.countActiveMembersBetween(previous.from, previous.to),
       this.membersByDay(current.from, current.to),
       this.countPaidMembers(),
-      this.newsletterMetrics(),
+      this.newsletterMetrics(current.from, current.to),
     ]);
 
     const latestPost = await this.latestPostWithViews(current.from, current.to);
@@ -272,7 +272,7 @@ export class AnalyticsOverviewService {
     return Number(rows[0]?.total || 0);
   }
 
-  private async newsletterMetrics(): Promise<{
+  private async newsletterMetrics(from: Date, to: Date): Promise<{
     sent: number;
     openRate: number;
     clickRate: number;
@@ -285,7 +285,11 @@ export class AnalyticsOverviewService {
         clicked: sql<number>`count(${emailRecipients.clickedAt})::int`,
       })
       .from(emailRecipients)
-      .where(inArray(emailRecipients.status, SENT_RECIPIENT_STATUSES));
+      .where(and(
+        inArray(emailRecipients.status, SENT_RECIPIENT_STATUSES),
+        gte(emailRecipients.sentAt, from),
+        lte(emailRecipients.sentAt, to),
+      ));
     const sent = Number(rows[0]?.sent || 0);
     const opened = Number(rows[0]?.opened || 0);
     const clicked = Number(rows[0]?.clicked || 0);

@@ -2,9 +2,9 @@ import React, { useMemo, useState } from "react";
 import { useAdminLocale } from "../../lib/admin-locale";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Users,
   Calendar,
   ChevronDown,
+  ChevronRight,
   Globe,
   Eye,
   FileText,
@@ -22,7 +22,6 @@ import {
   AnalyticsRange,
   AnalyticsOverview,
   AnalyticsTimeseriesPoint,
-  formatCompact,
 } from "../../lib/api/analytics";
 
 interface AnalyticsDashboardProps {
@@ -30,6 +29,7 @@ interface AnalyticsDashboardProps {
   onNavigate: (path: string) => void;
   canReadAnalytics: boolean;
   canReadPosts: boolean;
+  canEditPosts?: boolean;
 }
 
 const DATE_OPTIONS: Array<{ label: string; range: AnalyticsRange }> = [
@@ -52,7 +52,7 @@ function ChangeBadge({
     return (
       <Badge
         variant="outline"
-        className="text-xs font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+        className="text-xs font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
       >
         {tr("New")}
       </Badge>
@@ -74,7 +74,7 @@ function ChangeBadge({
       variant="outline"
       className={`text-xs font-medium px-2 py-0.5 ${
         positive
-          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
           : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
       }`}
     >
@@ -84,35 +84,43 @@ function ChangeBadge({
   );
 }
 
-function displayAnalyticsDate(value: string, locale: string) {
+function displayAnalyticsDate(value: string, locale: string, showYear = false) {
   const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
   const date = new Date(isDateOnly ? `${value}T00:00:00Z` : value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(locale === "ar" ? "ar-SA-u-ca-gregory" : "en-US", {
     day: "numeric", month: "short",
+    ...(showYear ? { year: "numeric" as const } : {}),
     ...(isDateOnly ? { timeZone: "UTC" } : {}),
   }).format(date);
 }
 
-/** Lightweight data-driven area chart (no chart dependency). */
+/**
+ * Compact, keyboard-explorable area chart. The SVG is visual only: one keyboard
+ * stop per chart and a complete semantic data table keep 90-day views usable.
+ */
 function AreaChart({
   points,
   metric,
   color,
+  size = "compact",
 }: {
   points: AnalyticsTimeseriesPoint[];
   metric: "views" | "visitors" | "members";
-  color: string;
+  color: "green" | "blue";
+  size?: "compact" | "large";
 }) {
   const { tr, locale, formatNumber } = useAdminLocale();
   const [showData, setShowData] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const gradientId = React.useId();
+  const metricLabel = tr(metric === "members" ? "New members" : metric);
   const values = points.map((point) => point[metric]);
   const max = Math.max(1, ...values);
   const ceiling = Math.ceil(max / 4) * 4;
   const hasData = values.some((value) => value > 0);
-  const format = (value: number) => formatNumber(value);
   const coords = values.map((value, index) => ({
-    x: values.length === 1 ? 50 : (index / Math.max(1, values.length - 1)) * 100,
+    x: values.length === 1 ? 50 : (index / (values.length - 1)) * 100,
     y: 96 - (value / ceiling) * 90,
   }));
   const line = coords.map((point, index) =>
@@ -121,11 +129,31 @@ function AreaChart({
   const area = coords.length ? `${line} L 100 100 L 0 100 Z` : "";
   const start = points[0]?.date;
   const end = points[points.length - 1]?.date;
-  const gradientId = `chart-gradient-${metric}`;
+  const crossesYear = Boolean(start && end && start.slice(0, 4) !== end.slice(0, 4));
+  const activePoint = activeIndex === null ? null : points[activeIndex];
+  const activeCoord = activeIndex === null ? null : coords[activeIndex];
+
+  const handlePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Touch users can tap to inspect a date without disabling page scrolling.
+    if (event.type === "pointermove" && event.pointerType === "touch") return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(1, bounds.width)));
+    setActiveIndex(Math.round(fraction * Math.max(0, points.length - 1)));
+  };
+
+  const handleChartKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const current = activeIndex ?? points.length - 1;
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? points.length - 1
+      : current + (event.key === "ArrowRight" ? 1 : -1);
+    setActiveIndex(Math.min(points.length - 1, Math.max(0, next)));
+  };
 
   if (!hasData) {
     return (
-      <div role="status" className="flex min-h-20 items-center gap-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3">
+      <div role="status" className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3">
         <ChartNoAxesCombined className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="space-y-0.5">
           <p className="text-sm font-medium text-foreground">{tr("No activity in this period")}</p>
@@ -137,71 +165,97 @@ function AreaChart({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-stretch gap-3">
-        <div aria-hidden="true" className="flex h-32 shrink-0 flex-col justify-between text-end text-xs tabular-nums text-muted-foreground">
+      <div className="flex items-stretch gap-3" dir="ltr">
+        <div aria-hidden="true" className={`flex shrink-0 flex-col justify-between text-end text-xs tabular-nums text-muted-foreground ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}>
           {[ceiling, ceiling * 0.75, ceiling * 0.5, ceiling * 0.25, 0].map((tick) => (
-            <span key={tick}>{format(tick)}</span>
+            <span key={tick}>{formatNumber(tick)}</span>
           ))}
         </div>
-        <div className="relative h-32 min-w-0 flex-1" role="group" aria-label={`${tr("Activity trend")}: ${tr(metric)} ${start || ""} – ${end || ""}`}>
+        <div
+          className={`relative min-w-0 flex-1 cursor-crosshair rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${color === "blue" ? "text-blue-700 dark:text-blue-400" : "text-emerald-700 dark:text-emerald-400"} ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}
+          role="group"
+          tabIndex={0}
+          aria-label={`${tr("Activity trend")}: ${metricLabel}. ${tr("Use arrow keys to inspect daily values.")}`}
+          onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+          onBlur={() => setActiveIndex(null)}
+          onKeyDown={handleChartKeys}
+          onPointerDown={handlePointer}
+          onPointerMove={handlePointer}
+          onPointerLeave={() => setActiveIndex(null)}
+        >
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
             {[0, 1, 2, 3, 4].map((tick) => <span key={tick} className="w-full border-t border-border/60" />)}
           </div>
-          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-                  <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-                </linearGradient>
-              </defs>
-              <path d={area} fill={`url(#${gradientId})`} />
-              <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-              {coords.map((point, index) => (
-                <circle
-                  key={points[index]?.date || index}
-                  cx={point.x}
-                  cy={point.y}
-                  r="1.8"
-                  fill={color}
-                  stroke="var(--color-card)"
-                  strokeWidth="0.8"
-                  tabIndex={0}
-                  role="img"
-                  aria-label={`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}
-                  className="outline-none focus-visible:stroke-foreground focus-visible:stroke-2"
-                >
-                  <title>{`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}</title>
-                </circle>
-              ))}
-            </svg>
+          <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="currentColor" stopOpacity="0.01" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill={`url(#${gradientId})`} />
+            <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {activeCoord && (
+              <>
+                <line x1={activeCoord.x} x2={activeCoord.x} y1="0" y2="100" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+              </>
+            )}
+          </svg>
+          {activeCoord && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-card shadow-sm"
+              style={{ left: `${activeCoord.x}%`, top: `${activeCoord.y}%`, backgroundColor: "currentColor" }}
+            />
+          )}
+          {activePoint && activeCoord && (
+            <div
+              aria-live="polite"
+              className="pointer-events-none absolute top-1 z-10 box-border w-max min-w-0 break-words rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground shadow-md"
+              style={{
+                left: `${activeCoord.x}%`,
+                maxWidth: `${activeCoord.x <= 50 ? 100 - activeCoord.x : activeCoord.x}%`,
+                transform: activeCoord.x <= 50 ? "translateX(0)" : "translateX(-100%)",
+              }}
+            >
+              <span className="block text-muted-foreground">{displayAnalyticsDate(activePoint.date, locale, true)}</span>
+              <strong className="block text-sm tabular-nums">{formatNumber(activePoint[metric])} {metricLabel}</strong>
+            </div>
+          )}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <div className="flex min-w-0 flex-wrap gap-x-2 tabular-nums">
-          {start && <time dateTime={start}>{displayAnalyticsDate(start, locale)}</time>}
-          {end && <><span aria-hidden="true">—</span><time dateTime={end}>{displayAnalyticsDate(end, locale)}</time></>}
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 tabular-nums" dir="ltr">
+          {start && <time dateTime={start}>{displayAnalyticsDate(start, locale, crossesYear)}</time>}
+          {end && <><span aria-hidden="true">—</span><time dateTime={end}>{displayAnalyticsDate(end, locale, crossesYear)}</time></>}
         </div>
-        {points.length > 0 && (
-          <button type="button" aria-expanded={showData} onClick={() => setShowData((open) => !open)}
-            className="shrink-0 min-h-10 rounded-lg px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-            {showData ? tr("Hide data") : tr("View data")}
-          </button>
-        )}
+        <button
+          type="button"
+          aria-expanded={showData}
+          onClick={() => setShowData((open) => !open)}
+          className="min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {showData ? tr("Hide data") : tr("View data")}
+        </button>
       </div>
-      {showData && points.length > 0 && (
-        <div className="max-h-48 overflow-auto rounded-lg border border-border">
+      {showData && (
+        <div className="max-h-64 overflow-auto rounded-lg border border-border">
           <table className="w-full text-start text-sm">
-            <caption className="sr-only">{tr("Activity trend")}</caption>
-            <thead className="sticky top-0 bg-muted text-muted-foreground"><tr>
-              <th scope="col" className="px-3 py-2 text-start font-semibold">{tr("Date")}</th>
-              <th scope="col" className="px-3 py-2 text-end font-semibold">{tr(metric)}</th>
-            </tr></thead>
-            <tbody>{points.map((point, index) => (
-              <tr key={`${point.date}-${index}`} className="border-t border-border/60">
-                <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale)}</time></td>
-                <td className="px-3 py-2 text-end tabular-nums">{format(point[metric])}</td>
+            <caption className="sr-only">{tr("Activity trend")}: {metricLabel}</caption>
+            <thead className="sticky top-0 bg-muted text-muted-foreground">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-start font-semibold">{tr("Date")}</th>
+                <th scope="col" className="px-3 py-2 text-end font-semibold">{metricLabel}</th>
               </tr>
-            ))}</tbody>
+            </thead>
+            <tbody>
+              {points.map((point, index) => (
+                <tr key={`${point.date}-${index}`} className="border-t border-border/60">
+                  <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale, true)}</time></td>
+                  <td className="px-3 py-2 text-end tabular-nums">{formatNumber(point[metric])}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       )}
@@ -210,33 +264,35 @@ function AreaChart({
 }
 
 function LoadingState() {
+  const { tr } = useAdminLocale();
   return (
-    <div className="space-y-6 w-full animate-pulse">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
-          <div className="flex justify-between">
-            <div className="space-y-2">
-              <div className="h-3 w-20 bg-muted rounded" />
-              <div className="h-7 w-24 bg-muted rounded" />
-            </div>
-            <div className="h-6 w-16 bg-muted rounded" />
-          </div>
-          <div className="h-28 w-full bg-muted/40 rounded-lg" />
+    <div role="status" aria-busy="true" aria-label={tr("Loading analytics")} className="w-full space-y-8 animate-pulse">
+      <div className="space-y-4">
+        <div className="h-5 w-40 rounded bg-muted" aria-hidden="true" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((item) => (
+            <Card key={item} className="flex min-h-36 flex-col justify-between gap-4 border-border/70 p-5" aria-hidden="true">
+              <div className="h-3 w-24 rounded bg-muted" />
+              <div className="h-8 w-28 rounded bg-muted" />
+              <div className="h-3 w-36 max-w-full rounded bg-muted" />
+            </Card>
+          ))}
         </div>
-        <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-4">
-          <div className="flex justify-between">
-            <div className="space-y-2">
-              <div className="h-3 w-24 bg-muted rounded" />
-              <div className="h-7 w-28 bg-muted rounded" />
-            </div>
-            <div className="h-6 w-16 bg-muted rounded" />
+        <Card className="space-y-5 border-border/70 p-4 sm:p-6" aria-hidden="true">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="h-4 w-48 max-w-full rounded bg-muted" />
+            <div className="h-9 w-36 rounded-lg bg-muted" />
           </div>
-          <div className="h-28 w-full bg-muted/40 rounded-lg" />
-        </div>
+          <div className="h-52 w-full rounded-lg bg-muted/50 sm:h-60" />
+          <div className="flex justify-between">
+            <div className="h-3 w-16 rounded bg-muted" />
+            <div className="h-3 w-16 rounded bg-muted" />
+          </div>
+        </Card>
       </div>
-      <div className="p-5 rounded-xl border border-border/60 bg-card/60 space-y-3">
-        <div className="h-3 w-40 bg-muted rounded" />
-        <div className="h-20 w-full bg-muted/40 rounded-lg" />
+      <div className="space-y-3" aria-hidden="true">
+        <div className="h-4 w-44 rounded bg-muted" />
+        <div className="h-24 rounded-xl border border-border/70 bg-muted/30" />
       </div>
     </div>
   );
@@ -254,20 +310,52 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** Only internal publication routes may become public content links. */
+function isSafePublicPath(path: string): boolean {
+  return /^\/(?!\/)[^\r\n]*$/.test(path);
+}
+
+/** Period metrics and all-time totals must never share an unlabeled denominator. */
+function MetricCard({
+  label,
+  value,
+  scope,
+  change,
+}: {
+  label: string;
+  value: number;
+  scope: string;
+  change?: { percentage: number | null; isNew: boolean };
+}) {
+  const { formatNumber, tr } = useAdminLocale();
+  return (
+    <Card className="flex min-w-0 flex-col justify-between gap-3 border-border/70 p-5 shadow-2xs">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+        <strong className="text-3xl font-semibold tracking-tight text-foreground tabular-nums">{formatNumber(value)}</strong>
+        {change && <ChangeBadge change={change} current={value} />}
+      </div>
+      <span className="text-xs text-muted-foreground">
+        {scope}{change ? ` · ${tr("Compared with previous period")}` : ""}
+      </span>
+    </Card>
+  );
+}
+
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   user,
   onNavigate,
   canReadAnalytics,
   canReadPosts,
+  canEditPosts = false,
 }) => {
   const { tr, locale, formatDate, formatNumber } = useAdminLocale();
   const [analyticsTab, setAnalyticsTab] = useState<
     "overview" | "web" | "newsletters" | "growth"
   >("overview");
   const [dateLabel, setDateLabel] = useState("Last 30 days");
-  const [trafficMetric, setTrafficMetric] = useState<"views" | "visitors">(
-    "views",
-  );
+  const [trafficMetric, setTrafficMetric] = useState<"views" | "visitors">("views");
+  const [overviewMetric, setOverviewMetric] = useState<"views" | "visitors" | "members">("views");
   const [topContentType, setTopContentType] = useState<
     "all" | "posts" | "pages"
   >("all");
@@ -307,14 +395,16 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   const topContent = useMemo(() => {
     if (!data) return [];
     if (topContentType === "all") return data.topContent;
-    return data.topContent.filter((c) => c.type === topContentType);
+    return data.topContent.filter((c) => c.type === (topContentType === "posts" ? "post" : "page"));
   }, [data, topContentType]);
 
   const totalViews = data?.summary.views ?? 0;
   const totalVisitors = data?.summary.visitors ?? 0;
+  const maxTopContentViews = Math.max(1, ...topContent.map((item) => item.views));
+  const paidMemberShare = data?.summary.members ? Math.min(100, (data.growth.paidMembers / data.summary.members) * 100) : 0;
 
   return (
-    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl space-y-8">
+    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl min-w-0 space-y-8">
       {/* Page Title Header */}
       <AdminPageHeader
         title={tr("Dashboard")}
@@ -375,13 +465,18 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" ariaLabel={tr("Analytics")}>
+        <div className="relative w-full min-w-0 max-w-full sm:w-auto">
+        <TabsList className="w-full min-w-0 max-w-full border-0 bg-transparent p-0 sm:w-auto" ariaLabel={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
             </TabsTrigger>
           ))}
         </TabsList>
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 end-0 z-10 flex w-7 items-center justify-end bg-gradient-to-l from-card to-transparent rtl:bg-gradient-to-r sm:hidden">
+          <ChevronRight className="size-4 text-muted-foreground rtl:rotate-180" />
+        </span>
+        </div>
 
         <div className="relative w-full shrink-0 sm:w-auto">
           <Calendar className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
@@ -414,73 +509,54 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <>
           {/* TAB 1: OVERVIEW */}
           <TabsContent value="overview" className="mt-0 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Members KPI Card */}
-                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium mb-1">
-                        <Users className="h-3.5 w-3.5" /> {tr("Members")}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {data.summary.members.toLocaleString(locale)}
-                        </span>
-                        <ChangeBadge change={data.comparison.members} current={data.summary.members} />
-                      </div>
+              <section className="space-y-4" aria-labelledby="performance-overview-title">
+                <div className="space-y-1">
+                  <h2 id="performance-overview-title" className="text-base font-semibold tracking-tight text-foreground">{tr("Performance overview")}</h2>
+                  <p className="text-sm text-muted-foreground">{tr("Key metrics for the selected period.")}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard label={tr("Total views")} value={totalViews} scope={tr("Selected period")} change={data.comparison.views} />
+                  <MetricCard label={tr("Unique Visitors")} value={totalVisitors} scope={tr("Selected period")} change={data.comparison.visitors} />
+                  <MetricCard label={tr("New members")} value={data.comparison.members.current} scope={tr("Selected period")} change={data.comparison.members} />
+                  <MetricCard label={tr("Current members")} value={data.summary.members} scope={tr("Current total")} />
+                </div>
+                <Card className="space-y-5 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-foreground">{tr("Views and visitors over time")}</h3>
+                      <p className="text-xs text-muted-foreground">{tr("Daily activity")} · {tr(dateLabel)}</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAnalyticsTab("growth")}
-                      className="min-h-10 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      {tr("View details")}
-                    </Button>
+                    <div role="group" className="flex max-w-full flex-wrap gap-1.5" aria-label={tr("Traffic and audience")}>
+                      {(["views", "visitors", "members"] as const).map((metric) => (
+                        <ToggleButton
+                          key={metric}
+                          pressed={overviewMetric === metric}
+                          onClick={() => setOverviewMetric(metric)}
+                        >
+                          {tr(metric === "members" ? "New members" : metric)}
+                        </ToggleButton>
+                      ))}
+                    </div>
                   </div>
                   <AreaChart
                     points={data.timeseries}
-                    metric="members"
-                    color="#60a5fa"
+                    metric={overviewMetric}
+                    color={overviewMetric === "members" ? "blue" : "green"}
+                    size="large"
                   />
                 </Card>
-
-                {/* Unique Visitors KPI Card */}
-                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium mb-1">
-                        <Globe className="h-3.5 w-3.5" /> {tr("Unique Visitors")}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {totalVisitors.toLocaleString(locale)}
-                        </span>
-                        <ChangeBadge change={data.comparison.visitors} current={totalVisitors} />
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAnalyticsTab("web")}
-                      className="min-h-10 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      {tr("View details")}
-                    </Button>
-                  </div>
-                  <AreaChart
-                    points={data.timeseries}
-                    metric="visitors"
-                    color="#3eb083"
-                  />
-                </Card>
-              </div>
+              </section>
 
               {/* Latest Post Performance */}
               <div className="space-y-3">
-                <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                  {tr("Latest post performance")}
-                </h3>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold tracking-tight text-foreground">{tr("Latest post performance")}</h3>
+                  {canEditPosts && data.latestPost && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => onNavigate(`/admin/posts/${data.latestPost!.id}`)}>
+                      {tr("Open published post")}
+                    </Button>
+                  )}
+                </div>
                 {data.latestPost ? (
                   <Card className="flex flex-col items-start justify-between gap-4 border-border/80 p-5 md:flex-row md:items-center shadow-2xs">
                     <div className="flex items-center gap-4 min-w-0">
@@ -542,9 +618,13 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                             <FileText className="size-4" />
                           </div>
                           <div className="truncate">
-                            <h4 className="font-semibold text-sm text-foreground truncate">
-                              {post.title}
-                            </h4>
+                            {isSafePublicPath(post.path) ? (
+                              <a href={post.path} target="_blank" rel="noopener noreferrer" dir="auto" className="block truncate rounded-sm text-sm font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring" title={tr("Open published post")}>
+                                {post.title}
+                              </a>
+                            ) : (
+                              <h4 className="truncate text-sm font-semibold text-foreground" dir="auto">{post.title}</h4>
+                            )}
                             <p className="text-xs text-muted-foreground truncate">
                               {post.path}
                             </p>
@@ -568,24 +648,25 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
               <Card className="p-6 border-border/70 shadow-2xs space-y-6">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <ToggleButton pressed={trafficMetric === "views"} onClick={() => setTrafficMetric("views")}>
-                    {tr("Total views")} ({formatCompact(totalViews)})
+                    {tr("Total views")} ({formatNumber(totalViews, { notation: "compact", maximumFractionDigits: 1 })})
                   </ToggleButton>
                   <ToggleButton pressed={trafficMetric === "visitors"} onClick={() => setTrafficMetric("visitors")}>
-                    {tr("Unique visitors")} ({formatCompact(totalVisitors)})
+                    {tr("Unique visitors")} ({formatNumber(totalVisitors, { notation: "compact", maximumFractionDigits: 1 })})
                   </ToggleButton>
                 </div>
 
                 <AreaChart
                   points={data.timeseries}
                   metric={trafficMetric}
-                  color="#3eb083"
+                  color="green"
+                  size="large"
                 />
               </Card>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Top Content */}
                 <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <h3 className="text-sm font-semibold text-foreground">
                       {tr("Top Content")}
                     </h3>
@@ -611,18 +692,20 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                       {topContent.map((item) => (
                         <div key={item.path} className="space-y-1">
                           <div className="flex justify-between font-medium gap-2">
-                            <span className="text-foreground truncate">
-                              {item.path}
-                            </span>
+                            {isSafePublicPath(item.path) ? (
+                              <a href={item.path} target="_blank" rel="noopener noreferrer" dir="auto" className="truncate rounded-sm text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring" title={tr("Open published content")}>
+                                {item.title || item.path}
+                              </a>
+                            ) : <span className="truncate text-foreground" dir="auto">{item.title || item.path}</span>}
                             <span className="font-mono text-muted-foreground shrink-0">
                               {item.views.toLocaleString(locale)} {tr("views")}
                             </span>
                           </div>
                           <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-indigo-500 rounded-full"
+                              className="h-full bg-blue-700 dark:bg-blue-400 rounded-full"
                               style={{
-                                width: `${Math.round((item.views / (topContent[0]?.views || 1)) * 100)}%`,
+                                width: `${Math.round((item.views / maxTopContentViews) * 100)}%`,
                               }}
                             />
                           </div>
@@ -654,11 +737,11 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                           key={r.name}
                           className="flex items-center justify-between py-1 border-b border-border/40 last:border-b-0"
                         >
-                          <span className="font-medium text-foreground flex items-center gap-2">
-                            <Globe className="h-3.5 w-3.5 text-muted-foreground" />{" "}
-                            {r.name}
+                          <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                            <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{" "}
+                            <span className="min-w-0 truncate" dir="auto" title={r.name}>{r.name}</span>
                           </span>
-                          <span className="font-mono text-muted-foreground">
+                          <span className="shrink-0 font-mono text-muted-foreground tabular-nums">
                             {r.views.toLocaleString(locale)}
                           </span>
                         </div>
@@ -671,6 +754,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
           {/* TAB 3: NEWSLETTERS */}
           <TabsContent value="newsletters" className="mt-0 space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">{tr("Newsletter performance")}</h2>
+                <p className="text-sm text-muted-foreground">{tr("Newsletter metrics reflect the selected date range.")} · {tr(dateLabel)}</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card className="p-4 border-border/70 shadow-2xs space-y-1">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -701,6 +788,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
           {/* TAB 4: GROWTH */}
           <TabsContent value="growth" className="mt-0 space-y-6">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">{tr("Member acquisition")}</h2>
+                <p className="text-sm text-muted-foreground">{tr("Membership totals are current and not limited by the date filter.")}</p>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Card className="p-5 border-border/70 shadow-2xs space-y-2">
                   <span className="text-xs text-muted-foreground font-medium">
@@ -716,6 +807,40 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
                   </span>
                   <div className="text-2xl font-bold text-foreground tabular-nums">
                     {data.growth.paidMembers.toLocaleString(locale)}
+                  </div>
+                </Card>
+              </div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Card className="space-y-5 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">{tr("Daily new members")}</h3>
+                    <p className="text-xs text-muted-foreground">{tr("Selected period")} · {tr(dateLabel)}</p>
+                  </div>
+                  <AreaChart points={data.timeseries} metric="members" color="blue" size="large" />
+                </Card>
+                <Card className="flex flex-col justify-between gap-6 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold text-foreground">{tr("Paid membership share")}</h3>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{tr("Membership totals are current and not limited by the date filter.")}</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <strong className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">
+                        {formatNumber(paidMemberShare, { maximumFractionDigits: 1 })}%
+                      </strong>
+                      <span className="text-sm text-muted-foreground">{formatNumber(data.growth.paidMembers)} / {formatNumber(data.summary.members)}</span>
+                    </div>
+                    <div
+                      role="progressbar"
+                      aria-label={tr("Paid membership share")}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(paidMemberShare)}
+                      className="h-2.5 overflow-hidden rounded-full bg-muted"
+                    >
+                      <div className="h-full rounded-full bg-emerald-700 dark:bg-emerald-400" style={{ width: `${paidMemberShare}%` }} />
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">{tr("Current paid members as a share of current members.")}</p>
                   </div>
                 </Card>
               </div>
