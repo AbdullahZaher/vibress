@@ -272,7 +272,6 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         setUploadError(null);
       } else {
         setUploadFile(null);
-        setUploadFile(null);
         setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
@@ -281,10 +280,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      e.currentTarget.value = "";
       if (/\.zip$/i.test(file.name)) {
         setUploadFile(file);
         setUploadError(null);
       } else {
+        setUploadFile(null);
         setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
