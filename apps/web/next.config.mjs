@@ -8,6 +8,13 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  transpilePackages: [
+    "@vibress/theme-core",
+    "@vibress/themes",
+    "@vibress/themes-registry",
+    "@vibress/api-contracts",
+    "@vibress/i18n",
+  ],
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
 };

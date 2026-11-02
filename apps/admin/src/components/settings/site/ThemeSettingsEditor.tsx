@@ -11,6 +11,9 @@ import { useAdminLocale } from "../../../lib/admin-locale";
 import { Input } from "../../ui/input";
 import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RotateCcw, Save } from "lucide-react";
 
+import { isValidHexColor, validateSettingValue } from "@vibress/theme-core";
+export { isValidHexColor };
+
 /** Native color inputs support 6-digit RGB only; keep stored alpha/text intact. */
 export function toColorPickerHex(color: unknown): string {
   if (typeof color !== "string") return "#000000";
@@ -22,13 +25,7 @@ export function toColorPickerHex(color: unknown): string {
   return "#000000";
 }
 
-/** Check if color string is a valid CSS hexadecimal color (#RGB, #RGBA, #RRGGBB, #RRGGBBAA). */
-export function isValidHexColor(color: unknown): boolean {
-  if (typeof color !== "string") return false;
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color.trim());
-}
-
-/** Validates an individual setting against its schema definition. Returns null if valid, or a localized error message. */
+/** Validates an individual setting against its schema definition using shared theme-core contracts. */
 export function validateThemeSetting(
   definition: ApiThemeSettingDefinition,
   value: unknown,
@@ -38,60 +35,60 @@ export function validateThemeSetting(
   const isDefined = value !== undefined && value !== null;
   const stringVal = isDefined ? String(value).trim() : "";
 
-  if (definition.type === "color") {
-    if (!isDefined || stringVal === "") {
-      if (isOptional) return null;
+  // Handle empty or unentered values
+  if (!isDefined || stringVal === "") {
+    if (isOptional) return null;
+    if (definition.type === "color") {
       return tr("A valid HEX color is required.");
     }
-    if (!isValidHexColor(value)) {
-      return tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.");
-    }
-  } else if (definition.type === "number") {
-    if (!isDefined || (typeof value === "string" && stringVal === "")) {
-      if (isOptional) return null;
+    if (definition.type === "number") {
       return tr("Please enter a valid number.");
     }
-    const num = typeof value === "number" ? value : Number(value);
-    if (Number.isNaN(num) || !Number.isFinite(num)) {
-      return tr("Please enter a valid number.");
-    }
-    if (definition.min !== undefined && num < definition.min) {
-      return `${tr("Value must be at least")} ${definition.min}`;
-    }
-    if (definition.max !== undefined && num > definition.max) {
-      return `${tr("Value must be at most")} ${definition.max}`;
-    }
-  } else if (definition.type === "string") {
-    const isRequired = (definition as { required?: boolean }).required === true;
-    if (!isDefined || stringVal === "") {
-      if (isRequired) {
-        return tr("This field is required.");
-      }
+    if (definition.type === "string") {
+      const isRequired = (definition as { required?: boolean }).required === true;
+      if (isRequired) return tr("This field is required.");
       const minLength = (definition as { minLength?: number }).minLength;
       if (minLength !== undefined && minLength > 0) {
         return `${tr("Minimum length is")} ${minLength}`;
       }
       return null;
     }
-    const str = String(value);
-    if (definition.maxLength !== undefined && str.length > definition.maxLength) {
+  }
+
+  // Parse string representation of numbers from input fields before validating against schema
+  const parsedValue =
+    definition.type === "number" && typeof value === "string"
+      ? (stringVal === "" ? NaN : Number(value))
+      : value;
+
+  const result = validateSettingValue("setting", definition as any, parsedValue);
+  if (result.ok) return null;
+
+  if (definition.type === "color") {
+    return tr("Invalid HEX format. Use #RGB, #RGBA, #RRGGBB, or #RRGGBBAA.");
+  }
+  if (definition.type === "number") {
+    if (result.error.includes("below min")) {
+      return `${tr("Value must be at least")} ${definition.min}`;
+    }
+    if (result.error.includes("above max")) {
+      return `${tr("Value must be at most")} ${definition.max}`;
+    }
+    return tr("Please enter a valid number.");
+  }
+  if (definition.type === "string") {
+    if (result.error.includes("string length must be at least")) {
+      return `${tr("Minimum length is")} ${(definition as any).minLength}`;
+    }
+    if (result.error.includes("string exceeds max length")) {
       return `${tr("Maximum length is")} ${definition.maxLength}`;
     }
-    const minLength = (definition as { minLength?: number }).minLength;
-    if (minLength !== undefined && str.length < minLength) {
-      return `${tr("Minimum length is")} ${minLength}`;
-    }
-  } else if (definition.type === "select") {
-    if (definition.options && definition.options.length > 0) {
-      const allowed = definition.options.map((opt) =>
-        typeof opt === "string" ? opt : opt.value,
-      );
-      if (!allowed.includes(String(value ?? ""))) {
-        return tr("Please select a valid option.");
-      }
-    }
+    return result.error;
   }
-  return null;
+  if (definition.type === "select") {
+    return tr("Please select a valid option.");
+  }
+  return result.error;
 }
 
 /** Schema keys may be camelCase; the UI must not show raw implementation identifiers. */

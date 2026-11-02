@@ -1,11 +1,73 @@
 import { execSync } from "node:child_process";
 
-// Ensure staging seeding cannot modify production publications or real user data.
-if (process.env.NODE_ENV === "production" && !process.env.ALLOW_EDITORIAL_SEED) {
-  throw new Error("Editorial staging seeder cannot run in production environments.");
+export class StagingIsolationError extends Error {
+  constructor(message: string) {
+    super(`[STAGING_ISOLATION_VIOLATION] ${message}`);
+    this.name = "StagingIsolationError";
+  }
+}
+
+/**
+ * Strict safety barriers ensuring editorial staging seeding NEVER runs in production
+ * or against customer databases, regardless of command-line flags or misconfigurations.
+ */
+export function verifyStagingTargetEnvironment(env: Record<string, string | undefined> = process.env): void {
+  // 1. Unconditional production rejection (no overrides permitted)
+  if (env.NODE_ENV === "production") {
+    throw new StagingIsolationError(
+      "Editorial staging seeder is strictly forbidden when NODE_ENV=production. Overrides are not permitted.",
+    );
+  }
+
+  // 2. Mandatory deliberate opt-in
+  if (env.VIBRESS_SEED_EDITORIAL_STAGING !== "true") {
+    throw new StagingIsolationError(
+      "Editorial staging seeder requires deliberate opt-in via VIBRESS_SEED_EDITORIAL_STAGING=true.",
+    );
+  }
+
+  // 3. Database URL inspection for cloud or production indicators
+  const dbUrl = env.DATABASE_URL;
+  if (dbUrl) {
+    const forbiddenPatterns = [
+      /prod/i,
+      /amazonaws\.com/i,
+      /neon\.tech/i,
+      /supabase\.co/i,
+      /cockroachlabs\.cloud/i,
+      /render\.com/i,
+      /railway\.app/i,
+      /azure\.com/i,
+      /gcp/i,
+      /google/i,
+    ];
+
+    for (const pattern of forbiddenPatterns) {
+      if (pattern.test(dbUrl)) {
+        throw new StagingIsolationError(
+          `Target database URL matches forbidden cloud/production pattern: ${pattern}. Only local dev databases are permitted.`,
+        );
+      }
+    }
+  }
 }
 
 function runSql(sql: string) {
+  // Verify target publication exists and is local development default
+  const checkSql = "SELECT id, name FROM publications WHERE id = 'pub_default';";
+  try {
+    const result = execSync('docker exec -i vibress-postgres-1 psql -U vibress -d vibress -t -A -c "' + checkSql + '"', {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "inherit"],
+    }).trim();
+    if (!result || !result.startsWith("pub_default")) {
+      throw new StagingIsolationError("Target database does not contain authorized local staging publication 'pub_default'.");
+    }
+  } catch (error) {
+    if (error instanceof StagingIsolationError) throw error;
+    throw new StagingIsolationError(`Pre-seed publication verification failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
   execSync('docker exec -i vibress-postgres-1 psql -U vibress -d vibress', {
     input: sql,
     stdio: ["pipe", "inherit", "inherit"],
@@ -133,6 +195,14 @@ INSERT INTO post_tags (post_id, tag_id, publication_id) VALUES
 COMMIT;
 `;
 
-console.log("Seeding editorial staging content...");
-runSql(seedSql);
-console.log("Staging content seeded successfully.");
+export function main() {
+  verifyStagingTargetEnvironment();
+  console.log("Seeding editorial staging content...");
+  runSql(seedSql);
+  console.log("Staging content seeded successfully.");
+}
+
+const isDirectExecution = process.argv[1]?.endsWith("seed-theme-editorial-content.ts");
+if (isDirectExecution) {
+  main();
+}

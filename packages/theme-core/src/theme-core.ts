@@ -241,6 +241,14 @@ export function validateThemeCompatibility(manifest: ThemeManifest): void {
   }
 }
 
+export const HEX_COLOR_REGEX =
+  /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export function isValidHexColor(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  return HEX_COLOR_REGEX.test(value.trim());
+}
+
 export function validateThemeSettingsSchema(rawSchema: unknown): ThemeSettingsSchema {
   if (!rawSchema || typeof rawSchema !== "object") {
     return {};
@@ -269,6 +277,51 @@ export function validateThemeSettingsSchema(rawSchema: unknown): ThemeSettingsSc
         if (typeof typedDef.default !== "string") {
           throw new ThemeSettingsInvalidError(`Theme setting "${key}" default must be a string`);
         }
+        if (typedDef.minLength !== undefined) {
+          if (
+            typeof typedDef.minLength !== "number" ||
+            !Number.isInteger(typedDef.minLength) ||
+            typedDef.minLength < 0
+          ) {
+            throw new ThemeSettingsInvalidError(
+              `Theme setting "${key}" minLength must be a non-negative integer`,
+            );
+          }
+        }
+        if (typedDef.maxLength !== undefined) {
+          if (
+            typeof typedDef.maxLength !== "number" ||
+            !Number.isInteger(typedDef.maxLength) ||
+            typedDef.maxLength < 0
+          ) {
+            throw new ThemeSettingsInvalidError(
+              `Theme setting "${key}" maxLength must be a non-negative integer`,
+            );
+          }
+        }
+        if (
+          typedDef.minLength !== undefined &&
+          typedDef.maxLength !== undefined &&
+          typedDef.minLength > typedDef.maxLength
+        ) {
+          throw new ThemeSettingsInvalidError(
+            `Theme setting "${key}" minLength cannot exceed maxLength`,
+          );
+        }
+        if (
+          typedDef.minLength !== undefined &&
+          typedDef.default.length < typedDef.minLength
+        ) {
+          throw new ThemeSettingsInvalidError(
+            `Theme setting "${key}" default length is below minLength ${typedDef.minLength}`,
+          );
+        }
+        const effectiveMaxLength = typedDef.maxLength ?? THEME_SETTING_MAX_STRING_LENGTH;
+        if (typedDef.default.length > effectiveMaxLength) {
+          throw new ThemeSettingsInvalidError(
+            `Theme setting "${key}" default length exceeds maxLength ${effectiveMaxLength}`,
+          );
+        }
         break;
       }
       case "boolean": {
@@ -278,20 +331,35 @@ export function validateThemeSettingsSchema(rawSchema: unknown): ThemeSettingsSc
         break;
       }
       case "number": {
-        if (typeof typedDef.default !== "number" || Number.isNaN(typedDef.default)) {
-          throw new ThemeSettingsInvalidError(`Theme setting "${key}" default must be a valid number`);
+        if (typeof typedDef.default !== "number" || !Number.isFinite(typedDef.default)) {
+          throw new ThemeSettingsInvalidError(`Theme setting "${key}" default must be a finite number`);
         }
-        if (typedDef.min !== undefined && typedDef.default < typedDef.min) {
+        if (
+          typedDef.min !== undefined &&
+          (!Number.isFinite(typedDef.min) || typedDef.default < typedDef.min)
+        ) {
           throw new ThemeSettingsInvalidError(`Theme setting "${key}" default is below min ${typedDef.min}`);
         }
-        if (typedDef.max !== undefined && typedDef.default > typedDef.max) {
+        if (
+          typedDef.max !== undefined &&
+          (!Number.isFinite(typedDef.max) || typedDef.default > typedDef.max)
+        ) {
           throw new ThemeSettingsInvalidError(`Theme setting "${key}" default is above max ${typedDef.max}`);
+        }
+        if (
+          typedDef.min !== undefined &&
+          typedDef.max !== undefined &&
+          typedDef.min > typedDef.max
+        ) {
+          throw new ThemeSettingsInvalidError(`Theme setting "${key}" min cannot exceed max`);
         }
         break;
       }
       case "color": {
-        if (typeof typedDef.default !== "string" || !/^#[0-9a-fA-F]{3,8}$/.test(typedDef.default)) {
-          throw new ThemeSettingsInvalidError(`Theme setting "${key}" default must be a valid hex color string (e.g. #6366f1)`);
+        if (typeof typedDef.default !== "string" || !isValidHexColor(typedDef.default)) {
+          throw new ThemeSettingsInvalidError(
+            `Theme setting "${key}" default must be a valid hex color string (#RGB, #RGBA, #RRGGBB, #RRGGBBAA)`,
+          );
         }
         break;
       }
@@ -302,7 +370,7 @@ export function validateThemeSettingsSchema(rawSchema: unknown): ThemeSettingsSc
         const optionValues = typedDef.options.map((opt: any) =>
           typeof opt === "string" ? opt : opt?.value,
         );
-        if (optionValues.some((v: any) => typeof v !== "string")) {
+        if (optionValues.some((v: any) => typeof v !== "string" || v.length === 0)) {
           throw new ThemeSettingsInvalidError(`Theme setting "${key}" contains invalid option values`);
         }
         if (!optionValues.includes(typedDef.default)) {
@@ -361,58 +429,66 @@ export function validateThemeSettings(
   return output;
 }
 
-function validateSettingValue(
+export function validateSettingValue(
   _key: string,
   def: ThemeSettingDefinition,
   value: unknown,
 ): { ok: true; value: unknown } | { ok: false; error: string } {
   switch (def.type) {
     case "string": {
-      if (typeof value !== "string")
+      if (typeof value !== "string") {
         return { ok: false, error: "expected string" };
+      }
+      if (def.minLength !== undefined && value.length < def.minLength) {
+        return { ok: false, error: `string length must be at least ${def.minLength}` };
+      }
       const maxLength = def.maxLength ?? THEME_SETTING_MAX_STRING_LENGTH;
       if (value.length > maxLength) {
         return { ok: false, error: `string exceeds max length ${maxLength}` };
       }
       return { ok: true, value };
     }
-    case "boolean":
-      if (typeof value !== "boolean")
+    case "boolean": {
+      if (typeof value !== "boolean") {
         return { ok: false, error: "expected boolean" };
-      return { ok: true, value };
-    case "number": {
-      if (typeof value !== "number" || Number.isNaN(value))
-        return { ok: false, error: "expected number" };
-      if (def.min !== undefined && value < def.min)
-        return { ok: false, error: `value below min ${def.min}` };
-      if (def.max !== undefined && value > def.max)
-        return { ok: false, error: `value above max ${def.max}` };
-      return { ok: true, value };
-    }
-    case "color": {
-      if (typeof value !== "string")
-        return { ok: false, error: "expected color string" };
-      if (!/^#[0-9a-fA-F]{3,8}$/.test(value)) {
-        return { ok: false, error: "invalid color, only hex colors allowed" };
       }
       return { ok: true, value };
     }
+    case "number": {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        return { ok: false, error: "expected finite number" };
+      }
+      if (def.min !== undefined && value < def.min) {
+        return { ok: false, error: `value below min ${def.min}` };
+      }
+      if (def.max !== undefined && value > def.max) {
+        return { ok: false, error: `value above max ${def.max}` };
+      }
+      return { ok: true, value };
+    }
+    case "color": {
+      if (typeof value !== "string" || !isValidHexColor(value)) {
+        return { ok: false, error: "invalid hex color string (#RGB, #RGBA, #RRGGBB, #RRGGBBAA)" };
+      }
+      return { ok: true, value: value.trim() };
+    }
     case "select": {
-      if (typeof value !== "string")
+      if (typeof value !== "string") {
         return { ok: false, error: "expected string" };
+      }
       const allowedValues = def.options.map((opt) =>
         typeof opt === "string" ? opt : opt.value,
       );
       if (!allowedValues.includes(value)) {
         return {
           ok: false,
-          error: `invalid option, allowed: ${allowedValues.join(", ")}`,
+          error: `invalid option, allowed: [${allowedValues.join(", ")}]`,
         };
       }
       return { ok: true, value };
     }
     default:
-      return { ok: false, error: "unsupported setting type" };
+      return { ok: false, error: `unsupported setting type "${(def as any).type}"` };
   }
 }
 
