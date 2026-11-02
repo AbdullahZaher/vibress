@@ -3,7 +3,7 @@ import type { ApiThemeSummary } from "../../../lib/api";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { CheckCircle2, Eye, ImageOff, Palette, Search, Settings2, Trash2 } from "lucide-react";
+import { CheckCircle2, Eye, ImageOff, Search, Settings2, Trash2 } from "lucide-react";
 
 interface ThemeGalleryProps {
   themes: ApiThemeSummary[];
