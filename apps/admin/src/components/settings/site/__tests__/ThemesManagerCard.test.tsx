@@ -11,6 +11,7 @@ import {
   getActiveThemeApi,
   getThemeApi,
   createThemePreviewApi,
+  activateThemeApi,
 } from "../../../../lib/api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -200,4 +201,55 @@ describe("ThemesManagerCard", () => {
     expect(document.querySelector<HTMLSelectElement>("select")).toBeNull();
     expect(document.querySelector('button[aria-label="Settings Retro Creator"]')).not.toBeNull();
   });
+  it("confirms before publishing a different theme and reports API errors without changing the active theme", async () => {
+    vi.mocked(activateThemeApi).mockRejectedValue(new Error("Theme activation unavailable"));
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const publish = Array.from(retro?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.trim() === "Publish",
+    );
+    expect(publish).toBeTruthy();
+    await act(async () => { publish?.click(); });
+    expect(activateThemeApi).not.toHaveBeenCalled();
+
+    const confirmation = document.querySelector(".settings-confirmation-dialog");
+    expect(confirmation?.textContent).toContain("Publish this theme to your live website?");
+    const proceed = Array.from(confirmation?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.includes("Publish theme"),
+    );
+    await act(async () => { proceed?.click(); });
+    expect(activateThemeApi).toHaveBeenCalledWith("retro-creator");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Theme activation unavailable");
+    expect(container.textContent).toContain("Vibress Default");
+  });
+
+  it("shows a clear preview link when the browser blocks a new preview tab", async () => {
+    const blocked = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(createThemePreviewApi).mockResolvedValue({
+      previewToken: "b".repeat(64),
+      expiresAt: new Date().toISOString(),
+      themeId: "retro-creator",
+    });
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const preview = retro?.querySelector<HTMLButtonElement>('button[title="Preview theme in new tab"]');
+    await act(async () => { preview?.click(); });
+    const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
+    expect(link?.getAttribute("href")).toBe("/preview/" + "b".repeat(64));
+    expect(link?.textContent).toContain("Open preview");
+    blocked.mockRestore();
+  });
+
 });
