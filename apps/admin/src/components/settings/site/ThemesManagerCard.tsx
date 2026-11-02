@@ -363,7 +363,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-sm min-h-10"
+                  className="gap-1.5 text-sm min-h-11"
                 >
                   <UploadCloud className="h-3.5 w-3.5" /> {tr("Upload ZIP")}
                 </Button>
@@ -372,7 +372,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-sm min-h-10"
+                  className="gap-1.5 text-sm min-h-11"
                   title={tr("Refresh themes")}
                 >
                   <RefreshCw
@@ -474,6 +474,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   onClick={handleCloseUpload}
                   data-theme-upload-close
                   aria-label={tr("Close theme upload")}
+                  disabled={uploadProgress === "validating" || uploadProgress === "installing"}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
@@ -481,6 +482,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               </div>
 
               <div className="p-5 space-y-3">
+                {(uploadProgress === "validating" || uploadProgress === "installing") && (
+                  <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                    {tr("Installing theme...")}
+                  </p>
+                )}
                 {uploadError && (
                   <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
@@ -534,7 +541,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     {uploadFile ? (
                       <div className="flex flex-col items-center gap-1.5">
                         <FileArchive className="h-8 w-8 text-emerald-500" />
-                        <span className="text-xs font-semibold">{uploadFile.name}</span>
+                        <span className="break-all text-sm font-semibold">{uploadFile.name}</span>
+                      <span className="text-xs text-muted-foreground">{new Intl.NumberFormat(undefined).format(Math.ceil(uploadFile.size / 1024))} KB</span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-1.5">
@@ -552,6 +560,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={handleCloseUpload}
+                  disabled={uploadProgress === "validating" || uploadProgress === "installing"}
                   className="min-h-11 text-sm"
                 >
                   {tr("Cancel")}
@@ -560,7 +569,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   size="sm"
                   disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
                   onClick={handleUploadSubmit}
-                  className="text-sm min-h-10 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="text-sm min-h-11 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
