@@ -375,6 +375,29 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     }
     await page.setViewportSize({ width: 1440, height: 900 });
 
+    // Genuine screenshots from the publication-scoped preview route, not
+    // fabricated gallery imagery. Review/redact before using in public assets.
+    for (const id of ["vibress-default", "vibress-minimal", "vibress-molten"]) {
+      const card = page.locator('article[data-theme-id="' + id + '"]');
+      await expect(card).toHaveCount(1);
+      await card.locator("button").first().click();
+      const previewFrame = page.locator('iframe[src^="/preview/"]');
+      await expect(previewFrame).toHaveCount(1);
+      const previewPath = await previewFrame.getAttribute("src");
+      expect(previewPath).toMatch(/^\/preview\//);
+      const previewPage = await page.context().newPage();
+      try {
+        await previewPage.setViewportSize({ width: 1200, height: 750 });
+        const result = await previewPage.goto(BASE_URL + previewPath, { waitUntil: "domcontentloaded" });
+        expect(result?.ok()).toBe(true);
+        await previewPage.waitForLoadState("networkidle").catch(() => {});
+        await previewPage.screenshot({ path: "test-results/design-theme-" + id + ".png", animations: "disabled" });
+      } finally {
+        await previewPage.close();
+      }
+      await page.getByRole("button", { name: "Back to themes" }).first().click();
+    }
+
     // Close Theme Studio
     await page.click('button[aria-label="Close themes drawer"]');
 
