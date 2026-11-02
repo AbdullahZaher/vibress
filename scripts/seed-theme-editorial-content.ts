@@ -23,7 +23,6 @@ export interface StagingEnvironmentIdentity {
   provisionedAt: Date;
 }
 
-export { provisionStagingMarker } from "./provision-staging-marker";
 
 /**
  * Verifies that the connected database is an explicitly authorized disposable staging/test database.
@@ -176,8 +175,7 @@ export const seedStatements: string[] = [
   `UPDATE settings SET value = '""' WHERE publication_id = 'pub_default' AND key = 'headerCode';`,
   `UPDATE settings SET value = '""' WHERE publication_id = 'pub_default' AND key = 'footerCode';`,
 
-  // 3. Authors
-  `UPDATE users SET name = 'Elena Vance' WHERE id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1));`,
+  // Shared user accounts must never be modified by a theme preview fixture.
 
   // 4. Editorial media assets
   `INSERT INTO media_assets (
@@ -195,7 +193,8 @@ export const seedStatements: string[] = [
   ON CONFLICT (id) DO UPDATE SET
     storage_key = EXCLUDED.storage_key,
     display_name = EXCLUDED.display_name,
-    metadata = EXCLUDED.metadata;`,
+    metadata = EXCLUDED.metadata
+  WHERE media_assets.publication_id = 'pub_default';`,
 
   // 5. Tags
   `INSERT INTO tags (id, publication_id, name, slug, description) VALUES
@@ -205,21 +204,14 @@ export const seedStatements: string[] = [
     ('tag-editorial-craft', 'pub_default', 'Editorial Craft', 'editorial-craft', 'Publishing workflows and editorial standards.')
   ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
-    slug = EXCLUDED.slug;`,
+    slug = EXCLUDED.slug
+  WHERE tags.publication_id = 'pub_default';`,
 
   // Clean up any test tags from previous test runs
-  `DELETE FROM post_tags WHERE tag_id = '07c440a1-9824-42f8-9385-c21e035a0d1d';`,
-  `DELETE FROM tags WHERE id = '07c440a1-9824-42f8-9385-c21e035a0d1d';`,
+  `DELETE FROM post_tags WHERE publication_id = 'pub_default' AND tag_id = '07c440a1-9824-42f8-9385-c21e035a0d1d';`,
+  `DELETE FROM tags WHERE id = '07c440a1-9824-42f8-9385-c21e035a0d1d' AND publication_id = 'pub_default';`,
 
-  // 6. Hide or unpublish any ad-hoc test posts
-  `UPDATE posts SET status = 'draft' 
-   WHERE publication_id = 'pub_default' 
-     AND id NOT IN (
-       'bb46491c-dd25-492c-a035-89745ceffd6c',
-       '18c6584c-385e-4340-ad06-4f3f6d4f74d4',
-       'c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7',
-       'a1825127-6b22-4841-9152-4b37917d9501'
-     );`,
+  // Do not unpublish unrelated posts; the preview fixture owns only its explicit article IDs.
 
   // 7. Polish the 4 primary editorial articles
   `UPDATE posts SET
@@ -227,47 +219,52 @@ export const seedStatements: string[] = [
     slug = 'the-architecture-of-quiet-interfaces',
     excerpt = 'How intentional whitespace, typographic restraint, and optical grid alignment elevate digital readability.',
     feature_image_id = 'asset-editorial-arch',
-    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
+    primary_author_id = (SELECT id FROM users WHERE email = 'owner@example.com'),
     featured = true,
     status = 'published',
     published_at = NOW() - interval '2 hours'
-  WHERE id = 'bb46491c-dd25-492c-a035-89745ceffd6c';`,
+  WHERE id = 'bb46491c-dd25-492c-a035-89745ceffd6c' AND publication_id = 'pub_default';`,
 
   `UPDATE posts SET
     title = 'Principles of Minimalist Typography',
     slug = 'principles-of-minimalist-typography',
     excerpt = 'The enduring principles of lead type continue to govern reading comfort on modern high-density displays.',
     feature_image_id = 'asset-editorial-typo',
-    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
+    primary_author_id = (SELECT id FROM users WHERE email = 'owner@example.com'),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '1 day'
-  WHERE id = '18c6584c-385e-4340-ad06-4f3f6d4f74d4';`,
+  WHERE id = '18c6584c-385e-4340-ad06-4f3f6d4f74d4' AND publication_id = 'pub_default';`,
 
   `UPDATE posts SET
     title = 'Designing for Focus in the Modern Web',
     slug = 'designing-for-focus-in-the-modern-web',
     excerpt = 'Reclaiming human attention through calm, purposeful interface design and quiet digital architecture.',
     feature_image_id = 'asset-editorial-work',
-    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
+    primary_author_id = (SELECT id FROM users WHERE email = 'owner@example.com'),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '2 days'
-  WHERE id = 'c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7';`,
+  WHERE id = 'c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7' AND publication_id = 'pub_default';`,
 
   `UPDATE posts SET
     title = 'The Renaissance of Independent Media',
     slug = 'the-renaissance-of-independent-media',
     excerpt = 'Why focused, ad-free editorial publications are winning the attention of discerning readers worldwide.',
     feature_image_id = 'asset-editorial-abstr',
-    primary_author_id = COALESCE((SELECT id FROM users WHERE email = 'owner@example.com'), (SELECT id FROM users LIMIT 1)),
+    primary_author_id = (SELECT id FROM users WHERE email = 'owner@example.com'),
     featured = false,
     status = 'published',
     published_at = NOW() - interval '3 days'
-  WHERE id = 'a1825127-6b22-4841-9152-4b37917d9501';`,
+  WHERE id = 'a1825127-6b22-4841-9152-4b37917d9501' AND publication_id = 'pub_default';`,
 
   // Link tags for existing editorial posts
-  `DELETE FROM post_tags WHERE publication_id = 'pub_default';`,
+  `DELETE FROM post_tags WHERE publication_id = 'pub_default' AND post_id IN (
+    'bb46491c-dd25-492c-a035-89745ceffd6c',
+    '18c6584c-385e-4340-ad06-4f3f6d4f74d4',
+    'c9c5fe2b-1d2c-46cf-88dc-5ec3b6df26d7',
+    'a1825127-6b22-4841-9152-4b37917d9501'
+  );`,
   `INSERT INTO post_tags (post_id, tag_id, publication_id)
    SELECT id, 'tag-editorial-design', 'pub_default' FROM posts WHERE id = 'bb46491c-dd25-492c-a035-89745ceffd6c'
    UNION ALL

@@ -1,5 +1,4 @@
 import { Client } from "@vibress/database";
-import crypto from "node:crypto";
 import {
   StagingIsolationError,
   STAGING_IDENTITY_TABLE,
@@ -41,6 +40,12 @@ export async function provisionStagingMarker(
 
   // 3. Fail-closed: cloud or managed target denial
   const dbUrl = env.DATABASE_URL;
+  if (!dbUrl) throw new StagingIsolationError("An explicit DATABASE_URL for a disposable local database is required.");
+  let url: URL;
+  try { url = new URL(dbUrl); } catch { throw new StagingIsolationError("Invalid staging DATABASE_URL."); }
+  if (!["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+    throw new StagingIsolationError("Marker provisioning is permitted only for an explicitly selected localhost disposable database.");
+  }
   if (dbUrl) {
     const forbiddenPatterns = [
       /prod/i,
@@ -64,7 +69,9 @@ export async function provisionStagingMarker(
     }
   }
 
-  const markerToken = options.markerToken || crypto.randomBytes(32).toString("hex");
+  // Token is created by an independent trusted provisioning workflow, not by this database operation.
+  const markerToken = options.markerToken || env.VIBRESS_STAGING_MARKER_TOKEN;
+  if (!markerToken) throw new StagingIsolationError("An externally supplied VIBRESS_STAGING_MARKER_TOKEN is required.");
   if (!/^[a-f0-9]{64}$/i.test(markerToken)) {
     throw new StagingIsolationError(
       "Invalid marker token format. Must be a 64-character hexadecimal string.",
@@ -101,18 +108,18 @@ export async function provisionStagingMarker(
     );
   `);
 
-  await client.query(
+  const inserted = await client.query(
     `
     INSERT INTO ${STAGING_IDENTITY_TABLE} (id, environment_type, marker_token, authorized_target_publication_id, provisioned_at)
     VALUES ('singleton', $1, $2, $3, now())
-    ON CONFLICT (id) DO UPDATE SET
-      environment_type = EXCLUDED.environment_type,
-      marker_token = EXCLUDED.marker_token,
-      authorized_target_publication_id = EXCLUDED.authorized_target_publication_id,
-      provisioned_at = now();
+    ON CONFLICT (id) DO NOTHING
+    RETURNING id;
   `,
     [environmentType, markerToken, targetPublicationId],
   );
+  if (!inserted?.rows?.length) {
+    throw new StagingIsolationError("A staging identity marker already exists; automatic replacement is forbidden.");
+  }
 
   return { markerToken, targetPublicationId, environmentType };
 }
@@ -130,7 +137,7 @@ export async function main() {
     console.log(`[STAGING_PROVISION] Successfully provisioned staging environment marker.`);
     console.log(`[STAGING_PROVISION] Environment Type: ${environmentType}`);
     console.log(`[STAGING_PROVISION] Target Publication: ${targetPublicationId}`);
-    console.log(`[STAGING_PROVISION] VIBRESS_STAGING_MARKER_TOKEN=${markerToken}`);
+    // Do not print or persist the authorization token to CI or terminal logs.
   } finally {
     await client.end();
   }

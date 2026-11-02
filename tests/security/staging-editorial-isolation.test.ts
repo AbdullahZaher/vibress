@@ -275,7 +275,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
       query: vi.fn()
         .mockResolvedValueOnce({ rows: [{ id: "pub_default" }] }) // check publication
         .mockResolvedValueOnce({}) // CREATE TABLE
-        .mockResolvedValueOnce({}), // INSERT INTO
+        .mockResolvedValueOnce({ rows: [{ id: "singleton" }] }), // INSERT INTO
     };
 
     const result = await provisionStagingMarker(mockClient, {
@@ -295,6 +295,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     expect(mockClient.query.mock.calls[0][0]).toContain("SELECT id FROM publications");
     expect(mockClient.query.mock.calls[1][0]).toContain("CREATE TABLE IF NOT EXISTS _staging_environment_identity");
     expect(mockClient.query.mock.calls[2][0]).toContain("INSERT INTO _staging_environment_identity");
+    expect(mockClient.query.mock.calls[2][0]).toContain("ON CONFLICT (id) DO NOTHING");
   });
 
   it("rejects staging marker provisioning without VIBRESS_PROVISION_STAGING_MARKER=true", async () => {
@@ -327,6 +328,36 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     ).rejects.toThrow(/Provisioning a staging marker is strictly forbidden when NODE_ENV=production/);
 
     expect(mockClient.query).not.toHaveBeenCalled();
+  });
+
+  it("refuses to replace an existing database authorization marker", async () => {
+    const client = { query: vi.fn()
+      .mockResolvedValueOnce({ rows: [{ id: "pub_default" }] })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [] }),
+    };
+    await expect(provisionStagingMarker(client, { markerToken: validToken,
+      env: { NODE_ENV: "development", VIBRESS_PROVISION_STAGING_MARKER: "true",
+        DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress" },
+    })).rejects.toThrow(/already exists/);
+  });
+
+  it("refuses provisioning to unrecognized private or remote hosts", async () => {
+    const client = { query: vi.fn() };
+    await expect(provisionStagingMarker(client, { markerToken: validToken,
+      env: { NODE_ENV: "development", VIBRESS_PROVISION_STAGING_MARKER: "true",
+        DATABASE_URL: "postgresql://x:y@customer-db.internal.example:5432/vibress" },
+    })).rejects.toThrow(/localhost disposable/);
+    expect(client.query).not.toHaveBeenCalled();
+  });
+
+  it("never mutates shared user profiles or unrelated posts during editorial seeding", async () => {
+    const { seedStatements } = await import("../../scripts/seed-theme-editorial-content");
+    const sql = seedStatements.join("\n");
+    expect(sql).not.toContain("UPDATE users SET");
+    expect(sql).not.toContain("SELECT id FROM users LIMIT 1");
+    expect(sql).not.toContain("UPDATE posts SET status = 'draft'");
+    expect(sql).not.toContain("DELETE FROM post_tags WHERE publication_id = 'pub_default';");
   });
 
   it("rolls back transactions on error during editorial seeding", async () => {
