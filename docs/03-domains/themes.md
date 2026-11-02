@@ -87,7 +87,7 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 
 ## Admin UI
 
-`/admin/settings/themes` — theme cards (name, version, description, active badge), Preview, Activate, and a settings editor (color, number, boolean, string, select) with server-side validation.
+`/admin/settings/site` → **Theme Studio**: always-visible published theme summary, spacious image-led catalog, official/custom filtering, Preview/Publish/Customize actions, ZIP upload, and schema-based editor. The existing Settings navigation remains the only navigation. `ThemeGallery.tsx` renders the theme's actual `previewImage` when supplied and a clearly labelled missing-screenshot state otherwise. Publishing requires explicit confirmation and reports server-confirmed success/errors. The same publication-bound 15-minute preview token is used for non-publishing previews; it does **not** preview unsaved form changes. The editor persists settings per theme and does not activate inactive themes. The design QA/release plan lives in `docs/design/VIBRESS_THEME_STUDIO_ROADMAP_2026-11-02.md`.
 
 ## Cache Freshness
 
