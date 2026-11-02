@@ -31,8 +31,8 @@ async function main() {
     });
     const admin = await context.newPage();
     await admin.goto(new URL("/admin/login", origin).toString());
-    await admin.locator("#email").fill(email);
-    await admin.locator("#password").fill(password);
+    await admin.locator('input[type="email"]').fill(email);
+    await admin.locator('input[type="password"]').fill(password);
     await admin.locator('button[type="submit"]').click();
     await admin.waitForURL((url) => !url.pathname.includes("/admin/login"));
     await admin.goto(new URL("/admin/settings/site", origin).toString());

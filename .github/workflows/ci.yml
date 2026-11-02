@@ -285,11 +285,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # Store screenshots independently; later Playwright suites clean test-results.
       - name: Upload admin design-review screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: admin-ui-design-review-${{ github.run_id }}
-          path: test-results/**/design-*.png
+          path: artifacts/theme-studio-ci/design-*.png
           if-no-files-found: ignore
           retention-days: 7

@@ -369,7 +369,7 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       const bounds = await dialog.boundingBox();
       expect(bounds?.width).toBeLessThanOrEqual(width + 1);
       await page.screenshot({
-        path: "test-results/design-theme-studio-" + width + "-en.png",
+        path: "artifacts/theme-studio-ci/design-theme-studio-" + width + "-en.png",
         animations: "disabled",
       });
     }
@@ -391,7 +391,7 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
         const result = await previewPage.goto(BASE_URL + previewPath, { waitUntil: "domcontentloaded" });
         expect(result?.ok()).toBe(true);
         await previewPage.waitForLoadState("networkidle").catch(() => {});
-        await previewPage.screenshot({ path: "test-results/design-theme-" + id + ".png", animations: "disabled" });
+        await previewPage.screenshot({ path: "artifacts/theme-studio-ci/design-theme-" + id + ".png", animations: "disabled" });
       } finally {
         await previewPage.close();
       }

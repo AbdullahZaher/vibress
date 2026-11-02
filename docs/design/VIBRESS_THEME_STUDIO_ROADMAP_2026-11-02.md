@@ -122,3 +122,11 @@ Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-sto
 - The iframe preview is static/sandboxed, with visible limitations and an error/timeout fallback to a full preview tab. Real theme JS may require the full preview.
 - Sources: https://developer.wordpress.org/themes/core-concepts/theme-structure/ ; https://help.shopify.com/en/manual/online-store/themes/adding-themes ; https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/.
 - PR #117 remains draft until image assets are genuine, CI succeeds and screen reader / RTL visual acceptance is completed.
+
+### Responsive preview, category semantics and CI capture hardening (2026-11-02)
+- The pending-delete guard now explicitly consumes isDeleting, fixing the exact-head CI typecheck error (TS6133).
+- On a 320px viewport the mobile preview canvas flexes to its available width up to 390px instead of forcing two-dimensional chrome scrolling. Tablet/desktop retain intentional canvas scrolling with explanatory copy.
+- Customizer classification places footerText and other content keys into Content, with header/footer style and widths in Layout; the action bar is sticky only at larger widths.
+- E2E screenshot assets are now stored in artifacts/theme-studio-ci (instead of test-results, which the next Playwright run cleans). They are uploaded as a short-lived PRIVATE CI QA artifact, never auto-published.
+- Genuine screenshots must be visually inspected, redacted if needed and only then added to published theme manifests. This cannot be replaced with synthetic gallery artwork.
+- References: https://www.w3.org/WAI/WCAG22/Understanding/reflow.html ; https://help.shopify.com/en/manual/online-store/themes/customizing-themes/theme-editor .

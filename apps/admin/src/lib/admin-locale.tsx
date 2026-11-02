@@ -432,6 +432,8 @@ const translations: Record<string, string> = {
   "Tablet": "جهاز لوحي",
   "Mobile": "جوال",
   "Saved theme settings": "إعدادات القالب المحفوظة",
+  "Up to 390px": "حتى 390 بكسل",
+  "Scroll horizontally to inspect large preview widths.": "مرّر أفقيًا لاستعراض معاينات الشاشات الكبيرة.",
   "Loading preview...": "جارٍ تحميل المعاينة...",
   "The preview uses saved theme settings. Unsaved edits are not shown. Preview links expire automatically.": "تعرض المعاينة الإعدادات المحفوظة فقط. لا تظهر التغييرات غير المحفوظة، وتنتهي صلاحية روابط المعاينة تلقائيًا.",
   "Preparing preview...": "جارٍ تجهيز المعاينة...",
