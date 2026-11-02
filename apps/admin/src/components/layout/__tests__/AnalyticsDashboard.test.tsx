@@ -7,6 +7,7 @@ import type { ApiUser } from "../../../lib/api";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+const queryState = { loading: false };
 const overview = {
   range: { range: "30d", from: "2026-10-01", to: "2026-10-30" },
   summary: { views: 130, visitors: 68, members: 240, paidMembers: 30 },
@@ -20,9 +21,12 @@ const overview = {
     { date: "2026-10-29", views: 50, visitors: 26, members: 8 },
     { date: "2026-10-30", views: 50, visitors: 24, members: 0 },
   ],
-  latestPost: null,
+  latestPost: null as null | { id: string; slug: string; title: string; publishedAt: string; views: number },
   topPosts: [{ path: "/posts/welcome", title: "Welcome", views: 42 }],
-  topContent: [{ path: "/posts/welcome", title: "Welcome", type: "posts", views: 42 }],
+  topContent: [
+    { path: "/posts/welcome", title: "Welcome", type: "post", views: 42 },
+    { path: "/pages/about", title: "About", type: "page", views: 10 },
+  ],
   referrers: [],
   newsletter: { sent: 34, openRate: 41.2, clickRate: 12.1 },
   growth: { freeMembers: 210, paidMembers: 30 },
@@ -30,10 +34,10 @@ const overview = {
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
-    data: overview,
-    isLoading: false,
+    data: queryState.loading ? undefined : overview,
+    isLoading: queryState.loading,
     isError: false,
-    isSuccess: true,
+    isSuccess: !queryState.loading,
     refetch: vi.fn(),
   }),
 }));
@@ -51,6 +55,8 @@ describe("AnalyticsDashboard clarity and accessible chart", () => {
   let container: HTMLDivElement;
 
   beforeEach(async () => {
+    queryState.loading = false;
+    overview.latestPost = null;
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -107,5 +113,62 @@ describe("AnalyticsDashboard clarity and accessible chart", () => {
     expect(growthTab).not.toBeNull();
     act(() => growthTab?.click());
     expect(container.textContent).toContain("Membership totals are current and not limited by the date filter.");
+  });
+
+  it("displays a new-member growth chart and an all-time paid share separately", () => {
+    const growthTab = container.querySelector<HTMLButtonElement>('[role="tab"][id$="-tab-growth"]');
+    act(() => growthTab?.click());
+    expect(container.textContent).toContain("Daily new members");
+    const chart = container.querySelector<HTMLElement>('[role="group"][tabindex="0"]');
+    expect(chart?.className).toContain("dark:text-blue-400");
+    expect(container.textContent).toContain("12.5%");
+    const share = container.querySelector<HTMLElement>('[role="progressbar"]');
+    expect(share?.getAttribute("aria-valuenow")).toBe("13");
+  });
+
+  it("keeps the tooltip within the chart at both edges and gives the full year", () => {
+    const chart = container.querySelector<HTMLElement>('[role="group"][tabindex="0"]');
+    act(() => chart?.focus());
+    const tooltip = container.querySelector<HTMLElement>('[aria-live="polite"]');
+    expect(tooltip?.style.maxWidth).toBe("100%");
+    expect(tooltip?.style.transform).toBe("translateX(-100%)");
+    act(() => chart?.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+    const startTooltip = container.querySelector<HTMLElement>('[aria-live="polite"]');
+    expect(startTooltip?.style.transform).toBe("translateX(0)");
+    expect(startTooltip?.textContent).toContain("2026");
+  });
+
+  it("filters pages and posts using the API singular content types", () => {
+    act(() => container.querySelector<HTMLButtonElement>('[role="tab"][id$="-tab-web"]')?.click());
+    const controls = [...container.querySelectorAll("button")];
+    const pages = controls.find((button) => button.textContent === "Pages");
+    act(() => pages?.click());
+    expect(container.textContent).toContain("About");
+    expect(container.querySelector('a[href="/posts/welcome"]')).toBeNull();
+  });
+
+  it("shows the admin edit action only to users with edit permission", () => {
+    overview.latestPost = {
+      id: "post-1", slug: "hello", title: "Latest story", publishedAt: "2026-10-30T12:00:00.000Z", views: 2,
+    };
+    act(() => root.render(
+      <AnalyticsDashboard user={{ id: "owner" } as ApiUser} onNavigate={vi.fn()} canReadAnalytics canReadPosts />
+    ));
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Open published post")).toBe(false);
+    act(() => root.render(
+      <AnalyticsDashboard user={{ id: "owner" } as ApiUser} onNavigate={vi.fn()} canReadAnalytics canReadPosts canEditPosts />
+    ));
+    expect([...container.querySelectorAll("button")].some((button) => button.textContent?.trim() === "Open published post")).toBe(true);
+  });
+
+  it("uses a four-card and primary-chart skeleton while loading", () => {
+    queryState.loading = true;
+    act(() => root.render(
+      <AnalyticsDashboard user={{ id: "owner" } as ApiUser} onNavigate={vi.fn()} canReadAnalytics canReadPosts={false} />
+    ));
+    const skeleton = container.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
+    expect(skeleton).not.toBeNull();
+    expect(skeleton?.querySelectorAll(".grid > div")).toHaveLength(4);
+    expect(skeleton?.querySelector(".h-52")).not.toBeNull();
   });
 });
