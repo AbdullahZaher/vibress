@@ -66,7 +66,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
         </div>
         <p className="text-xs text-muted-foreground">{viewport.width}px · {tr("Saved theme settings")}</p>
       </div>
-      <div className="flex min-h-[55dvh] w-full justify-center overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4">
+      <div className="flex min-h-[55dvh] w-full justify-start overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4 2xl:justify-center">
         <div style={{ width: viewport.width, minWidth: viewport.width }}
           className="relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
           {!loaded && (
