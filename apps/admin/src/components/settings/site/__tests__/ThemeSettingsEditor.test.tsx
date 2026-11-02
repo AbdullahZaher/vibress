@@ -109,9 +109,11 @@ describe("ThemeSettingsEditor", () => {
       (button) => button.textContent?.includes("Save Settings"),
     );
     expect(save?.disabled).toBe(false);
+    expect(container.textContent).toContain("Unsaved changes");
     await act(async () => {
       save?.click();
     });
+    expect(container.textContent).toContain("All changes saved");
     expect(updateThemeSettingsApi).toHaveBeenCalledWith("retro-creator", {
       designPreset: "sunshine",
       showBio: false,

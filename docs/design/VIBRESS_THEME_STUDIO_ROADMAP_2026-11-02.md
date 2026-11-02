@@ -114,3 +114,11 @@ Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-sto
 - A secure in-Studio, sandboxed responsive preview (desktop/tablet/mobile) uses existing publication-scoped tokens and persisted theme settings; visitors cannot publish from the preview.
 - An explicit external-tab link and preview-token refresh control remain available. The responsive iframe uses the requested device width, horizontally scrollable on narrow screens rather than misreporting the viewport.
 - Live unsaved settings preview **remains out of scope** until a separate secure draft-preview API is designed and tested; do not confuse saved-settings preview with live draft changes.
+
+### Theme Studio refinements — 2026-11-02
+- Published theme now appears in a dedicated full-width editorial hero; other themes remain in a responsive 16:10 library.
+- Built-in themes still need real privacy-reviewed screenshots. The gallery NEVER substitutes generic images for a screenshot. Capture only from a seeded, authorized staging publication; approve output before including in public theme manifests.
+- The editor displays live schema-bound color swatches and unsaved field changes; these are NOT fake live site previews. Save settings before previewing the actual site.
+- The iframe preview is static/sandboxed, with visible limitations and an error/timeout fallback to a full preview tab. Real theme JS may require the full preview.
+- Sources: https://developer.wordpress.org/themes/core-concepts/theme-structure/ ; https://help.shopify.com/en/manual/online-store/themes/adding-themes ; https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/.
+- PR #117 remains draft until image assets are genuine, CI succeeds and screen reader / RTL visual acceptance is completed.

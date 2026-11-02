@@ -145,7 +145,7 @@ describe("ThemesManagerCard", () => {
     );
     await act(async () => { open?.click(); });
     const retroCard = [...document.querySelectorAll("article")].find((node) => node.textContent?.includes("Retro Creator"));
-    const previewButton = retroCard?.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
+    const previewButton = retroCard?.querySelector<HTMLButtonElement>('[title="Preview theme"]');
     await act(async () => { previewButton?.click(); });
     const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Theme preview Retro Creator"]');
     expect(iframe?.getAttribute("src")).toBe("/preview/" + "a".repeat(64));
@@ -244,7 +244,7 @@ describe("ThemesManagerCard", () => {
     const retro = Array.from(document.querySelectorAll("article")).find(
       (element) => element.textContent?.includes("Retro Creator"),
     );
-    const preview = retro?.querySelector<HTMLButtonElement>('button[title="Preview theme in new tab"]');
+    const preview = retro?.querySelector<HTMLButtonElement>('button[title="Preview theme"]');
     await act(async () => { preview?.click(); });
     const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
     expect(link?.getAttribute("href")).toBe("/preview/" + "b".repeat(64));

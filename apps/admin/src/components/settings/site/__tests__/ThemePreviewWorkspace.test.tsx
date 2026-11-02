@@ -28,6 +28,7 @@ describe("ThemePreviewWorkspace", () => {
     const frame = container.querySelector("iframe");
     expect(frame?.getAttribute("src")).toBe("/preview/token-123");
     expect(frame?.getAttribute("sandbox")).not.toContain("allow-scripts");
+    expect(container.textContent).toContain("Inline preview is limited");
     expect(frame?.getAttribute("title")).toContain("Retro Creator");
     const link = container.querySelector('a[href="/preview/token-123"]');
     expect(link?.getAttribute("target")).toBe("_blank");

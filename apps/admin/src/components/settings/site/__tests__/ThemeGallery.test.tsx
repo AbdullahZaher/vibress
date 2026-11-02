@@ -41,6 +41,8 @@ describe("Theme Studio Gallery", () => {
     expect(host.querySelector('img[src="/theme/retro.webp"]')).not.toBeNull();
     expect(host.textContent).toContain("Screenshot not available");
     expect(host.textContent).toContain("Published");
+    expect(host.querySelector('section[aria-label="Currently published theme"] article[data-theme-id="vibress-default"]')).not.toBeNull();
+    expect(host.querySelector('section[aria-label="Other themes"] article[data-theme-id="retro-creator"]')).not.toBeNull();
     const preview = host.querySelector<HTMLButtonElement>('button[aria-label="Preview Retro Creator"]');
     const publish = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Publish");
     const customize = host.querySelector<HTMLButtonElement>('button[aria-label="Settings Retro Creator"]');
