@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from "react";
 import {
   type ApiThemeDetail,
   type ApiThemeSummary,
+  type ApiThemeSettingDefinition,
   getThemeApi,
   updateThemeSettingsApi,
 } from "../../../lib/api";
@@ -19,6 +20,23 @@ export function toColorPickerHex(color: unknown): string {
     return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
   }
   return "#000000";
+}
+
+/** Groups only actual schema-defined settings; no fabricated design controls. */
+export function themeSettingCategory(key: string): string {
+  if (/color|background|accent|palette/i.test(key)) return "Colors";
+  if (/font|typography|typeface/i.test(key)) return "Typography";
+  if (/layout|width|header|footer|navigation|spacing|columns/i.test(key)) return "Layout";
+  if (/show|visible|display|content|author|date|related/i.test(key)) return "Content";
+  return "General";
+}
+function groupedThemeSettings(schema: Record<string, ApiThemeSettingDefinition>) {
+  const groups: Record<string, Array<[string, ApiThemeSettingDefinition]>> = {};
+  for (const [key, definition] of Object.entries(schema)) {
+    const category = themeSettingCategory(key);
+    (groups[category] ??= []).push([key, definition]);
+  }
+  return Object.entries(groups);
 }
 
 interface ThemeSettingsEditorProps {
@@ -43,6 +61,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [initial, setInitial] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
+  const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -62,6 +81,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setDetail(null);
     setError(null);
     setSuccess(false);
     getThemeApi(theme.manifest.id)
@@ -87,7 +107,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [theme.manifest.id]);
+  }, [theme.manifest.id, retry]);
 
   const updateField = (key: string, value: unknown) => {
     setDraft((previous) => ({ ...previous, [key]: value }));
@@ -130,13 +150,22 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             </p>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" className="min-h-11" disabled={!dirty || saving || loading}
+            onClick={() => { setDraft({ ...initial }); setError(null); setSuccess(false); }}>
+            {tr("Discard changes")}
+          </Button>
         <Button size="sm" className="min-h-11" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? tr("Saving...") : tr("Save Settings")}
         </Button>
+        </div>
       </div>
 
-      {error && <p role="alert" className="flex gap-2 text-xs text-red-600 dark:text-red-400"><AlertCircle className="h-4 w-4 shrink-0" />{tr(error)}</p>}
+      {error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/20 p-3 text-sm text-destructive">
+        <AlertCircle className="size-4 shrink-0" />{tr(error)}
+        {!detail && !loading && <Button variant="outline" size="sm" className="min-h-11" onClick={() => setRetry((value) => value + 1)}>{tr("Retry")}</Button>}
+      </div>}
       {success && <p role="status" className="flex gap-2 text-xs text-emerald-600"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
 
       {loading ? (
@@ -148,8 +177,12 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
           {tr("This theme does not define any customizable fields in settings.json.")}
         </p>
       ) : detail ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-          {Object.entries(detail.settingsSchema).map(([key, definition], index) => {
+        <div className="space-y-7">
+          {groupedThemeSettings(detail.settingsSchema).map(([category, fields]) => (
+            <section key={category} aria-label={tr(category)} className="space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
+              <h5 className="border-b border-border/60 pb-3 text-base font-semibold text-foreground">{tr(category)}</h5>
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          {fields.map(([key, definition], index) => {
             const inputId = `${idPrefix}-${index}`;
             const descriptionId = `${inputId}-description`;
             const value = draft[key] ?? definition.default;
@@ -232,6 +265,9 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
               </div>
             );
           })}
+              </div>
+            </section>
+          ))}
         </div>
       ) : null}
     </section>
