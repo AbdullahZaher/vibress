@@ -95,24 +95,32 @@ function displayAnalyticsDate(value: string, locale: string) {
 }
 
 /** Lightweight data-driven area chart (no chart dependency). */
+/**
+ * Compact, keyboard-explorable area chart. The SVG is visual only: one keyboard
+ * stop per chart and a complete semantic data table keep 90-day views usable.
+ */
 function AreaChart({
   points,
   metric,
   color,
+  size = "compact",
 }: {
   points: AnalyticsTimeseriesPoint[];
   metric: "views" | "visitors" | "members";
   color: string;
+  size?: "compact" | "large";
 }) {
   const { tr, locale, formatNumber } = useAdminLocale();
   const [showData, setShowData] = useState(false);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const gradientId = React.useId();
+  const metricLabel = tr(metric === "members" ? "New members" : metric);
   const values = points.map((point) => point[metric]);
   const max = Math.max(1, ...values);
   const ceiling = Math.ceil(max / 4) * 4;
   const hasData = values.some((value) => value > 0);
-  const format = (value: number) => formatNumber(value);
   const coords = values.map((value, index) => ({
-    x: values.length === 1 ? 50 : (index / Math.max(1, values.length - 1)) * 100,
+    x: values.length === 1 ? 50 : (index / (values.length - 1)) * 100,
     y: 96 - (value / ceiling) * 90,
   }));
   const line = coords.map((point, index) =>
@@ -121,11 +129,30 @@ function AreaChart({
   const area = coords.length ? `${line} L 100 100 L 0 100 Z` : "";
   const start = points[0]?.date;
   const end = points[points.length - 1]?.date;
-  const gradientId = `chart-gradient-${metric}`;
+  const activePoint = activeIndex === null ? null : points[activeIndex];
+  const activeCoord = activeIndex === null ? null : coords[activeIndex];
+
+  const handlePointer = (event: React.PointerEvent<HTMLDivElement>) => {
+    // Touch users can tap to inspect a date without disabling page scrolling.
+    if (event.type === "pointermove" && event.pointerType === "touch") return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / Math.max(1, bounds.width)));
+    setActiveIndex(Math.round(fraction * Math.max(0, points.length - 1)));
+  };
+
+  const handleChartKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const current = activeIndex ?? points.length - 1;
+    const next = event.key === "Home" ? 0
+      : event.key === "End" ? points.length - 1
+      : current + (event.key === "ArrowRight" ? 1 : -1);
+    setActiveIndex(Math.min(points.length - 1, Math.max(0, next)));
+  };
 
   if (!hasData) {
     return (
-      <div role="status" className="flex min-h-20 items-center gap-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3">
+      <div role="status" className="flex min-h-24 items-center gap-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3">
         <ChartNoAxesCombined className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="space-y-0.5">
           <p className="text-sm font-medium text-foreground">{tr("No activity in this period")}</p>
@@ -137,71 +164,87 @@ function AreaChart({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-stretch gap-3">
-        <div aria-hidden="true" className="flex h-32 shrink-0 flex-col justify-between text-end text-xs tabular-nums text-muted-foreground">
+      <div className="flex items-stretch gap-3" dir="ltr">
+        <div aria-hidden="true" className={`flex shrink-0 flex-col justify-between text-end text-xs tabular-nums text-muted-foreground ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}>
           {[ceiling, ceiling * 0.75, ceiling * 0.5, ceiling * 0.25, 0].map((tick) => (
-            <span key={tick}>{format(tick)}</span>
+            <span key={tick}>{formatNumber(tick)}</span>
           ))}
         </div>
-        <div className="relative h-32 min-w-0 flex-1" role="group" aria-label={`${tr("Activity trend")}: ${tr(metric)} ${start || ""} – ${end || ""}`}>
+        <div
+          className={`relative min-w-0 flex-1 cursor-crosshair rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${size === "large" ? "h-52 sm:h-60" : "h-36 sm:h-44"}`}
+          role="group"
+          tabIndex={0}
+          aria-label={`${tr("Activity trend")}: ${metricLabel}. ${tr("Use arrow keys to inspect daily values.")}`}
+          onFocus={() => setActiveIndex((current) => current ?? points.length - 1)}
+          onBlur={() => setActiveIndex(null)}
+          onKeyDown={handleChartKeys}
+          onPointerDown={handlePointer}
+          onPointerMove={handlePointer}
+          onPointerLeave={() => setActiveIndex(null)}
+        >
           <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
             {[0, 1, 2, 3, 4].map((tick) => <span key={tick} className="w-full border-t border-border/60" />)}
           </div>
-          <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-                  <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-                </linearGradient>
-              </defs>
-              <path d={area} fill={`url(#${gradientId})`} />
-              <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-              {coords.map((point, index) => (
-                <circle
-                  key={points[index]?.date || index}
-                  cx={point.x}
-                  cy={point.y}
-                  r="1.8"
-                  fill={color}
-                  stroke="var(--color-card)"
-                  strokeWidth="0.8"
-                  tabIndex={0}
-                  role="img"
-                  aria-label={`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}
-                  className="outline-none focus-visible:stroke-foreground focus-visible:stroke-2"
-                >
-                  <title>{`${points[index]?.date || ""}: ${formatNumber(values[index] || 0)} ${tr(metric)}`}</title>
-                </circle>
-              ))}
-            </svg>
+          <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+                <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+              </linearGradient>
+            </defs>
+            <path d={area} fill={`url(#${gradientId})`} />
+            <path d={line} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+            {activeCoord && (
+              <>
+                <line x1={activeCoord.x} x2={activeCoord.x} y1="0" y2="100" stroke="currentColor" strokeOpacity="0.4" strokeDasharray="3 3" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                <circle cx={activeCoord.x} cy={activeCoord.y} r="2.5" fill={color} stroke="var(--color-card)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+              </>
+            )}
+          </svg>
+          {activePoint && activeCoord && (
+            <div
+              aria-live="polite"
+              className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground shadow-md"
+              style={{ left: `${Math.max(13, Math.min(87, activeCoord.x))}%` }}
+            >
+              <span className="block text-muted-foreground">{displayAnalyticsDate(activePoint.date, locale)}</span>
+              <strong className="block text-sm tabular-nums">{formatNumber(activePoint[metric])} {metricLabel}</strong>
+            </div>
+          )}
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <div className="flex min-w-0 flex-wrap gap-x-2 tabular-nums">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 tabular-nums" dir="ltr">
           {start && <time dateTime={start}>{displayAnalyticsDate(start, locale)}</time>}
           {end && <><span aria-hidden="true">—</span><time dateTime={end}>{displayAnalyticsDate(end, locale)}</time></>}
         </div>
-        {points.length > 0 && (
-          <button type="button" aria-expanded={showData} onClick={() => setShowData((open) => !open)}
-            className="shrink-0 min-h-10 rounded-lg px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-            {showData ? tr("Hide data") : tr("View data")}
-          </button>
-        )}
+        <button
+          type="button"
+          aria-expanded={showData}
+          onClick={() => setShowData((open) => !open)}
+          className="min-h-11 shrink-0 rounded-lg px-3 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          {showData ? tr("Hide data") : tr("View data")}
+        </button>
       </div>
-      {showData && points.length > 0 && (
-        <div className="max-h-48 overflow-auto rounded-lg border border-border">
+      {showData && (
+        <div className="max-h-64 overflow-auto rounded-lg border border-border">
           <table className="w-full text-start text-sm">
-            <caption className="sr-only">{tr("Activity trend")}</caption>
-            <thead className="sticky top-0 bg-muted text-muted-foreground"><tr>
-              <th scope="col" className="px-3 py-2 text-start font-semibold">{tr("Date")}</th>
-              <th scope="col" className="px-3 py-2 text-end font-semibold">{tr(metric)}</th>
-            </tr></thead>
-            <tbody>{points.map((point, index) => (
-              <tr key={`${point.date}-${index}`} className="border-t border-border/60">
-                <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale)}</time></td>
-                <td className="px-3 py-2 text-end tabular-nums">{format(point[metric])}</td>
+            <caption className="sr-only">{tr("Activity trend")}: {metricLabel}</caption>
+            <thead className="sticky top-0 bg-muted text-muted-foreground">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-start font-semibold">{tr("Date")}</th>
+                <th scope="col" className="px-3 py-2 text-end font-semibold">{metricLabel}</th>
               </tr>
-            ))}</tbody>
+            </thead>
+            <tbody>
+              {points.map((point, index) => (
+                <tr key={`${point.date}-${index}`} className="border-t border-border/60">
+                  <td className="px-3 py-2 tabular-nums"><time dateTime={point.date}>{displayAnalyticsDate(point.date, locale)}</time></td>
+                  <td className="px-3 py-2 text-end tabular-nums">{formatNumber(point[metric])}</td>
+                </tr>
+              ))}
+            </tbody>
           </table>
         </div>
       )}
