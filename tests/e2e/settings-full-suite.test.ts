@@ -353,11 +353,11 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await manageThemesBtn.click();
 
     // Verify Themes Drawer is displayed with zero-rebuild notice
-    await expect(page.locator("text=Themes Manager")).toBeVisible({
+    await expect(page.getByRole("dialog", { name: "Themes Manager" })).toBeVisible({
       timeout: 5000,
     });
     await expect(
-      page.locator("text=Zero-Rebuild Theme System"),
+      page.locator("text=Theme Studio"),
     ).toBeVisible({
       timeout: 5000,
     });
