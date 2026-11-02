@@ -271,6 +271,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         setUploadFile(file);
         setUploadError(null);
       } else {
+        setUploadFile(null);
+        setUploadFile(null);
         setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
@@ -289,18 +291,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handleUploadSubmit = async () => {
-    if (!uploadFile) return;
+    if (!uploadFile || uploadProgress === "validating" || uploadProgress === "installing") return;
+    const scope = publicationGeneration.current;
     setUploadProgress("validating");
     setUploadError(null);
 
     try {
       setUploadProgress("installing");
       await uploadThemeApi(uploadFile);
+      if (scope !== publicationGeneration.current) return;
       setUploadProgress("success");
       setUploadFile(null);
       await load();
       // Keep the confirmed success state until the user chooses to return to the gallery.
     } catch (err: unknown) {
+      if (scope !== publicationGeneration.current) return;
       setUploadProgress("error");
       const e = err as { message?: string };
       setUploadError(e.message || tr("Failed to install theme package."));
