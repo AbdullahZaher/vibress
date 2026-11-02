@@ -104,6 +104,7 @@ export const SubscriptionTiersCard: React.FC<SubscriptionTiersCardProps> = ({
 
       {/* Subscription Tiers & Billing Modal */}
       <SettingsModalPortal
+        title="Subscription tiers"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >

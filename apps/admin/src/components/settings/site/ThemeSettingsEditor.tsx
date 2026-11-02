@@ -125,12 +125,12 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
           </Button>
           <div>
             <h4 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-foreground">{theme.manifest.name} {tr("Settings")}</h4>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {tr("Edit presentation options for this publication. Changes to inactive themes take effect on activation.")}
             </p>
           </div>
         </div>
-        <Button size="sm" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
+        <Button size="sm" className="min-h-11" onClick={save} disabled={loading || saving || !dirty || !detail || Object.keys(detail.settingsSchema).length === 0}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {saving ? tr("Saving...") : tr("Save Settings")}
         </Button>
@@ -156,11 +156,11 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             const describedBy = definition.description ? descriptionId : undefined;
             return (
               <div key={key} className="space-y-1.5 min-w-0">
-                <label htmlFor={inputId} className="block text-xs font-semibold text-foreground">
+                <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
                   {tr(definition.label || key)}
                 </label>
                 {definition.description && (
-                  <p id={descriptionId} className="text-xs text-muted-foreground">{tr(definition.description)}</p>
+                  <p id={descriptionId} className="text-sm leading-relaxed text-muted-foreground">{tr(definition.description)}</p>
                 )}
                 {definition.type === "boolean" ? (
                   <input
@@ -170,7 +170,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     disabled={saving}
                     checked={value === true}
                     onChange={(event) => updateField(key, event.target.checked)}
-                    className="h-4 w-4 accent-primary"
+                    className="size-5 accent-primary"
                   />
                 ) : definition.type === "select" ? (
                   <select
@@ -179,7 +179,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                     disabled={saving}
                     value={String(value ?? "")}
                     onChange={(event) => updateField(key, event.target.value)}
-                    className="w-full h-9 rounded-md border border-border bg-card px-2 text-xs text-foreground"
+                    className="w-full min-h-11 rounded-md border border-border bg-card px-3 text-sm text-foreground"
                   >
                     {(definition.options || []).map((option) => {
                       const optionValue = typeof option === "string" ? option : option.value;
@@ -198,7 +198,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                       aria-describedby={describedBy}
                       value={toColorPickerHex(value)}
                       onChange={(event) => updateField(key, event.target.value)}
-                      className="h-9 w-11 shrink-0 cursor-pointer"
+                      className="h-11 w-11 shrink-0 cursor-pointer"
                     />
                     <Input
                       aria-label={`${tr(definition.label || key)} ${tr("hex value")}`}
@@ -207,7 +207,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                       maxLength={9}
                       disabled={saving}
                       onChange={(event) => updateField(key, event.target.value)}
-                      className="h-9 font-mono text-xs"
+                      className="min-h-11 font-mono text-sm"
                     />
                   </div>
                 ) : (
@@ -226,7 +226,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
                         ? (event.target.value === "" ? "" : Number(event.target.value))
                         : event.target.value,
                     )}
-                    className="h-9 text-xs"
+                    className="min-h-11 text-sm"
                   />
                 )}
               </div>

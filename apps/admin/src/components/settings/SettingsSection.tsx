@@ -16,7 +16,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
   children,
 }) => {
   return (
-    <section id={id} className="scroll-mt-24 space-y-4">
+    <section id={id} className="scroll-mt-6 space-y-4">
       {/* Clean Section Header */}
       <div className="flex min-w-0 items-start justify-between pb-1">
         <div>

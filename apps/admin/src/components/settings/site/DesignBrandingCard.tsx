@@ -3,6 +3,7 @@ import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import {
   Palette,
   Image as ImageIcon,
@@ -44,7 +45,9 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
   onChange,
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -103,23 +106,24 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
             </span>
           </div>
         }
-        actionLabel={isExpanded ? "Close" : "Customize"}
+        actionLabel={isExpanded ? tr("Close") : tr("Customize")}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
-        <div className="border-t border-border/40 p-5 bg-muted/15 space-y-5 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-5 animate-in slide-in-from-top-2 duration-150">
           {/* Visual Theme Preview Mockup Banner */}
           <div className="rounded-xl border border-border/70 overflow-hidden bg-card p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
             <div className="space-y-1">
               <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Live Brand Style & Palette
+                {tr("Live Brand Style & Palette")}
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Accent colors are applied throughout themes, buttons, links, and
-                newsletters.
+              <p className="text-xs text-muted-foreground">
+                {tr("Accent colors are applied throughout themes, buttons, links, and newsletters.")}
               </p>
             </div>
 
@@ -139,7 +143,7 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
           {/* Accent Color Picker */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-foreground">
-              Publication accent color
+              {tr("Publication accent color")}
             </label>
             <div className="flex flex-wrap items-center gap-3">
               {/* Color Swatch Circles */}
@@ -149,7 +153,9 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                     key={c}
                     type="button"
                     onClick={() => handleColorSelect(c)}
-                    className="size-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-xs cursor-pointer relative"
+                    aria-label={`${tr("Select accent color")} ${c}`}
+                     aria-pressed={accentColor.toLowerCase() === c.toLowerCase()}
+                     className="size-10 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-xs cursor-pointer relative"
                     style={{ backgroundColor: c }}
                     title={c}
                   >
@@ -166,7 +172,8 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   value={accentColor}
                   onChange={(e) => handleColorSelect(e.target.value)}
                   placeholder="#6366f1"
-                  className="w-28 font-mono text-xs h-8 uppercase bg-card"
+                  aria-label={tr("Accent color hex code")}
+                  className="w-32 font-mono text-sm min-h-10 uppercase bg-card"
                 />
               </div>
             </div>
@@ -183,17 +190,17 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
             <div className="p-4 rounded-xl border border-border/60 bg-card space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground">
-                  Publication Icon
+                  {tr("Publication Icon")}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Square PNG (min 60x60)
+                <span className="text-xs text-muted-foreground">
+                  {tr("Square PNG (min 60x60)")}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 {iconUrl ? (
                   <img
                     src={iconUrl}
-                    alt="Site Icon"
+                    alt={tr("Publication Icon")}
                     className="size-11 rounded-xl object-cover shadow-xs border border-border/50"
                   />
                 ) : (
@@ -216,14 +223,14 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   variant="outline"
                   disabled={uploadingIcon}
                   onClick={() => iconInputRef.current?.click()}
-                  className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
+                  className="min-h-10 text-sm bg-card hover:bg-muted"
                 >
                   {uploadingIcon ? (
                     <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
                   ) : (
                     <ImageIcon className="h-3.5 w-3.5 me-1" />
                   )}
-                  {iconUrl ? "Change icon" : "Upload icon"}
+                  {iconUrl ? tr("Change icon") : tr("Upload icon")}
                 </Button>
               </div>
             </div>
@@ -231,17 +238,17 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
             <div className="p-4 rounded-xl border border-border/60 bg-card space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-foreground">
-                  Publication Logo
+                  {tr("Publication Logo")}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
-                  Transparent SVG / PNG
+                <span className="text-xs text-muted-foreground">
+                  {tr("Transparent SVG / PNG")}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 {logoUrl ? (
                   <img
                     src={logoUrl}
-                    alt="Logo"
+                    alt={tr("Publication Logo")}
                     className="h-11 max-w-[120px] object-contain p-1 rounded-lg bg-muted/40 border border-border/60"
                   />
                 ) : (
@@ -261,14 +268,14 @@ export const DesignBrandingCard: React.FC<DesignBrandingCardProps> = ({
                   variant="outline"
                   disabled={uploadingLogo}
                   onClick={() => logoInputRef.current?.click()}
-                  className="text-xs h-8 cursor-pointer bg-card hover:bg-muted"
+                  className="min-h-10 text-sm bg-card hover:bg-muted"
                 >
                   {uploadingLogo ? (
                     <RefreshCw className="h-3.5 w-3.5 me-1 animate-spin" />
                   ) : (
                     <ImageIcon className="h-3.5 w-3.5 me-1" />
                   )}
-                  {logoUrl ? "Change logo" : "Upload logo"}
+                  {logoUrl ? tr("Change logo") : tr("Upload logo")}
                 </Button>
               </div>
             </div>

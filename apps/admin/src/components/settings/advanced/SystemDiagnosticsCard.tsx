@@ -14,6 +14,7 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
   const [purging, setPurging] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -49,12 +50,14 @@ export const SystemDiagnosticsCard: React.FC<SystemDiagnosticsCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? "Close" : "Maintain"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           {msg && (
             <div className="flex items-center gap-2 p-2.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs">
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />

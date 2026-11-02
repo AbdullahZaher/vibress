@@ -11,6 +11,7 @@ export function Dialog({
   description,
   children,
   className,
+  overlayClassName,
   fallbackFocusRef,
   restoreFocusOnClose = true,
 }: {
@@ -20,6 +21,7 @@ export function Dialog({
   description?: string;
   children: React.ReactNode;
   className?: string;
+  overlayClassName?: string | undefined;
   fallbackFocusRef?: React.RefObject<HTMLElement | null> | undefined;
   restoreFocusOnClose?: boolean | undefined;
 }) {
@@ -102,7 +104,10 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-0 duration-150"
+      className={cn(
+        "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 bg-black/60 backdrop-blur-xs animate-in fade-in-0 duration-150",
+        overlayClassName,
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? titleId : undefined}

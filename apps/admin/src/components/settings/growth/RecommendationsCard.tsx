@@ -110,6 +110,7 @@ export const RecommendationsCard: React.FC<RecommendationsCardProps> = ({
 
       {/* Recommendations Modal */}
       <SettingsModalPortal
+        title="Recommendations"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >

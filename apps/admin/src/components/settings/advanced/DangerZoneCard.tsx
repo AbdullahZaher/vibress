@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { runMaintenanceApi } from "../../../lib/api/operations";
+import { useAdminLocale } from "../../../lib/admin-locale";
+import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 
 interface DangerZoneCardProps {
   isHighlighted?: boolean | undefined;
@@ -21,12 +23,19 @@ interface DangerZoneCardProps {
 export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
+  const { confirm, confirmationDialog } = useSettingsConfirmation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [runningOp, setRunningOp] = useState<string | null>(null);
   const [opSuccess, setOpSuccess] = useState<string | null>(null);
   const [opError, setOpError] = useState<string | null>(null);
 
   const handleExecuteMaintenance = async (op: string) => {
+    if (runningOp !== null) return;
+    const confirmed = await confirm(tr(op === "cache-purge"
+      ? "Purge all dynamic caches?"
+      : "Rebuild all search indices?"));
+    if (!confirmed) return;
     setRunningOp(op);
     setOpSuccess(null);
     setOpError(null);
@@ -75,6 +84,7 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
 
       {/* Danger Zone Modal */}
       <SettingsModalPortal
+        title="Danger zone"
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
       >
@@ -84,14 +94,14 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
               <div className="flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-4 w-4" />
                 <h3 className="text-sm font-bold">
-                  System Maintenance & Danger Zone
+                  {tr("System Maintenance & Danger Zone")}
                 </h3>
               </div>
               <button
                 type="button"
-                aria-label="Close danger zone modal"
+                aria-label={tr("Close dialog")}
                 onClick={() => setIsModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -114,14 +124,13 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
 
               {/* Maintenance operations */}
               <div className="space-y-3">
-                <div className="p-4 rounded-xl border border-border/80 bg-muted/20 flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h4 className="text-xs font-bold text-foreground">
-                      Purge All Dynamic Caches
+                      {tr("Purge All Dynamic Caches")}
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Flushes Redis cache keys for public posts, settings
-                      namespaces, and author listings.
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {tr("Flushes cached posts, settings and author listings.")}
                     </p>
                   </div>
                   <Button
@@ -129,23 +138,22 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     variant="outline"
                     disabled={runningOp !== null}
                     onClick={() => handleExecuteMaintenance("cache-purge")}
-                    className="shrink-0 text-xs gap-1.5 cursor-pointer h-8"
+                    className="min-h-11 w-full shrink-0 gap-1.5 text-sm sm:w-auto"
                   >
                     <RefreshCw
                       className={`h-3 w-3 ${runningOp === "cache-purge" ? "animate-spin" : ""}`}
                     />
-                    {runningOp === "cache-purge" ? "Purging..." : "Purge cache"}
+                    {tr(runningOp === "cache-purge" ? "Purging..." : "Purge cache")}
                   </Button>
                 </div>
 
-                <div className="p-4 rounded-xl border border-border/80 bg-muted/20 flex items-center justify-between gap-3">
+                <div className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h4 className="text-xs font-bold text-foreground">
-                      Rebuild Search Indices
+                      {tr("Rebuild Search Indices")}
                     </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Reindexes all published articles and pages into the search
-                      document database.
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {tr("Reindexes published articles and pages for search.")}
                     </p>
                   </div>
                   <Button
@@ -153,14 +161,14 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                     variant="outline"
                     disabled={runningOp !== null}
                     onClick={() => handleExecuteMaintenance("search-reindex")}
-                    className="shrink-0 text-xs gap-1.5 cursor-pointer h-8"
+                    className="min-h-11 w-full shrink-0 gap-1.5 text-sm sm:w-auto"
                   >
                     <Database
                       className={`h-3 w-3 ${runningOp === "search-reindex" ? "animate-spin" : ""}`}
                     />
                     {runningOp === "search-reindex"
-                      ? "Reindexing..."
-                      : "Reindex"}
+                      ? tr("Reindexing...")
+                      : tr("Reindex")}
                   </Button>
                 </div>
               </div>
@@ -169,14 +177,11 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
               <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-destructive font-semibold text-xs">
                   <ShieldAlert className="h-4 w-4" />
-                  <span>Database Purge & Reset Policy</span>
+                  <span>{tr("Database Purge & Reset Policy")}</span>
                 </div>
-                <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Direct HTTP deletion of all publication records is
-                  intentionally restricted in production to prevent catastrophic
-                  data loss. To wipe or reset test databases, use the
-                  authenticated CLI command{" "}
-                  <code className="font-mono text-primary text-[10px]">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {tr("Database reset is restricted in production. Use this authenticated CLI command only in a test environment:")}{" "}
+                  <code className="font-mono text-primary text-xs">
                     pnpm db:reset
                   </code>
                   .
@@ -188,15 +193,16 @@ export const DangerZoneCard: React.FC<DangerZoneCardProps> = ({
                   size="sm"
                   variant="ghost"
                   onClick={() => setIsModalOpen(false)}
-                  className="text-xs cursor-pointer"
+                  className="min-h-11 text-sm"
                 >
-                  Close
+                  {tr("Close")}
                 </Button>
               </div>
             </div>
           </div>
         </div>
       </SettingsModalPortal>
+      {confirmationDialog}
     </>
   );
 };

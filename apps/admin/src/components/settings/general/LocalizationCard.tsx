@@ -33,6 +33,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
 }) => {
   const { tr } = useAdminLocale();
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   const langObj = COMMON_LANGUAGES.find((l) => l.code === locale);
   const langLabel = langObj ? langObj.label : locale;
@@ -55,12 +56,14 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? tr("Close") : tr("Edit")}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
-        <div className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/50 p-5 bg-muted/10 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-3">
               <PublicationLanguagesManager onSaved={onSaved} />
@@ -78,7 +81,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                 id="card-site-tz"
                 value={timezone}
                 onChange={(e) => onChange("timezone", e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="w-full min-h-11 rounded-md border border-input bg-background px-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value="UTC">UTC (Coordinated Universal Time)</option>
                 <option value="Asia/Riyadh">Asia/Riyadh (UTC+3)</option>
@@ -91,7 +94,7 @@ export const LocalizationCard: React.FC<LocalizationCardProps> = ({
                   America/Los_Angeles (PST/PDT)
                 </option>
               </select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {tr("Used for post scheduling and date formatting.")}
               </p>
             </div>

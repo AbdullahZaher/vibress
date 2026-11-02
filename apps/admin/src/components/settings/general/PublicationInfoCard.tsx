@@ -20,6 +20,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
   isHighlighted,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const panelId = React.useId();
 
   return (
     <SettingsCard id="general-info" isHighlighted={isHighlighted}>
@@ -40,16 +41,18 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           </div>
         }
         actionLabel={isExpanded ? "Close" : "Edit"}
+        panelId={panelId}
         isExpanded={isExpanded}
         onAction={() => setIsExpanded(!isExpanded)}
       />
 
+      {!isExpanded && <div id={panelId} hidden />}
       {isExpanded && (
-        <div className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
+        <div id={panelId} className="border-t border-border/40 p-5 bg-muted/15 space-y-4 animate-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-title"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site title
             </label>
@@ -58,10 +61,10 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={title}
               onChange={(e) => onChange("title", e.target.value)}
               placeholder="e.g. The Daily Drop"
-              className="bg-card text-xs h-9"
+              className="bg-card text-sm min-h-10"
               required
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               The name of your publication or brand.
             </p>
           </div>
@@ -69,7 +72,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-tagline"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site tagline
             </label>
@@ -78,9 +81,9 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={tagline}
               onChange={(e) => onChange("tagline", e.target.value)}
               placeholder="e.g. Thoughts, stories and ideas"
-              className="bg-card text-xs h-9"
+              className="bg-card text-sm min-h-10"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               A memorable short description of your site.
             </p>
           </div>
@@ -88,7 +91,7 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
           <div className="space-y-1.5">
             <label
               htmlFor="card-site-desc"
-              className="text-xs font-semibold text-foreground"
+              className="text-sm font-semibold text-foreground"
             >
               Site description
             </label>
@@ -97,10 +100,10 @@ export const PublicationInfoCard: React.FC<PublicationInfoCardProps> = ({
               value={description}
               onChange={(e) => onChange("description", e.target.value)}
               rows={3}
-              className="w-full rounded-md border border-input bg-card px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              className="w-full min-h-24 rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               placeholder="Describe what your publication is about..."
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Used in themes and search engine metadata descriptions.
             </p>
           </div>

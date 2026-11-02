@@ -10,8 +10,7 @@ import { SettingsCardRow } from "./SettingsCardRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsPermissionGate } from "./SettingsPermissionGate";
 import { AdminPageHeader } from "../common/AdminPageHeader";
-import { Button, buttonVariants } from "../ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 
 // General Pillar Compact Cards
@@ -54,6 +53,7 @@ import {
   Sparkles,
   Cpu,
   Search,
+  ArrowUp,
   X,
   Database,
 } from "lucide-react";
@@ -65,6 +65,34 @@ interface SettingsHubProps {
 }
 
 const SECTION_IDS = SETTINGS_REGISTRY.map((p) => p.id);
+
+const CARD_PERMISSIONS: Record<string, string> = {
+  "publication-info": "settings.manage",
+  "localization": "settings.manage",
+  "metadata-social": "settings.manage",
+  "site-privacy": "settings.manage",
+  "staff-overview": "users.read",
+  "design-branding": "settings.manage",
+  "navigation-manager": "settings.manage",
+  "social-links": "settings.manage",
+  "themes-manager": "themes.manage",
+  "announcement-bar": "settings.manage",
+  "portal-access": "members.manage",
+  "subscription-tiers": "billing.manage",
+  "offers-promotions": "offers.manage",
+  "newsletters-config": "email.manage",
+  "analytics-tracking": "analytics.read",
+  "community-discussions": "comments.manage",
+  "recommendations-card": "recommendations.manage",
+  "content-models": "posts.read",
+  "code-injection": "settings.manage",
+  "integrations-platform": "integrations.manage",
+  "system-diagnostics": "system.read",
+  "import-export": "imports.manage",
+  "audit-logs": "audit.read",
+  "danger-zone": "system.manage",
+};
+
 
 const getPillarIcon = (iconName: string) => {
   switch (iconName) {
@@ -108,7 +136,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   const { query, setQuery, filteredPillars, highlightedCardId } =
     useSettingsSearch();
 
-  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 120);
+  const { activeSection, scrollToSection } = useScrollSpy(SECTION_IDS, 48, !loading, query);
 
   // Jump to initial anchor on load or route change
   useEffect(() => {
@@ -127,12 +155,21 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
   }, [initialSection, scrollToSection]);
 
   const isCardVisible = (cardId: string) => {
-    return filteredPillars.some((p) => p.cards.some((c) => c.id === cardId));
+    const permission = CARD_PERMISSIONS[cardId];
+    return filteredPillars.some((p) => p.cards.some((card) => card.id === cardId))
+      && (!permission || !can || can(permission));
   };
 
   const isPillarVisible = (pillarId: string) => {
-    return filteredPillars.some((p) => p.id === pillarId);
+    return filteredPillars.some((p) =>
+      p.id === pillarId && p.cards.some((card) => isCardVisible(card.id)),
+    );
   };
+
+  const visibleResultCount = filteredPillars.reduce(
+    (count, pillar) => count + pillar.cards.filter((card) => isCardVisible(card.id)).length,
+    0,
+  );
 
   if (loading) {
     return (
@@ -157,12 +194,14 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         description={tr("Manage publication preferences, membership, theme, and system options.")}
       />
 
-      {/* Search and Section Sticky Filter Bar */}
-      <div className="sticky top-0 z-30 flex flex-col items-stretch justify-between gap-3 border-b border-border bg-card/95 py-3 backdrop-blur-md sm:flex-row sm:items-center">
-        {/* Semantic section links, preserving existing /admin/settings/:section routes. */}
-        <nav aria-label={tr("Settings sections")} className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+      {/* In-flow section navigation: no sticky overlay, blur, or translucent content. */}
+      <div id="settings-section-navigation" className="flex min-w-0 flex-col gap-3 border-b border-border/70 pb-3 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+        <nav
+          aria-label={tr("Settings sections")}
+          className="flex min-w-0 flex-1 items-center gap-5 overflow-x-auto no-scrollbar"
+        >
           {SETTINGS_REGISTRY.filter((pillar) => isPillarVisible(pillar.id)).map((pillar) => {
-            const isActive = activeSection === pillar.id;
+            const isActive = activeSection === pillar.id && !query.trim();
             return (
               <a
                 key={pillar.id}
@@ -172,7 +211,11 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   event.preventDefault();
                   scrollToSection(pillar.id, true);
                 }}
-                className={cn(buttonVariants({ variant: isActive ? "subtle" : "ghost", size: "sm" }), "min-h-11 shrink-0 px-3.5")}
+                className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-medium whitespace-nowrap transition-colors focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                  isActive
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+                }`}
               >
                 {getPillarIcon(pillar.iconName)}
                 <span>{tr(pillar.title)}</span>
@@ -181,15 +224,18 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           })}
         </nav>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <div className="relative w-full shrink-0 lg:w-64">
+          <Search
+            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
           <Input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder={tr("Filter settings...")}
-            className="min-h-11 border-border bg-card ps-9 pe-12 text-sm"
+            aria-label={tr("Filter settings...")}
+            className="min-h-11 rounded-lg border-border bg-background ps-10 pe-11 text-sm"
           />
           {query && (
             <Button
@@ -205,6 +251,38 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
           )}
         </div>
       </div>
+
+      {[
+        { label: tr("General settings"), error: general.error },
+        { label: tr("Site"), error: site.error },
+        { label: tr("Membership"), error: membership.error },
+        { label: tr("Growth"), error: growth.error },
+        { label: tr("Advanced"), error: advanced.error },
+      ].some(item => item.error) && !globalSuccess && (
+        <div role="alert" className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <p className="font-semibold text-destructive">{tr("Some settings need attention")}</p>
+          {[
+            { label: tr("General settings"), error: general.error },
+            { label: tr("Site"), error: site.error },
+            { label: tr("Membership"), error: membership.error },
+            { label: tr("Growth"), error: growth.error },
+            { label: tr("Advanced"), error: advanced.error },
+          ].filter(item => item.error).map(item => (
+            <p key={item.label} className="text-foreground">
+              <span className="font-medium">{item.label}:</span> {item.error}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {query.trim() && visibleResultCount === 0 && (
+        <div role="status" className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card px-5 py-12 text-center">
+          <Search className="size-6 text-muted-foreground" aria-hidden="true" />
+          <h2 className="text-base font-semibold">{tr("No settings found")}</h2>
+          <p className="max-w-md text-sm text-muted-foreground">{tr("Try a different keyword or clear your search to browse all settings.")}</p>
+          <Button type="button" variant="outline" onClick={() => setQuery("")}>{tr("Clear search")}</Button>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 1. GENERAL SETTINGS PILLAR                                                */}
@@ -462,7 +540,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
                   icon={<Database className="h-4 w-4" />}
                   title={tr("Content Models")}
                   description={tr("Define structured content types, fields, relations and their validation rules.")}
-                  actionLabel="Manage models"
+                  actionLabel={tr("Manage models")}
                   onAction={() => onNavigate?.("/admin/settings/advanced/content-models")}
                   disabled={!onNavigate}
                 />
@@ -523,6 +601,13 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         </SettingsSection>
       )}
 
+      <div className="flex justify-center pb-3">
+        <a href="#settings-section-navigation" className="inline-flex min-h-11 items-center gap-2 rounded-md px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <ArrowUp className="size-4" aria-hidden="true" />
+          {tr("Back to settings sections")}
+        </a>
+      </div>
+
       {/* Floating Save / Discard Action Bar */}
       <SettingsSaveBar
         isDirty={isDirty}
@@ -531,7 +616,7 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         onSave={saveAllDirty}
         onDiscard={discardAllDirty}
         successMsg={globalSuccess}
-        errorMsg={globalError}
+        errorMsg={globalSuccess ? null : globalError ?? general.error ?? site.error ?? membership.error ?? growth.error ?? advanced.error ?? null}
       />
     </div>
   );

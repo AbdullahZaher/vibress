@@ -12,6 +12,7 @@ import {
 import { SettingsCard } from "../SettingsCard";
 import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
+import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
@@ -38,6 +39,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   isHighlighted,
 }) => {
   const { tr } = useAdminLocale();
+  const { confirm, confirmationDialog, isConfirmOpen } = useSettingsConfirmation();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [themes, setThemes] = useState<ApiThemeSummary[]>([]);
   const [active, setActive] = useState<ApiActiveTheme | null>(null);
@@ -73,6 +75,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   useEffect(() => {
     if (!isDrawerOpen) return;
+    if (isConfirmOpen) return;
     const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
     if (isUploadOpen) {
       focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
@@ -100,7 +103,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     };
     document.addEventListener("keydown", trapTab);
     return () => document.removeEventListener("keydown", trapTab);
-  }, [isDrawerOpen, isUploadOpen]);
+  }, [isDrawerOpen, isUploadOpen, isConfirmOpen]);
 
 
 
@@ -125,16 +128,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     }
   }, []);
 
-  const handleEditorBack = () => {
+  const handleEditorBack = async () => {
     if (editorSaving) return;
-    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
   };
 
-  const handleCloseDrawer = () => {
+  const handleCloseDrawer = async () => {
     if (editorSaving) return;
-    if (editorDirty && !window.confirm(tr("Discard unsaved theme settings changes?"))) return;
+    if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
     setIsDrawerOpen(false);
@@ -165,7 +168,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm(`Are you sure you want to uninstall theme "${id}"?`)) {
+    if (!(await confirm(`Are you sure you want to uninstall theme "${id}"?`, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
     setDeleting(id);
@@ -257,14 +260,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
       {/* Themes Manager Slide-over Drawer */}
       <SettingsModalPortal
+        title="Themes manager"
+        manageFocus={false}
         isOpen={isDrawerOpen}
         onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-card border-l border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right duration-200">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
             {/* Drawer Header */}
-            <div className="flex items-center justify-between p-5 border-b border-border/60 bg-muted/20">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-border/60 bg-muted/20">
+              <div className="flex flex-wrap items-center gap-2">
                 <Palette className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
                   Themes Manager
@@ -282,7 +287,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-xs h-8"
+                  className="gap-1.5 text-sm min-h-10"
                 >
                   <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
                 </Button>
@@ -291,7 +296,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-xs h-8"
+                  className="gap-1.5 text-sm min-h-10"
                   title="Reload registry themes from backend"
                 >
                   <RefreshCw
@@ -304,7 +309,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   aria-label="Close themes drawer"
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -320,7 +325,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <div className="flex items-center gap-2">
                   <Badge
                     variant="outline"
-                    className="text-[10px] font-mono border-primary/30 text-primary"
+                    className="text-xs font-mono border-primary/30 text-primary"
                   >
                     Zero-Rebuild Theme System
                   </Badge>
@@ -373,21 +378,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             <div className="flex items-center gap-1">
                               <Badge
                                 variant="secondary"
-                                className="text-[10px] font-mono"
+                                className="text-xs font-mono"
                               >
                                 v{theme.manifest.version}
                               </Badge>
                               {!theme.isBuiltIn && (
                                 <Badge
                                   variant="outline"
-                                  className="text-[9px] font-mono text-purple-500 border-purple-500/30"
+                                  className="text-xs font-mono text-purple-700 dark:text-purple-300 border-purple-500/30"
                                 >
                                   ZIP
                                 </Badge>
                               )}
                             </div>
                           </div>
-                          <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
                             {theme.manifest.description ||
                               "Responsive publishing theme optimized for modern publications."}
                           </p>
@@ -400,7 +405,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               isCurrent || activating === theme.manifest.id
                             }
                             onClick={() => handleActivate(theme.manifest.id)}
-                            className="text-xs h-7 flex-1 cursor-pointer"
+                            className="text-sm min-h-10 flex-1 cursor-pointer"
                             variant={isCurrent ? "outline" : "default"}
                           >
                             {isCurrent ? (
@@ -420,7 +425,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                             size="sm"
                             variant="ghost"
                             onClick={() => handlePreview(theme.manifest.id)}
-                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
                             title="Preview theme in new tab"
                           >
                             <Eye className="h-3.5 w-3.5" />
@@ -433,7 +438,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               setEditorDirty(false);
                               setEditingTheme(theme);
                             }}
-                            className="h-7 px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
                             title={tr("Theme settings")}
                             aria-label={`${tr("Settings")} ${theme.manifest.name}`}
                           >
@@ -446,7 +451,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                               variant="ghost"
                               disabled={deleting === theme.manifest.id}
                               onClick={() => handleDelete(theme.manifest.id)}
-                              className="h-7 px-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 cursor-pointer"
+                              className="min-h-11 min-w-11 px-3 text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               title="Uninstall theme"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -466,9 +471,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 size="sm"
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 disabled={editorSaving}
-                className="text-xs cursor-pointer"
+                className="min-h-11 text-sm"
               >
-                {editingTheme ? tr("Back to themes") : "Done"}
+                {editingTheme ? tr("Back to themes") : tr("Close manager")}
               </Button>
             </div>
           </div>
@@ -489,7 +494,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   type="button"
                   onClick={handleCloseUpload}
                   aria-label="Close theme upload"
-                  className="text-muted-foreground hover:text-foreground p-1 rounded-md"
+                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -543,7 +548,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
                         <span className="text-xs font-semibold">Drop theme.zip here</span>
-                        <span className="text-[10px] text-muted-foreground">or click to browse</span>
+                        <span className="text-xs text-muted-foreground">or click to browse</span>
                       </div>
                     )}
                   </div>
@@ -555,7 +560,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={handleCloseUpload}
-                  className="text-xs h-7"
+                  className="min-h-11 text-sm"
                 >
                   Cancel
                 </Button>
@@ -563,7 +568,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   size="sm"
                   disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
                   onClick={handleUploadSubmit}
-                  className="text-xs h-7 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="text-sm min-h-10 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -576,6 +581,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           </div>
         )}
       </SettingsModalPortal>
+      {confirmationDialog}
     </>
   );
 };

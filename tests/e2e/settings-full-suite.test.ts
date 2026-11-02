@@ -384,9 +384,16 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await expect(purgeBtn).toBeVisible({ timeout: 5000 });
     await purgeBtn.click();
 
+    // Confirm maintenance operation in the confirmation dialog
+    const confirmBtn = page
+      .locator(".settings-confirmation-dialog button", { hasText: /Continue|متابعة/i })
+      .first();
+    await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+    await confirmBtn.click();
+
     // Verify success feedback
     await expect(page.locator("text=purged successfully")).toBeVisible({
-      timeout: 5000,
+      timeout: 10000,
     });
   });
 

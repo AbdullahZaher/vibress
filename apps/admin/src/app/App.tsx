@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { AdminLocaleProvider, useAdminLocale } from "../lib/admin-locale";
 import { createAdminQueryClient } from "../lib/query-keys";
@@ -17,6 +17,8 @@ const AppContent: React.FC = () => {
   const { user, isLoading, isAuthenticated, login, logout, can } = useAuth();
   const { refresh, setUserId } = useAdminLocale();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
+  const currentPathRef = useRef(currentPath);
+  useEffect(() => { currentPathRef.current = currentPath; }, [currentPath]);
   const [setupState, setSetupState] = useState<SetupState>("loading");
   const [setupRetry, setSetupRetry] = useState(0);
 
@@ -25,9 +27,32 @@ const AppContent: React.FC = () => {
   }, [user?.id, setUserId]);
 
   useEffect(() => {
-    const onPopState = () => setCurrentPath(window.location.pathname);
+    const onPopState = () => {
+      const destination = window.location.pathname;
+      if (destination === currentPathRef.current) return;
+      const request = new CustomEvent("vibress:before-settings-navigation", {
+        cancelable: true,
+        detail: { path: destination },
+      });
+      if (!window.dispatchEvent(request)) {
+        // Restore the current page while the user chooses whether to discard edits.
+        window.history.pushState({}, "", currentPathRef.current);
+        return;
+      }
+      setCurrentPath(destination);
+    };
+    const onConfirmed = (event: Event) => {
+      const destination = (event as CustomEvent<{ path: string }>).detail?.path;
+      if (typeof destination !== "string" || !destination.startsWith("/admin")) return;
+      window.history.pushState({}, "", destination);
+      setCurrentPath(destination);
+    };
     window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    window.addEventListener("vibress:confirmed-settings-navigation", onConfirmed);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("vibress:confirmed-settings-navigation", onConfirmed);
+    };
   }, []);
 
   useEffect(() => {
@@ -46,6 +71,13 @@ const AppContent: React.FC = () => {
   }, [setupRetry]);
 
   const navigate = (path: string) => {
+    if (path !== window.location.pathname) {
+      const request = new CustomEvent("vibress:before-settings-navigation", {
+        cancelable: true,
+        detail: { path },
+      });
+      if (!window.dispatchEvent(request)) return;
+    }
     window.history.pushState({}, "", path);
     setCurrentPath(path);
   };
