@@ -12,8 +12,9 @@ function createMockPng(options: {
   pixelValues?: number[];
   corruptCrc?: boolean;
   truncate?: boolean;
+  filterType?: 0 | 1 | 2 | 3 | 4;
 }): Buffer {
-  const { width, height, pixelValues, corruptCrc, truncate } = options;
+  const { width, height, pixelValues, corruptCrc, truncate, filterType = 0 } = options;
   const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   // IHDR chunk
@@ -55,6 +56,30 @@ function createMockPng(options: {
     }
   }
 
+  if (filterType !== 0) {
+    const rowBytes = width * 3;
+    const original = Buffer.from(rawRaster);
+    for (let y = 0; y < height; y++) {
+      const offset = y * scanlineBytes;
+      rawRaster[offset] = filterType;
+      for (let x = 0; x < rowBytes; x++) {
+        const here = original[offset + 1 + x];
+        const left = x >= 3 ? original[offset + 1 + x - 3] : 0;
+        const above = y ? original[offset + 1 + x - scanlineBytes] : 0;
+        const upperLeft = y && x >= 3 ? original[offset + 1 + x - scanlineBytes - 3] : 0;
+        let predictor = 0;
+        if (filterType === 1) predictor = left;
+        else if (filterType === 2) predictor = above;
+        else if (filterType === 3) predictor = Math.floor((left + above) / 2);
+        else if (filterType === 4) {
+          const p = left + above - upperLeft;
+          const pa = Math.abs(p - left), pb = Math.abs(p - above), pc = Math.abs(p - upperLeft);
+          predictor = pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft;
+        }
+        rawRaster[offset + 1 + x] = (here - predictor + 256) & 255;
+      }
+    }
+  }
   const compressedIdat = zlib.deflateSync(rawRaster);
   const idatTypeAndData = Buffer.concat([Buffer.from("IDAT", "ascii"), compressedIdat]);
   const idatCrc = computeCrc32(idatTypeAndData);
@@ -94,6 +119,17 @@ describe("PNG Integrity & Decoding Verification (P1)", () => {
     expect(decoded.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(decoded.pixelStats.isBlankOrUniform).toBe(false);
     expect(decoded.pixelStats.standardDeviation).toBeGreaterThan(10);
+  });
+
+  it("reconstructs all standard PNG scanline filters before checking visual variance", () => {
+    const gradient = Array.from({ length: 37 }, (_, i) => (i * 29) % 256);
+    for (const filterType of [0, 1, 2, 3, 4] as const) {
+      const decoded = decodePng(createMockPng({ width: 24, height: 24, pixelValues: gradient, filterType }));
+      expect(decoded.pixelStats.isBlankOrUniform).toBe(false);
+      expect(decoded.pixelStats.standardDeviation).toBeGreaterThan(10);
+    }
+    const flat = decodePng(createMockPng({ width: 20, height: 20, filterType: 4 }));
+    expect(flat.pixelStats.isBlankOrUniform).toBe(true);
   });
 
   it("detects completely uniform or blank images", () => {

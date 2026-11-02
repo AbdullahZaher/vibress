@@ -176,58 +176,68 @@ export function decodePng(buffer: Buffer): DecodedPng {
     throw new Error(`Failed to decompress PNG raster stream: ${err.message}`);
   }
 
-  // Validate decompressed raster stream length for non-interlaced images
-  if (ihdr.interlaceMethod === 0) {
-    const bytesPerPixel = Math.ceil((ihdr.channels * ihdr.bitDepth) / 8);
-    const scanlineBytes = 1 + ihdr.width * bytesPerPixel;
-    const expectedLength = ihdr.height * scanlineBytes;
+  // Validate and reconstruct actual screenshot pixels, rather than measuring filtered IDAT bytes.
+  if (ihdr.bitDepth !== 8 || ![0, 2, 4, 6].includes(ihdr.colorType) ||
+      ihdr.interlaceMethod !== 0 || ihdr.compressionMethod !== 0 || ihdr.filterMethod !== 0) {
+    throw new Error("Unsupported PNG format: expected non-interlaced 8-bit grayscale/RGB/RGBA.");
+  }
+  const bytesPerPixel = ihdr.channels;
+  const rowBytes = ihdr.width * bytesPerPixel;
+  const scanlineBytes = rowBytes + 1;
+  const expectedLength = ihdr.height * scanlineBytes;
+  if (expectedLength > 150_000_000) throw new Error("PNG raster exceeds the safe decoding limit.");
+  if (decompressed.length !== expectedLength) {
+    throw new Error(
+      `PNG raster stream length mismatch: expected ${expectedLength} bytes for ${ihdr.width}x${ihdr.height} image, decompressed ${decompressed.length} bytes.`,
+    );
+  }
 
-    if (decompressed.length !== expectedLength) {
-      throw new Error(
-        `PNG raster stream length mismatch: expected ${expectedLength} bytes for ${ihdr.width}x${ihdr.height} image, decompressed ${decompressed.length} bytes.`,
-      );
+  const pixels = Buffer.alloc(ihdr.height * rowBytes);
+  for (let y = 0; y < ihdr.height; y++) {
+    const sourceOffset = y * scanlineBytes;
+    const filter = decompressed[sourceOffset];
+    if (filter > 4) throw new Error(`Invalid PNG scanline filter ${filter} on row ${y}.`);
+    const dstOffset = y * rowBytes;
+    for (let x = 0; x < rowBytes; x++) {
+      const left = x >= bytesPerPixel ? pixels[dstOffset + x - bytesPerPixel] : 0;
+      const above = y > 0 ? pixels[dstOffset - rowBytes + x] : 0;
+      const upperLeft = y > 0 && x >= bytesPerPixel
+        ? pixels[dstOffset - rowBytes + x - bytesPerPixel] : 0;
+      let predictor = 0;
+      if (filter === 1) predictor = left;
+      else if (filter === 2) predictor = above;
+      else if (filter === 3) predictor = Math.floor((left + above) / 2);
+      else if (filter === 4) {
+        const p = left + above - upperLeft;
+        const pa = Math.abs(p - left), pb = Math.abs(p - above), pc = Math.abs(p - upperLeft);
+        predictor = pa <= pb && pa <= pc ? left : pb <= pc ? above : upperLeft;
+      }
+      pixels[dstOffset + x] = (decompressed[sourceOffset + 1 + x] + predictor) & 255;
     }
   }
 
-  // Compute pixel raster statistics to detect completely blank or single-color canvas
-  let min = 255;
-  let max = 0;
-  let sum = 0;
-  let sampleCount = 0;
-
-  const bytesPerPixel = Math.ceil((ihdr.channels * ihdr.bitDepth) / 8);
-  const scanlineBytes = 1 + ihdr.width * bytesPerPixel;
-
-  // Iterate over pixel data only, skipping scanline filter type bytes (offset 0 of each scanline)
-  const scanlineStep = Math.max(1, Math.floor(ihdr.height / 200));
-  const pixelStep = Math.max(1, Math.floor((ihdr.width * bytesPerPixel) / 200));
-
-  for (let y = 0; y < ihdr.height; y += scanlineStep) {
-    const scanlineOffset = y * scanlineBytes + 1; // skip filter byte
-    const scanlinePixelBytes = ihdr.width * bytesPerPixel;
-    for (let x = 0; x < scanlinePixelBytes; x += pixelStep) {
-      const val = decompressed[scanlineOffset + x];
-      if (val < min) min = val;
-      if (val > max) max = val;
-      sum += val;
+  let min = 255, max = 0, sum = 0, sampleCount = 0, varianceSum = 0;
+  const sampleStep = Math.max(1, Math.floor((ihdr.width * ihdr.height) / 30000));
+  const visibleChannels = ihdr.colorType === 0 || ihdr.colorType === 4 ? 1 : 3;
+  for (let pixel = 0; pixel < ihdr.width * ihdr.height; pixel += sampleStep) {
+    const offset = pixel * bytesPerPixel;
+    for (let channel = 0; channel < visibleChannels; channel++) {
+      const value = pixels[offset + channel];
+      min = Math.min(min, value);
+      max = Math.max(max, value);
+      sum += value;
       sampleCount++;
     }
   }
-
-  const mean = sampleCount > 0 ? sum / sampleCount : 0;
-  let varianceSum = 0;
-  for (let y = 0; y < ihdr.height; y += scanlineStep) {
-    const scanlineOffset = y * scanlineBytes + 1;
-    const scanlinePixelBytes = ihdr.width * bytesPerPixel;
-    for (let x = 0; x < scanlinePixelBytes; x += pixelStep) {
-      const diff = decompressed[scanlineOffset + x] - mean;
+  const mean = sampleCount ? sum / sampleCount : 0;
+  for (let pixel = 0; pixel < ihdr.width * ihdr.height; pixel += sampleStep) {
+    const offset = pixel * bytesPerPixel;
+    for (let channel = 0; channel < visibleChannels; channel++) {
+      const diff = pixels[offset + channel] - mean;
       varianceSum += diff * diff;
     }
   }
-  const variance = sampleCount > 0 ? varianceSum / sampleCount : 0;
-  const standardDeviation = Math.sqrt(variance);
-
-  // Blank or uniform check: if range is trivial (max - min < 5) and standardDeviation < 1.0
+  const standardDeviation = Math.sqrt(sampleCount ? varianceSum / sampleCount : 0);
   const isBlankOrUniform = max - min < 5 || standardDeviation < 1.0;
 
   const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
