@@ -407,6 +407,7 @@ const translations: Record<string, string> = {
   "Plugin record saved.": "تم حفظ سجل الإضافة.",
   "No plugin data available.": "لا تتوفر بيانات للإضافة.",
   "Themes Manager": "إدارة القوالب",
+  "If the preview did not open, use this link.": "إذا لم تُفتح المعاينة تلقائيًا، استخدم هذا الرابط.",
   "Accent Color": "اللون البارز",
   "Background Color": "لون الخلفية",
   "Content Width": "عرض المحتوى",
