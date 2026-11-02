@@ -93,3 +93,19 @@ Release needs weighted ≥9.5/10 after visual QA, zero P0/P1 regressions, and no
 - WordPress: test theme on actual site content before activation.
 - WCAG 2.2/WAI-ARIA: predictable accessible dialog, focus management, keyboard-operable controls.
 Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-store/themes / https://wordpress.org/documentation/article/appearance-themes-screen/ / https://www.w3.org/TR/WCAG22/ / https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/.
+
+
+## Implementation log — 2026-11-02 (PR #117, draft)
+**Source implementation exists on the branch; these marks do not signify QA acceptance.**
+
+| Phase | Implemented | Still required for acceptance |
+|---|---|---|
+| 0. Baseline | Branch, roadmap, design-system and domain documentation; reproducible authenticated screenshot-capture script | Run screenshot matrix on an authenticated staging instance and review images |
+| 1. Active state | Published theme name/version on Settings, async loading/error/retry, publication-change invalidation, lifecycle feedback | Verify each publication, error recovery, concurrent action safety in browser |
+| 2. Gallery | Wide studio surface, responsive image-led gallery, honest missing-image state, search and filters, active-first ordering | Approved real screenshot assets for built-in themes; browser visual signoff; decide whether dedicated route supersedes modal |
+| 3. Preview/publishing | Existing short-lived preview token reused; explicit confirmation, success/failure and nonpublishing fallback link | Browser popup tests, expired preview-token UX, in-place device preview if feasible |
+| 4. Customizer | Grouped schema-backed controls, human-readable labels, Save vs Publish, local Discard, error/retry | Full design QA of all supported schemas; live unsaved draft preview needs separate secure backend capability |
+| 5. Upload/i18n/a11y | Keyboard-operable ZIP drop zone and file input, progress/status, no duplicate install, Arabic labels, modal focus hooks | Manual VoiceOver/NVDA, target-size checks, 200% zoom, Arabic screenshots |
+| 6. Release | Gallery unit tests, publish failure/preview fallback unit tests, existing settings E2E adjusted, CI started on draft PR | Exact-head green CI, accessibility review and authenticated visual matrix before production |
+
+**Release status:** IN PROGRESS — NOT PRODUCTION APPROVED. No claim of 9.5/10 until exact-head CI, screenshot comparison and WCAG 2.2 AA verification. The branch intentionally does not change the active public theme or deploy any code.
