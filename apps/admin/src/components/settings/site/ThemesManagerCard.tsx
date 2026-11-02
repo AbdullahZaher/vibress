@@ -50,6 +50,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewFallbackUrl, setPreviewFallbackUrl] = useState<string | null>(null);
   const [previewThemeName, setPreviewThemeName] = useState<string | null>(null);
+  const [previewThemeId, setPreviewThemeId] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -149,6 +150,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setEditingTheme(null);
       setPreviewFallbackUrl(null);
       setPreviewThemeName(null);
+      setPreviewThemeId(null);
       setPreviewError(null);
       setPreviewLoading(false);
       setActivating(null);
@@ -177,6 +179,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setEditorDirty(false);
     setPreviewFallbackUrl(null);
     setPreviewThemeName(null);
+    setPreviewThemeId(null);
     setIsDrawerOpen(false);
   };
 
@@ -193,6 +196,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setActionSuccess(null);
     setPreviewFallbackUrl(null);
     setPreviewThemeName(null);
+    setPreviewThemeId(null);
     void load();
   };
 
@@ -248,6 +252,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setPreviewError(null);
     setPreviewFallbackUrl(null);
     setPreviewThemeName(null);
+    setPreviewThemeId(null);
     setPreviewLoading(true);
     const scope = publicationGeneration.current;
     try {
@@ -255,6 +260,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       if (scope !== publicationGeneration.current) return;
       setPreviewFallbackUrl("/preview/" + encodeURIComponent(res.previewToken));
       setPreviewThemeName(theme.manifest.name);
+      setPreviewThemeId(themeId);
     } catch (error: unknown) {
       if (scope === publicationGeneration.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     } finally {
@@ -419,7 +425,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </p>
               ) : previewFallbackUrl && previewThemeName ? (
                 <ThemePreviewWorkspace themeName={previewThemeName} url={previewFallbackUrl}
-                  onBack={() => { setPreviewFallbackUrl(null); setPreviewThemeName(null); }} />
+                  onRefresh={() => { if (previewThemeId) void handlePreview(previewThemeId); }}
+                  onBack={() => { setPreviewFallbackUrl(null); setPreviewThemeName(null); setPreviewThemeId(null); }} />
               ) : editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}

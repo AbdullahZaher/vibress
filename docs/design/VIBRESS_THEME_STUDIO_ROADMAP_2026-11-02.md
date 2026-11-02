@@ -109,3 +109,8 @@ Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-sto
 | 6. Release | Gallery unit tests, publish failure/preview fallback unit tests, existing settings E2E adjusted, CI started on draft PR | Exact-head green CI, accessibility review and authenticated visual matrix before production |
 
 **Release status:** IN PROGRESS — NOT PRODUCTION APPROVED. No claim of 9.5/10 until exact-head CI, screenshot comparison and WCAG 2.2 AA verification. The branch intentionally does not change the active public theme or deploy any code.
+
+### Preview-workspace refinement (2026-11-02)
+- A secure in-Studio, sandboxed responsive preview (desktop/tablet/mobile) uses existing publication-scoped tokens and persisted theme settings; visitors cannot publish from the preview.
+- An explicit external-tab link and preview-token refresh control remain available. The responsive iframe uses the requested device width, horizontally scrollable on narrow screens rather than misreporting the viewport.
+- Live unsaved settings preview **remains out of scope** until a separate secure draft-preview API is designed and tested; do not confuse saved-settings preview with live draft changes.

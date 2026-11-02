@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, ExternalLink, Laptop, Monitor, Smartphone } from "lucide-react";
+import { ArrowLeft, ExternalLink, Laptop, Monitor, RefreshCw, Smartphone } from "lucide-react";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
 
@@ -7,6 +7,7 @@ interface ThemePreviewWorkspaceProps {
   themeName: string;
   url: string;
   onBack: () => void;
+  onRefresh: () => void;
 }
 
 const VIEWPORTS = [
@@ -22,7 +23,7 @@ const VIEWPORTS = [
  * embeds from executing active code in the Admin document.
  */
 export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
-  themeName, url, onBack,
+  themeName, url, onBack, onRefresh,
 }) => {
   const { tr } = useAdminLocale();
   const [selected, setSelected] = useState<(typeof VIEWPORTS)[number]["id"]>("desktop");
@@ -42,11 +43,16 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
             <p className="text-sm text-muted-foreground">{tr("Preview only — your published site is unchanged.")}</p>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={onRefresh} className="min-h-11 gap-2 text-sm">
+          <RefreshCw aria-hidden="true" className="size-4" />{tr("Refresh preview")}
+        </Button>
         <a href={url} target="_blank" rel="noopener noreferrer"
           className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ExternalLink aria-hidden="true" className="size-4" />
           {tr("Open preview in new tab")}
         </a>
+        </div>
       </header>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/20 p-3">
         <div role="group" aria-label={tr("Preview device size")} className="flex flex-wrap items-center gap-1">
@@ -61,7 +67,7 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
         <p className="text-xs text-muted-foreground">{viewport.width}px · {tr("Saved theme settings")}</p>
       </div>
       <div className="flex min-h-[55dvh] w-full justify-center overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4">
-        <div style={{ width: viewport.width, maxWidth: "100%" }}
+        <div style={{ width: viewport.width, minWidth: viewport.width }}
           className="relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
           {!loaded && (
             <div role="status" className="absolute inset-0 flex items-center justify-center bg-background text-sm text-muted-foreground">

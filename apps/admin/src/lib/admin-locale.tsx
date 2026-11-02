@@ -407,6 +407,7 @@ const translations: Record<string, string> = {
   "Plugin record saved.": "تم حفظ سجل الإضافة.",
   "No plugin data available.": "لا تتوفر بيانات للإضافة.",
   "Themes Manager": "إدارة القوالب",
+  "Refresh preview": "تحديث المعاينة",
   "Theme preview": "معاينة القالب",
   "Preview only — your published site is unchanged.": "معاينة فقط — لن يتغير موقعك المنشور.",
   "Open preview in new tab": "فتح المعاينة في تبويب جديد",
