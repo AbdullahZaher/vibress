@@ -22,13 +22,13 @@ export function toColorPickerHex(color: unknown): string {
   return "#000000";
 }
 
-/** Groups only actual schema-defined settings; no fabricated design controls. */
 /** Schema keys may be camelCase; the UI must not show raw implementation identifiers. */
 export function themeFieldLabel(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
+/** Groups only actual schema-defined settings; no fabricated design controls. */
 export function themeSettingCategory(key: string): string {
   if (/color|background|accent|palette/i.test(key)) return "Colors";
   if (/font|typography|typeface/i.test(key)) return "Typography";
@@ -188,8 +188,8 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             <section key={category} aria-label={tr(category)} className="space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
               <h5 className="border-b border-border/60 pb-3 text-base font-semibold text-foreground">{tr(category)}</h5>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {fields.map(([key, definition], index) => {
-            const inputId = `${idPrefix}-${index}`;
+          {fields.map(([key, definition]) => {
+            const inputId = `${idPrefix}-${Object.keys(detail.settingsSchema).indexOf(key)}`;
             const descriptionId = `${inputId}-description`;
             const value = draft[key] ?? definition.default;
             const describedBy = definition.description ? descriptionId : undefined;
