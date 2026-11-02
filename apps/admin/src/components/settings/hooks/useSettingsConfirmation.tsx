@@ -30,6 +30,7 @@ export function useSettingsConfirmation() {
       onClose={() => settle(false)}
       title={tr("Confirm settings change")}
       className="settings-confirmation-dialog"
+      overlayClassName="bg-black/40 dark:bg-black/55 backdrop-blur-xs"
     >
       <p className="text-sm leading-relaxed text-muted-foreground">{pending?.message}</p>
       <div className="mt-6 flex flex-wrap justify-end gap-2">

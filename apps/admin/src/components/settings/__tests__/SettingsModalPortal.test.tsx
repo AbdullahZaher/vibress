@@ -93,4 +93,42 @@ describe("SettingsModalPortal accessible dialog", () => {
     expect(closeConfirm).toHaveBeenCalledOnce();
   });
 
+  it("prioritizes nested confirmation dialog for Escape and Tab containment", () => {
+    const onModalClose = vi.fn();
+    act(() => root.render(
+      <SettingsModalPortal isOpen onClose={onModalClose} title="Danger zone">
+        <div>
+          <button type="button" id="portal-btn">Portal Button</button>
+        </div>
+      </SettingsModalPortal>,
+    ));
+
+    // Simulate opening a confirmation dialog portaled onto document.body
+    const confirmationDialog = document.createElement("div");
+    confirmationDialog.setAttribute("role", "dialog");
+    confirmationDialog.setAttribute("aria-modal", "true");
+    confirmationDialog.className = "settings-confirmation-dialog";
+    const confirmBtn = document.createElement("button");
+    confirmBtn.id = "confirm-btn";
+    confirmationDialog.appendChild(confirmBtn);
+    document.body.appendChild(confirmationDialog);
+
+    confirmBtn.focus();
+    expect(document.activeElement).toBe(confirmBtn);
+
+    // Press Tab while in nested dialog: SettingsModalPortal must not steal focus
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true })));
+    expect(document.activeElement).toBe(confirmBtn);
+
+    // Press Escape while nested dialog is open: SettingsModalPortal must not close
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(onModalClose).not.toHaveBeenCalled();
+
+    // Clean up nested dialog
+    confirmationDialog.remove();
+
+    // Now Escape should close the SettingsModalPortal
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(onModalClose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -36,10 +36,12 @@ describe("SocialLinksCard Component", () => {
     });
 
     expect(container.textContent).toContain("Social links");
-    expect(container.textContent).toContain("0 links");
+    const toggle = container.querySelector("button[aria-expanded]") as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("renders count when links are provided", () => {
+  it("renders safely and expands to display links when links are provided", () => {
     const mockLinks: SocialLink[] = [
       { id: "1", platform: "github", label: "GitHub", url: "https://github.com/example" },
       { id: "2", platform: "x", label: "X", url: "https://x.com/example" },
@@ -55,7 +57,17 @@ describe("SocialLinksCard Component", () => {
       );
     });
 
-    expect(container.textContent).toContain("2 links");
+    expect(container.textContent).toContain("Social links");
+    const toggle = container.querySelector("button[aria-expanded]") as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    act(() => {
+      toggle.click();
+    });
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelectorAll("fieldset")).toHaveLength(2);
   });
 
   it("expands and allows adding a link", () => {
@@ -69,13 +81,11 @@ describe("SocialLinksCard Component", () => {
       );
     });
 
-    const manageBtn = Array.from(container.querySelectorAll("button")).find(
-      (btn) => btn.textContent?.includes("Manage")
-    );
-    expect(manageBtn).toBeDefined();
+    const toggle = container.querySelector("button[aria-expanded]") as HTMLButtonElement;
+    expect(toggle).toBeTruthy();
 
     act(() => {
-      manageBtn?.click();
+      toggle.click();
     });
 
     const addBtn = Array.from(container.querySelectorAll("button")).find(

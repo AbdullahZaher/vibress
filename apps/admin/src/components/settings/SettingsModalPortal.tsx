@@ -42,6 +42,10 @@ export const SettingsModalPortal: React.FC<SettingsModalPortalProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       // The topmost confirmation owns both Tab and Escape keyboard navigation.
       if (document.querySelector(".settings-confirmation-dialog")) return;
+      const allModals = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'));
+      const isTopmost = allModals.length === 0 || allModals[allModals.length - 1] === dialogRef.current || (dialogRef.current?.contains(allModals[allModals.length - 1] ?? null) ?? false);
+      if (!isTopmost) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current?.();
@@ -54,10 +58,15 @@ export const SettingsModalPortal: React.FC<SettingsModalPortalProps> = ({
       if (!first || !last) {
         event.preventDefault();
         dialogRef.current?.focus();
-      } else if (!dialogRef.current?.contains(document.activeElement) ||
-        (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current))) {
+      } else if (
+        document.activeElement === dialogRef.current ||
+        !dialogRef.current?.contains(document.activeElement)
+      ) {
         event.preventDefault();
         (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
       } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
         first.focus();
