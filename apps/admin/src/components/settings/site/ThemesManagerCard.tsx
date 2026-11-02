@@ -398,7 +398,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               {previewFallbackUrl && <p role="status" className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                 {tr("If the preview did not open, use this link.")}{" "}
                 <a href={previewFallbackUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary underline underline-offset-4">{tr("Open preview")}</a>
-              </p>
+              </p>}
               {editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
