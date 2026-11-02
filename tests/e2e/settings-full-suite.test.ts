@@ -340,7 +340,7 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await anonContext.close();
   });
 
-  test("9. Themes Drawer & Danger Zone UI Execution", async ({ page }) => {
+  test("9. Theme Studio responsive review & Danger Zone UI Execution", async ({ page }) => {
     await loginAsAdmin(page);
     await page.goto(`${BASE_URL}/admin/settings/site#site`);
     await page.waitForLoadState("networkidle");
@@ -352,7 +352,7 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await expect(manageThemesBtn).toBeVisible({ timeout: 5000 });
     await manageThemesBtn.click();
 
-    // Verify Themes Drawer is displayed with zero-rebuild notice
+    // Verify the Studio entry point and capture REAL seeded publication screenshots
     await expect(page.getByRole("dialog", { name: "Themes Manager" })).toBeVisible({
       timeout: 5000,
     });
@@ -362,7 +362,20 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       timeout: 5000,
     });
 
-    // Close Themes Drawer
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const dialog = page.getByRole("dialog", { name: "Themes Manager" });
+      await expect(dialog).toBeVisible();
+      const bounds = await dialog.boundingBox();
+      expect(bounds?.width).toBeLessThanOrEqual(width + 1);
+      await page.screenshot({
+        path: "test-results/design-theme-studio-" + width + "-en.png",
+        animations: "disabled",
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    // Close Theme Studio
     await page.click('button[aria-label="Close themes drawer"]');
 
     // Navigate to Advanced Settings
