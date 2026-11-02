@@ -78,7 +78,8 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
       <div className={"flex min-h-[55dvh] w-full overflow-x-auto rounded-xl border border-border bg-muted/30 p-2 sm:p-4 " +
         (selected === "mobile" ? "justify-center" : "justify-start 2xl:justify-center")}>
         <div style={{
-          width: selected === "mobile" ? "min(100%, 390px)" : viewport.width,
+          width: selected === "mobile" ? "100%" : viewport.width,
+          maxWidth: selected === "mobile" ? 390 : undefined,
           minWidth: selected === "mobile" ? 0 : viewport.width,
         }}
           className="relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden rounded-lg border border-border bg-background shadow-sm">

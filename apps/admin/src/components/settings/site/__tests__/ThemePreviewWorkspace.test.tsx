@@ -48,7 +48,8 @@ describe("ThemePreviewWorkspace", () => {
     expect(frame.style.width).toBe("1200px");
     const mobile = [...container.querySelectorAll("button")].find(x => x.textContent?.includes("Mobile"));
     await act(async () => { mobile?.click(); });
-    expect(container.querySelector("iframe")?.parentElement?.style.width).toBe("min(100%, 390px)");
+    expect(container.querySelector("iframe")?.parentElement?.style.width).toBe("100%");
+    expect(container.querySelector("iframe")?.parentElement?.style.maxWidth).toBe("390px");
     expect(container.querySelector("iframe")?.parentElement?.style.minWidth).toBe("0px");
     expect(container.textContent).toContain("Up to 390px");
     expect(mobile?.getAttribute("aria-pressed")).toBe("true");
