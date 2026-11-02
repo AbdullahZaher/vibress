@@ -72,6 +72,12 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
+  const changedKeys = detail
+    ? Object.keys(detail.settingsSchema).filter((key) => JSON.stringify(draft[key]) !== JSON.stringify(initial[key]))
+    : [];
+  const colorFields = detail ? Object.entries(detail.settingsSchema)
+    .filter(([, definition]) => definition.type === "color")
+    .slice(0, 6) : [];
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -172,7 +178,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
         <AlertCircle className="size-4 shrink-0" />{tr(error)}
         {!detail && !loading && <Button variant="outline" size="sm" className="min-h-11" onClick={() => setRetry((value) => value + 1)}>{tr("Retry")}</Button>}
       </div>}
-      {success && <p role="status" className="flex gap-2 text-xs text-emerald-600"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
+      {success && <p role="status" className="flex gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4 shrink-0" />{tr("Theme settings saved.")}</p>}
 
       {loading ? (
         <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -183,7 +189,8 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
           {tr("This theme does not define any customizable fields in settings.json.")}
         </p>
       ) : detail ? (
-        <div className="space-y-7">
+        <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(17rem,0.85fr)]">
+          <div className="min-w-0 space-y-6">
           {groupedThemeSettings(detail.settingsSchema).map(([category, fields]) => (
             <section key={category} aria-label={tr(category)} className="space-y-4 rounded-xl border border-border/70 bg-card p-4 sm:p-5">
               <h5 className="border-b border-border/60 pb-3 text-base font-semibold text-foreground">{tr(category)}</h5>
@@ -194,7 +201,7 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
             const value = draft[key] ?? definition.default;
             const describedBy = definition.description ? descriptionId : undefined;
             return (
-              <div key={key} className="space-y-1.5 min-w-0">
+              <div key={key} className="min-w-0 space-y-2">
                 <label htmlFor={inputId} className="block text-sm font-semibold text-foreground">
                   {tr(definition.label || themeFieldLabel(key))}
                 </label>
@@ -274,6 +281,51 @@ export const ThemeSettingsEditor: React.FC<ThemeSettingsEditorProps> = ({
               </div>
             </section>
           ))}
+          </div>
+          <aside className="min-w-0 space-y-5 rounded-xl border border-border/70 bg-muted/20 p-4 sm:p-5 xl:sticky xl:top-3"
+            aria-label={tr("Design changes overview")}>
+            <div className="space-y-1">
+              <h5 className="text-base font-semibold text-foreground">{tr("Design changes overview")}</h5>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {tr("This panel reflects field values only, not a live website preview. Save settings to preview the published rendering.")}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-3 py-3 text-sm" role="status">
+              <p className="font-medium text-foreground">
+                {dirty ? tr("Unsaved changes") + ": " + changedKeys.length : tr("All changes saved")}
+              </p>
+              {changedKeys.length > 0 && (
+                <ul className="mt-2 space-y-1.5 text-sm text-muted-foreground">
+                  {changedKeys.map((key) => (
+                    <li key={key} className="flex items-start gap-2">
+                      <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-primary" />
+                      <span className="break-words">{tr(detail.settingsSchema[key]?.label || themeFieldLabel(key))}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {colorFields.length > 0 && (
+              <section aria-label={tr("Selected colors")} className="space-y-3">
+                <h6 className="text-sm font-semibold text-foreground">{tr("Selected colors")}</h6>
+                <div className="grid grid-cols-2 gap-3">
+                  {colorFields.map(([key, definition]) => (
+                    <div key={key} className="min-w-0 space-y-1.5">
+                      <div className="h-14 rounded-lg border border-border shadow-xs" aria-hidden="true"
+                        style={{ backgroundColor: toColorPickerHex(draft[key] ?? definition.default) }} />
+                      <p className="break-words text-xs font-medium text-foreground">{tr(definition.label || themeFieldLabel(key))}</p>
+                      <p className="break-all font-mono text-xs text-muted-foreground">{String(draft[key] ?? definition.default)}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            {Object.keys(detail.settingsSchema).length > 0 && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {tr("Theme layout and script behavior must be checked in the full preview.")}
+              </p>
+            )}
+          </aside>
         </div>
       ) : null}
     </section>
