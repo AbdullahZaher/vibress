@@ -280,12 +280,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
       setUploadProgress("installing");
       await uploadThemeApi(uploadFile);
       setUploadProgress("success");
+      setUploadFile(null);
       await load();
-      setTimeout(() => {
-        handleCloseUpload();
-        setUploadFile(null);
-        setUploadProgress("idle");
-      }, 1200);
+      // Keep the confirmed success state until the user chooses to return to the gallery.
     } catch (err: unknown) {
       setUploadProgress("error");
       const e = err as { message?: string };
@@ -567,14 +564,14 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </Button>
                 <Button
                   size="sm"
-                  disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
-                  onClick={handleUploadSubmit}
+                  disabled={uploadProgress !== "success" && (!uploadFile || uploadProgress === "validating" || uploadProgress === "installing")}
+                  onClick={uploadProgress === "success" ? handleCloseUpload : handleUploadSubmit}
                   className="text-sm min-h-11 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    tr("Install")
+                    uploadProgress === "success" ? tr("Back to themes") : tr("Install")
                   )}
                 </Button>
               </div>
