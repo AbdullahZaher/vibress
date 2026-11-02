@@ -27,6 +27,7 @@ function createValidPngBuffer(): Buffer {
   ihdrChunk.writeUInt32BE(ihdrCrc, 21);
 
   const rawRaster = Buffer.alloc(10 * (1 + 10 * 3), 100);
+  for (let y = 0; y < 10; y++) rawRaster[y * (1 + 10 * 3)] = 0; // Valid PNG unfiltered scanlines.
   const compressedIdat = zlib.deflateSync(rawRaster);
   const idatTypeAndData = Buffer.concat([Buffer.from("IDAT", "ascii"), compressedIdat]);
   const idatCrc = computeCrc32(idatTypeAndData);
@@ -114,6 +115,12 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
     await expect(approveVisualReview({ manifestPath, reviewerName: "Auditor", reviewerRole: "QA",
       commitSha: dummyCommit, score: 9.8, observations: {},
     })).rejects.toThrow(/Documented, substantive/);
+  });
+
+  it("refuses approval without the protected signing key", async () => {
+    delete process.env.THEME_STUDIO_REVIEW_SIGNING_KEY;
+    expect(() => computeApprovalSignature(dummyCommit, [], "Reviewer", new Date().toISOString(), 9.5))
+      .toThrow(/protected THEME_STUDIO_REVIEW_SIGNING_KEY/);
   });
 
   it("fails closed when automated checks have not passed", async () => {

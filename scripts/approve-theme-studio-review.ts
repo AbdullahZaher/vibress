@@ -39,7 +39,6 @@ export function computeApprovalSignature(
   observations: Record<string, string> = {},
   notes?: string,
 ): string {
-  const sortedHashes = [...screenshotHashes].sort().join(":");
   const signingKey = process.env.THEME_STUDIO_REVIEW_SIGNING_KEY;
   if (!signingKey || !/^[a-f0-9]{64,}$/i.test(signingKey) || signingKey.length % 2 !== 0) {
     throw new Error("A protected THEME_STUDIO_REVIEW_SIGNING_KEY (32+ random bytes, hex) is required.");

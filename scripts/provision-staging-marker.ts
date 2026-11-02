@@ -131,7 +131,7 @@ export async function main() {
   await client.connect();
 
   try {
-    const { markerToken, targetPublicationId, environmentType } = await provisionStagingMarker(
+    const { targetPublicationId, environmentType } = await provisionStagingMarker(
       client,
     );
     console.log(`[STAGING_PROVISION] Successfully provisioned staging environment marker.`);
