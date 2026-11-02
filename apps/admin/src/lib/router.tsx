@@ -207,6 +207,7 @@ export const adminRoutes: AdminRouteDefinition[] = [
         onNavigate={onNavigate}
         canReadAnalytics={can("analytics.read")}
         canReadPosts={can("posts.read")}
+        canEditPosts={can("posts.edit")}
       />
     ),
   },
