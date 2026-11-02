@@ -69,7 +69,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   useEffect(() => {
     if (!isDrawerOpen) return;
-    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label={tr("Close themes drawer")}]')?.focus();
+    drawerRef.current?.querySelector<HTMLButtonElement>('[data-theme-studio-close]')?.focus();
     return () => {
       openingControlRef.current?.focus();
     };
@@ -80,7 +80,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (isConfirmOpen) return;
     const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
     if (isUploadOpen) {
-      focusRoot?.querySelector<HTMLButtonElement>('[aria-label={tr("Close theme upload")}]')?.focus();
+      focusRoot?.querySelector<HTMLButtonElement>('[data-theme-upload-close]')?.focus();
     }
     const trapTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || !focusRoot) return;
@@ -382,7 +382,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 </Button>
                 <button
                   type="button"
-                  aria-label="Close themes drawer"
+                  data-theme-studio-close
+                  aria-label={tr("Close themes drawer")}
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -471,6 +472,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <button
                   type="button"
                   onClick={handleCloseUpload}
+                  data-theme-upload-close
                   aria-label={tr("Close theme upload")}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
