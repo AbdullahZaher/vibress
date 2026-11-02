@@ -22,7 +22,6 @@ import {
   AnalyticsRange,
   AnalyticsOverview,
   AnalyticsTimeseriesPoint,
-  formatCompact,
 } from "../../lib/api/analytics";
 
 interface AnalyticsDashboardProps {
@@ -297,6 +296,33 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   );
 }
 
+/** Period metrics and all-time totals must never share an unlabeled denominator. */
+function MetricCard({
+  label,
+  value,
+  scope,
+  change,
+}: {
+  label: string;
+  value: number;
+  scope: string;
+  change?: { percentage: number | null; isNew: boolean };
+}) {
+  const { formatNumber, tr } = useAdminLocale();
+  return (
+    <Card className="flex min-w-0 flex-col justify-between gap-3 border-border/70 p-5 shadow-2xs">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+        <strong className="text-3xl font-semibold tracking-tight text-foreground tabular-nums">{formatNumber(value)}</strong>
+        {change && <ChangeBadge change={change} current={value} />}
+      </div>
+      <span className="text-xs text-muted-foreground">
+        {scope}{change ? ` · ${tr("Compared with previous period")}` : ""}
+      </span>
+    </Card>
+  );
+}
+
 export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
   user,
   onNavigate,
@@ -308,9 +334,8 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
     "overview" | "web" | "newsletters" | "growth"
   >("overview");
   const [dateLabel, setDateLabel] = useState("Last 30 days");
-  const [trafficMetric, setTrafficMetric] = useState<"views" | "visitors">(
-    "views",
-  );
+  const [trafficMetric, setTrafficMetric] = useState<"views" | "visitors">("views");
+  const [overviewMetric, setOverviewMetric] = useState<"views" | "visitors" | "members">("views");
   const [topContentType, setTopContentType] = useState<
     "all" | "posts" | "pages"
   >("all");
@@ -355,9 +380,10 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
   const totalViews = data?.summary.views ?? 0;
   const totalVisitors = data?.summary.visitors ?? 0;
+  const maxTopContentViews = Math.max(1, ...topContent.map((item) => item.views));
 
   return (
-    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl space-y-8">
+    <Tabs value={analyticsTab} onValueChange={(value) => setAnalyticsTab(value as typeof analyticsTab)} className="mx-auto w-full max-w-7xl min-w-0 space-y-8">
       {/* Page Title Header */}
       <AdminPageHeader
         title={tr("Dashboard")}
@@ -418,7 +444,7 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
 
       {/* Navigation Tabs & Date Filter Bar */}
       {canReadAnalytics && <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <TabsList className="min-w-0 max-w-full border-0 bg-transparent p-0" ariaLabel={tr("Analytics")}>
+        <TabsList className="w-full min-w-0 max-w-full border-0 bg-transparent p-0 sm:w-auto" ariaLabel={tr("Analytics")}>
           {(["overview", "web", "newsletters", "growth"] as const).map((t) => (
             <TabsTrigger key={t} value={t} className="min-h-11 shrink-0 px-3.5">
               {tr(t === "web" ? "Web traffic" : t.charAt(0).toUpperCase() + t.slice(1))}
@@ -457,67 +483,43 @@ export const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
         <>
           {/* TAB 1: OVERVIEW */}
           <TabsContent value="overview" className="mt-0 space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Members KPI Card */}
-                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium mb-1">
-                        <Users className="h-3.5 w-3.5" /> {tr("Members")}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {data.summary.members.toLocaleString(locale)}
-                        </span>
-                        <ChangeBadge change={data.comparison.members} current={data.summary.members} />
-                      </div>
+              <section className="space-y-4" aria-labelledby="performance-overview-title">
+                <div className="space-y-1">
+                  <h2 id="performance-overview-title" className="text-base font-semibold tracking-tight text-foreground">{tr("Performance overview")}</h2>
+                  <p className="text-sm text-muted-foreground">{tr("Key metrics for the selected period.")}</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MetricCard label={tr("Total views")} value={totalViews} scope={tr("Selected period")} change={data.comparison.views} />
+                  <MetricCard label={tr("Unique Visitors")} value={totalVisitors} scope={tr("Selected period")} change={data.comparison.visitors} />
+                  <MetricCard label={tr("New members")} value={data.comparison.members.current} scope={tr("Selected period")} change={data.comparison.members} />
+                  <MetricCard label={tr("Current members")} value={data.summary.members} scope={tr("Current total")} />
+                </div>
+                <Card className="space-y-5 border-border/70 p-4 shadow-2xs sm:p-6">
+                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div className="space-y-1">
+                      <h3 className="text-sm font-semibold text-foreground">{tr("Views and visitors over time")}</h3>
+                      <p className="text-xs text-muted-foreground">{tr("Daily activity")} · {tr(dateLabel)}</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAnalyticsTab("growth")}
-                      className="min-h-10 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      {tr("View details")}
-                    </Button>
+                    <div className="flex max-w-full flex-wrap gap-1.5" aria-label={tr("Traffic and audience")}>
+                      {(["views", "visitors", "members"] as const).map((metric) => (
+                        <ToggleButton
+                          key={metric}
+                          pressed={overviewMetric === metric}
+                          onClick={() => setOverviewMetric(metric)}
+                        >
+                          {tr(metric === "members" ? "New members" : metric)}
+                        </ToggleButton>
+                      ))}
+                    </div>
                   </div>
                   <AreaChart
                     points={data.timeseries}
-                    metric="members"
-                    color="#60a5fa"
+                    metric={overviewMetric}
+                    color={overviewMetric === "members" ? "#1d4ed8" : "#047857"}
+                    size="large"
                   />
                 </Card>
-
-                {/* Unique Visitors KPI Card */}
-                <Card className="p-5 border-border/70 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-sm text-muted-foreground font-medium mb-1">
-                        <Globe className="h-3.5 w-3.5" /> {tr("Unique Visitors")}
-                      </div>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-2xl font-bold text-foreground tabular-nums">
-                          {totalVisitors.toLocaleString(locale)}
-                        </span>
-                        <ChangeBadge change={data.comparison.visitors} current={totalVisitors} />
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAnalyticsTab("web")}
-                      className="min-h-10 text-sm text-muted-foreground hover:text-foreground"
-                    >
-                      {tr("View details")}
-                    </Button>
-                  </div>
-                  <AreaChart
-                    points={data.timeseries}
-                    metric="visitors"
-                    color="#3eb083"
-                  />
-                </Card>
-              </div>
+              </section>
 
               {/* Latest Post Performance */}
               <div className="space-y-3">
