@@ -447,7 +447,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                 <div className="flex items-center gap-2">
                   <UploadCloud className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-bold text-foreground">
-                    Upload Theme Package
+                    {tr("Upload Theme Package")}
                   </h4>
                 </div>
                 <button
@@ -483,8 +483,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleFileDrop}
-                    onClick={() => fileInputRef.current?.click()}
-                    role="group"
+                    onClick={(event) => { if (event.target !== fileInputRef.current) fileInputRef.current?.click(); }}
+                    onKeyDown={(event) => {
+                      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-describedby="theme-zip-help"
                     aria-label={tr("Upload Theme Package")}
                     className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer ${
                       dragOver
@@ -499,7 +507,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                       type="file"
                       accept=".zip"
                       onChange={handleFileSelect}
-                      className="hidden"
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={tr("Choose ZIP file")}
+                      className="sr-only"
                     />
                     {uploadFile ? (
                       <div className="flex flex-col items-center gap-1.5">
@@ -509,8 +519,8 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     ) : (
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
-                        <span className="text-xs font-semibold">{tr("Drop theme.zip here")}</span>
-                        <span className="text-xs text-muted-foreground">{tr("or click to browse")}</span>
+                        <span className="text-sm font-semibold">{tr("Drop theme.zip here")}</span>
+                        <span id="theme-zip-help" className="text-sm text-muted-foreground">{tr("or click to browse")}</span>
                       </div>
                     )}
                   </div>
