@@ -55,6 +55,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const publicationGeneration = useRef(0);
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
@@ -138,6 +139,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   useEffect(() => {
     void load();
     const onPublicationChange = () => {
+      publicationGeneration.current += 1;
       requestSequence.current += 1;
       setActive(null);
       setThemes([]);
@@ -155,6 +157,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     };
     window.addEventListener("vibress:publication-changed", onPublicationChange);
     return () => {
+      publicationGeneration.current += 1;
       requestSequence.current += 1;
       window.removeEventListener("vibress:publication-changed", onPublicationChange);
     };
@@ -196,42 +199,44 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleActivate = async (id: string) => {
     const selected = themes.find((theme) => theme.manifest.id === id);
     if (!selected || active?.themeId === id || activating || deleting) return;
+    const scope = publicationGeneration.current;
     if (!(await confirm(
       tr("Publish this theme to your live website?") + " " + selected.manifest.name + ". " + tr("This replaces the currently published theme:") + " " + (themes.find((theme) => theme.manifest.id === active?.themeId)?.manifest.name || active?.themeId || "—"),
       { confirmLabel: tr("Publish theme") },
     ))) return;
-    const scope = requestSequence.current;
+    if (scope !== publicationGeneration.current) return;
     setActivating(id);
     setActionError(null);
     setActionSuccess(null);
     try {
       const result = await activateThemeApi(id);
-      if (scope !== requestSequence.current) return;
+      if (scope !== publicationGeneration.current) return;
       setActive(result.theme);
       setActionSuccess(tr("Theme published successfully."));
       await load();
     } catch (error: unknown) {
-      if (scope === requestSequence.current) setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
+      if (scope === publicationGeneration.current) setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
     } finally {
       setActivating(null);
     }
   };
 
   const handleDelete = async (id: string) => {
+    const scope = publicationGeneration.current;
     if (!(await confirm(tr("Uninstall this theme?") + " " + id, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
-    const scope = requestSequence.current;
+    if (scope !== publicationGeneration.current) return;
     setDeleting(id);
     setActionError(null);
     setActionSuccess(null);
     try {
       await deleteThemeApi(id);
-      if (scope !== requestSequence.current) return;
+      if (scope !== publicationGeneration.current) return;
       setActionSuccess(tr("Theme uninstalled."));
       await load();
     } catch (error: unknown) {
-      if (scope === requestSequence.current) setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
+      if (scope === publicationGeneration.current) setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
     } finally {
       setDeleting(null);
     }
@@ -244,16 +249,16 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setPreviewFallbackUrl(null);
     setPreviewThemeName(null);
     setPreviewLoading(true);
-    const scope = requestSequence.current;
+    const scope = publicationGeneration.current;
     try {
       const res = await createThemePreviewApi(themeId);
-      if (scope !== requestSequence.current) return;
+      if (scope !== publicationGeneration.current) return;
       setPreviewFallbackUrl("/preview/" + encodeURIComponent(res.previewToken));
       setPreviewThemeName(theme.manifest.name);
     } catch (error: unknown) {
-      if (scope === requestSequence.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
+      if (scope === publicationGeneration.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
     } finally {
-      if (scope === requestSequence.current) setPreviewLoading(false);
+      if (scope === publicationGeneration.current) setPreviewLoading(false);
     }
   };
 
