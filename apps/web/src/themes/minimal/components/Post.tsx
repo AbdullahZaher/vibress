@@ -1,3 +1,5 @@
+import { getPreviewNavigation } from "../../../lib/preview-link-server";
+import { rewritePreviewHtml } from "../../../lib/preview-links";
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemePostProps, themeSetting } from "../../types";
@@ -17,6 +19,8 @@ export async function Post(props: ThemePostProps) {
     true,
   ) as boolean;
   const dateLocale = props.site.locale || "en";
+
+  const previewNavigation = await getPreviewNavigation();
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -77,7 +81,7 @@ export async function Post(props: ThemePostProps) {
           )}
 
           <section className="vb-content studio-html-content">
-            <div dangerouslySetInnerHTML={{ __html: post.html || "" }} />
+            <div dangerouslySetInnerHTML={{ __html: rewritePreviewHtml(post.html || "", previewNavigation) }} />
           </section>
 
           <CommentSection

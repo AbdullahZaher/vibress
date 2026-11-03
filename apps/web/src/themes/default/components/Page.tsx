@@ -1,3 +1,5 @@
+import { getPreviewNavigation } from "../../../lib/preview-link-server";
+import { rewritePreviewHtml } from "../../../lib/preview-links";
 import React from "react";
 import { ThemePageProps } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -11,6 +13,8 @@ export async function Page(props: ThemePageProps) {
     primaryLocale: props.site.primaryLocale,
     enabledLocales: props.site.enabledLocales,
   });
+
+  const previewNavigation = await getPreviewNavigation();
 
   return (
     <ThemeLayout settings={props.settings} site={props.site}>
@@ -34,7 +38,7 @@ export async function Page(props: ThemePageProps) {
           </header>
 
           <section className="vb-content studio-html-content">
-            <div dangerouslySetInnerHTML={{ __html: pageObj.html || "" }} />
+            <div dangerouslySetInnerHTML={{ __html: rewritePreviewHtml(pageObj.html || "", previewNavigation) }} />
           </section>
         </article>
       </main>

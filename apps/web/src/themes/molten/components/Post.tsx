@@ -1,3 +1,6 @@
+import { getPreviewNavigation } from "../../../lib/preview-link-server";
+import { rewritePreviewHtml } from "../../../lib/preview-links";
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemePostProps } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -22,6 +25,8 @@ export async function Post(props: ThemePostProps) {
     })
     .toUpperCase();
 
+  const previewNavigation = await getPreviewNavigation();
+
   return (
     <ThemeLayout settings={settings} site={site} bodyClass="post-template">
       <main className="site-main">
@@ -33,12 +38,12 @@ export async function Post(props: ThemePostProps) {
                 <>
                   {" "}
                   {t("post.in")}{" "}
-                  <a
+                  <PreviewAnchor
                     className="vb-article-tag"
                     href={`/tag/${primaryTag.slug}`}
                   >
                     {primaryTag.name}
-                  </a>
+                  </PreviewAnchor>
                 </>
               )}{" "}
               —{" "}
@@ -48,13 +53,13 @@ export async function Post(props: ThemePostProps) {
               {site.commentsEnabled !== false && (
                 <>
                   {" "}—{" "}
-                  <a
+                  <PreviewAnchor
                     href="#comments-container"
                     className="vb-article-comments-badge"
                     style={{ textDecoration: "none", color: "inherit", fontWeight: 700 }}
                   >
                     💬 {post.commentCount ?? 0}
-                  </a>
+                  </PreviewAnchor>
                 </>
               )}
             </span>
@@ -81,7 +86,7 @@ export async function Post(props: ThemePostProps) {
 
           <div
             className="vb-content vb-canvas studio-html-content"
-            dangerouslySetInnerHTML={{ __html: post.html || "" }}
+            dangerouslySetInnerHTML={{ __html: rewritePreviewHtml(post.html || "", previewNavigation) }}
           />
 
           <CommentSection
@@ -101,9 +106,9 @@ export async function Post(props: ThemePostProps) {
               {/* Previous post placeholder */}
             </div>
             <div className="navigation-middle">
-              <a href="#" className="vb-button-share">
+              <PreviewAnchor href="#" className="vb-button-share">
                 {t("post.share")}
-              </a>
+              </PreviewAnchor>
             </div>
             <div className="navigation-next-wrapper">
               {/* Next post placeholder */}

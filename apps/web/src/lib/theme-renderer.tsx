@@ -12,6 +12,8 @@ import { getTheme, getFallbackTheme } from "../themes/registry";
 import { ThemeSiteSettings } from "./theme-host";
 import { LiquidCommentsHydrator } from "../components/comments/LiquidCommentsHydrator";
 import { DefaultExtensionView } from "../components/extensions/DefaultExtensionView";
+import { getPreviewNavigation } from "./preview-link-server";
+import { rewritePreviewHtml } from "./preview-links";
 import { THEME_CACHE_TTL_MS, getThemeStorageRoot, getThemeAssetRevision } from "./theme-renderer-environment";
 
 const themeFilesCache = new Map<string, { files: Map<string, string>; loadedAt: number }>();
@@ -479,7 +481,7 @@ export async function renderThemeTemplate(
 
   try {
     const rawHtml = await engine.renderFile(templateName, fullContext);
-    const cleanHtml = cleanThemeHtml(rawHtml);
+    const cleanHtml = rewritePreviewHtml(cleanThemeHtml(rawHtml), await getPreviewNavigation());
 
     // Check if theme has a primary stylesheet that should be linked
     let cssHref: string | null = null;

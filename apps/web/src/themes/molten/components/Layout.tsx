@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
@@ -73,13 +74,13 @@ export function ThemeLayout({
             </div>
             <div className="vb-powered-by">
               Powered by{" "}
-              <a
+              <PreviewAnchor
                 href="https://vibress.com/"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Vibress
-              </a>
+              </PreviewAnchor>
             </div>
           </div>
         </footer>

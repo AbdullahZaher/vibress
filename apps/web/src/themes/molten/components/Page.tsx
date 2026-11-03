@@ -1,9 +1,13 @@
+import { getPreviewNavigation } from "../../../lib/preview-link-server";
+import { rewritePreviewHtml } from "../../../lib/preview-links";
 import React from "react";
 import { ThemePageProps } from "../../types";
 import { ThemeLayout } from "./Layout";
 
 export async function Page(props: ThemePageProps) {
   const { page, settings, site } = props;
+
+  const previewNavigation = await getPreviewNavigation();
 
   return (
     <ThemeLayout settings={settings} site={site} bodyClass="page-template">
@@ -20,7 +24,7 @@ export async function Page(props: ThemePageProps) {
 
           <div
             className="vb-content vb-canvas studio-html-content"
-            dangerouslySetInnerHTML={{ __html: page.html || "" }}
+            dangerouslySetInnerHTML={{ __html: rewritePreviewHtml(page.html || "", previewNavigation) }}
           />
         </article>
       </main>
