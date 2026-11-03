@@ -20,7 +20,8 @@ export function toPreviewHref(
   // Never turn an external URL, custom protocol, or protocol-relative URL
   // into a bearer-token preview route.
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) ||
-      trimmed.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(trimmed)) {
+      trimmed.startsWith("//") || trimmed.includes("\\") ||
+      [...trimmed].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
     return href;
   }
 
