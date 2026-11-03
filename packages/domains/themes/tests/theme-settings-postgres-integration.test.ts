@@ -44,8 +44,8 @@ describe("Default theme settings with real PostgreSQL persistence", () => {
   it("publishes implicit Default settings, even under concurrent saves, without creating a configuration row", async () => {
     expect(await activeRepo.getActive(alpha)).toBeNull();
     await Promise.all([
-      service.updateThemeSettings("vibress-default", { accentColor: "#2468ac" }, "editor", alpha),
-      service.updateThemeSettings("vibress-default", { accentColor: "#13579b" }, "editor", alpha),
+      service.updateThemeSettings("vibress-default", { accentColor: "#2468ac" }, null, alpha),
+      service.updateThemeSettings("vibress-default", { accentColor: "#13579b" }, null, alpha),
     ]);
     const saved = await editorRepo.getThemeSettings("vibress-default", alpha);
     const effective = await service.getActiveTheme(alpha);
@@ -63,17 +63,17 @@ describe("Default theme settings with real PostgreSQL persistence", () => {
   });
 
   it("never activates a theme by saving inactive settings", async () => {
-    await service.updateThemeSettings("vibress-minimal", { accentColor: "#abcdef" }, "editor", alpha);
+    await service.updateThemeSettings("vibress-minimal", { accentColor: "#abcdef" }, null, alpha);
     expect((await service.getActiveTheme(alpha))?.manifest.id).toBe("vibress-default");
     expect((await editorRepo.getThemeSettings("vibress-minimal", alpha))?.accentColor).toBe("#abcdef");
     expect(await activeRepo.getActive(alpha)).toBeNull();
   });
 
   it("updates explicitly active settings and rejects stale compare-and-swap writes", async () => {
-    await service.activateTheme("vibress-default", "editor", undefined, alpha);
+    await service.activateTheme("vibress-default", null, undefined, alpha);
     const old = await activeRepo.getActive(alpha);
     if (!old) throw new Error("Fixture must have active Default theme");
-    await service.updateThemeSettings("vibress-default", { accentColor: "#991122" }, "editor", alpha);
+    await service.updateThemeSettings("vibress-default", { accentColor: "#991122" }, null, alpha);
     expect((await service.getActiveTheme(alpha))?.settings.accentColor).toBe("#991122");
 
     expect(await activeRepo.updateSettingsIfUnchanged(old, { accentColor: "#999999" }, alpha)).toBeNull();
@@ -89,15 +89,15 @@ describe("Default theme settings with real PostgreSQL persistence", () => {
     failingRepo.saveThemeSettings = async () => { throw new Error("Simulated editor settings failure"); };
     const failingService = new ThemeService(activeRepo, registry, failingRepo);
     await expect(failingService.updateThemeSettings(
-      "vibress-default", { accentColor: "#333333" }, "editor", alpha,
+      "vibress-default", { accentColor: "#333333" }, null, alpha,
     )).rejects.toThrow("Simulated editor settings failure");
     expect((await service.getActiveTheme(alpha))?.settings.accentColor).toBe("#991122");
   });
 
   it("restores saved settings after switching and keeps other publications isolated", async () => {
-    await service.activateTheme("vibress-minimal", "editor", undefined, alpha);
+    await service.activateTheme("vibress-minimal", null, undefined, alpha);
     expect((await service.getActiveTheme(alpha))?.settings.accentColor).toBe("#abcdef");
-    await service.activateTheme("vibress-default", "editor", undefined, alpha);
+    await service.activateTheme("vibress-default", null, undefined, alpha);
     expect((await service.getActiveTheme(alpha))?.settings.accentColor).toBe("#991122");
     expect((await service.getActiveTheme(beta))?.settings.accentColor).toBe("#f05230");
   });
