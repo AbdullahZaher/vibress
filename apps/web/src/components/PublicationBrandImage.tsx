@@ -6,11 +6,14 @@ import { useState } from "react";
 export function safePublicationImageUrl(input: unknown): string | null {
   if (typeof input !== "string") return null;
   const url = input.trim();
-  if (url.startsWith("/") && !url.startsWith("//") && !url.startsWith("/\\")) return url;
+  // WHATWG URL parsing treats backslashes as slashes and can strip embedded
+  // control characters. "/\\t/host" must not become a network-path URL.
+  if (/[\\\u0000-\u001f\u007f]/.test(url)) return null;
+  if (url.startsWith("/") && !url.startsWith("//")) return url;
   if (!/^https?:\/\//i.test(url)) return null;
   try {
     const parsed = new URL(url);
-    return parsed.hostname ? url : null;
+    return parsed.hostname && !parsed.username && !parsed.password ? url : null;
   } catch {
     return null;
   }

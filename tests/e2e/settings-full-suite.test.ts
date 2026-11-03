@@ -130,7 +130,7 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await page.keyboard.press("Enter");
     await expect(toggle).toHaveAttribute("aria-expanded", "true");
     await expect(identity.getByRole("button", { name: /رفع أيقونة|تغيير الأيقونة/ })).toBeVisible();
-    await expect(identity.getByRole("button", { name: /رفع شعار|تغيير الشعار/ })).toBeVisible();
+    await expect(identity.getByRole("button", { name: /رفع الشعار|تغيير الشعار/ })).toBeVisible();
     for (const width of [320, 390, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       const bounds = await identity.boundingBox();

@@ -26,7 +26,19 @@ describe("publication identity asset fallback", () => {
   it("accepts safe public media URLs and rejects unsafe or malformed URLs", () => {
     expect(safePublicationImageUrl("/media/uploads/logo.svg")).toBe("/media/uploads/logo.svg");
     expect(safePublicationImageUrl("https://cdn.example.test/logo.png")).toBe("https://cdn.example.test/logo.png");
-    for (const candidate of ["javascript:alert(1)", "//evil.test/logo.png", "data:image/svg+xml,code", "/\\evil.test", "http://"]) {
+    for (const candidate of [
+      "javascript:alert(1)",
+      "//evil.test/logo.png",
+      "data:image/svg+xml,code",
+      "/\\\\evil.test",
+      "/\\t/evil.test/logo.png",
+      "/\\n/evil.test/logo.png",
+      "/\\r/evil.test/logo.png",
+      "/assets\\\\evil.test/logo.png",
+      "https://cdn.example.test/\\nlogo.png",
+      "https://user:password@cdn.example.test/logo.png",
+      "http://",
+    ]) {
       expect(safePublicationImageUrl(candidate)).toBeNull();
     }
   });
