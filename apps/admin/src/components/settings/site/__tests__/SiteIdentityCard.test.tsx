@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SiteIdentityCard } from "../SiteIdentityCard";
-import { uploadMediaApi } from "../../../../lib/api/media";
+import { uploadMediaApi, type ApiMediaAsset } from "../../../../lib/api/media";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,9 +44,24 @@ describe("Site Identity", () => {
 
   it("keeps icon and logo uploads publication-owned and editable through the save bar", async () => {
     const onChange = vi.fn();
+    const media = (url: string): ApiMediaAsset => ({
+      id: "asset-1",
+      storageProvider: "local",
+      storageKey: "uploads/test.png",
+      originalFilename: "test.png",
+      displayName: "test.png",
+      mimeType: "image/png",
+      extension: "png",
+      sizeBytes: 5,
+      checksum: "test-checksum",
+      assetType: "image",
+      url,
+      createdAt: "2026-11-03T00:00:00Z",
+      updatedAt: "2026-11-03T00:00:00Z",
+    });
     vi.mocked(uploadMediaApi)
-      .mockResolvedValueOnce({ media: { url: "/new-icon.png" } } as Awaited<ReturnType<typeof uploadMediaApi>>)
-      .mockResolvedValueOnce({ media: { url: "/new-logo.png" } } as Awaited<ReturnType<typeof uploadMediaApi>>);
+      .mockResolvedValueOnce({ media: media("/new-icon.png") })
+      .mockResolvedValueOnce({ media: media("/new-logo.png") });
     await act(async () => {
       root.render(<SiteIdentityCard onChange={onChange} />);
     });

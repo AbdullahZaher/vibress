@@ -897,6 +897,8 @@ const translations: Record<string, string> = {
   "Make this site private": "جعل الموقع خاصًا",
   "Staff & permissions": "الفريق والصلاحيات",
   "Site Identity": "هوية الموقع",
+  "Icon upload failed": "تعذّر رفع أيقونة الموقع",
+  "Logo upload failed": "تعذّر رفع شعار الموقع",
   "Navigation menus": "قوائم التنقل",
   "Announcement bar": "شريط الإعلانات",
   "Access & portal registration": "الوصول والتسجيل",
