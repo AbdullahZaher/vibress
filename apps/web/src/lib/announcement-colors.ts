@@ -16,7 +16,7 @@ export function announcementColors(settings: Record<string, unknown>): {
     : FALLBACK_BACKGROUND.slice(1);
   const short = value.length === 3 || value.length === 4;
   const opaque = short
-    ? [...value.slice(0, 3)].map((digit) => digit + digit).join("")
+    ? value.slice(0, 3).split("").map((digit) => digit + digit).join("")
     : value.slice(0, 6);
   const rgb = [0, 2, 4].map((offset) => Number.parseInt(opaque.slice(offset, offset + 2), 16) / 255);
   const channels = rgb.map((channel) =>

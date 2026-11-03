@@ -41,6 +41,7 @@ describe("built-in appearance ownership", () => {
     expect(markup).toContain('data-theme="vibress-default"');
     expect(markup).toContain('data-accent="#123456"');
     expect(markup).toContain("--vb-accent-color: #123456");
+    expect(markup).toContain("--brand-pink-light: color-mix(in srgb, var(--vb-accent-color) 8%, transparent)");
     expect(markup).not.toContain("--vb-accent-color: #ff0000");
   });
 

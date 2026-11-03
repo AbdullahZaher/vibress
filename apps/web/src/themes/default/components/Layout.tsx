@@ -44,6 +44,7 @@ export async function ThemeLayout({
           --accent-color: ${accentColor};
           --brand-pink: ${accentColor};
           --brand-pink-hover: ${accentColor};
+          --brand-pink-light: color-mix(in srgb, var(--vb-accent-color) 8%, transparent);
         }
       `,
         }}
