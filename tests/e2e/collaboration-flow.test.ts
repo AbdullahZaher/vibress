@@ -16,7 +16,7 @@ test.describe("Studio Real-Time Collaboration & Editorial Review E2E", () => {
     // Context A creates a post
     await pageA.getByRole("button", { name: "Posts", exact: true }).click();
     await pageA.waitForURL("**/admin/posts");
-    await pageA.click('button:has-text("Create Post")');
+    await pageA.click('button:has-text("New Post")');
     await pageA.waitForURL("**/admin/posts/new");
 
     const postTitle = `Collab E2E Post ${Date.now()}`;
