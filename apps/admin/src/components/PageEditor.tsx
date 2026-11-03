@@ -265,6 +265,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         setSaving(true);
       }
 
+      const submittedDoc = isAutosave ? latestStudioDocRef.current : studioDoc;
       const payload = {
         title: title || "Untitled Page",
         slug: slug || undefined,
@@ -272,7 +273,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         metaTitle: metaTitle || null,
         metaDescription: metaDescription || null,
         canonicalUrl: canonicalUrl || null,
-        content: isAutosave ? latestStudioDocRef.current : studioDoc,
+        content: submittedDoc,
         primaryAuthorId: currentUserId,
         expectedVersion: pageId ? latestVersionRef.current : undefined,
       };
@@ -288,7 +289,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           );
           latestVersionRef.current = res.page.version;
           setVersion(res.page.version);
-          setAutosaveState("saved");
+          // Edits made while the request was in flight are not yet saved.
+          setAutosaveState(latestStudioDocRef.current === submittedDoc ? "saved" : "idle");
         } else {
           const res = await apiRequest<{ page: { id: string } }>("/pages", {
             method: "POST",
