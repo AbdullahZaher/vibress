@@ -97,6 +97,11 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
         const bounds = await identity.boundingBox();
         expect(bounds).not.toBeNull();
         expect(bounds!.width).toBeLessThanOrEqual(width + 1);
+        await page.screenshot({
+          path: `artifacts/theme-studio-ci/site-identity-${width}-en-${colorScheme}.png`,
+          animations: "disabled",
+          fullPage: true,
+        });
       }
     }
 
@@ -105,6 +110,11 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await expect(identity.getByRole("button", { name: /Upload icon|Change icon/ })).toBeVisible();
     await expect(identity.getByRole("button", { name: /Upload logo|Change logo/ })).toBeVisible();
+    await page.screenshot({
+      path: "artifacts/theme-studio-ci/site-identity-320-en-text-200.png",
+      animations: "disabled",
+      fullPage: true,
+    });
   });
 
   test("1c. Site Identity remains navigable and translated in Arabic RTL", async ({ page }) => {
@@ -126,6 +136,11 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       const bounds = await identity.boundingBox();
       expect(bounds).not.toBeNull();
       expect(bounds!.width).toBeLessThanOrEqual(width + 1);
+      await page.screenshot({
+        path: `artifacts/theme-studio-ci/site-identity-${width}-ar-rtl.png`,
+        animations: "disabled",
+        fullPage: true,
+      });
     }
   });
 

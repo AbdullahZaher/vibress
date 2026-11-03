@@ -6,7 +6,7 @@ import { MemberActions } from "./MemberActions";
 
 interface HeaderNavProps {
   siteTitle: string;
-  siteLogo?: string;
+  siteLogo?: string | undefined;
   settings: Record<string, unknown>;
 }
 
