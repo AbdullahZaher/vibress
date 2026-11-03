@@ -51,6 +51,9 @@ describe("settings search", () => {
     expect(identity?.keywords).toContain("favicon");
     expect(identity?.keywords).not.toContain("accent");
     expect(identity?.keywords).not.toContain("color");
+    const themes = site?.cards.find((card) => card.id === "themes-manager");
+    expect(themes?.keywords).toContain("accent");
+    expect(themes?.keywords).toContain("palette");
   });
 
   it("keeps registry counts consistent for an empty query", () => {
