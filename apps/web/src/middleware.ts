@@ -396,9 +396,44 @@ export async function middleware(request: NextRequest) {
       const data = await res.json();
       const themeId: string = data.themeId;
 
-      // Strip the /preview/:token prefix and serve the underlying public path with the theme header.
-      const rest = "/" + segments.slice(2).join("/");
-      const url = new URL(rest === "/" ? "/" : rest, request.url);
+      // Retain the external preview URL while resolving the canonical public
+      // path for Next.js. Locale-aware previews must not fall through to
+      // public routes (whose CSP correctly prohibits embedding).
+      const previewPath = "/" + segments.slice(2).join("/");
+      let publicSegments = segments.slice(2);
+      let previewLocale: string | undefined;
+      try {
+        const sitePayload = await fetchSiteSettings(hostHeader);
+        const site = sitePayload?.data?.site;
+        const primary = typeof site?.locale === "string" ? site.locale : undefined;
+        const enabled = Array.isArray(site?.enabledLocales)
+          ? site.enabledLocales.filter((v: unknown): v is string => typeof v === "string")
+          : [];
+        const first = publicSegments[0]?.toLowerCase();
+        if (primary && enabled.includes(primary)) {
+          previewLocale = primary;
+          if (first) {
+            const candidates = enabled.filter((locale: string) => {
+              if (locale.toLowerCase() === first) return true;
+              const sameBase = locale.split("-")[0]?.toLowerCase() === first;
+              return sameBase && enabled.filter(
+                (other: string) => other.split("-")[0]?.toLowerCase() === sameBase,
+              ).length === 1;
+            });
+            if (candidates.length === 1) {
+              previewLocale = candidates[0];
+              publicSegments = publicSegments.slice(1);
+            }
+          }
+        }
+      } catch {
+        // An unavailable site settings API must not turn a valid preview into
+        // an exception; theme token resolution already fails closed above.
+      }
+
+      const rest = "/" + publicSegments.join("/");
+      const url = new URL(rest, request.url);
+      url.search = request.nextUrl.search;
       return createCspResponse(request, {
         rewriteUrl: url,
         extraHeaders: {
@@ -407,7 +442,8 @@ export async function middleware(request: NextRequest) {
         },
         requestOnlyHeaders: {
           "x-vibress-preview-token": token,
-          "x-vibress-preview-path": rest,
+          "x-vibress-preview-path": previewPath,
+          ...(previewLocale ? { "x-vibress-locale": previewLocale } : {}),
         },
         allowEmbedding: true,
       });
