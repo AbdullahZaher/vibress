@@ -415,9 +415,10 @@ export async function middleware(request: NextRequest) {
           if (first) {
             const candidates = enabled.filter((locale: string) => {
               if (locale.toLowerCase() === first) return true;
-              const sameBase = locale.split("-")[0]?.toLowerCase() === first;
+              const base = locale.split("-")[0]?.toLowerCase();
+              const sameBase = base === first;
               return sameBase && enabled.filter(
-                (other: string) => other.split("-")[0]?.toLowerCase() === sameBase,
+                (other: string) => other.split("-")[0]?.toLowerCase() === base,
               ).length === 1;
             });
             if (candidates.length === 1) {

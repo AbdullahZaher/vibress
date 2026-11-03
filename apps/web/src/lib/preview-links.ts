@@ -10,6 +10,14 @@ export interface PreviewNavigation {
 const PREVIEW_PREFIX = /^\/preview\/[a-f0-9]{64}$/i;
 const SYSTEM_PATH = /^\/(?:admin|api|_next|portal|theme-assets|assets|content|health|preview|favicon\.ico|robots\.txt|sitemap\.xml)(?:\/|$|\?)/i;
 
+function hasControlCharacters(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
+
 export function toPreviewHref(
   href: string,
   navigation: PreviewNavigation | null,
@@ -21,7 +29,7 @@ export function toPreviewHref(
   // into a bearer-token preview route.
   if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) ||
       trimmed.startsWith("//") || trimmed.includes("\\") ||
-      [...trimmed].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)) {
+      hasControlCharacters(trimmed)) {
     return href;
   }
 
