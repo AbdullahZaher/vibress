@@ -50,7 +50,7 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
             >
               {pagination.page > 1 ? (
                 <PreviewAnchor
-                  href={`/author/${author.slug}?page=${pagination.page - 1}`}
+                  href={`/authors/${author.slug}?page=${pagination.page - 1}`}
                   className="newer-posts"
                 >
                   &larr; Newer Posts
@@ -63,7 +63,7 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
               </span>
               {pagination.page < pagination.pages ? (
                 <PreviewAnchor
-                  href={`/author/${author.slug}?page=${pagination.page + 1}`}
+                  href={`/authors/${author.slug}?page=${pagination.page + 1}`}
                   className="older-posts"
                 >
                   Older Posts &rarr;

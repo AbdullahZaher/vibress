@@ -44,7 +44,7 @@ export function HeaderNav({
                     <a href={toPreviewHref("/", previewNavigation)}>{t("nav.home")}</a>
                   </li>
                   <li className="nav-about">
-                    <a href={toPreviewHref("/about", previewNavigation)}>{t("nav.about")}</a>
+                    <a href={toPreviewHref(previewNavigation ? "/pages/about" : "/about", previewNavigation)}>{t("nav.about")}</a>
                   </li>
                 </>
               )}

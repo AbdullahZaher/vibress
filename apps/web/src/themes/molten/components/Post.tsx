@@ -40,7 +40,7 @@ export async function Post(props: ThemePostProps) {
                   {t("post.in")}{" "}
                   <PreviewAnchor
                     className="vb-article-tag"
-                    href={`/tag/${primaryTag.slug}`}
+                    href={`/tags/${primaryTag.slug}`}
                   >
                     {primaryTag.name}
                   </PreviewAnchor>

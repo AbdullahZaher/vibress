@@ -43,7 +43,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
             >
               {pagination.page > 1 ? (
                 <PreviewAnchor
-                  href={`/tag/${tag.slug}?page=${pagination.page - 1}`}
+                  href={`/tags/${tag.slug}?page=${pagination.page - 1}`}
                   className="newer-posts"
                 >
                   &larr; Newer Posts
@@ -56,7 +56,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
               </span>
               {pagination.page < pagination.pages ? (
                 <PreviewAnchor
-                  href={`/tag/${tag.slug}?page=${pagination.page + 1}`}
+                  href={`/tags/${tag.slug}?page=${pagination.page + 1}`}
                   className="older-posts"
                 >
                   Older Posts &rarr;

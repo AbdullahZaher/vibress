@@ -58,7 +58,7 @@ export function HeaderNav({
               <PreviewAnchor href="/">{t("nav.home")}</PreviewAnchor>
             </li>
             <li className="nav-about">
-              <PreviewAnchor href="/about">{t("nav.about")}</PreviewAnchor>
+              <PreviewAnchor href="/pages/about">{t("nav.about")}</PreviewAnchor>
             </li>
           </ul>
         </nav>
