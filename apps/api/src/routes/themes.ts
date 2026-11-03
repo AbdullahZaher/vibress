@@ -369,8 +369,19 @@ export async function themeRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Distinguish invalid path parameters from unexpected storage failures.
+      // Return the established 400 contract without reflecting untrusted IDs.
       try {
         validateThemeId(id);
+      } catch {
+        return reply.status(400).send({
+          errors: [
+            { code: "THEME_INVALID_ID", message: "Invalid theme ID", requestId: req.id },
+          ],
+        });
+      }
+
+      try {
         const settingsInput =
           typeof parseResult.data.settings === "object" &&
           parseResult.data.settings !== null &&
