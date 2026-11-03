@@ -10,7 +10,7 @@ test("page autosave persists the latest content without remounting Lexical", asy
   await page.goto(`${BASE}/admin/login`);
   await page.locator("#email").fill("owner@example.com");
   await page.locator("#password").fill("OwnerPass123!");
-  await page.getByRole("button", { name: /sign in|log in/i }).click();
+  await page.locator('button[type="submit"]').click();
   await page.waitForURL(
     (url) => url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
   );
