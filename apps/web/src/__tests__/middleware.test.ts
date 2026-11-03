@@ -146,6 +146,22 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
     expect(previewRes.headers.get("x-vibress-theme")).toBe("vibress-default");
   });
 
+
+  it("keeps verified preview routes nested for post navigation", async () => {
+    const token = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ themeId: "vibress-default" }),
+    }) as any;
+    const req = new NextRequest("http://localhost:7777/preview/" + token + "/posts/example?x=1");
+    const res = await middleware(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/posts/example?x=1");
+    // Private routing state is forwarded to Next.js, not exposed as response headers.
+    expect(res.headers.get("x-vibress-preview-token")).toBeNull();
+    expect(res.headers.get("x-vibress-preview-path")).toBeNull();
+  });
   describe("Production CSP & Iframe Embedding Security", () => {
     it("strictly returns frame-ancestors 'none' when allowEmbedding is false across any environment", () => {
       expect(getValidatedFrameAncestors(false, { NODE_ENV: "production" })).toBe("frame-ancestors 'none'");

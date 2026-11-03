@@ -157,6 +157,7 @@ function createCspResponse(
   requestHeaders.delete("x-vibress-theme");
   requestHeaders.delete("x-vibress-preview");
   requestHeaders.delete("x-vibress-preview-token");
+  requestHeaders.delete("x-vibress-preview-path");
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", cspHeader);
 
@@ -406,6 +407,7 @@ export async function middleware(request: NextRequest) {
         },
         requestOnlyHeaders: {
           "x-vibress-preview-token": token,
+          "x-vibress-preview-path": rest,
         },
         allowEmbedding: true,
       });
