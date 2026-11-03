@@ -42,11 +42,11 @@ export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <Button variant="outline" size="sm" className="min-h-11 min-w-11 rounded-xl"
-            aria-label={tr("Back to themes")} onClick={onBack}>
+            aria-label={tr("Back to themes")} title={tr("Back to themes")} onClick={onBack}>
             <ArrowLeft aria-hidden="true" className="size-4 rtl:rotate-180" />
           </Button>
           <div className="min-w-0">
-            <h3 className="break-words text-lg font-bold tracking-tight text-foreground">{themeName}</h3>
+            <h3 className="break-words text-lg font-bold tracking-tight text-foreground"><bdi>{themeName}</bdi></h3>
             <p className="text-sm text-muted-foreground">{tr("Preview only — your published site is unchanged.")}</p>
           </div>
         </div>

@@ -51,6 +51,8 @@ describe("ThemePreviewWorkspace", () => {
       x.textContent?.includes("Refresh preview"),
     );
     const back = container.querySelector<HTMLButtonElement>('button[aria-label="Back to themes"]');
+    expect(back?.getAttribute("title")).toBe("Back to themes");
+    expect(container.querySelector("bdi")?.textContent).toBe("Retro Creator");
     await act(async () => {
       refresh?.click();
       back?.click();

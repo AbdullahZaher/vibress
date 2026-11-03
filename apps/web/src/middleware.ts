@@ -14,19 +14,25 @@ const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
  *   attributes in themes; non-executable CSS exception, documented)
  * - connect-src: 'self' only — the web app talks to the API same-origin via
  *   the gateway; no cross-origin browser fetch is performed.
- * - No unsafe wildcards; frame-ancestors 'none'; object-src 'none'.
+ * - No unsafe wildcards; frame-ancestors 'none' (or 'self' on preview routes); object-src 'none'.
  */
-function buildCsp(nonce: string): string {
+function buildCsp(nonce: string, allowEmbedding = false): string {
   const isDev = process.env.NODE_ENV !== "production";
   const scriptDirectives = isDev
     ? `script-src 'self' 'unsafe-eval' 'nonce-${nonce}' https://www.googletagmanager.com https://plausible.io https://*.posthog.com`
     : `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://plausible.io https://*.posthog.com`;
 
+  const frameAncestorsDirective = allowEmbedding
+    ? (isDev
+        ? "frame-ancestors 'self' http://localhost:7779 http://127.0.0.1:7779 http://localhost:7777 http://127.0.0.1:7777 http://localhost:3000 http://127.0.0.1:3000"
+        : "frame-ancestors 'self'")
+    : "frame-ancestors 'none'";
+
   return [
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-ancestors 'none'",
+    frameAncestorsDirective,
     "form-action 'self'",
     "img-src 'self' data: blob: https:",
     "media-src 'self' blob: https:",
@@ -49,12 +55,13 @@ function createCspResponse(
     redirectUrl?: URL;
     extraHeaders?: Record<string, string>;
     requestOnlyHeaders?: Record<string, string>;
+    allowEmbedding?: boolean;
   },
 ): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID().replace(/-/g, "")).toString(
     "base64",
   );
-  const cspHeader = buildCsp(nonce);
+  const cspHeader = buildCsp(nonce, Boolean(options?.allowEmbedding));
 
   const requestHeaders = new Headers(request.headers);
   // Never accept preview-selection headers supplied directly by a caller.
@@ -311,6 +318,7 @@ export async function middleware(request: NextRequest) {
         requestOnlyHeaders: {
           "x-vibress-preview-token": token,
         },
+        allowEmbedding: true,
       });
     } catch {
       return createCspResponse(request, {

@@ -41,7 +41,7 @@ const ThemeArtwork: React.FC<ArtworkProps> = ({ theme, className = "" }) => {
           <div className="flex size-12 items-center justify-center rounded-xl border border-border/80 bg-card/90 shadow-xs">
             <ImageOff aria-hidden="true" className="size-5 text-muted-foreground/70" />
           </div>
-          <p className="text-sm font-semibold text-foreground/80">{tr("Screenshot not available")}</p>
+          <p className="text-sm font-medium text-foreground">{tr("Screenshot not available")}</p>
           <p className="max-w-60 text-xs leading-relaxed text-muted-foreground">
             {tr("Preview this theme using your actual publication content.")}
           </p>

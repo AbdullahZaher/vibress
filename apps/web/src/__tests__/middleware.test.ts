@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { middleware, _clearSiteSettingsCache } from "../middleware";
 
 describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
-  const originalFetch = global.fetch;
+  const _originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -103,5 +103,41 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
       c[0].includes("/api/content/v1/site"),
     ).length;
     expect(siteCallsAfterSecondReq).toBe(1);
+  });
+
+  it("applies frame-ancestors 'none' on standard routes and allows embedding on preview routes", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/admin/v1/themes/preview/valid-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ themeId: "vibress-default" }),
+        });
+      }
+      if (url.includes("/api/content/v1/site")) {
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ "x-vibress-publication-id": "pub_test" }),
+          json: () => Promise.resolve({
+            site: { title: "Test Site", locale: "en", enabledLocales: ["en"] },
+            security: { isPrivate: false },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404 });
+    });
+    global.fetch = fetchMock as any;
+
+    // 1. Standard page request: must strictly prohibit embedding with frame-ancestors 'none'
+    const standardReq = new NextRequest("http://localhost:7777/posts/post-1");
+    const standardRes = await middleware(standardReq);
+    const standardCsp = standardRes.headers.get("Content-Security-Policy") || "";
+    expect(standardCsp).toContain("frame-ancestors 'none'");
+
+    // 2. Valid preview route: must permit embedding by the admin iframe
+    const previewReq = new NextRequest("http://localhost:7777/preview/valid-token");
+    const previewRes = await middleware(previewReq);
+    const previewCsp = previewRes.headers.get("Content-Security-Policy") || "";
+    expect(previewCsp).toContain("frame-ancestors 'self'");
+    expect(previewRes.headers.get("x-vibress-theme")).toBe("vibress-default");
   });
 });

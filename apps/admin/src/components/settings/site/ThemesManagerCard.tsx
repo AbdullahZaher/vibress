@@ -228,7 +228,9 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   const handleDelete = async (id: string) => {
     const scope = publicationGeneration.current;
-    if (!(await confirm(tr("Uninstall this theme?") + " " + id, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
+    const targetTheme = themes.find((item) => item.manifest.id === id);
+    const themeDisplayName = targetTheme?.manifest.name || id;
+    if (!(await confirm(tr("Uninstall this theme?") + " " + themeDisplayName, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
     if (scope !== publicationGeneration.current) return;
@@ -421,6 +423,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   type="button"
                   data-theme-studio-close="true"
                   aria-label={tr("Close themes drawer")}
+                  title={tr("Close themes drawer")}
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
                   className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

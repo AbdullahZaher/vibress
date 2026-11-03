@@ -117,6 +117,7 @@ describe("ThemesManagerCard", () => {
     const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Themes Manager"]');
     const close = dialog?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]');
     expect(dialog).not.toBeNull();
+    expect(close?.getAttribute("title")).toBe("Close themes drawer");
     expect(document.activeElement).toBe(close);
 
     const controls = Array.from(dialog?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") || []);
@@ -252,4 +253,20 @@ describe("ThemesManagerCard", () => {
     expect(document.querySelector('iframe[title="Theme preview Retro Creator"]')).not.toBeNull();
   });
 
+  it("prompts for confirmation displaying the human-readable theme name before uninstalling", async () => {
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const uninstallBtn = retro?.querySelector<HTMLButtonElement>('button[title="Uninstall theme"]');
+    expect(uninstallBtn).not.toBeNull();
+    await act(async () => { uninstallBtn?.click(); });
+
+    const confirmation = document.querySelector(".settings-confirmation-dialog");
+    expect(confirmation?.textContent).toContain("Uninstall this theme? Retro Creator");
+  });
 });
