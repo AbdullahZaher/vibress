@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { buildApp } from "../main";
+import { themeService } from "../services";
 import { FastifyInstance } from "fastify";
 import { getDb, installedThemes, themeSettings } from "@vibress/database";
 import { eq } from "drizzle-orm";
@@ -305,6 +306,34 @@ describe("API — External Theme System Integration", () => {
     });
     expect(pathTraversal.statusCode).toBe(400);
     expect(pathTraversal.json().errors[0]?.code).toMatch(/THEME/);
+  });
+
+  it("does not disclose unexpected storage errors from theme settings updates", async () => {
+    const update = vi.spyOn(themeService, "updateThemeSettings")
+      .mockRejectedValueOnce(new Error("internal postgres://secret-password@db.example/private"));
+    try {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/admin/v1/themes/vibress-news-express/settings",
+        headers: {
+          cookie: staffCookie,
+          origin: "http://localhost:7777",
+        },
+        payload: { accentColor: "#112233" },
+      });
+      expect(res.statusCode).toBe(500);
+      const body = res.json();
+      expect(body.errors[0]).toMatchObject({
+        code: "THEME_SETTINGS_UPDATE_FAILED",
+        message: "Unable to update theme settings",
+      });
+      expect(typeof body.errors[0]?.requestId).toBe("string");
+      expect(res.body).not.toContain("postgres://");
+      expect(res.body).not.toContain("secret-password");
+      expect(res.body).not.toContain("internal");
+    } finally {
+      update.mockRestore();
+    }
   });
 
   it("returns saved theme settings to authorized staff only", async () => {
