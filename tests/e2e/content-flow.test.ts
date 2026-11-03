@@ -18,7 +18,7 @@ test.describe("Admin Content & Vibress Studio E2E Flow", () => {
     await expect(page.locator("h1")).toContainText("Posts");
 
     // 3. Click Create Post
-    await page.click('button:has-text("Create Post")');
+    await page.click('button:has-text("New Post")');
     await page.waitForURL("**/admin/posts/new");
 
     // 4. Fill Title
@@ -76,7 +76,7 @@ test.describe("Admin Content & Vibress Studio E2E Flow", () => {
     await page.getByRole("button", { name: "Pages", exact: true }).click();
     await page.waitForURL("**/admin/pages");
 
-    await page.click('button:has-text("Create Page")');
+    await page.click('button:has-text("New Page")');
     await page.waitForURL("**/admin/pages/new");
 
     await page.fill(

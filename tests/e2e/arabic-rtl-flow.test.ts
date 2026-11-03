@@ -18,7 +18,7 @@ test.describe("Arabic-First Internationalization & RTL E2E Flow", () => {
     // 2. Create an Arabic Post
     await page.getByRole("button", { name: "Posts", exact: true }).click();
     await page.waitForURL("**/admin/posts");
-    await page.click('button:has-text("Create Post")');
+    await page.click('button:has-text("New Post")');
     await page.waitForURL("**/admin/posts/new");
 
     // 3. Write Arabic Title & Body

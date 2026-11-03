@@ -14,7 +14,7 @@ test.describe("Studio Inline AI Assistant E2E Flow", () => {
     // 2. Open Post Editor
     await page.getByRole("button", { name: "Posts", exact: true }).click();
     await page.waitForURL("**/admin/posts");
-    await page.click('button:has-text("Create Post")');
+    await page.click('button:has-text("New Post")');
     await page.waitForURL("**/admin/posts/new");
 
     const postTitle = `AI Assisted Post ${Date.now()}`;
