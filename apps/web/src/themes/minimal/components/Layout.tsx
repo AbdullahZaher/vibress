@@ -2,6 +2,7 @@ import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { isValidHexColor, type ThemeSiteSettings } from "@vibress/theme-core";
 import { SocialLinks } from "../../../components/SocialLinks";
+import { PublicationBrandImage } from "../../../components/PublicationBrandImage";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -51,7 +52,7 @@ export async function ThemeLayout({
         <header id="vb-navigation" className="vb-navigation vb-outer">
           <div className="vb-navigation-inner vb-inner">
             <PreviewAnchor className="vb-navigation-logo" href="/">
-              {site.title}
+              <PublicationBrandImage url={site.logoUrl} title={site.title} className="vb-navigation-logo-image" />
             </PreviewAnchor>
             <nav className="vb-navigation-menu">
               <ul className="nav">

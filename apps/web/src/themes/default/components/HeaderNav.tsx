@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { PublicationBrandImage } from "../../../components/PublicationBrandImage";
 import { SubscribeModal } from "./SubscribeModal";
 import { ThemeToggle } from "../../../components/reader/ThemeToggle";
 import { t } from "../../../lib/i18n";
@@ -53,20 +54,14 @@ export function HeaderNav({
 
           <div className="vb-head-brand">
             <a className="vb-head-logo" href={toPreviewHref("/", previewNavigation)}>
-              {siteLogo ? (
-                <img
-                  src={siteLogo}
-                  alt={siteTitle}
-                  className="vb-head-logo-img"
-                  style={{ maxHeight: "36px" }}
+              {(siteLogo || siteIcon) && (
+                <PublicationBrandImage
+                  url={siteLogo || siteIcon}
+                  title={siteTitle}
+                  showFallbackText={false}
+                  className={siteLogo ? "vb-head-logo-img" : "vb-head-logo-icon"}
                 />
-              ) : siteIcon ? (
-                <img
-                  src={siteIcon}
-                  alt={siteTitle}
-                  className="vb-head-logo-icon"
-                />
-              ) : null}
+              )}
               <span>{siteTitle}</span>
             </a>
           </div>

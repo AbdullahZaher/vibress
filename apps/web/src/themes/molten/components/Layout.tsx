@@ -19,8 +19,6 @@ export function ThemeLayout({
 }: ThemeLayoutProps) {
   const accentColor =
     isValidHexColor(settings.accentColor) ? settings.accentColor.trim() : "#f05230";
-  const siteIcon = (site as unknown as Record<string, unknown>).icon as
-    string | undefined;
 
   const navLayout =
     settings.navigationLayout === "Logo on the left"
@@ -58,7 +56,7 @@ export function ThemeLayout({
       <div className="vb-site">
         <HeaderNav
           siteTitle={site.title}
-          siteLogo={siteIcon || ""}
+          siteLogo={site.logoUrl}
           settings={settings}
         />
 
