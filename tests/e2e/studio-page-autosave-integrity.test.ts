@@ -17,7 +17,7 @@ test("page autosave persists the latest content without remounting Lexical", asy
 
   await page.getByRole("button", { name: "Pages", exact: true }).click();
   await page.waitForURL("**/admin/pages");
-  await page.getByRole("button", { name: "Create Page", exact: true }).click();
+  await page.getByRole("button", { name: "New Page", exact: true }).click();
   await page.waitForURL("**/admin/pages/new");
 
   await page.locator('textarea[aria-label="Page Title"]').fill(
