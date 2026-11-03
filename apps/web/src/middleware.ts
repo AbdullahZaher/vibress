@@ -3,6 +3,99 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
 
 /**
+ * Strict origin sanitizer for preview iframe embedding.
+ * Enforces HTTPS in production (allowing loopback in non-prod/testing),
+ * rejects credentials, paths, query strings, hashes, control characters,
+ * semicolons, and wildcards that could compromise Content-Security-Policy.
+ */
+export function sanitizeEmbedOrigin(
+  raw: string,
+  isProduction: boolean,
+): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Disallow characters that could perform header injection or break CSP directive boundaries
+  if (/[\s;,\r\n'"]/.test(trimmed)) return null;
+
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+
+    const isLoopback =
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "[::1]";
+
+    if (isProduction && url.protocol !== "https:" && !isLoopback) {
+      return null;
+    }
+
+    if (url.username || url.password) return null;
+    if (url.pathname !== "/" && url.pathname !== "") return null;
+    if (url.search || url.hash) return null;
+    if (!url.hostname || url.hostname.includes("*")) return null;
+
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strict, explicitly validated allowlist for preview frame-ancestors.
+ *
+ * Normal public routes always receive `frame-ancestors 'none'` to protect against clickjacking.
+ * When `allowEmbedding` is active (preview routes only):
+ * - Same-origin ('self') is always permitted.
+ * - In production, explicitly configured origins (ADMIN_ORIGIN, VIBRESS_ADMIN_ORIGIN,
+ *   ALLOWED_PREVIEW_EMBED_ORIGINS) are parsed, sanitized, and validated.
+ * - Development-only localhost origins are ONLY permitted when NODE_ENV !== "production"
+ *   and are NEVER emitted into production CSP headers.
+ * - Malicious or untrusted origins are strictly rejected.
+ */
+export function getValidatedFrameAncestors(
+  allowEmbedding: boolean,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  if (!allowEmbedding) {
+    return "frame-ancestors 'none'";
+  }
+
+  const isProduction = env.NODE_ENV === "production";
+  const origins = new Set<string>(["'self'"]);
+
+  // In development/test only, permit standard local development origins
+  if (!isProduction) {
+    origins.add("http://localhost:7779");
+    origins.add("http://127.0.0.1:7779");
+    origins.add("http://localhost:7777");
+    origins.add("http://127.0.0.1:7777");
+    origins.add("http://localhost:3000");
+    origins.add("http://127.0.0.1:3000");
+  }
+
+  // Parse candidate origins from explicit environment variables
+  const envSources = [
+    env.ADMIN_ORIGIN,
+    env.VIBRESS_ADMIN_ORIGIN,
+    env.ALLOWED_PREVIEW_EMBED_ORIGINS,
+  ];
+
+  for (const source of envSources) {
+    if (!source || typeof source !== "string") continue;
+    const candidates = source.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+    for (const candidate of candidates) {
+      const sanitized = sanitizeEmbedOrigin(candidate, isProduction);
+      if (sanitized) {
+        origins.add(sanitized);
+      }
+    }
+  }
+
+  return `frame-ancestors ${Array.from(origins).join(" ")}`;
+}
+
+/**
  * Environment-aware enforced CSP for the public web app.
  *
  * Next.js App Router renders inline bootstrap scripts/styles; the nonce is
@@ -14,7 +107,7 @@ const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
  *   attributes in themes; non-executable CSS exception, documented)
  * - connect-src: 'self' only — the web app talks to the API same-origin via
  *   the gateway; no cross-origin browser fetch is performed.
- * - No unsafe wildcards; frame-ancestors 'none' (or 'self' on preview routes); object-src 'none'.
+ * - No unsafe wildcards; frame-ancestors 'none' (or validated allowlist on preview routes); object-src 'none'.
  */
 function buildCsp(nonce: string, allowEmbedding = false): string {
   const isDev = process.env.NODE_ENV !== "production";
@@ -22,11 +115,7 @@ function buildCsp(nonce: string, allowEmbedding = false): string {
     ? `script-src 'self' 'unsafe-eval' 'nonce-${nonce}' https://www.googletagmanager.com https://plausible.io https://*.posthog.com`
     : `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://plausible.io https://*.posthog.com`;
 
-  const frameAncestorsDirective = allowEmbedding
-    ? (isDev
-        ? "frame-ancestors 'self' http://localhost:7779 http://127.0.0.1:7779 http://localhost:7777 http://127.0.0.1:7777 http://localhost:3000 http://127.0.0.1:3000"
-        : "frame-ancestors 'self'")
-    : "frame-ancestors 'none'";
+  const frameAncestorsDirective = getValidatedFrameAncestors(allowEmbedding);
 
   return [
     "default-src 'self'",

@@ -260,6 +260,7 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
       const lastModified = stat.mtime.toUTCString();
 
       reply.header("X-Content-Type-Options", "nosniff");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       if (mimeType === "image/svg+xml") {
         // SVG is active XML when opened as a document, even when uploaded by a
         // trusted author. Keep legacy assets addressable but never inline.

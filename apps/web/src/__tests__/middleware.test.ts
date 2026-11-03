@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
-import { middleware, _clearSiteSettingsCache } from "../middleware";
+import {
+  middleware,
+  _clearSiteSettingsCache,
+  getValidatedFrameAncestors,
+  sanitizeEmbedOrigin,
+} from "../middleware";
 
 describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
   const _originalFetch = global.fetch;
@@ -139,5 +144,87 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
     const previewCsp = previewRes.headers.get("Content-Security-Policy") || "";
     expect(previewCsp).toContain("frame-ancestors 'self'");
     expect(previewRes.headers.get("x-vibress-theme")).toBe("vibress-default");
+  });
+
+  describe("Production CSP & Iframe Embedding Security", () => {
+    it("strictly returns frame-ancestors 'none' when allowEmbedding is false across any environment", () => {
+      expect(getValidatedFrameAncestors(false, { NODE_ENV: "production" })).toBe("frame-ancestors 'none'");
+      expect(getValidatedFrameAncestors(false, { NODE_ENV: "development" })).toBe("frame-ancestors 'none'");
+      expect(getValidatedFrameAncestors(false, { NODE_ENV: "staging" })).toBe("frame-ancestors 'none'");
+      expect(getValidatedFrameAncestors(false, { NODE_ENV: "production", ADMIN_ORIGIN: "https://admin.example.com" })).toBe("frame-ancestors 'none'");
+    });
+
+    it("restricts production same-origin embedding to 'self' without leaking dev localhost origins", () => {
+      const prodCsp = getValidatedFrameAncestors(true, { NODE_ENV: "production" });
+      expect(prodCsp).toBe("frame-ancestors 'self'");
+      expect(prodCsp).not.toContain("localhost");
+      expect(prodCsp).not.toContain("127.0.0.1");
+      expect(prodCsp).not.toContain("7779");
+      expect(prodCsp).not.toContain("3000");
+    });
+
+    it("correctly includes validated production cross-origin ADMIN_ORIGIN while excluding localhost", () => {
+      const prodCsp = getValidatedFrameAncestors(true, {
+        NODE_ENV: "production",
+        ADMIN_ORIGIN: "https://admin.vibress.com",
+      });
+      expect(prodCsp).toBe("frame-ancestors 'self' https://admin.vibress.com");
+      expect(prodCsp).not.toContain("localhost");
+      expect(prodCsp).not.toContain("127.0.0.1");
+    });
+
+    it("supports multi-origin staging and production configurations via ALLOWED_PREVIEW_EMBED_ORIGINS", () => {
+      const stagingCsp = getValidatedFrameAncestors(true, {
+        NODE_ENV: "production",
+        ALLOWED_PREVIEW_EMBED_ORIGINS: "https://staging.admin.vibress.com, https://admin.vibress.com",
+      });
+      expect(stagingCsp).toBe(
+        "frame-ancestors 'self' https://staging.admin.vibress.com https://admin.vibress.com",
+      );
+    });
+
+    it("strictly includes dev-only localhost origins when NODE_ENV is development or test", () => {
+      const devCsp = getValidatedFrameAncestors(true, { NODE_ENV: "development" });
+      expect(devCsp).toContain("'self'");
+      expect(devCsp).toContain("http://localhost:7779");
+      expect(devCsp).toContain("http://127.0.0.1:7779");
+      expect(devCsp).toContain("http://localhost:7777");
+      expect(devCsp).toContain("http://127.0.0.1:7777");
+    });
+
+    it("rejects malicious, unencrypted, or malformed origin injection attempts", () => {
+      // 1. Unencrypted HTTP rejected in production for remote hosts
+      expect(sanitizeEmbedOrigin("http://evil.com", true)).toBeNull();
+
+      // 2. Header injection via semicolon or newline rejected
+      expect(sanitizeEmbedOrigin("https://admin.vibress.com; script-src *", true)).toBeNull();
+      expect(sanitizeEmbedOrigin("https://admin.vibress.com\r\nX-Injected: true", true)).toBeNull();
+
+      // 3. Credentials or paths stripped/rejected
+      expect(sanitizeEmbedOrigin("https://user:pass@admin.vibress.com/admin/path", true)).toBeNull();
+
+      // 4. Wildcard origins rejected
+      expect(sanitizeEmbedOrigin("https://*.vibress.com", true)).toBeNull();
+      expect(sanitizeEmbedOrigin("*", true)).toBeNull();
+
+      // 5. Dangerous protocols rejected
+      expect(sanitizeEmbedOrigin("javascript:alert(1)", true)).toBeNull();
+      expect(sanitizeEmbedOrigin("ftp://admin.vibress.com", true)).toBeNull();
+
+      // 6. Valid HTTPS origin cleanly sanitized to canonical origin
+      expect(sanitizeEmbedOrigin("https://admin.vibress.com/", true)).toBe("https://admin.vibress.com");
+      expect(sanitizeEmbedOrigin("https://admin.vibress.com", true)).toBe("https://admin.vibress.com");
+    });
+
+    it("never includes untrusted third-party origins in the preview frame-ancestors directive", () => {
+      const result = getValidatedFrameAncestors(true, {
+        NODE_ENV: "production",
+        ADMIN_ORIGIN: "https://trusted-admin.vibress.com",
+      });
+      expect(result).not.toContain("https://evil.com");
+      expect(result).not.toContain("https://attacker.com");
+      expect(result).toContain("https://trusted-admin.vibress.com");
+      expect(result).toContain("'self'");
+    });
   });
 });
