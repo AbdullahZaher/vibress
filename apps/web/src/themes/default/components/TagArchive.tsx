@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import { ThemeTagArchiveProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { t } from "../../../lib/i18n";
@@ -35,7 +36,7 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
             {posts.map((post) => (
               <article key={post.id} className="post-card">
                 <h2 className="post-card-title">
-                  <a href={`/posts/${post.slug}`}>{post.title}</a>
+                  <PreviewAnchor href={`/posts/${post.slug}`}>{post.title}</PreviewAnchor>
                 </h2>
                 <div className="article-meta">
                   {showPublicationDate && (
@@ -53,9 +54,9 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                   {showAuthor && post.primaryAuthor && (
                     <span>
                       {t("archive.by")}{" "}
-                      <a href={`/authors/${post.primaryAuthor.slug}`}>
+                      <PreviewAnchor href={`/authors/${post.primaryAuthor.slug}`}>
                         {post.primaryAuthor.name}
-                      </a>
+                      </PreviewAnchor>
                     </span>
                   )}
                   {props.site.commentsEnabled !== false && typeof (post as any).commentCount === "number" && (
@@ -81,12 +82,12 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
             })}
           >
             {pagination.page > 1 ? (
-              <a
+              <PreviewAnchor
                 href={`/tags/${tag.slug}?page=${pagination.page - 1}`}
                 className="pagination-btn"
               >
                 ← {t("archive.previous")}
-              </a>
+              </PreviewAnchor>
             ) : (
               <span className="pagination-btn disabled">
                 ← {t("archive.previous")}
@@ -101,12 +102,12 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
             </span>
 
             {pagination.page < pagination.pages ? (
-              <a
+              <PreviewAnchor
                 href={`/tags/${tag.slug}?page=${pagination.page + 1}`}
                 className="pagination-btn"
               >
                 {t("archive.next")} →
-              </a>
+              </PreviewAnchor>
             ) : (
               <span className="pagination-btn disabled">
                 {t("archive.next")} →

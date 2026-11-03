@@ -11,6 +11,7 @@ import {
   getActiveThemeApi,
   getThemeApi,
   createThemePreviewApi,
+  activateThemeApi,
 } from "../../../../lib/api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -116,6 +117,7 @@ describe("ThemesManagerCard", () => {
     const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Themes Manager"]');
     const close = dialog?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]');
     expect(dialog).not.toBeNull();
+    expect(close?.getAttribute("title")).toBe("Close themes drawer");
     expect(document.activeElement).toBe(close);
 
     const controls = Array.from(dialog?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") || []);
@@ -132,8 +134,7 @@ describe("ThemesManagerCard", () => {
     expect(document.activeElement).toBe(opener);
   });
 
-  it("opens a validated preview URL instead of query-string theme selection", async () => {
-    const mockOpen = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("embeds a validated preview URL instead of query-string theme selection", async () => {
     vi.mocked(createThemePreviewApi).mockResolvedValue({
       previewToken: "a".repeat(64),
       expiresAt: new Date().toISOString(),
@@ -144,12 +145,14 @@ describe("ThemesManagerCard", () => {
       (button) => button.textContent?.includes("Change theme"),
     );
     await act(async () => { open?.click(); });
-    const previewButton = document.querySelector<HTMLButtonElement>('[title="Preview theme in new tab"]');
+    const retroCard = [...document.querySelectorAll("article")].find((node) => node.textContent?.includes("Retro Creator"));
+    const previewButton = retroCard?.querySelector<HTMLButtonElement>('[title="Preview theme"]');
     await act(async () => { previewButton?.click(); });
-    expect(mockOpen).toHaveBeenCalledWith(
-      `/preview/${"a".repeat(64)}`, "_blank", "noopener,noreferrer",
-    );
-    mockOpen.mockRestore();
+    const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="Theme preview Retro Creator"]');
+    expect(iframe?.getAttribute("src")).toBe("/preview/" + "a".repeat(64));
+    const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toContain("noopener");
   });
 
   it("prompts for confirmation before discarding unsaved theme settings", async () => {
@@ -199,5 +202,71 @@ describe("ThemesManagerCard", () => {
     await act(async () => { proceed?.click(); });
     expect(document.querySelector<HTMLSelectElement>("select")).toBeNull();
     expect(document.querySelector('button[aria-label="Settings Retro Creator"]')).not.toBeNull();
+  });
+  it("confirms before publishing a different theme and reports API errors without changing the active theme", async () => {
+    vi.mocked(activateThemeApi).mockRejectedValue(new Error("Theme activation unavailable"));
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const publish = Array.from(retro?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.trim() === "Publish",
+    );
+    expect(publish).toBeTruthy();
+    await act(async () => { publish?.click(); });
+    expect(activateThemeApi).not.toHaveBeenCalled();
+
+    const confirmation = document.querySelector(".settings-confirmation-dialog");
+    expect(confirmation?.textContent).toContain("Publish this theme to your live website?");
+    const proceed = Array.from(confirmation?.querySelectorAll("button") || []).find(
+      (button) => button.textContent?.includes("Publish theme"),
+    );
+    await act(async () => { proceed?.click(); });
+    expect(activateThemeApi).toHaveBeenCalledWith("retro-creator");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Theme activation unavailable");
+    expect(container.textContent).toContain("Vibress Default");
+  });
+
+  it("provides a user-controlled external preview link beside an in-studio preview", async () => {
+    vi.mocked(createThemePreviewApi).mockResolvedValue({
+      previewToken: "b".repeat(64),
+      expiresAt: new Date().toISOString(),
+      themeId: "retro-creator",
+    });
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const preview = retro?.querySelector<HTMLButtonElement>('button[title="Preview theme"]');
+    await act(async () => { preview?.click(); });
+    const link = document.querySelector<HTMLAnchorElement>('a[href^="/preview/"]');
+    expect(link?.getAttribute("href")).toBe("/preview/" + "b".repeat(64));
+    expect(link?.textContent).toContain("Open preview");
+    expect(document.querySelector('iframe[title="Theme preview Retro Creator"]')).not.toBeNull();
+  });
+
+  it("prompts for confirmation displaying the human-readable theme name before uninstalling", async () => {
+    await act(async () => { root.render(<ThemesManagerCard />); });
+    const open = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Change theme"),
+    );
+    await act(async () => { open?.click(); });
+    const retro = Array.from(document.querySelectorAll("article")).find(
+      (element) => element.textContent?.includes("Retro Creator"),
+    );
+    const uninstallBtn = retro?.querySelector<HTMLButtonElement>('button[title="Uninstall theme"]');
+    expect(uninstallBtn).not.toBeNull();
+    await act(async () => { uninstallBtn?.click(); });
+
+    const confirmation = document.querySelector(".settings-confirmation-dialog");
+    expect(confirmation?.textContent).toContain("Uninstall this theme? Retro Creator");
   });
 });

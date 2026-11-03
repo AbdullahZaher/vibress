@@ -87,9 +87,18 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 
 ## Admin UI
 
-`/admin/settings/themes` — theme cards (name, version, description, active badge), Preview, Activate, and a settings editor (color, number, boolean, string, select) with server-side validation.
+`/admin/settings/site` → **Theme Studio**: always-visible published theme summary, spacious image-led catalog, official/custom filtering, Preview/Publish/Customize actions, ZIP upload, and schema-based editor. The existing Settings navigation remains the only navigation. `ThemeGallery.tsx` renders the theme's actual `previewImage` when supplied and a clearly labelled missing-screenshot state otherwise. Publishing requires explicit confirmation and reports server-confirmed success/errors. The same publication-bound 15-minute preview token is used for non-publishing previews; it does **not** preview unsaved form changes. The editor persists settings per theme and does not activate inactive themes. The design QA/release plan lives in `docs/design/VIBRESS_THEME_STUDIO_ROADMAP_2026-11-02.md`.
 
 ## Cache Freshness
 
 - Web fetches active theme + settings per request with `no-store`; theme activation and saved settings do not require a rebuild.
 - External renderer file maps have a 60-second production cache; asset responses can be cached longer by clients. Plan asset versioning for changes to installed theme files.
+
+
+## Theme Studio release verification & test-data safety
+
+- **Editorial fixtures are destructive test data**, never a production migration. Provision a dedicated, disposable localhost PostgreSQL instance with a restricted database role. Run `pnpm staging:provision` only with explicit `DATABASE_URL`, `VIBRESS_PROVISION_STAGING_MARKER=true` and an independently generated 64-character hexadecimal `VIBRESS_STAGING_MARKER_TOKEN`. Existing marker identities must not be overwritten.
+- Pass the same token to `pnpm staging:seed` with `VIBRESS_SEED_EDITORIAL_STAGING=true`; the seeder verifies the identity and publication against its mutation connection before beginning a transaction. Never expose the marker in logs or commit it to the repository. Restrict the test fixtures to their explicit post IDs and never mutate shared user profiles.
+- `pnpm qa:theme-studio` captures and validates screenshots but leaves `visual_review_pending=true`; capture success **is not** independent design certification.
+- A separate authorized reviewer may run `pnpm qa:approve-review -- --manifest <path> --commit-sha <40-hex-sha> --reviewer <identity> --role <role> --score <number> --observations <json>`. Set `THEME_STUDIO_REVIEW_SIGNING_KEY` from a protected secret store to a random **32+ byte hex key** before signing or verifying approval. The HMAC binds reviewer metadata, observations, score, commit and screenshot hashes; it establishes integrity only when the signing key and reviewer identity are controlled by an independent trusted process.
+- The final production merge gate requires all required CI jobs to complete successfully **on the exact reviewed SHA**, actual manual inspection of QA artifacts (including RTL/mobile states), and separately documented approval. Never use earlier successful workflow runs as proof of the current head.

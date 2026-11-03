@@ -5,9 +5,12 @@ import { SubscribeModal } from "./SubscribeModal";
 import { ThemeToggle } from "../../../components/reader/ThemeToggle";
 import { t } from "../../../lib/i18n";
 import { useMember } from "../../../lib/useMember";
+import type { PreviewNavigation } from "../../../lib/preview-links";
+import { toPreviewHref } from "../../../lib/preview-links";
 
 interface HeaderNavProps {
   siteTitle: string;
+  previewNavigation: PreviewNavigation | null;
   siteIcon?: string | undefined;
   siteLogo?: string | undefined;
   primaryNav?: Array<{ label: string; url: string }> | undefined;
@@ -15,6 +18,7 @@ interface HeaderNavProps {
 
 export function HeaderNav({
   siteTitle,
+  previewNavigation,
   siteIcon,
   siteLogo,
   primaryNav,
@@ -31,16 +35,16 @@ export function HeaderNav({
               {primaryNav && primaryNav.length > 0 ? (
                 primaryNav.map((item, idx) => (
                   <li key={idx} className="nav-item">
-                    <a href={item.url}>{item.label}</a>
+                    <a href={toPreviewHref(item.url, previewNavigation)}>{item.label}</a>
                   </li>
                 ))
               ) : (
                 <>
                   <li className="nav-home nav-current">
-                    <a href="/">{t("nav.home")}</a>
+                    <a href={toPreviewHref("/", previewNavigation)}>{t("nav.home")}</a>
                   </li>
                   <li className="nav-about">
-                    <a href="/about">{t("nav.about")}</a>
+                    <a href={toPreviewHref(previewNavigation ? "/pages/about" : "/about", previewNavigation)}>{t("nav.about")}</a>
                   </li>
                 </>
               )}
@@ -48,7 +52,7 @@ export function HeaderNav({
           </nav>
 
           <div className="vb-head-brand">
-            <a className="vb-head-logo" href="/">
+            <a className="vb-head-logo" href={toPreviewHref("/", previewNavigation)}>
               {siteLogo ? (
                 <img
                   src={siteLogo}

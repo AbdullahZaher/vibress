@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import { ThemeAuthorArchiveProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { t } from "../../../lib/i18n";
@@ -32,9 +33,9 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                     })}
                   </time>
                 )}
-                <a href={`/posts/${post.slug}`} className="minimal-link">
+                <PreviewAnchor href={`/posts/${post.slug}`} className="minimal-link">
                   {post.title}
-                </a>
+                </PreviewAnchor>
               </li>
             ))}
           </ul>

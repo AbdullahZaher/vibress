@@ -16,7 +16,25 @@ function getValidatedProxyTarget(): string | undefined {
   }
 }
 
+function getValidatedWebProxyTarget(): string {
+  const raw = process.env.WEB_PROXY_TARGET;
+  if (!raw) return "http://127.0.0.1:7778";
+  try {
+    const parsed = new URL(raw);
+    if (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1")
+    ) {
+      return parsed.origin;
+    }
+  } catch {
+    return "http://127.0.0.1:7778";
+  }
+  return "http://127.0.0.1:7778";
+}
+
 const proxyTarget = getValidatedProxyTarget();
+const webProxyTarget = getValidatedWebProxyTarget();
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -74,30 +92,53 @@ export default defineConfig({
   server: {
     port: process.env.ADMIN_PORT ? parseInt(process.env.ADMIN_PORT) : 7779,
     host: "0.0.0.0",
-    proxy: proxyTarget
-      ? {
-          "/api": {
-            target: proxyTarget,
-            changeOrigin: false,
-            configure: (proxy) => {
-              proxy.on("error", (_err, _req, res) => {
-                if ("writeHead" in res && !res.headersSent) {
-                  res.writeHead(502, { "Content-Type": "application/json" });
-                  res.end(
-                    JSON.stringify({
-                      errors: [
-                        {
-                          code: "BAD_GATEWAY",
-                          message: "api proxy destination is unavailable",
-                        },
-                      ],
-                    }),
-                  );
-                }
-              });
+    proxy: {
+      ...(proxyTarget
+        ? {
+            "/api": {
+              target: proxyTarget,
+              changeOrigin: false,
+              configure: (proxy) => {
+                proxy.on("error", (_err, _req, res) => {
+                  if ("writeHead" in res && !res.headersSent) {
+                    res.writeHead(502, { "Content-Type": "application/json" });
+                    res.end(
+                      JSON.stringify({
+                        errors: [
+                          {
+                            code: "BAD_GATEWAY",
+                            message: "api proxy destination is unavailable",
+                          },
+                        ],
+                      }),
+                    );
+                  }
+                });
+              },
             },
-          },
-        }
-      : undefined,
+          }
+        : {}),
+      "/preview": {
+        target: webProxyTarget,
+        changeOrigin: false,
+        configure: (proxy) => {
+          proxy.on("error", (_err, _req, res) => {
+            if ("writeHead" in res && !res.headersSent) {
+              res.writeHead(502, { "Content-Type": "application/json" });
+              res.end(
+                JSON.stringify({
+                  errors: [
+                    {
+                      code: "BAD_GATEWAY",
+                      message: "preview web destination is unavailable",
+                    },
+                  ],
+                }),
+              );
+            }
+          });
+        },
+      },
+    },
   },
 });

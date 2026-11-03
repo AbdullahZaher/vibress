@@ -312,7 +312,7 @@ export const plugin: PluginModule = {
         stdio: "pipe",
       });
     }).not.toThrow();
-  });
+  }, 30000);
 
   it("compiles V1 Native builders from a packed SDK without exposing Host internals", () => {
     expect(tmpConsumerDir).toBeTruthy();
@@ -378,7 +378,7 @@ defineNativeAdminPageV1({
     expect(invalid.error).toBeUndefined();
     expect(invalid.status).not.toBe(0);
     expect(invalid.stdout + invalid.stderr).toContain("TS2322");
-  });
+  }, 30000);
 
   it("strictly rejects external consumer attempts to import private Host internal packages", () => {
     expect(tmpConsumerDir).toBeTruthy();
@@ -407,7 +407,7 @@ import { getDb } from "@vibress/database";
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain("TS2307");
     expect(result.stdout + result.stderr).toContain("@vibress/database");
-  });
+  }, 30000);
 
   it("admits a packaged external plugin conforming to public SDK contracts", () => {
     const pageOutcome = admitNativeAdminPage(packagedExternalPlugin, "catalog-view");

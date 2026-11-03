@@ -16,6 +16,7 @@
     "@tanstack/react-router": "^1.45.10",
     "@vibress/api-contracts": "workspace:*",
     "@vibress/i18n": "workspace:*",
+    "@vibress/theme-core": "workspace:*",
     "@vibress/studio-cards": "workspace:*",
     "@vibress/studio-core": "workspace:*",
     "@vibress/studio-html": "workspace:*",

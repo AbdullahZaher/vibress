@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import { ThemeTagArchiveProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { t } from "../../../lib/i18n";
@@ -31,9 +32,9 @@ export async function TagArchive(props: ThemeTagArchiveProps) {
                     })}
                   </time>
                 )}
-                <a href={`/posts/${post.slug}`} className="minimal-link">
+                <PreviewAnchor href={`/posts/${post.slug}`} className="minimal-link">
                   {post.title}
-                </a>
+                </PreviewAnchor>
               </li>
             ))}
           </ul>

@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeHomeProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -39,7 +40,7 @@ export async function Home(props: ThemeHomeProps) {
           ) : (
             <div className="post-feed-horizontal">
               {posts.map((post) => (
-                <a
+                <PreviewAnchor
                   key={post.id}
                   href={`/posts/${post.slug}`}
                   className="post-card-horizontal"
@@ -99,7 +100,7 @@ export async function Home(props: ThemeHomeProps) {
                       )}
                     </div>
                   </div>
-                </a>
+                </PreviewAnchor>
               ))}
             </div>
           )}
@@ -114,12 +115,12 @@ export async function Home(props: ThemeHomeProps) {
               }}
             >
               {props.pagination.page > 1 ? (
-                <a
+                <PreviewAnchor
                   href={`/?page=${props.pagination.page - 1}`}
                   style={{ fontWeight: 700, color: "var(--brand-pink)" }}
                 >
                   &larr; {t("home.newer")}
-                </a>
+                </PreviewAnchor>
               ) : (
                 <span />
               )}
@@ -130,12 +131,12 @@ export async function Home(props: ThemeHomeProps) {
                 })}
               </span>
               {props.pagination.page < props.pagination.pages ? (
-                <a
+                <PreviewAnchor
                   href={`/?page=${props.pagination.page + 1}`}
                   style={{ fontWeight: 700, color: "var(--brand-pink)" }}
                 >
                   {t("home.older")} &rarr;
-                </a>
+                </PreviewAnchor>
               ) : (
                 <span />
               )}

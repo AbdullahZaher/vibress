@@ -1,0 +1,134 @@
+import React, { useEffect, useState } from "react";
+import { ArrowLeft, ExternalLink, Laptop, Monitor, RefreshCw, Smartphone } from "lucide-react";
+import { useAdminLocale } from "../../../lib/admin-locale";
+import { Button } from "../../ui/button";
+
+interface ThemePreviewWorkspaceProps {
+  themeName: string;
+  url: string;
+  onBack: () => void;
+  onRefresh: () => void;
+}
+
+const VIEWPORTS = [
+  { id: "desktop", name: "Desktop", width: 1200, Icon: Monitor },
+  { id: "tablet", name: "Tablet", width: 768, Icon: Laptop },
+  { id: "mobile", name: "Mobile", width: 390, Icon: Smartphone },
+] as const;
+
+/**
+ * Publication-scoped preview token is returned by the existing backend.
+ * This frame shows SAVED theme settings only; it never publishes a theme.
+ * The frame is intentionally script-restricted to prevent untrusted theme
+ * embeds from executing active code in the Admin document.
+ */
+export const ThemePreviewWorkspace: React.FC<ThemePreviewWorkspaceProps> = ({
+  themeName, url, onBack, onRefresh,
+}) => {
+  const { tr } = useAdminLocale();
+  const [selected, setSelected] = useState<(typeof VIEWPORTS)[number]["id"]>("desktop");
+  const [frameStatus, setFrameStatus] = useState<"loading" | "ready" | "unavailable">("loading");
+  useEffect(() => {
+    setFrameStatus("loading");
+    // iframe onLoad is not sufficient to detect denied embedding. Keep an
+    // actionable external preview available when rendering hangs.
+    const timeout = window.setTimeout(() => setFrameStatus((s) => s === "loading" ? "unavailable" : s), 15000);
+    return () => window.clearTimeout(timeout);
+  }, [url, selected]);
+  const viewport = VIEWPORTS.find((item) => item.id === selected) || VIEWPORTS[0];
+
+  return (
+    <section aria-label={tr("Theme preview") + " " + themeName} className="mx-auto flex max-w-6xl flex-col gap-4 pb-4">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Button variant="outline" size="sm" className="min-h-11 min-w-11 rounded-xl"
+            aria-label={tr("Back to themes")} title={tr("Back to themes")} onClick={onBack}>
+            <ArrowLeft aria-hidden="true" className="size-4 rtl:rotate-180" />
+          </Button>
+          <div className="min-w-0">
+            <h3 className="break-words text-lg font-bold tracking-tight text-foreground"><bdi>{themeName}</bdi></h3>
+            <p className="text-sm text-muted-foreground">{tr("Preview only — your published site is unchanged.")}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onRefresh} className="min-h-11 gap-2 text-sm font-medium">
+            <RefreshCw aria-hidden="true" className="size-4" />{tr("Refresh preview")}
+          </Button>
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border/80 bg-background px-4 text-sm font-semibold text-foreground shadow-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <ExternalLink aria-hidden="true" className="size-4 text-muted-foreground" />
+            {tr("Open preview in new tab")}
+          </a>
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/80 bg-muted/20 px-4 py-2.5 shadow-xs">
+        <div role="group" aria-label={tr("Preview device size")} className="flex flex-wrap items-center gap-1.5">
+          {VIEWPORTS.map(({ id, name, Icon }) => (
+            <Button key={id} size="sm" variant={selected === id ? "secondary" : "ghost"}
+              aria-pressed={selected === id} onClick={() => setSelected(id)}
+              className={"min-h-11 gap-2 rounded-xl text-sm font-medium transition-all " +
+                (selected === id ? "shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground")}>
+              <Icon aria-hidden="true" className="size-4" />{tr(name)}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <span className="font-mono bg-background/60 px-2 py-0.5 rounded-md border border-border/60">
+            {selected === "mobile" ? tr("Up to 390px") : `${viewport.width}px`}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>{tr("Saved theme settings")}</span>
+        </div>
+      </div>
+
+      <div className={"flex min-h-[55dvh] w-full overflow-x-auto rounded-2xl border border-border/80 bg-muted/30 p-2 sm:p-5 shadow-inner " +
+        (selected === "mobile" ? "justify-center" : "justify-start 2xl:justify-center")}>
+        <div style={{
+          width: selected === "mobile" ? "100%" : viewport.width,
+          maxWidth: selected === "mobile" ? 390 : undefined,
+          minWidth: selected === "mobile" ? 0 : viewport.width,
+        }}
+          className={"relative h-[min(65dvh,750px)] min-h-80 shrink-0 overflow-hidden bg-background shadow-md transition-all " +
+            (selected === "mobile" ? "rounded-3xl border-4 border-foreground/15 ring-1 ring-border" : "rounded-xl border border-border/80")}>
+          {frameStatus === "loading" && (
+            <div role="status" aria-live="polite" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background/95 backdrop-blur-sm text-sm text-muted-foreground animate-in fade-in">
+              <RefreshCw className="size-6 animate-spin text-primary" />
+              <span>{tr("Loading preview...")}</span>
+            </div>
+          )}
+          {frameStatus === "unavailable" && (
+            <div role="alert" className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background p-6 text-center text-sm">
+              <p className="font-semibold text-foreground">{tr("Inline preview could not be displayed.")}</p>
+              <p className="max-w-sm text-muted-foreground">{tr("Try the full preview in a new tab or refresh your preview link.")}</p>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                <Button variant="outline" size="sm" onClick={onRefresh} className="min-h-11 gap-2 text-sm font-medium">
+                  <RefreshCw aria-hidden="true" className="size-4" />{tr("Refresh preview")}
+                </Button>
+                <a href={url} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 font-semibold text-foreground shadow-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ExternalLink aria-hidden="true" className="size-4 text-muted-foreground" />
+                  {tr("Open preview in new tab")}
+                </a>
+              </div>
+            </div>
+          )}
+          <iframe key={url + ":" + selected} src={url} title={tr("Theme preview") + " " + themeName}
+            onLoad={() => setFrameStatus((s) => s === "unavailable" ? s : "ready")}
+            onError={() => setFrameStatus("unavailable")}
+            sandbox="allow-forms allow-popups"
+            referrerPolicy="no-referrer"
+            className="h-full w-full border-0 bg-background" />
+        </div>
+      </div>
+
+      {selected !== "mobile" && (
+        <p className="text-xs text-muted-foreground">{tr("Scroll horizontally to inspect large preview widths.")}</p>
+      )}
+      <div className="rounded-xl border border-border/60 bg-muted/20 p-3.5 text-xs sm:text-sm leading-relaxed text-muted-foreground space-y-1">
+        <p>{tr("The preview uses saved theme settings. Unsaved edits are not shown. Preview links expire automatically.")}</p>
+        <p>{tr("Inline preview is limited; use the new-tab link for interactive features.")}</p>
+      </div>
+    </section>
+  );
+};

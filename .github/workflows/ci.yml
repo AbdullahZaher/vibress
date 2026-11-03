@@ -260,6 +260,7 @@ jobs:
           # Apps are started above in this same CI step; Playwright must not
           # run its fallback pnpm dev webServer and collide with ports.
           export PLAYWRIGHT_SKIP_WEBSERVER=1
+          mkdir -p artifacts/theme-studio-ci
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             # PR gate: gateway health, upload/traversal regressions and a real
             # authenticated collaboration WebSocket handshake via Nginx.
@@ -276,6 +277,9 @@ jobs:
             npx playwright test
           fi
 
+          # Capture reproducible Theme Studio visual evidence matrix (60 screenshots across viewports, locales, themes, editor, upload dialog)
+          THEME_STUDIO_BASE_URL="http://127.0.0.1:7777" THEME_STUDIO_ADMIN_EMAIL="owner@example.com" THEME_STUDIO_ADMIN_PASSWORD="OwnerPass123!" THEME_STUDIO_OUTPUT="artifacts/theme-studio-ci" pnpm exec tsx scripts/capture-theme-studio-qa.ts
+
       - name: Upload Playwright failure artifacts
         if: failure()
         uses: actions/upload-artifact@v7
@@ -285,11 +289,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # Store screenshots independently; later Playwright suites clean test-results.
       - name: Upload admin design-review screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: admin-ui-design-review-${{ github.run_id }}
-          path: test-results/**/design-*.png
+          path: |
+            artifacts/theme-studio-ci/**
+            artifacts/theme-studio/**
+            test-results/**/design-*.png
           if-no-files-found: ignore
           retention-days: 7

@@ -179,7 +179,6 @@ export function certifyTheme(input: CertifyThemeInput): ThemeCertificationReport
   const templateKeys = Array.from(files.keys()).filter((k) => k.startsWith("templates/"));
   const hasHome = templateKeys.some((k) => /^templates\/(home|index)\.(liquid|html)$/i.test(k));
   const hasPost = templateKeys.some((k) => /^templates\/post\.(liquid|html)$/i.test(k));
-  const _has404 = templateKeys.some((k) => /^templates\/404\.(liquid|html)$/i.test(k));
 
   const templatesPassed = hasHome && hasPost;
   checks.push({

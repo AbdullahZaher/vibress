@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
 import { SocialLinks } from "../../../components/SocialLinks";
@@ -49,13 +50,13 @@ export async function ThemeLayout({
       <div className="vb-viewport">
         <header id="vb-navigation" className="vb-navigation vb-outer">
           <div className="vb-navigation-inner vb-inner">
-            <a className="vb-navigation-logo" href="/">
+            <PreviewAnchor className="vb-navigation-logo" href="/">
               {site.title}
-            </a>
+            </PreviewAnchor>
             <nav className="vb-navigation-menu">
               <ul className="nav">
                 <li className="nav-home">
-                  <a href="/">Home</a>
+                  <PreviewAnchor href="/">Home</PreviewAnchor>
                 </li>
               </ul>
             </nav>

@@ -518,7 +518,7 @@ export function createLiquidThemeEngine(options: ThemeEngineOptions = {}): Liqui
       const modelMatch = beforeAs.match(/^['"]?([a-zA-Z0-9_-]+)['"]?/);
       this.modelSlug = modelMatch ? modelMatch[1] : "";
     },
-    render(ctx, emitter) {
+    render(ctx) {
       const env = ctx.environments || {};
       const collections = env.collections || (ctx.get(["collections"]) as Record<string, any[]>) || {};
       let items = collections[this.modelSlug] || [];

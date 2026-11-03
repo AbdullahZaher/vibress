@@ -121,6 +121,7 @@ describe("Media API Upload & Security Integration", () => {
       expect(res.headers["etag"]).toMatch(/^"[0-9a-f]+-[0-9a-f]+"$/);
       expect(res.headers["last-modified"]).toBeDefined();
       expect(res.headers["cache-control"]).toBe("public, max-age=3600");
+      expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
       expect(res.headers["content-disposition"]).toContain("inline");
       expect(res.headers["content-disposition"]).toContain(testFileName);
     });

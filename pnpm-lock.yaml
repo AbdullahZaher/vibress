@@ -136,6 +136,9 @@ importers:
       '@vibress/studio-utils':
         specifier: workspace:*
         version: link:../../packages/studio-utils
+      '@vibress/theme-core':
+        specifier: workspace:*
+        version: link:../../packages/theme-core
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -448,6 +451,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      zod:
+        specifier: ^4.6.6
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^26.6.5

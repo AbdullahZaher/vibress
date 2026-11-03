@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { t } from "../../../lib/i18n";
 import { MemberActions } from "./MemberActions";
@@ -18,9 +19,9 @@ export function HeaderNav({
       <div className="vb-head-inner vb-inner">
         <div className="vb-head-brand">
           <div className="vb-head-brand-wrapper">
-            <a className="vb-head-logo" href="/">
+            <PreviewAnchor className="vb-head-logo" href="/">
               {siteLogo ? <img src={siteLogo} alt={siteTitle} /> : siteTitle}
-            </a>
+            </PreviewAnchor>
           </div>
           <button
             type="button"
@@ -54,10 +55,10 @@ export function HeaderNav({
         <nav className="vb-head-menu">
           <ul className="nav">
             <li className="nav-home">
-              <a href="/">{t("nav.home")}</a>
+              <PreviewAnchor href="/">{t("nav.home")}</PreviewAnchor>
             </li>
             <li className="nav-about">
-              <a href="/about">{t("nav.about")}</a>
+              <PreviewAnchor href="/pages/about">{t("nav.about")}</PreviewAnchor>
             </li>
           </ul>
         </nav>

@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { t } from "../../../lib/i18n";
 import type { PublicPostSummaryDto } from "@vibress/api-contracts";
@@ -33,7 +34,7 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
           : {}
       }
     >
-      <a className="post-link" href={`/posts/${post.slug}`}>
+      <PreviewAnchor className="post-link" href={`/posts/${post.slug}`}>
         {isActuallyFeatured ? (
           <img
             className="post-image u-object-fit"
@@ -90,7 +91,7 @@ export function PostCard({ post, isFeatured = false }: PostCardProps) {
             })}
           </div>
         </footer>
-      </a>
+      </PreviewAnchor>
     </article>
   );
 }

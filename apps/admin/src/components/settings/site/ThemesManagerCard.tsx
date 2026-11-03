@@ -14,18 +14,16 @@ import { SettingsCardRow } from "../SettingsCardRow";
 import { SettingsModalPortal } from "../SettingsModalPortal";
 import { useSettingsConfirmation } from "../hooks/useSettingsConfirmation";
 import { ThemeSettingsEditor } from "./ThemeSettingsEditor";
+import { ThemeGallery, safeThemePreviewImage } from "./ThemeGallery";
+import { ThemePreviewWorkspace } from "./ThemePreviewWorkspace";
 import { useAdminLocale } from "../../../lib/admin-locale";
 import { Button } from "../../ui/button";
-import { Badge } from "../../ui/badge";
 import {
   Palette,
   CheckCircle2,
-  Eye,
   RefreshCw,
   X,
   UploadCloud,
-  Trash2,
-  Settings2,
   FileArchive,
   Loader2,
   AlertCircle,
@@ -50,9 +48,19 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const [editorDirty, setEditorDirty] = useState(false);
   const [editorSaving, setEditorSaving] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewFallbackUrl, setPreviewFallbackUrl] = useState<string | null>(null);
+  const [previewThemeName, setPreviewThemeName] = useState<string | null>(null);
+  const [previewThemeId, setPreviewThemeId] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+  const publicationGeneration = useRef(0);
   const drawerRef = useRef<HTMLDivElement>(null);
   const uploadDialogRef = useRef<HTMLDivElement>(null);
   const openingControlRef = useRef<HTMLElement | null>(null);
+  const previewReturnFocusId = useRef<string | null>(null);
   const uploadControlRef = useRef<HTMLButtonElement>(null);
 
   // Upload modal state inside drawer
@@ -67,7 +75,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
   useEffect(() => {
     if (!isDrawerOpen) return;
-    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Close themes drawer"]')?.focus();
+    drawerRef.current?.querySelector<HTMLButtonElement>('[data-theme-studio-close]')?.focus();
     return () => {
       openingControlRef.current?.focus();
     };
@@ -78,7 +86,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (isConfirmOpen) return;
     const focusRoot = isUploadOpen ? uploadDialogRef.current : drawerRef.current;
     if (isUploadOpen) {
-      focusRoot?.querySelector<HTMLButtonElement>('[aria-label="Close theme upload"]')?.focus();
+      focusRoot?.querySelector<HTMLButtonElement>('[data-theme-upload-close]')?.focus();
     }
     const trapTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || !focusRoot) return;
@@ -108,12 +116,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
+    setCatalogError(null);
     try {
-      const [themesRes, activeRes] = await Promise.all([
-        listThemesApi(),
-        getActiveThemeApi(),
-      ]);
+      const [themesRes, activeRes] = await Promise.all([listThemesApi(), getActiveThemeApi()]);
+      if (requestId !== requestSequence.current) return;
       setThemes(themesRes.themes || []);
       setActive({
         themeId: activeRes.themeId,
@@ -121,12 +129,42 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         settings: activeRes.settings,
         settingsSchemaVersion: activeRes.settingsSchemaVersion,
       });
-    } catch {
-      // Ignored
+    } catch (error: unknown) {
+      if (requestId !== requestSequence.current) return;
+      setCatalogError(error instanceof Error ? error.message : "Failed to load themes.");
+      // Preserve the last server-confirmed theme within this publication during transient refresh errors.
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    void load();
+    const onPublicationChange = () => {
+      publicationGeneration.current += 1;
+      requestSequence.current += 1;
+      setActive(null);
+      setThemes([]);
+      setActionError(null);
+      setActionSuccess(null);
+      setIsDrawerOpen(false);
+      setEditingTheme(null);
+      setPreviewFallbackUrl(null);
+      setPreviewThemeName(null);
+      setPreviewThemeId(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      setActivating(null);
+      setDeleting(null);
+      void load();
+    };
+    window.addEventListener("vibress:publication-changed", onPublicationChange);
+    return () => {
+      publicationGeneration.current += 1;
+      requestSequence.current += 1;
+      window.removeEventListener("vibress:publication-changed", onPublicationChange);
+    };
+  }, [load]);
 
   const handleEditorBack = async () => {
     if (editorSaving) return;
@@ -140,10 +178,14 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     if (editorDirty && !(await confirm(tr("Discard unsaved theme settings changes?"), { destructive: true }))) return;
     setEditingTheme(null);
     setEditorDirty(false);
+    setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
+    setPreviewThemeId(null);
     setIsDrawerOpen(false);
   };
 
   const handleCloseUpload = () => {
+    if (uploadProgress === "validating" || uploadProgress === "installing") return;
     setIsUploadOpen(false);
     uploadControlRef.current?.focus();
   };
@@ -151,44 +193,93 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleOpen = () => {
     openingControlRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setIsDrawerOpen(true);
-    load();
+    setActionError(null);
+    setActionSuccess(null);
+    setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
+    setPreviewThemeId(null);
+    void load();
   };
 
   const handleActivate = async (id: string) => {
+    const selected = themes.find((theme) => theme.manifest.id === id);
+    if (!selected || active?.themeId === id || activating || deleting) return;
+    const scope = publicationGeneration.current;
+    if (!(await confirm(
+      tr("Publish this theme to your live website?") + " " + selected.manifest.name + ". " + tr("This replaces the currently published theme:") + " " + (themes.find((theme) => theme.manifest.id === active?.themeId)?.manifest.name || active?.themeId || "—"),
+      { confirmLabel: tr("Publish theme") },
+    ))) return;
+    if (scope !== publicationGeneration.current) return;
     setActivating(id);
+    setActionError(null);
+    setActionSuccess(null);
     try {
-      const res = await activateThemeApi(id);
-      setActive(res.theme);
+      const result = await activateThemeApi(id);
+      if (scope !== publicationGeneration.current) return;
+      setActive(result.theme);
+      setActionSuccess(tr("Theme published successfully."));
       await load();
-    } catch {
-      // Error handled
+    } catch (error: unknown) {
+      if (scope === publicationGeneration.current) setActionError(error instanceof Error ? error.message : tr("Failed to publish theme."));
     } finally {
       setActivating(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!(await confirm(`Are you sure you want to uninstall theme "${id}"?`, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
+    const scope = publicationGeneration.current;
+    const targetTheme = themes.find((item) => item.manifest.id === id);
+    const themeDisplayName = targetTheme?.manifest.name || id;
+    if (!(await confirm(tr("Uninstall this theme?") + " " + themeDisplayName, { destructive: true, confirmLabel: tr("Uninstall theme") }))) {
       return;
     }
+    if (scope !== publicationGeneration.current) return;
     setDeleting(id);
+    setActionError(null);
+    setActionSuccess(null);
     try {
       await deleteThemeApi(id);
+      if (scope !== publicationGeneration.current) return;
+      setActionSuccess(tr("Theme uninstalled."));
       await load();
-    } catch {
-      // Error handled
+    } catch (error: unknown) {
+      if (scope === publicationGeneration.current) setActionError(error instanceof Error ? error.message : tr("Failed to uninstall theme."));
     } finally {
       setDeleting(null);
     }
   };
 
+  useEffect(() => {
+    if (!isDrawerOpen || previewLoading || previewFallbackUrl) return;
+    const id = previewReturnFocusId.current;
+    if (!id) return;
+    const theme = themes.find((item) => item.manifest.id === id);
+    if (!theme) return;
+    previewReturnFocusId.current = null;
+    const container = Array.from(drawerRef.current?.querySelectorAll<HTMLElement>("article[data-theme-id]") ?? [])
+      .find((item) => item.dataset.themeId === id);
+    container?.querySelector<HTMLButtonElement>("button[title]")?.focus();
+  }, [isDrawerOpen, previewFallbackUrl, previewLoading, themes]);
+
   const handlePreview = async (themeId: string) => {
+    const theme = themes.find((item) => item.manifest.id === themeId);
+    if (!theme || previewLoading) return;
     setPreviewError(null);
+    setPreviewFallbackUrl(null);
+    setPreviewThemeName(null);
+    setPreviewThemeId(null);
+    setPreviewLoading(true);
+    const scope = publicationGeneration.current;
     try {
       const res = await createThemePreviewApi(themeId);
-      window.open(`/preview/${encodeURIComponent(res.previewToken)}`, "_blank", "noopener,noreferrer");
+      if (scope !== publicationGeneration.current) return;
+      setPreviewFallbackUrl("/preview/" + encodeURIComponent(res.previewToken));
+      setPreviewThemeName(theme.manifest.name);
+      setPreviewThemeId(themeId);
     } catch (error: unknown) {
-      setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
+      if (scope === publicationGeneration.current) setPreviewError(error instanceof Error ? error.message : tr("Failed to open theme preview."));
+    } finally {
+      if (scope === publicationGeneration.current) setPreviewLoading(false);
     }
   };
 
@@ -197,11 +288,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
     setDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
-      if (file.name.endsWith(".zip")) {
+      if (/\.zip$/i.test(file.name)) {
         setUploadFile(file);
         setUploadError(null);
       } else {
-        setUploadError("Please select a valid .zip archive file.");
+        setUploadFile(null);
+        setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
   };
@@ -209,34 +301,36 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.name.endsWith(".zip")) {
+      e.currentTarget.value = "";
+      if (/\.zip$/i.test(file.name)) {
         setUploadFile(file);
         setUploadError(null);
       } else {
-        setUploadError("Please select a valid .zip archive file.");
+        setUploadFile(null);
+        setUploadError(tr("Please select a valid .zip archive file."));
       }
     }
   };
 
   const handleUploadSubmit = async () => {
-    if (!uploadFile) return;
+    if (!uploadFile || uploadProgress === "validating" || uploadProgress === "installing") return;
+    const scope = publicationGeneration.current;
     setUploadProgress("validating");
     setUploadError(null);
 
     try {
       setUploadProgress("installing");
       await uploadThemeApi(uploadFile);
+      if (scope !== publicationGeneration.current) return;
       setUploadProgress("success");
+      setUploadFile(null);
       await load();
-      setTimeout(() => {
-        handleCloseUpload();
-        setUploadFile(null);
-        setUploadProgress("idle");
-      }, 1200);
+      // Keep the confirmed success state until the user chooses to return to the gallery.
     } catch (err: unknown) {
+      if (scope !== publicationGeneration.current) return;
       setUploadProgress("error");
       const e = err as { message?: string };
-      setUploadError(e.message || "Failed to install theme package.");
+      setUploadError(e.message || tr("Failed to install theme package."));
     }
   };
 
@@ -247,15 +341,32 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
           icon={<Palette className="h-4 w-4" />}
           title="Themes"
           description="Choose how your publication looks and feels with official and custom responsive themes."
-          currentValue={
-            <Badge variant="secondary" className="text-xs font-mono gap-1">
-              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-              {active ? active.themeId : "Vibress Default"} (Active)
-            </Badge>
-          }
           actionLabel="Change theme"
           onAction={handleOpen}
         />
+        <div role="status" className="flex flex-wrap items-center gap-2 border-t border-border/50 px-4 py-3 text-sm sm:px-5">
+          <span className="text-muted-foreground">{tr("Published theme")}:</span>
+          {loading && !active ? (
+            <span className="text-muted-foreground">{tr("Loading themes...")}</span>
+          ) : catalogError ? (
+            <>
+              <span className="text-destructive">{tr("Unable to load published theme.")}</span>
+              <Button size="sm" variant="outline" onClick={() => void load()}>{tr("Retry")}</Button>
+            </>
+          ) : active ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-foreground">
+              <CheckCircle2 aria-hidden="true" className="size-4 text-emerald-600 dark:text-emerald-400" />
+              {(() => {
+                const current = themes.find((theme) => theme.manifest.id === active.themeId);
+                const previewImage = current ? safeThemePreviewImage(current) : null;
+                return previewImage ? <img src={previewImage} alt="" aria-hidden="true" className="size-9 rounded-md border border-border object-cover object-top"
+                  onError={(event) => { event.currentTarget.hidden = true; }} /> : null;
+              })()}
+              <bdi>{themes.find((theme) => theme.manifest.id === active.themeId)?.manifest.name || active.themeId}</bdi>
+              <span className="font-normal text-muted-foreground">v{active.themeVersion}</span>
+            </span>
+          ) : <span className="text-muted-foreground">{tr("No active theme found.")}</span>}
+        </div>
       </SettingsCard>
 
       {/* Themes Manager Slide-over Drawer */}
@@ -265,15 +376,19 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
         isOpen={isDrawerOpen}
         onClose={isUploadOpen ? handleCloseUpload : handleCloseDrawer}
       >
-        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex justify-end rtl:justify-start bg-background/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-2xl bg-card border-s border-border/80 shadow-2xl h-full flex flex-col justify-between animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
+        <div ref={drawerRef} role="dialog" aria-modal="true" aria-label={tr("Themes Manager")} className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-7xl bg-card border border-border/80 shadow-2xl h-full sm:h-[min(94dvh,1100px)] sm:rounded-2xl overflow-hidden flex flex-col justify-between animate-in fade-in duration-200">
             {/* Drawer Header */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-5 border-b border-border/60 bg-muted/20">
-              <div className="flex flex-wrap items-center gap-2">
-                <Palette className="h-4 w-4 text-primary" />
-                <h3 className="text-sm font-bold text-foreground">
-                  Themes Manager
-                </h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5 border-b border-border/60 bg-muted/20">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-border/80 bg-background shadow-xs">
+                  <Palette className="h-4 w-4 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold tracking-tight text-foreground">
+                    {tr("Theme Studio")}
+                  </h3>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -287,29 +402,31 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     setUploadProgress("idle");
                     setUploadError(null);
                   }}
-                  className="gap-1.5 text-sm min-h-10"
+                  className="gap-1.5 text-sm min-h-11 rounded-xl font-medium"
                 >
-                  <UploadCloud className="h-3.5 w-3.5" /> Upload ZIP
+                  <UploadCloud className="h-4 w-4" /> {tr("Upload ZIP")}
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={load}
                   disabled={loading || editingTheme !== null}
-                  className="gap-1.5 text-sm min-h-10"
-                  title="Reload registry themes from backend"
+                  className="gap-1.5 text-sm min-h-11 rounded-xl font-medium"
+                  title={tr("Refresh themes")}
                 >
                   <RefreshCw
-                    className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+                    className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
                   />{" "}
-                  Refresh
+                  {tr("Refresh")}
                 </Button>
                 <button
                   type="button"
-                  aria-label="Close themes drawer"
+                  data-theme-studio-close="true"
+                  aria-label={tr("Close themes drawer")}
+                  title={tr("Close themes drawer")}
                   onClick={handleCloseDrawer}
                   disabled={editorSaving}
-                  className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex size-11 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -317,25 +434,20 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
             </div>
 
             {/* Drawer Body */}
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              {previewError && (
-                <p role="alert" className="text-xs text-red-600 dark:text-red-400">{previewError}</p>
-              )}
-              <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant="outline"
-                    className="text-xs font-mono border-primary/30 text-primary"
-                  >
-                    Zero-Rebuild Theme System
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Upload external Liquid theme ZIPs or switch between built-in themes. All changes take effect immediately without recompilation or server restart.
-                </p>
-              </div>
+            <div className="min-h-0 p-4 sm:p-6 overflow-y-auto space-y-5 flex-1">
+              {previewError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{previewError}</p>}
+              {actionError && <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">{actionError}</p>}
+              {actionSuccess && <p role="status" className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-foreground">{actionSuccess}</p>}
 
-              {editingTheme ? (
+              {previewLoading ? (
+                <p role="status" className="flex min-h-60 items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 aria-hidden="true" className="size-5 animate-spin" />{tr("Preparing preview...")}
+                </p>
+              ) : previewFallbackUrl && previewThemeName ? (
+                <ThemePreviewWorkspace themeName={previewThemeName} url={previewFallbackUrl}
+                  onRefresh={() => { if (previewThemeId) void handlePreview(previewThemeId); }}
+                  onBack={() => { previewReturnFocusId.current = previewThemeId; setPreviewFallbackUrl(null); setPreviewThemeName(null); setPreviewThemeId(null); }} />
+              ) : editingTheme ? (
                 <ThemeSettingsEditor
                   key={editingTheme.manifest.id}
                   theme={editingTheme}
@@ -351,127 +463,40 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               ) : loading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                   <RefreshCw className="h-5 w-5 animate-spin text-primary" />
-                  <p className="text-xs">Loading theme catalog...</p>
+                  <p className="text-sm">{tr("Loading theme catalog...")}</p>
+                </div>
+              ) : catalogError ? (
+                <div role="alert" className="rounded-xl border border-destructive/20 p-6 text-sm">
+                  <p className="font-semibold">{tr("Failed to load themes.")}</p>
+                  <p className="my-3 text-muted-foreground">{catalogError}</p>
+                  <Button size="sm" variant="outline" onClick={() => void load()}>{tr("Retry")}</Button>
                 </div>
               ) : themes.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-xs">
-                  No themes discovered.
+                <div className="py-12 text-center text-muted-foreground text-sm">
+                  {tr("No themes discovered.")}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {themes.map((theme) => {
-                    const isCurrent = active?.themeId === theme.manifest.id;
-                    return (
-                      <div
-                        key={theme.manifest.id}
-                        className={`rounded-xl border p-4 flex flex-col justify-between transition-all ${
-                          isCurrent
-                            ? "border-primary/60 bg-primary/5 ring-1 ring-primary/30 shadow-xs"
-                            : "border-border/70 hover:border-border hover:bg-muted/10"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-bold text-foreground">
-                              {theme.manifest.name}
-                            </h4>
-                            <div className="flex items-center gap-1">
-                              <Badge
-                                variant="secondary"
-                                className="text-xs font-mono"
-                              >
-                                v{theme.manifest.version}
-                              </Badge>
-                              {!theme.isBuiltIn && (
-                                <Badge
-                                  variant="outline"
-                                  className="text-xs font-mono text-purple-700 dark:text-purple-300 border-purple-500/30"
-                                >
-                                  ZIP
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                            {theme.manifest.description ||
-                              "Responsive publishing theme optimized for modern publications."}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-4 border-t border-border/40 mt-4">
-                          <Button
-                            size="sm"
-                            disabled={
-                              isCurrent || activating === theme.manifest.id
-                            }
-                            onClick={() => handleActivate(theme.manifest.id)}
-                            className="text-sm min-h-10 flex-1 cursor-pointer"
-                            variant={isCurrent ? "outline" : "default"}
-                          >
-                            {isCurrent ? (
-                              <span className="flex items-center gap-1 text-emerald-500 font-medium">
-                                <CheckCircle2 className="h-3 w-3" /> Active
-                              </span>
-                            ) : activating === theme.manifest.id ? (
-                              <span className="flex items-center gap-1">
-                                <RefreshCw className="h-3 w-3 animate-spin" />{" "}
-                                Activating...
-                              </span>
-                            ) : (
-                              "Activate"
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handlePreview(theme.manifest.id)}
-                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title="Preview theme in new tab"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditorDirty(false);
-                              setEditingTheme(theme);
-                            }}
-                            className="min-h-11 px-3 text-muted-foreground hover:text-foreground cursor-pointer"
-                            title={tr("Theme settings")}
-                            aria-label={`${tr("Settings")} ${theme.manifest.name}`}
-                          >
-                            <Settings2 className="h-3.5 w-3.5" />
-                          </Button>
-
-                          {!theme.isBuiltIn && !isCurrent && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={deleting === theme.manifest.id}
-                              onClick={() => handleDelete(theme.manifest.id)}
-                              className="min-h-11 min-w-11 px-3 text-red-600 dark:text-red-400 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              title="Uninstall theme"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <ThemeGallery
+                  themes={themes}
+                  activeThemeId={active?.themeId}
+                  activating={activating}
+                  deleting={deleting}
+                  onPreview={(id) => void handlePreview(id)}
+                  onActivate={(id) => void handleActivate(id)}
+                  onCustomize={(theme) => { setEditorDirty(false); setEditingTheme(theme); }}
+                  onDelete={(id) => void handleDelete(id)}
+                />
               )}
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-border/60 bg-muted/20 flex justify-end">
+            <div className="p-3.5 sm:p-4 border-t border-border/60 bg-muted/20 flex justify-end">
               <Button
                 size="sm"
+                variant="outline"
                 onClick={editingTheme ? handleEditorBack : handleCloseDrawer}
                 disabled={editorSaving}
-                className="min-h-11 text-sm"
+                className="min-h-11 text-sm rounded-xl font-medium"
               >
                 {editingTheme ? tr("Back to themes") : tr("Close manager")}
               </Button>
@@ -481,19 +506,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
 
         {/* Inner Upload Modal */}
         {isUploadOpen && (
-          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
+          <div ref={uploadDialogRef} role="dialog" aria-modal="true" aria-label={tr("Upload Theme Package")} className="fixed inset-0 z-60 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-150">
             <div className="w-full max-w-md bg-card border border-border shadow-2xl rounded-2xl overflow-hidden flex flex-col">
               <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
                 <div className="flex items-center gap-2">
                   <UploadCloud className="h-4 w-4 text-primary" />
                   <h4 className="text-sm font-bold text-foreground">
-                    Upload Theme Package
+                    {tr("Upload Theme Package")}
                   </h4>
                 </div>
                 <button
                   type="button"
                   onClick={handleCloseUpload}
-                  aria-label="Close theme upload"
+                  data-theme-upload-close="true"
+                  aria-label={tr("Close theme upload")}
+                  disabled={uploadProgress === "validating" || uploadProgress === "installing"}
                   className="inline-flex size-11 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
@@ -501,6 +528,12 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
               </div>
 
               <div className="p-5 space-y-3">
+                {(uploadProgress === "validating" || uploadProgress === "installing") && (
+                  <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                    {tr("Installing theme...")}
+                  </p>
+                )}
                 {uploadError && (
                   <div className="p-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" />
@@ -512,7 +545,7 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   <div className="py-6 flex flex-col items-center justify-center gap-2 text-center">
                     <CheckCircle2 className="h-10 w-10 text-emerald-500" />
                     <p className="text-xs font-bold text-foreground">
-                      Theme Installed Successfully!
+                      {tr("Theme Installed Successfully!")}
                     </p>
                   </div>
                 ) : (
@@ -523,7 +556,17 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                     }}
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleFileDrop}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={(event) => { if (event.target !== fileInputRef.current) fileInputRef.current?.click(); }}
+                    onKeyDown={(event) => {
+                      if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-describedby="theme-zip-help"
+                    aria-label={tr("Upload Theme Package")}
                     className={`border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer ${
                       dragOver
                         ? "border-primary bg-primary/5"
@@ -537,18 +580,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                       type="file"
                       accept=".zip"
                       onChange={handleFileSelect}
-                      className="hidden"
+                      onClick={(event) => event.stopPropagation()}
+                      aria-label={tr("Choose ZIP file")}
+                      className="sr-only"
                     />
                     {uploadFile ? (
                       <div className="flex flex-col items-center gap-1.5">
                         <FileArchive className="h-8 w-8 text-emerald-500" />
-                        <span className="text-xs font-semibold">{uploadFile.name}</span>
+                        <span className="break-all text-sm font-semibold">{uploadFile.name}</span>
+                      <span className="text-xs text-muted-foreground">{new Intl.NumberFormat(undefined).format(Math.ceil(uploadFile.size / 1024))} KB</span>
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-1.5">
                         <UploadCloud className="h-8 w-8 text-muted-foreground/60" />
-                        <span className="text-xs font-semibold">Drop theme.zip here</span>
-                        <span className="text-xs text-muted-foreground">or click to browse</span>
+                        <span className="text-sm font-semibold">{tr("Drop theme.zip here")}</span>
+                        <span id="theme-zip-help" className="text-sm text-muted-foreground">{tr("or click to browse")}</span>
                       </div>
                     )}
                   </div>
@@ -560,20 +606,21 @@ export const ThemesManagerCard: React.FC<ThemesManagerCardProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={handleCloseUpload}
+                  disabled={uploadProgress === "validating" || uploadProgress === "installing"}
                   className="min-h-11 text-sm"
                 >
-                  Cancel
+                  {tr("Cancel")}
                 </Button>
                 <Button
                   size="sm"
-                  disabled={!uploadFile || uploadProgress === "validating" || uploadProgress === "installing"}
-                  onClick={handleUploadSubmit}
-                  className="text-sm min-h-10 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
+                  disabled={uploadProgress !== "success" && (!uploadFile || uploadProgress === "validating" || uploadProgress === "installing")}
+                  onClick={uploadProgress === "success" ? handleCloseUpload : handleUploadSubmit}
+                  className="text-sm min-h-11 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   {uploadProgress === "validating" || uploadProgress === "installing" ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    "Install"
+                    uploadProgress === "success" ? tr("Back to themes") : tr("Install")
                   )}
                 </Button>
               </div>

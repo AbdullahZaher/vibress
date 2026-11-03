@@ -29,6 +29,18 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       headers: { Origin: BASE_URL },
       data: { value: false },
     }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/title`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "The Vibress Chronicle" },
+    }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/description`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "An independent journal of architecture, design, and editorial craftsmanship." },
+    }).catch(() => {});
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`, {
+      headers: { Origin: BASE_URL },
+      data: { value: false },
+    }).catch(() => {});
   });
 
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -156,6 +168,15 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
       const bar = page.locator("#vb-announcement-bar");
       return (await bar.isVisible()) && (await bar.innerText()).includes(announcementText);
     }, { timeout: 35000, intervals: [1000, 2000, 3000] }).toBe(true);
+
+    // Clean up temporary announcement so subsequent preview and visual tests observe clean editorial state
+    await request.put(
+      `${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`,
+      {
+        headers: { Origin: BASE_URL },
+        data: { value: false },
+      },
+    );
   });
 
   test("4. Site Privacy: End-to-End public protection barrier & unlock flow", async ({
@@ -340,7 +361,22 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await anonContext.close();
   });
 
-  test("9. Themes Drawer & Danger Zone UI Execution", async ({ page }) => {
+  test("9. Theme Studio responsive review & Danger Zone UI Execution", async ({ page, request }) => {
+    await loginAsStaff(request);
+    // Restore clean editorial staging title and description before capturing preview screenshots
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/title`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "The Vibress Chronicle" },
+    });
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/description`, {
+      headers: { Origin: BASE_URL },
+      data: { value: "An independent journal of architecture, design, and editorial craftsmanship." },
+    });
+    await request.put(`${BASE_URL}/api/admin/v1/settings/site/announcementEnabled`, {
+      headers: { Origin: BASE_URL },
+      data: { value: false },
+    });
+
     await loginAsAdmin(page);
     await page.goto(`${BASE_URL}/admin/settings/site#site`);
     await page.waitForLoadState("networkidle");
@@ -352,17 +388,56 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await expect(manageThemesBtn).toBeVisible({ timeout: 5000 });
     await manageThemesBtn.click();
 
-    // Verify Themes Drawer is displayed with zero-rebuild notice
-    await expect(page.locator("text=Themes Manager")).toBeVisible({
+    // Verify the Studio entry point and capture REAL seeded publication screenshots
+    await expect(page.getByRole("dialog", { name: "Themes Manager" })).toBeVisible({
       timeout: 5000,
     });
     await expect(
-      page.locator("text=Zero-Rebuild Theme System"),
+      page.locator("text=Theme Studio"),
     ).toBeVisible({
       timeout: 5000,
     });
 
-    // Close Themes Drawer
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const dialog = page.getByRole("dialog", { name: "Themes Manager" });
+      await expect(dialog).toBeVisible();
+      const bounds = await dialog.boundingBox();
+      expect(bounds?.width).toBeLessThanOrEqual(width + 1);
+      await page.screenshot({
+        path: "artifacts/theme-studio-ci/design-theme-studio-" + width + "-en.png",
+        animations: "disabled",
+      });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    // Genuine screenshots from the publication-scoped preview route, not
+    // fabricated gallery imagery. Review/redact before using in public assets.
+    for (const id of ["vibress-default", "vibress-minimal", "vibress-molten"]) {
+      const card = page.locator('article[data-theme-id="' + id + '"]');
+      await expect(card).toHaveCount(1);
+      await card.locator("button").first().click();
+      const previewFrame = page.locator('iframe[src^="/preview/"]');
+      await expect(previewFrame).toHaveCount(1);
+      const previewPath = await previewFrame.getAttribute("src");
+      expect(previewPath).toMatch(/^\/preview\//);
+      const previewPage = await page.context().newPage();
+      try {
+        await previewPage.setViewportSize({ width: 1200, height: 750 });
+        const result = await previewPage.goto(BASE_URL + previewPath, { waitUntil: "domcontentloaded" });
+        expect(result?.ok()).toBe(true);
+        await previewPage.waitForLoadState("networkidle").catch(() => {});
+        await previewPage.addStyleTag({
+          content: "nextjs-portal, [data-nextjs-toast], [data-next-badge] { display: none !important; }",
+        });
+        await previewPage.screenshot({ path: "artifacts/theme-studio-ci/design-theme-" + id + ".png", animations: "disabled" });
+      } finally {
+        await previewPage.close();
+      }
+      await page.getByRole("button", { name: "Back to themes" }).first().click();
+    }
+
+    // Close Theme Studio
     await page.click('button[aria-label="Close themes drawer"]');
 
     // Navigate to Advanced Settings
