@@ -71,6 +71,79 @@ test.describe("Vibress Full Settings System & Public Runtime Verification", () =
     await expect(growth).toHaveAttribute("aria-current", "location");
   });
 
+  test("1b. Site Identity has no duplicate palette across viewports and keyboard flows", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("vibress-admin-ui-locale", "en"));
+    await loginAsAdmin(page);
+    await page.goto(`${BASE_URL}/admin/settings/site#site-branding`);
+    await page.waitForLoadState("networkidle");
+
+    const identity = page.locator("#site-branding");
+    const toggle = identity.getByRole("button", { name: "Site Identity" });
+    await expect(toggle).toBeVisible();
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(identity.getByRole("button", { name: /Upload icon|Change icon/ })).toBeVisible();
+    await expect(identity.getByRole("button", { name: /Upload logo|Change logo/ })).toBeVisible();
+    await expect(identity.locator('input[type="file"]')).toHaveCount(2);
+    await expect(identity.locator('input[type="color"]')).toHaveCount(0);
+    await expect(page.getByText("Live Brand Style & Palette")).toHaveCount(0);
+    await expect(page.getByText("Publication accent color")).toHaveCount(0);
+
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
+      for (const width of [320, 390, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        const bounds = await identity.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(bounds!.width).toBeLessThanOrEqual(width + 1);
+        await page.screenshot({
+          path: `artifacts/theme-studio-ci/site-identity-${width}-en-${colorScheme}.png`,
+          animations: "disabled",
+          fullPage: true,
+        });
+      }
+    }
+
+    // 200% text resizing must keep the controls usable on a narrow screen.
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await expect(identity.getByRole("button", { name: /Upload icon|Change icon/ })).toBeVisible();
+    await expect(identity.getByRole("button", { name: /Upload logo|Change logo/ })).toBeVisible();
+    await page.screenshot({
+      path: "artifacts/theme-studio-ci/site-identity-320-en-text-200.png",
+      animations: "disabled",
+      fullPage: true,
+    });
+  });
+
+  test("1c. Site Identity remains navigable and translated in Arabic RTL", async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("vibress-admin-ui-locale", "ar"));
+    await loginAsAdmin(page);
+    await page.goto(`${BASE_URL}/admin/settings/site#site-branding`);
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ar");
+    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    const identity = page.locator("#site-branding");
+    const toggle = identity.getByRole("button", { name: "هوية الموقع" });
+    await toggle.focus();
+    await page.keyboard.press("Enter");
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(identity.getByRole("button", { name: /رفع أيقونة|تغيير الأيقونة/ })).toBeVisible();
+    await expect(identity.getByRole("button", { name: /رفع الشعار|تغيير الشعار/ })).toBeVisible();
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const bounds = await identity.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.width).toBeLessThanOrEqual(width + 1);
+      await page.screenshot({
+        path: `artifacts/theme-studio-ci/site-identity-${width}-ar-rtl.png`,
+        animations: "disabled",
+        fullPage: true,
+      });
+    }
+  });
+
   test("2. General Settings: Title, Description, Locale, Timezone updates & persistence", async ({
     request,
   }) => {

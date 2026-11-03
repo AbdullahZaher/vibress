@@ -19,6 +19,7 @@ import {
   minimalThemeSettingsSchema,
 } from "@vibress/themes-registry";
 import { ThemeError } from "@vibress/theme-core";
+import type { TransactionRunner } from "@vibress/database";
 
 const registry: ThemeDefinitionRegistry = {
   has: (id) => [defaultThemeManifest.id, minimalThemeManifest.id].includes(id),
@@ -53,17 +54,31 @@ const registry: ThemeDefinitionRegistry = {
 };
 
 class MemoryThemeRepo implements ThemeConfigurationRepository {
-  private active: ThemeConfiguration | null = null;
+  private active = new Map<string, ThemeConfiguration>();
   writes: number[] = [];
 
-  async getActive(): Promise<ThemeConfiguration | null> {
-    return this.active;
+  async getActive(publicationId = "pub_default"): Promise<ThemeConfiguration | null> {
+    return this.active.get(publicationId) ?? null;
   }
 
-  async setActive(config: ThemeConfiguration): Promise<ThemeConfiguration> {
-    this.active = { ...config };
+  async setActive(config: ThemeConfiguration, publicationId = "pub_default"): Promise<ThemeConfiguration> {
+    const saved = { ...config };
+    this.active.set(publicationId, saved);
     this.writes.push(this.writes.length + 1);
-    return this.active;
+    return saved;
+  }
+
+  async updateSettingsIfUnchanged(
+    expected: ThemeConfiguration,
+    settings: Record<string, unknown>,
+    publicationId = "pub_default",
+  ): Promise<ThemeConfiguration | null> {
+    const current = await this.getActive(publicationId);
+    if (!current || current.themeId !== expected.themeId ||
+      current.themeVersion !== expected.themeVersion ||
+      current.settingsSchemaVersion !== expected.settingsSchemaVersion ||
+      JSON.stringify(current.settings) !== JSON.stringify(expected.settings)) return null;
+    return this.setActive({ ...current, settings, updatedAt: new Date() }, publicationId);
   }
 }
 
@@ -135,15 +150,16 @@ class MemoryInstalledThemeRepository implements InstalledThemeRepository {
     }
   }
 
-  async getThemeSettings(themeId: string): Promise<Record<string, unknown> | null> {
-    return this.settings.get(themeId) || null;
+  async getThemeSettings(themeId: string, publicationId = "pub_default"): Promise<Record<string, unknown> | null> {
+    return this.settings.get(`${publicationId}:${themeId}`) ?? null;
   }
 
   async saveThemeSettings(
     themeId: string,
     settings: Record<string, unknown>,
+    publicationId = "pub_default",
   ): Promise<void> {
-    this.settings.set(themeId, settings);
+    this.settings.set(`${publicationId}:${themeId}`, settings);
   }
 }
 
@@ -173,6 +189,8 @@ class MemoryThemeStorageAdapter implements ThemeStorageAdapter {
   }
 }
 
+const noOpTransactionRunner: TransactionRunner = { run: (work) => work() };
+
 describe("Theme Domain — Activation & Management", () => {
   let themeRepo: MemoryThemeRepo;
   let installedRepo: MemoryInstalledThemeRepository;
@@ -188,6 +206,8 @@ describe("Theme Domain — Activation & Management", () => {
       registry,
       installedRepo,
       storageAdapter,
+      undefined,
+      noOpTransactionRunner,
     );
 
     // Seed installed theme
@@ -283,6 +303,52 @@ describe("Theme Domain — Activation & Management", () => {
 
     await service.activateTheme("custom-nordic", "user-1");
     expect((await service.getActiveTheme())?.settings.accentColor).toBe("#123abc");
+  });
+
+  it("publishes saved settings for implicit Default without inserting an activation row", async () => {
+    const publicationId = "pub_fresh_1";
+    expect(await themeRepo.getActive(publicationId)).toBeNull();
+    expect((await service.getActiveTheme(publicationId))?.settings.accentColor).toBe("#f05230");
+
+    const saved = await service.updateThemeSettings(
+      "vibress-default",
+      { accentColor: "#2468ac" },
+      "editor-1",
+      publicationId,
+    );
+    expect(saved.settings.accentColor).toBe("#2468ac");
+    expect(await themeRepo.getActive(publicationId)).toBeNull();
+    expect((await service.getActiveTheme(publicationId))?.settings.accentColor).toBe("#2468ac");
+    expect((await service.getActiveTheme("pub_other"))?.settings.accentColor).toBe("#f05230");
+    expect(await installedRepo.getThemeSettings("vibress-default", "pub_other")).toBeNull();
+    // Multiple saves do not create activation rows or duplicate settings keys.
+    await service.updateThemeSettings("vibress-default", { accentColor: "#13579b" }, "editor-1", publicationId);
+    expect((await service.getActiveTheme(publicationId))?.settings.accentColor).toBe("#13579b");
+    expect(await themeRepo.getActive(publicationId)).toBeNull();
+  });
+
+  it("keeps saved Default settings through switching to another theme and back", async () => {
+    const pub = "pub_switch";
+    await service.updateThemeSettings("vibress-default", { accentColor: "#2468ac" }, "editor", pub);
+    await service.updateThemeSettings("vibress-minimal", { accentColor: "#abcdef" }, "editor", pub);
+    expect((await service.getActiveTheme(pub))?.manifest.id).toBe("vibress-default");
+    await service.activateTheme("vibress-minimal", "editor", undefined, pub);
+    expect((await service.getActiveTheme(pub))?.settings.accentColor).toBe("#abcdef");
+    await service.activateTheme("vibress-default", "editor", undefined, pub);
+    expect((await service.getActiveTheme(pub))?.settings.accentColor).toBe("#2468ac");
+  });
+
+  it("rejects a stale active settings write without overwriting a different theme", async () => {
+    const pub = "pub_race";
+    await service.activateTheme("vibress-default", "editor", undefined, pub);
+    const original = themeRepo.updateSettingsIfUnchanged.bind(themeRepo);
+    themeRepo.updateSettingsIfUnchanged = async (expected, values, publicationId) => {
+      await service.activateTheme("vibress-minimal", "editor", undefined, pub);
+      return original(expected, values, publicationId);
+    };
+    await expect(service.updateThemeSettings("vibress-default", { accentColor: "#2468ac" }, "editor", pub))
+      .rejects.toMatchObject({ code: "THEME_SETTINGS_CONFLICT" });
+    expect((await service.getActiveTheme(pub))?.manifest.id).toBe("vibress-minimal");
   });
 
   it("rejects invalid settings inputs and non-existent themes", async () => {

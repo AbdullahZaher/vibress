@@ -108,6 +108,16 @@ a {
   justify-content: space-between;
 }
 
+.vb-navigation-logo-image {
+  display: inline-block;
+  width: auto;
+  height: auto;
+  max-height: 44px;
+  max-width: min(50vw, 240px);
+  object-fit: contain;
+  vertical-align: middle;
+}
+
 .vb-navigation-logo {
   font-family: var(--font-sans);
   font-size: 1.5rem;

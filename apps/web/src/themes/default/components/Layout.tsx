@@ -1,6 +1,6 @@
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
-import { ThemeSiteSettings } from "@vibress/theme-core";
+import { isValidHexColor, type ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
 import { getPreviewNavigation } from "../../../lib/preview-link-server";
 import { SocialLinks } from "../../../components/SocialLinks";
@@ -17,12 +17,9 @@ export async function ThemeLayout({
   settings,
 }: ThemeLayoutProps) {
   const extendedSite = site as unknown as Record<string, unknown>;
-  const accentColor =
-    typeof extendedSite.accentColor === "string" && extendedSite.accentColor
-      ? (extendedSite.accentColor as string)
-      : typeof settings.accentColor === "string"
-        ? settings.accentColor
-        : "#ff2865";
+  const accentColor = isValidHexColor(settings.accentColor)
+    ? settings.accentColor.trim()
+    : "#f05230";
   const siteIcon = (extendedSite.iconUrl || extendedSite.icon) as
     string | undefined;
   const siteLogo = extendedSite.logoUrl as string | undefined;
@@ -47,6 +44,7 @@ export async function ThemeLayout({
           --accent-color: ${accentColor};
           --brand-pink: ${accentColor};
           --brand-pink-hover: ${accentColor};
+          --brand-pink-light: color-mix(in srgb, var(--vb-accent-color) 8%, transparent);
         }
       `,
         }}

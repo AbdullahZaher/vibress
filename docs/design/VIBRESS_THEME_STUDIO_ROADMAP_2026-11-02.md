@@ -130,3 +130,20 @@ Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-sto
 - E2E screenshot assets are now stored in artifacts/theme-studio-ci (instead of test-results, which the next Playwright run cleans). They are uploaded as a short-lived PRIVATE CI QA artifact, never auto-published.
 - Genuine screenshots must be visually inspected, redacted if needed and only then added to published theme manifests. This cannot be replaced with synthetic gallery artwork.
 - References: https://www.w3.org/WAI/WCAG22/Understanding/reflow.html ; https://help.shopify.com/en/manual/online-store/themes/customizing-themes/theme-editor .
+
+## Appearance Consolidation Addendum (2026-11-03, PR #118)
+
+- **Site Identity:** The Site Settings card owns logo and favicon uploads only. Its stable `design-branding` registry ID and `site-branding` anchor remain for legacy navigation; `coverUrl` and publication metadata persist without newly invented editors.
+- **Theme Studio:** Accent color, palettes, typography and layout are controlled only by each theme's validated schema-supported options. Settings searches for `accent`, `palette`, and corresponding Arabic terms route to Theme Studio rather than Site Identity. No mock live palette preview is shown.
+- **Published upgrade parity:** Migration 0051 preserves the previously effective Default theme accent for each existing publication, including installations without an explicit active theme row, while retaining other choices and inactive-theme settings.
+- **Public rendering:** Default, Minimal and Molten use theme-owned validated accents. Announcement bars use the active or authorized preview theme's color with WCAG AA black/white foreground contrast; unsupported theme schemas use a neutral background. External Liquid theme site-level accent fields remain in the compatibility contract.
+- **No false preview promise:** Saving theme settings does not automatically publish another theme, and unsaved draft values are not displayed in the actual site preview.
+- **Release verification:** Test at 320/390/768/1024/1440 in both writing directions and appearance modes; inspect keyboard navigation, upload failure/success, published color before/after a real upgrade and exact-head CI before releasing.
+
+## Final Hardening Test Matrix (2026-11-03)
+
+- **Admin identity:** verify original `site-branding` anchor, upload/save/discard, no duplicate color picker, keyboard Enter disclosure, accessible names, Arabic RTL and English LTR. Responsive automation checks 320, 390, 768, 1024 and 1440px in light/dark media preferences, with reduced motion and narrow-screen 200% root text scaling.
+- **Public branding:** verify logo/fallback in Minimal and Molten and Default's preferred logo and historical favicon fallback; preserve distinct header designs. Check the public favicon metadata independently of header logos.
+- **Appearance:** validate default published colors on a fresh site, persisted theme settings, fallback behavior and external Liquid view-model compatibility. Announcement contrast covers common colors and hex-alpha input.
+- **Database:** test migration 0051 against isolated copies of actual PostgreSQL table definitions, including conflicting colors, invalid/missing values, multiple publications, alternate/external themes, subsequent activation, unique constraints and an uninvolved newly created publication. CI migrations execute through the standard Drizzle runner.
+- **Certification note:** CI/browser automation alone does not constitute independent *manual* visual sign-off. Review actual screenshots and browser layout, keyboard/screen-reader focus order, Arabic/RTL, 200% text scaling and dark/light states before moving the PR out of Draft.

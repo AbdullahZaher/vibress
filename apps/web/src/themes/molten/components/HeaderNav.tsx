@@ -1,11 +1,12 @@
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
+import { PublicationBrandImage } from "../../../components/PublicationBrandImage";
 import { t } from "../../../lib/i18n";
 import { MemberActions } from "./MemberActions";
 
 interface HeaderNavProps {
   siteTitle: string;
-  siteLogo?: string;
+  siteLogo?: string | undefined;
   settings: Record<string, unknown>;
 }
 
@@ -20,7 +21,7 @@ export function HeaderNav({
         <div className="vb-head-brand">
           <div className="vb-head-brand-wrapper">
             <PreviewAnchor className="vb-head-logo" href="/">
-              {siteLogo ? <img src={siteLogo} alt={siteTitle} /> : siteTitle}
+              <PublicationBrandImage url={siteLogo} title={siteTitle} />
             </PreviewAnchor>
           </div>
           <button

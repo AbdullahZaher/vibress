@@ -1,6 +1,6 @@
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
-import { ThemeSiteSettings } from "@vibress/theme-core";
+import { isValidHexColor, type ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
 import { SocialLinks } from "../../../components/SocialLinks";
 
@@ -18,9 +18,7 @@ export function ThemeLayout({
   bodyClass = "",
 }: ThemeLayoutProps) {
   const accentColor =
-    typeof settings.accentColor === "string" ? settings.accentColor : "#f05230";
-  const siteIcon = (site as unknown as Record<string, unknown>).icon as
-    string | undefined;
+    isValidHexColor(settings.accentColor) ? settings.accentColor.trim() : "#f05230";
 
   const navLayout =
     settings.navigationLayout === "Logo on the left"
@@ -49,6 +47,7 @@ export function ThemeLayout({
           __html: `
         :root {
           --vb-accent-color: ${accentColor};
+          --accent-color: ${accentColor};
           --brand-pink: ${accentColor};
         }
       `,
@@ -58,7 +57,7 @@ export function ThemeLayout({
       <div className="vb-site">
         <HeaderNav
           siteTitle={site.title}
-          siteLogo={siteIcon || ""}
+          siteLogo={site.logoUrl}
           settings={settings}
         />
 

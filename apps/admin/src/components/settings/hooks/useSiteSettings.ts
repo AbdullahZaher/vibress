@@ -12,7 +12,6 @@ export interface NavItem {
 }
 
 export interface SiteSettingsState {
-  accentColor: string;
   iconUrl?: string;
   logoUrl?: string;
   coverUrl?: string;
@@ -25,7 +24,6 @@ export interface SiteSettingsState {
 }
 
 const DEFAULT_STATE: SiteSettingsState = {
-  accentColor: "#6366f1",
   iconUrl: "",
   logoUrl: "",
   coverUrl: "",
@@ -62,8 +60,6 @@ export function useSiteSettings() {
 
       if (siteNs) {
         for (const s of siteNs.settings) {
-          if (s.key === "accentColor")
-            loaded.accentColor = String(s.value || "#6366f1");
           if (s.key === "iconUrl") loaded.iconUrl = String(s.value || "");
           if (s.key === "logoUrl") loaded.logoUrl = String(s.value || "");
           if (s.key === "coverUrl") loaded.coverUrl = String(s.value || "");
@@ -115,7 +111,6 @@ export function useSiteSettings() {
 
   const dirtyCount = useMemo(() => {
     let count = 0;
-    if (initial.accentColor !== draft.accentColor) count++;
     if (initial.iconUrl !== draft.iconUrl) count++;
     if (initial.logoUrl !== draft.logoUrl) count++;
     if (initial.coverUrl !== draft.coverUrl) count++;
@@ -139,10 +134,6 @@ export function useSiteSettings() {
     setError(null);
     try {
       const promises: Promise<unknown>[] = [];
-      if (initial.accentColor !== draft.accentColor)
-        promises.push(
-          updateSettingApi("site", "accentColor", draft.accentColor),
-        );
       if (initial.iconUrl !== draft.iconUrl)
         promises.push(updateSettingApi("site", "iconUrl", draft.iconUrl));
       if (initial.logoUrl !== draft.logoUrl)

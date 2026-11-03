@@ -109,6 +109,10 @@ export type ThemeSettingsSchema = Record<string, ThemeSettingDefinition>;
 
 export interface ThemeSiteSettings {
   title: string;
+  /** Publication-owned identity assets; themes choose their own presentation. */
+  logoUrl?: string | undefined;
+  iconUrl?: string | undefined;
+  coverUrl?: string | undefined;
   socialLinks?: Array<{ id: string; platform: string; label: string; url: string; iconUrl: string }> | undefined;
   description: string;
   url: string;

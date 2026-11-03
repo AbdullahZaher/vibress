@@ -17,6 +17,7 @@ import {
   ThemeError,
 } from "@vibress/theme-core";
 import crypto from "node:crypto";
+import { defaultTransactionRunner, type TransactionRunner } from "@vibress/database";
 
 export interface UnifiedThemeSummary {
   manifest: ThemeManifest;
@@ -51,6 +52,7 @@ export class ThemeService {
     private installedRepo?: InstalledThemeRepository | undefined,
     private storageAdapter?: ThemeStorageAdapter | undefined,
     previewStore?: PreviewTokenStore | undefined,
+    private transactionRunner: TransactionRunner = defaultTransactionRunner,
   ) {
     this.previewStore = previewStore || new MemoryPreviewTokenStore();
   }
@@ -151,9 +153,15 @@ export class ThemeService {
     const definition = await this.getTheme(activeThemeId, config?.themeVersion, publicationId);
     if (!definition) return null;
 
+    // A new publication implicitly publishes Default before its first explicit
+    // activation. Theme Studio saves that theme to theme_settings; do not create
+    // an activation record just to read those publication-scoped saved values.
+    const implicitDefaultSettings = !config && this.installedRepo
+      ? await this.installedRepo.getThemeSettings("vibress-default", publicationId)
+      : null;
     const settings = mergeThemeSettings(
       definition.settingsSchema,
-      config?.settings,
+      config?.settings ?? implicitDefaultSettings,
     );
 
     // Migration 0032 copied installed-theme rows with their original legacy
@@ -261,6 +269,7 @@ export class ThemeService {
     publicationId?: string,
     expected?: { themeVersion: string; settingsSchemaVersion: number },
   ): Promise<ThemeConfiguration> {
+    return this.transactionRunner.run(async () => {
     const config = await this.repo.getActive(publicationId);
     const definition = await this.getTheme(
       themeId,
@@ -287,17 +296,26 @@ export class ThemeService {
       throw new ThemeSettingsInvalidError((err as Error).message);
     }
 
-    // Persist settings per theme identity
-    if (this.installedRepo) {
-      await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
+    if (config && config.themeId === themeId) {
+      // CAS prevents a concurrent activation or update from being overwritten.
+      // The saved editor settings and active configuration commit or roll back together.
+      const updated = await this.repo.updateSettingsIfUnchanged(config, settings, publicationId);
+      if (!updated) {
+        throw new ThemeError(
+          "THEME_SETTINGS_CONFLICT",
+          "The active theme changed while saving. Reload settings and try again.",
+        );
+      }
+      if (this.installedRepo) {
+        await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
+      }
+      return updated;
     }
 
-    if (config && config.themeId === themeId) {
-      return this.repo.setActive({
-        ...config,
-        settings,
-        updatedAt: new Date(),
-      }, publicationId);
+    // Saving an inactive theme never activates it. The implicitly active
+    // Default theme is resolved from this same saved row by getActiveTheme().
+    if (this.installedRepo) {
+      await this.installedRepo.saveThemeSettings(themeId, settings, publicationId);
     }
 
     return {
@@ -310,6 +328,7 @@ export class ThemeService {
       activatedAt: new Date(),
       updatedAt: new Date(),
     };
+    });
   }
 
   async uninstallTheme(

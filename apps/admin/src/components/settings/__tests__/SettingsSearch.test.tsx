@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { useSettingsSearch } from "../hooks/useSettingsSearch";
+import { SETTINGS_REGISTRY } from "../settings.registry";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -42,6 +43,19 @@ describe("settings search", () => {
     // React's controlled input receives the native input event.
     expect(node.querySelector('[data-testid="matches"]')?.textContent).toContain("site-privacy");
   });
+  it("indexes site identity without advertising a competing color editor", () => {
+    const site = SETTINGS_REGISTRY.find((pillar) => pillar.id === "site");
+    const identity = site?.cards.find((card) => card.id === "design-branding");
+    expect(identity?.title).toBe("Site Identity");
+    expect(identity?.anchor).toBe("site-branding");
+    expect(identity?.keywords).toContain("favicon");
+    expect(identity?.keywords).not.toContain("accent");
+    expect(identity?.keywords).not.toContain("color");
+    const themes = site?.cards.find((card) => card.id === "themes-manager");
+    expect(themes?.keywords).toContain("accent");
+    expect(themes?.keywords).toContain("palette");
+  });
+
   it("keeps registry counts consistent for an empty query", () => {
     expect(Number(node.querySelector('[data-testid="count"]')?.textContent)).toBeGreaterThan(20);
   });

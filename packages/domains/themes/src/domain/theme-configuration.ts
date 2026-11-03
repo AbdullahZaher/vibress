@@ -19,6 +19,12 @@ export interface ThemeConfiguration {
 export interface ThemeConfigurationRepository {
   getActive(publicationId?: string): Promise<ThemeConfiguration | null>;
   setActive(config: ThemeConfiguration, publicationId?: string): Promise<ThemeConfiguration>;
+  /** Atomic compare-and-swap: never reactivate an unrelated theme during a settings save. */
+  updateSettingsIfUnchanged(
+    expected: ThemeConfiguration,
+    settings: Record<string, unknown>,
+    publicationId?: string,
+  ): Promise<ThemeConfiguration | null>;
 }
 
 export interface ThemeDefinitionRegistry {

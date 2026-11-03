@@ -1,7 +1,8 @@
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
-import { ThemeSiteSettings } from "@vibress/theme-core";
+import { isValidHexColor, type ThemeSiteSettings } from "@vibress/theme-core";
 import { SocialLinks } from "../../../components/SocialLinks";
+import { PublicationBrandImage } from "../../../components/PublicationBrandImage";
 
 interface ThemeLayoutProps {
   children: React.ReactNode;
@@ -15,7 +16,7 @@ export async function ThemeLayout({
   settings,
 }: ThemeLayoutProps) {
   const accentColor =
-    typeof settings.accentColor === "string" ? settings.accentColor : "#09090b";
+    isValidHexColor(settings.accentColor) ? settings.accentColor.trim() : "#09090b";
   const typography =
     typeof settings.typography === "string"
       ? settings.typography
@@ -42,6 +43,7 @@ export async function ThemeLayout({
           __html: `
         :root {
           --vb-accent-color: ${accentColor};
+          --accent-color: ${accentColor};
         }
       `,
         }}
@@ -51,7 +53,7 @@ export async function ThemeLayout({
         <header id="vb-navigation" className="vb-navigation vb-outer">
           <div className="vb-navigation-inner vb-inner">
             <PreviewAnchor className="vb-navigation-logo" href="/">
-              {site.title}
+              <PublicationBrandImage url={site.logoUrl} title={site.title} className="vb-navigation-logo-image" />
             </PreviewAnchor>
             <nav className="vb-navigation-menu">
               <ul className="nav">

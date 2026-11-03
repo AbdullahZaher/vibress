@@ -7,7 +7,7 @@ import {
   themeConfigurations,
   ThemeConfigurationRow,
 } from "@vibress/database";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import crypto from "node:crypto";
 
 export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRepository {
@@ -33,6 +33,27 @@ export class DrizzleThemeConfigurationRepository implements ThemeConfigurationRe
       .limit(1);
     if (!rows[0]) return null;
     return this.mapToDomain(rows[0]);
+  }
+
+  async updateSettingsIfUnchanged(
+    expected: ThemeConfiguration,
+    settings: Record<string, unknown>,
+    publicationId = "pub_default",
+  ): Promise<ThemeConfiguration | null> {
+    const [row] = await getDb()
+      .update(themeConfigurations)
+      .set({ settingsJson: settings, updatedAt: new Date() })
+      .where(and(
+        eq(themeConfigurations.publicationId, publicationId),
+        eq(themeConfigurations.themeId, expected.themeId),
+        eq(themeConfigurations.themeVersion, expected.themeVersion),
+        eq(themeConfigurations.settingsSchemaVersion, expected.settingsSchemaVersion),
+        // Compare values, not timestamps: legacy PostgreSQL timestamps may have
+        // microsecond precision that cannot round-trip through a JS Date.
+        sql`${themeConfigurations.settingsJson} = ${JSON.stringify(expected.settings)}::jsonb`,
+      ))
+      .returning();
+    return row ? this.mapToDomain(row) : null;
   }
 
   async setActive(

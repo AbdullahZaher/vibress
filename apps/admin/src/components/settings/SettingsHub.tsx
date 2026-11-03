@@ -21,7 +21,7 @@ import { SitePrivacyCard } from "./general/SitePrivacyCard";
 import { StaffOverviewCard } from "./general/StaffOverviewCard";
 
 // Site Pillar Compact Cards
-import { DesignBrandingCard } from "./site/DesignBrandingCard";
+import { SiteIdentityCard } from "./site/SiteIdentityCard";
 import { NavigationManagerCard } from "./site/NavigationManagerCard";
 import { SocialLinksCard } from "./site/SocialLinksCard";
 import { ThemesManagerCard } from "./site/ThemesManagerCard";
@@ -361,11 +361,9 @@ export const SettingsHub: React.FC<SettingsHubProps> = ({
         >
           {isCardVisible("design-branding") && (
             <SettingsPermissionGate permission="settings.manage" can={can}>
-              <DesignBrandingCard
-                accentColor={site.settings.accentColor}
+              <SiteIdentityCard
                 iconUrl={site.settings.iconUrl}
                 logoUrl={site.settings.logoUrl}
-                coverUrl={site.settings.coverUrl}
                 onChange={(key, val) => site.updateField(key, val)}
                 isHighlighted={highlightedCardId === "design-branding"}
               />
