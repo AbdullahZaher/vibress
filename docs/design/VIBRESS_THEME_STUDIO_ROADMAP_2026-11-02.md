@@ -130,3 +130,12 @@ Sources: https://ghost.org/help/ / https://help.shopify.com/en/manual/online-sto
 - E2E screenshot assets are now stored in artifacts/theme-studio-ci (instead of test-results, which the next Playwright run cleans). They are uploaded as a short-lived PRIVATE CI QA artifact, never auto-published.
 - Genuine screenshots must be visually inspected, redacted if needed and only then added to published theme manifests. This cannot be replaced with synthetic gallery artwork.
 - References: https://www.w3.org/WAI/WCAG22/Understanding/reflow.html ; https://help.shopify.com/en/manual/online-store/themes/customizing-themes/theme-editor .
+
+## Appearance Consolidation Addendum (2026-11-03, PR #118)
+
+- **Site Identity:** The Site Settings card owns logo and favicon uploads only. Its stable `design-branding` registry ID and `site-branding` anchor remain for legacy navigation; `coverUrl` and publication metadata persist without newly invented editors.
+- **Theme Studio:** Accent color, palettes, typography and layout are controlled only by each theme's validated schema-supported options. Settings searches for `accent`, `palette`, and corresponding Arabic terms route to Theme Studio rather than Site Identity. No mock live palette preview is shown.
+- **Published upgrade parity:** Migration 0051 preserves the previously effective Default theme accent for each existing publication, including installations without an explicit active theme row, while retaining other choices and inactive-theme settings.
+- **Public rendering:** Default, Minimal and Molten use theme-owned validated accents. Announcement bars use the active or authorized preview theme's color with WCAG AA black/white foreground contrast; unsupported theme schemas use a neutral background. External Liquid theme site-level accent fields remain in the compatibility contract.
+- **No false preview promise:** Saving theme settings does not automatically publish another theme, and unsaved draft values are not displayed in the actual site preview.
+- **Release verification:** Test at 320/390/768/1024/1440 in both writing directions and appearance modes; inspect keyboard navigation, upload failure/success, published color before/after a real upgrade and exact-head CI before releasing.
