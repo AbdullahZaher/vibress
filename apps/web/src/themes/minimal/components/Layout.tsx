@@ -43,6 +43,7 @@ export async function ThemeLayout({
           __html: `
         :root {
           --vb-accent-color: ${accentColor};
+          --accent-color: ${accentColor};
         }
       `,
         }}

@@ -56,6 +56,7 @@ describe("built-in appearance ownership", () => {
     expect(markup).toContain('data-theme="vibress-minimal"');
     expect(markup).toContain('data-accent="#345678"');
     expect(markup).toContain("--vb-accent-color: #345678");
+    expect(markup).toContain("--accent-color: #345678");
   });
 
   it("preserves Molten theme-specific accent rendering", () => {
@@ -67,6 +68,7 @@ describe("built-in appearance ownership", () => {
     expect(markup).toContain('data-theme="vibress-molten"');
     expect(markup).toContain('data-accent="#abcdef"');
     expect(markup).toContain("--vb-accent-color: #abcdef");
+    expect(markup).toContain("--accent-color: #abcdef");
   });
 
   it("does not inject arbitrary CSS from malformed settings", async () => {
