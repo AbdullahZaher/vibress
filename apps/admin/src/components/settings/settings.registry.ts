@@ -151,25 +151,14 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
     cards: [
       {
         id: "design-branding",
-        title: "Design & branding",
-        description:
-          "Customize your publication accent colors, site icons, and cover imagery.",
-        keywords: [
-          "design",
-          "branding",
-          "color",
-          "accent",
-          "icon",
-          "logo",
-          "cover",
-          "favicon",
-          "theme style",
-        ],
+        title: "Site Identity",
+        description: "Manage your publication logo and favicon.",
+        keywords: ["site identity", "publication", "branding", "icon", "logo", "favicon"],
         pillarId: "site",
         anchor: "site-branding",
         editorMode: "inline",
         requiredPermission: "settings.site.manage",
-        iconName: "Palette",
+        iconName: "Image",
       },
       {
         id: "navigation-manager",

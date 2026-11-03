@@ -9,6 +9,7 @@ import {
 } from "../lib/theme-host";
 import { AnalyticsTracker } from "../components/analytics-tracker";
 import { HeadCodeInjection } from "../components/HeadCodeInjection";
+import { announcementColors } from "../lib/announcement-colors";
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await getThemeSiteSettings();
@@ -61,6 +62,7 @@ export default async function RootLayout({
   }
 
   const site = await getThemeSiteSettings();
+  const announcementPalette = announcementColors(hostState?.settings ?? {});
   const isBuiltIn = hostState?.isBuiltIn !== false;
   const themeCss = isBuiltIn
     ? hostState?.theme.cssPath ||
@@ -80,8 +82,7 @@ export default async function RootLayout({
           <div
             id="vb-announcement-bar"
             style={{
-              backgroundColor: site.accentColor || "#6366f1",
-              color: "#ffffff",
+              ...announcementPalette,
               textAlign: "center",
               padding: "10px 16px",
               fontSize: "14px",
@@ -93,7 +94,7 @@ export default async function RootLayout({
             {site.announcementUrl ? (
               <a
                 href={site.announcementUrl}
-                style={{ color: "#ffffff", textDecoration: "underline" }}
+                style={{ color: announcementPalette.color, textDecoration: "underline" }}
               >
                 {site.announcementText}
               </a>

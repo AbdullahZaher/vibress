@@ -1,6 +1,6 @@
 import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
-import { ThemeSiteSettings } from "@vibress/theme-core";
+import { isValidHexColor, type ThemeSiteSettings } from "@vibress/theme-core";
 import { SocialLinks } from "../../../components/SocialLinks";
 
 interface ThemeLayoutProps {
@@ -15,7 +15,7 @@ export async function ThemeLayout({
   settings,
 }: ThemeLayoutProps) {
   const accentColor =
-    typeof settings.accentColor === "string" ? settings.accentColor : "#09090b";
+    isValidHexColor(settings.accentColor) ? settings.accentColor.trim() : "#09090b";
   const typography =
     typeof settings.typography === "string"
       ? settings.typography
