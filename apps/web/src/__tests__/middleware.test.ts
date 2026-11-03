@@ -162,6 +162,35 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
     expect(res.headers.get("x-vibress-preview-token")).toBeNull();
     expect(res.headers.get("x-vibress-preview-path")).toBeNull();
   });
+  it("keeps query parameters and selected language in nested preview navigation", async () => {
+    const token = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/admin/v1/themes/preview/")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ themeId: "vibress-default" }) });
+      }
+      if (url.includes("/api/content/v1/site")) {
+        return Promise.resolve({
+          ok: true,
+          headers: new Headers({ "x-vibress-publication-id": "pub_test" }),
+          json: () => Promise.resolve({
+            site: { title: "Test Site", locale: "en", enabledLocales: ["en", "ar"] },
+            security: { isPrivate: false },
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404 });
+    }) as any;
+
+    const req = new NextRequest("http://localhost:7777/preview/" + token + "/ar/posts/hello?page=2");
+    const res = await middleware(req);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-middleware-rewrite")).toBe("http://localhost:7777/posts/hello?page=2");
+    expect(res.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
+    // The prefix and language must remain private to the Next.js request.
+    expect(res.headers.get("x-vibress-preview-token")).toBeNull();
+    expect(res.headers.get("x-vibress-preview-path")).toBeNull();
+  });
+
   describe("Production CSP & Iframe Embedding Security", () => {
     it("strictly returns frame-ancestors 'none' when allowEmbedding is false across any environment", () => {
       expect(getValidatedFrameAncestors(false, { NODE_ENV: "production" })).toBe("frame-ancestors 'none'");
