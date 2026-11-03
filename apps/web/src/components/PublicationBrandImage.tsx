@@ -8,7 +8,10 @@ export function safePublicationImageUrl(input: unknown): string | null {
   const url = input.trim();
   // WHATWG URL parsing treats backslashes as slashes and can strip embedded
   // control characters. "/\\t/host" must not become a network-path URL.
-  if (/[\\\u0000-\u001f\u007f]/.test(url)) return null;
+  for (const character of url) {
+    const code = character.charCodeAt(0);
+    if (character === "\\" || code < 0x20 || code === 0x7f) return null;
+  }
   if (url.startsWith("/") && !url.startsWith("//")) return url;
   if (!/^https?:\/\//i.test(url)) return null;
   try {
