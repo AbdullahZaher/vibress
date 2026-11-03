@@ -143,7 +143,9 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
         reviewerRole: "Staff QA",
         commitSha: dummyCommit,
         score: 9.7,
-        observations: {},
+        observations: {
+          visual_hierarchy: "Substantive detailed audit observation for test validation.",
+        },
       }),
     ).rejects.toThrow(/manifest reports automated checks have not passed/);
   });
@@ -163,7 +165,9 @@ describe("Independent Visual Review Approval Workflow (P1)", () => {
         reviewerRole: "Staff QA",
         commitSha: dummyCommit,
         score: 9.7,
-        observations: {},
+        observations: {
+          visual_hierarchy: "Substantive detailed audit observation for test validation.",
+        },
       }),
     ).rejects.toThrow(/Commit SHA mismatch/);
   });

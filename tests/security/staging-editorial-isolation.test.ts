@@ -92,8 +92,7 @@ describe("Editorial Staging Database Isolation (P1)", () => {
     await expect(
       verifyStagingMarker(mockClient, {
         env: {
-          NODE_ENV: "development",
-          VIBRESS_SEED_EDITORIAL_STAGING: "true",
+          ...validEnv,
           VIBRESS_STAGING_MARKER_TOKEN: undefined,
         },
       }),
