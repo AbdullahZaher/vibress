@@ -1,6 +1,8 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeSiteSettings } from "@vibress/theme-core";
 import { HeaderNav } from "./HeaderNav";
+import { getPreviewNavigation } from "../../../lib/preview-link-server";
 import { SocialLinks } from "../../../components/SocialLinks";
 
 interface ThemeLayoutProps {
@@ -29,6 +31,8 @@ export async function ThemeLayout({
   const secondaryNav = extendedSite.secondaryNav as
     Array<{ label: string; url: string }> | undefined;
 
+  const previewNavigation = await getPreviewNavigation();
+
   return (
     <div data-theme="vibress-default" data-accent={accentColor}>
       <link
@@ -51,6 +55,7 @@ export async function ThemeLayout({
       <div className="viewport">
         <HeaderNav
           siteTitle={site.title}
+          previewNavigation={previewNavigation}
           siteIcon={siteIcon}
           siteLogo={siteLogo}
           primaryNav={primaryNav}
@@ -67,24 +72,24 @@ export async function ThemeLayout({
                 style={{ display: "flex", gap: "16px" }}
               >
                 {secondaryNav.map((item, idx) => (
-                  <a key={idx} href={item.url}>
+                  <PreviewAnchor key={idx} href={item.url}>
                     {item.label}
-                  </a>
+                  </PreviewAnchor>
                 ))}
               </div>
             ) : null}
             <SocialLinks links={site.socialLinks} locale={site.locale} />
             <div>
-              <a href="/portal/#/sign-in">Sign up</a>
+              <PreviewAnchor href="/portal/#/sign-in">Sign up</PreviewAnchor>
             </div>
             <div>
-              <a
+              <PreviewAnchor
                 href="https://vibress.com"
                 target="_blank"
                 rel="noopener noreferrer"
               >
                 Powered by Vibress
-              </a>
+              </PreviewAnchor>
             </div>
           </div>
         </footer>

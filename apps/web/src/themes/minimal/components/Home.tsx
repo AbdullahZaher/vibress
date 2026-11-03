@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeHomeProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -31,7 +32,7 @@ export async function Home(props: ThemeHomeProps) {
               <div className="vb-feed">
                 {props.posts.map((post) => (
                   <article key={post.id} className="vb-card">
-                    <a className="vb-card-link" href={`/posts/${post.slug}`}>
+                    <PreviewAnchor className="vb-card-link" href={`/posts/${post.slug}`}>
                       {post.featureImage && (
                         <figure className="vb-card-image">
                           <img
@@ -79,7 +80,7 @@ export async function Home(props: ThemeHomeProps) {
                           )}
                         </footer>
                       </div>
-                    </a>
+                    </PreviewAnchor>
                   </article>
                 ))}
               </div>
@@ -88,13 +89,13 @@ export async function Home(props: ThemeHomeProps) {
             {props.pagination.pages > 1 && (
               <div className="vb-more">
                 {props.pagination.page < props.pagination.pages ? (
-                  <a href={`/?page=${props.pagination.page + 1}`}>
+                  <PreviewAnchor href={`/?page=${props.pagination.page + 1}`}>
                     {t("home.olderArticles")} &rarr;
-                  </a>
+                  </PreviewAnchor>
                 ) : (
-                  <a href={`/?page=${props.pagination.page - 1}`}>
+                  <PreviewAnchor href={`/?page=${props.pagination.page - 1}`}>
                     &larr; {t("home.newerArticles")}
-                  </a>
+                  </PreviewAnchor>
                 )}
               </div>
             )}

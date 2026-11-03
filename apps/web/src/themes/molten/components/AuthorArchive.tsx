@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemeAuthorArchiveProps } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -48,12 +49,12 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
               }}
             >
               {pagination.page > 1 ? (
-                <a
+                <PreviewAnchor
                   href={`/author/${author.slug}?page=${pagination.page - 1}`}
                   className="newer-posts"
                 >
                   &larr; Newer Posts
-                </a>
+                </PreviewAnchor>
               ) : (
                 <span />
               )}
@@ -61,12 +62,12 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                 Page {pagination.page} of {pagination.pages}
               </span>
               {pagination.page < pagination.pages ? (
-                <a
+                <PreviewAnchor
                   href={`/author/${author.slug}?page=${pagination.page + 1}`}
                   className="older-posts"
                 >
                   Older Posts &rarr;
-                </a>
+                </PreviewAnchor>
               ) : (
                 <span />
               )}

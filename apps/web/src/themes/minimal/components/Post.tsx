@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemePostProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -51,13 +52,13 @@ export async function Post(props: ThemePostProps) {
                 </time>
               )}
               {props.site.commentsEnabled !== false && (
-                <a
+                <PreviewAnchor
                   href="#comments-container"
                   className="vb-article-meta-date"
                   style={{ textDecoration: "none", opacity: 0.8 }}
                 >
                   {post.commentCount ?? 0} {dateLocale.startsWith("ar") ? "تعليقات" : "comments"}
-                </a>
+                </PreviewAnchor>
               )}
             </div>
           </header>

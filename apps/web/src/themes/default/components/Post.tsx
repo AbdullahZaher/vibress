@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import React from "react";
 import { ThemePostProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
@@ -61,7 +62,7 @@ export async function Post(props: ThemePostProps) {
             {showTags && primaryTag && (
               <div className="article-tag post-card-tags">
                 <span className="post-card-primary-tag">
-                  <a href={`/tags/${primaryTag.slug}`}>{primaryTag.name}</a>
+                  <PreviewAnchor href={`/tags/${primaryTag.slug}`}>{primaryTag.name}</PreviewAnchor>
                 </span>
               </div>
             )}
@@ -87,9 +88,9 @@ export async function Post(props: ThemePostProps) {
                       {post.primaryAuthor.name.charAt(0).toUpperCase()}
                     </span>
                     <h4 className="author-name">
-                      <a href={`/authors/${post.primaryAuthor.slug}`}>
+                      <PreviewAnchor href={`/authors/${post.primaryAuthor.slug}`}>
                         {post.primaryAuthor.name}
-                      </a>
+                      </PreviewAnchor>
                     </h4>
                   </div>
                 )}
@@ -123,13 +124,13 @@ export async function Post(props: ThemePostProps) {
                   {props.site.commentsEnabled !== false && (
                     <>
                       <span style={{ opacity: 0.4 }}>&bull;</span>
-                      <a
+                      <PreviewAnchor
                         href="#comments-container"
                         className="byline-meta-date"
                         style={{ textDecoration: "none", color: "inherit" }}
                       >
                         💬 {post.commentCount ?? 0} {t("comments.title", undefined, dateLocale) || "Comments"}
-                      </a>
+                      </PreviewAnchor>
                     </>
                   )}
                 </div>

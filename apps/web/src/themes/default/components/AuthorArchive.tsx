@@ -1,3 +1,4 @@
+import { PreviewAnchor } from "../../../components/preview/PreviewAnchor";
 import { ThemeAuthorArchiveProps, themeSetting } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { t as translate } from "../../../lib/i18n";
@@ -29,7 +30,7 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
             {posts.map((post) => (
               <article key={post.id} className="post-card">
                 <h2 className="post-card-title">
-                  <a href={`/posts/${post.slug}`}>{post.title}</a>
+                  <PreviewAnchor href={`/posts/${post.slug}`}>{post.title}</PreviewAnchor>
                 </h2>
                 <div className="article-meta">
                   {showPublicationDate && (
@@ -46,13 +47,13 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
                   )}
                   {showTags &&
                     post.tags.map((t) => (
-                      <a
+                      <PreviewAnchor
                         key={t.id}
                         href={`/tags/${t.slug}`}
                         className="tag-badge"
                       >
                         #{t.name}
-                      </a>
+                      </PreviewAnchor>
                     ))}
                   {props.site.commentsEnabled !== false && typeof (post as any).commentCount === "number" && (
                     <span>
@@ -77,12 +78,12 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
             })}
           >
             {pagination.page > 1 ? (
-              <a
+              <PreviewAnchor
                 href={`/authors/${author.slug}?page=${pagination.page - 1}`}
                 className="pagination-btn"
               >
                 ← {translate("archive.previous")}
-              </a>
+              </PreviewAnchor>
             ) : (
               <span className="pagination-btn disabled">
                 ← {translate("archive.previous")}
@@ -97,12 +98,12 @@ export async function AuthorArchive(props: ThemeAuthorArchiveProps) {
             </span>
 
             {pagination.page < pagination.pages ? (
-              <a
+              <PreviewAnchor
                 href={`/authors/${author.slug}?page=${pagination.page + 1}`}
                 className="pagination-btn"
               >
                 {translate("archive.next")} →
-              </a>
+              </PreviewAnchor>
             ) : (
               <span className="pagination-btn disabled">
                 {translate("archive.next")} →
