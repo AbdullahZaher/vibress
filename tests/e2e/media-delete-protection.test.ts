@@ -137,7 +137,7 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     // Navigate to Create Post
     await page.getByRole("button", { name: "Posts", exact: true }).click();
     await page.waitForTimeout(800);
-    await page.click('button:has-text("Create Post")');
+    await page.click('button:has-text("New Post")');
     await page.waitForTimeout(800);
     await page
       .locator('textarea[aria-label="Post Title"]')
