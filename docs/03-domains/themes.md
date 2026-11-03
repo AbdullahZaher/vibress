@@ -53,6 +53,7 @@ Both provide: Layout, Home, Post, Page, TagArchive, AuthorArchive. Studio card C
 - Legacy shared theme files remain at their original path until a publication installs its own scoped copy. Attempts to replace or uninstall a default-publication package still referenced by another publication fail with `THEME_SHARED_LEGACY_STORAGE`. Back up legacy storage and migrate each publication to its own installation before retiring shared files.
 - `ThemeService.activateTheme` validates the registered theme (manifest, compatibility, settings defaults) **before** persisting — a failed activation leaves the current theme intact.
 - `ThemeService.updateThemeSettings` validates server-side (types, enum options, hex color format, bounds, string length, unknown keys) before persisting.
+- Migration `0051_default_theme_legacy_accent` is data-only: for publications publishing `vibress-default`, it copies the *previously effective* `site.accentColor` (or its historical fallback `#6366f1`) into active theme configuration and the Default theme's editable settings. It preserves all unrelated keys, inactive-theme settings, and publication isolation. Existing publications with no activation row are pinned to their previously displayed Default accent; fresh publications created after migration use schema defaults. The legacy site setting is retained for API compatibility but is no longer an appearance source for built-in themes.
 - Invalid persisted settings fall back to schema defaults with logging; they never crash the site.
 
 ## Public Endpoints
@@ -87,7 +88,7 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 
 ## Admin UI
 
-`/admin/settings/site` → **Theme Studio**: always-visible published theme summary, spacious image-led catalog, official/custom filtering, Preview/Publish/Customize actions, ZIP upload, and schema-based editor. The existing Settings navigation remains the only navigation. `ThemeGallery.tsx` renders the theme's actual `previewImage` when supplied and a clearly labelled missing-screenshot state otherwise. Publishing requires explicit confirmation and reports server-confirmed success/errors. The same publication-bound 15-minute preview token is used for non-publishing previews; it does **not** preview unsaved form changes. The editor persists settings per theme and does not activate inactive themes. The design QA/release plan lives in `docs/design/VIBRESS_THEME_STUDIO_ROADMAP_2026-11-02.md`.
+`/admin/settings/site` → **Site Identity** manages publication logo and favicon without a duplicate color editor; the stable `site-branding` anchor remains available. **Theme Studio** is the sole user-facing appearance editor: always-visible published theme summary, spacious image-led catalog, official/custom filtering, Preview/Publish/Customize actions, ZIP upload, and schema-based editor. The existing Settings navigation remains the only navigation. `ThemeGallery.tsx` renders the theme's actual `previewImage` when supplied and a clearly labelled missing-screenshot state otherwise. Publishing requires explicit confirmation and reports server-confirmed success/errors. The same publication-bound 15-minute preview token is used for non-publishing previews; it does **not** preview unsaved form changes. The editor persists settings per theme and does not activate inactive themes. The design QA/release plan lives in `docs/design/VIBRESS_THEME_STUDIO_ROADMAP_2026-11-02.md`.
 
 ## Cache Freshness
 
@@ -102,3 +103,10 @@ Stable error codes: `THEME_NOT_FOUND`, `THEME_INVALID`, `THEME_INCOMPATIBLE`, `T
 - `pnpm qa:theme-studio` captures and validates screenshots but leaves `visual_review_pending=true`; capture success **is not** independent design certification.
 - A separate authorized reviewer may run `pnpm qa:approve-review -- --manifest <path> --commit-sha <40-hex-sha> --reviewer <identity> --role <role> --score <number> --observations <json>`. Set `THEME_STUDIO_REVIEW_SIGNING_KEY` from a protected secret store to a random **32+ byte hex key** before signing or verifying approval. The HMAC binds reviewer metadata, observations, score, commit and screenshot hashes; it establishes integrity only when the signing key and reviewer identity are controlled by an independent trusted process.
 - The final production merge gate requires all required CI jobs to complete successfully **on the exact reviewed SHA**, actual manual inspection of QA artifacts (including RTL/mobile states), and separately documented approval. Never use earlier successful workflow runs as proof of the current head.
+
+## Appearance ownership and announcements
+
+- Site Settings owns publication name, metadata, logo, favicon, and existing cover assets; no theme color is written from Site Settings.
+- The currently active theme's validated schema settings control theme-specific visual appearance. Default, Minimal and Molten all prioritize `theme.settings.accentColor`; external themes retain their existing Liquid setting contracts. The schema defines which editor fields exist.
+- The public announcement bar uses the active theme's `accentColor` when supported, or an accessible neutral fallback for other theme schemas. Its foreground is chosen for WCAG AA contrast, and alpha is rendered opaque to avoid unpredictable overlaid background contrast.
+- Saved theme edits and preview tokens are separate from publishing. A preview shows the stored theme settings associated with its authorized token, **not unsaved input**.

@@ -39,3 +39,11 @@ Migration 0033 is additive and transactional. It retains original setting IDs fo
 Secret and internal setting values remain masked in staff/public responses. Public site identities, navigation, announcements, analytics, code snippets and privacy flags are read from the host-resolved publication. If no publication maps to the request hostname in production, public settings routes return 404 rather than reading `pub_default` settings.
 
 The existing API JSON envelopes, setting names, types, and update bodies are unchanged. Runtime validation and `settings.manage`/`settings.read` permissions remain in force.
+
+## Publication identity versus Theme Studio appearance
+
+Site Settings owns the publication name and metadata, logo (`site.logoUrl`), favicon (`site.iconUrl`), and existing cover metadata (`site.coverUrl`). The Site Identity UI preserves the historical `site-branding` navigation anchor and continues to use the media upload flow, settings save/discard behavior, permission checks and publication scoping. It no longer provides a separate accent/color editor.
+
+Theme Studio owns appearance choices defined by the active theme's validated `settings.json` schema, including `accentColor` where supported. This keeps visual customization publication-scoped and avoids conflicting global color precedence. External themes without an accent schema remain supported.
+
+**Legacy compatibility:** `site.accentColor` remains a public, validated, writable field in existing settings APIs to avoid breaking existing consumers. It is deprecated as a built-in visual appearance source and is not editable from Admin. It does **not** override Theme Studio or the announcement bar. Migration `0051_default_theme_legacy_accent` transfers the previously published Default theme color into active and per-theme settings on upgrade, without deleting the legacy field or any other identity assets. Existing API clients updating `site.accentColor` after upgrade should switch to the permission-checked Theme Studio API to change the published appearance. No destructive schema change is required.
