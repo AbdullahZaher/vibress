@@ -86,6 +86,18 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   }, [title, studioDoc]);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // A timer created during an editor change must save the latest document, not
+  // the state captured by the render that scheduled it.
+  const latestStudioDocRef = useRef(studioDoc);
+  const latestVersionRef = useRef(version);
+
+  useEffect(() => {
+    latestStudioDocRef.current = studioDoc;
+  }, [studioDoc]);
+
+  useEffect(() => {
+    latestVersionRef.current = version;
+  }, [version]);
 
   const [showPicker, setShowPicker] = useState(false);
   const [pickerConfig, setPickerConfig] = useState<{
@@ -260,9 +272,9 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         metaTitle: metaTitle || null,
         metaDescription: metaDescription || null,
         canonicalUrl: canonicalUrl || null,
-        content: studioDoc,
+        content: isAutosave ? latestStudioDocRef.current : studioDoc,
         primaryAuthorId: currentUserId,
-        expectedVersion: pageId ? version : undefined,
+        expectedVersion: pageId ? latestVersionRef.current : undefined,
       };
 
       try {
@@ -274,6 +286,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
               body: JSON.stringify(payload),
             },
           );
+          latestVersionRef.current = res.page.version;
           setVersion(res.page.version);
           setAutosaveState("saved");
         } else {
@@ -313,6 +326,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   );
 
   const handleStudioChange = (newDoc: StudioDocument) => {
+    latestStudioDocRef.current = newDoc;
     setStudioDoc(newDoc);
     if (!pageId || autosaveState === "conflict") return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -465,7 +479,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           </div>
 
           <VibressStudio
-            key={`${pageId || "new"}-${version}`}
+            // Keep Lexical mounted across autosave and publish version bumps.
+            key={pageId || "new"}
             value={studioDoc}
             onChange={handleStudioChange}
             requestMedia={handleRequestMedia}
