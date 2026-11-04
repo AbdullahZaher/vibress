@@ -5,6 +5,7 @@ import {
   $getNearestNodeFromDOMNode,
   $createParagraphNode,
   $isRootOrShadowRoot,
+  $isElementNode,
   LexicalNode,
 } from "lexical";
 import { createPortal } from "react-dom";
@@ -15,6 +16,8 @@ import {
   Trash2,
   Palette,
   Sparkles,
+  ArrowUp,
+  ArrowDown,
   Heading1,
   Heading2,
   Heading3,
@@ -25,6 +28,7 @@ import {
   Code,
 } from "lucide-react";
 import { turnNodeInto, TurnIntoType } from "./TurnIntoHelper";
+import { $deepCloneNode } from "../utils/cloneNode";
 
 const NOTION_COLORS = [
   { name: "Default", color: "inherit", bg: "transparent" },
@@ -151,10 +155,44 @@ export function BlockHandleGutterPlugin({
     editor.update(() => {
       const node = $getNodeByKey(hoveredNodeKey);
       if (node) {
-        const parent = node.getParent();
-        if (parent) {
-          const p = $createParagraphNode();
-          node.insertAfter(p);
+        const cloned = $deepCloneNode(node);
+        node.insertAfter(cloned);
+        if ("selectEnd" in cloned && typeof (cloned as { selectEnd?: () => void }).selectEnd === "function") {
+          (cloned as { selectEnd: () => void }).selectEnd();
+        } else if ("select" in cloned && typeof (cloned as { select?: () => void }).select === "function") {
+          (cloned as { select: () => void }).select();
+        }
+      }
+    });
+    setShowMenu(false);
+  };
+
+  const handleMoveUp = () => {
+    editor.update(() => {
+      const node = $getNodeByKey(hoveredNodeKey);
+      if (node) {
+        const prev = node.getPreviousSibling();
+        if (prev) {
+          prev.insertBefore(node);
+          if ("select" in node && typeof (node as { select?: () => void }).select === "function") {
+            (node as { select: () => void }).select();
+          }
+        }
+      }
+    });
+    setShowMenu(false);
+  };
+
+  const handleMoveDown = () => {
+    editor.update(() => {
+      const node = $getNodeByKey(hoveredNodeKey);
+      if (node) {
+        const next = node.getNextSibling();
+        if (next) {
+          next.insertAfter(node);
+          if ("select" in node && typeof (node as { select?: () => void }).select === "function") {
+            (node as { select: () => void }).select();
+          }
         }
       }
     });
@@ -184,11 +222,26 @@ export function BlockHandleGutterPlugin({
   const handleApplyColor = (color: string, bg: string) => {
     editor.update(() => {
       const node = $getNodeByKey(hoveredNodeKey);
-      if (node) {
-        const dom = editor.getElementByKey(hoveredNodeKey);
-        if (dom) {
-          dom.style.color = color;
-          dom.style.backgroundColor = bg;
+      if (node && $isElementNode(node)) {
+        const textNodes = node.getAllTextNodes();
+        for (const t of textNodes) {
+          const curStyle = t.getStyle();
+          const styleMap: Record<string, string> = {};
+          if (curStyle) {
+            curStyle.split(";").forEach((pair: string) => {
+              const [k, v] = pair.split(":").map((s: string) => s?.trim());
+              if (k && v) styleMap[k] = v;
+            });
+          }
+          if (color !== "inherit") styleMap["color"] = color;
+          else delete styleMap["color"];
+          if (bg !== "transparent") styleMap["background-color"] = bg;
+          else delete styleMap["background-color"];
+
+          const newStyle = Object.entries(styleMap)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(";");
+          t.setStyle(newStyle);
         }
       }
     });
@@ -300,6 +353,18 @@ export function BlockHandleGutterPlugin({
           }}
         >
           <div className="studio-slash-header">Block Actions</div>
+
+          <button type="button" style={menuItemStyle} onClick={handleMoveUp}>
+            <ArrowUp size={14} />
+            <span>Move up</span>
+          </button>
+
+          <button type="button" style={menuItemStyle} onClick={handleMoveDown}>
+            <ArrowDown size={14} />
+            <span>Move down</span>
+          </button>
+
+          <div style={{ height: "1px", backgroundColor: "#e2e8f0", margin: "4px 0" }} />
 
           <button
             type="button"

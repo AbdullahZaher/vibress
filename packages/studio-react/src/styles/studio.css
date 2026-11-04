@@ -1,0 +1,517 @@
+@import './tokens.css';
+
+/* ==========================================================================
+   Vibress Studio — Editorial Writing Canvas & Measure
+   ========================================================================== */
+
+.vibress-studio-editor {
+  position: relative;
+  width: 100%;
+  font-family: var(--vb-studio-font-sans);
+  color: var(--vb-studio-foreground);
+  background-color: transparent;
+  box-sizing: border-box;
+}
+
+.vibress-studio-editor *,
+.vibress-studio-editor *::before,
+.vibress-studio-editor *::after {
+  box-sizing: inherit;
+}
+
+/* Core Reading Measure Constraint (740px) */
+.vibress-studio-editor [contenteditable] > p,
+.vibress-studio-editor [contenteditable] > h1,
+.vibress-studio-editor [contenteditable] > h2,
+.vibress-studio-editor [contenteditable] > h3,
+.vibress-studio-editor [contenteditable] > ul,
+.vibress-studio-editor [contenteditable] > ol,
+.vibress-studio-editor [contenteditable] > blockquote,
+.vibress-studio-editor [contenteditable] > hr,
+.vibress-studio-editor [contenteditable] > table,
+.vibress-studio-editor [contenteditable] > [data-studio-card] {
+  max-width: var(--vb-studio-measure-reading, 740px);
+  margin-inline: auto;
+}
+
+/* Placeholder */
+.vibress-studio-placeholder {
+  pointer-events: none;
+  user-select: none;
+  color: var(--vb-studio-foreground-subtle);
+  font-size: var(--vb-studio-text-lg);
+  line-height: var(--vb-studio-leading-relaxed);
+  max-width: var(--vb-studio-measure-reading, 740px);
+  margin-inline: auto;
+}
+
+/* ==========================================================================
+   Editorial Typography Hierarchy
+   ========================================================================== */
+
+.studio-paragraph {
+  margin-top: 0;
+  margin-bottom: 1.15rem;
+  line-height: var(--vb-studio-leading-relaxed);
+  font-size: var(--vb-studio-text-lg);
+  color: var(--vb-studio-foreground);
+  word-break: break-word;
+}
+
+[dir="rtl"] .studio-paragraph,
+html[dir="rtl"] .studio-paragraph {
+  line-height: var(--vb-studio-leading-arabic);
+  letter-spacing: normal;
+}
+
+.studio-h1 {
+  font-size: var(--vb-studio-text-3xl);
+  font-weight: 700;
+  line-height: var(--vb-studio-leading-tight);
+  margin-top: 2.25rem;
+  margin-bottom: 0.85rem;
+  letter-spacing: -0.025em;
+  color: var(--vb-studio-foreground);
+}
+
+[dir="rtl"] .studio-h1,
+html[dir="rtl"] .studio-h1 {
+  letter-spacing: normal;
+  line-height: 1.4;
+}
+
+.studio-h2 {
+  font-size: var(--vb-studio-text-2xl);
+  font-weight: 600;
+  line-height: var(--vb-studio-leading-snug);
+  margin-top: 1.85rem;
+  margin-bottom: 0.65rem;
+  letter-spacing: -0.02em;
+  color: var(--vb-studio-foreground);
+}
+
+[dir="rtl"] .studio-h2,
+html[dir="rtl"] .studio-h2 {
+  letter-spacing: normal;
+  line-height: 1.5;
+}
+
+.studio-h3 {
+  font-size: var(--vb-studio-text-xl);
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.4rem;
+  margin-bottom: 0.5rem;
+  color: var(--vb-studio-foreground);
+}
+
+[dir="rtl"] .studio-h3,
+html[dir="rtl"] .studio-h3 {
+  letter-spacing: normal;
+  line-height: 1.5;
+}
+
+/* Blockquotes */
+.studio-quote {
+  border-inline-start: 3px solid var(--vb-studio-primary);
+  padding-inline-start: 1.25rem;
+  padding-inline-end: 0.5rem;
+  margin: 1.5rem auto;
+  font-style: italic;
+  color: var(--vb-studio-foreground-muted);
+  font-size: var(--vb-studio-text-lg);
+  line-height: var(--vb-studio-leading-relaxed);
+  background: transparent;
+}
+
+/* Lists */
+.studio-ul,
+.studio-ol {
+  padding-inline-start: 1.5rem;
+  margin-bottom: 1.15rem;
+  font-size: var(--vb-studio-text-lg);
+  line-height: var(--vb-studio-leading-relaxed);
+}
+
+.studio-ul {
+  list-style-type: disc;
+}
+.studio-ol {
+  list-style-type: decimal;
+}
+
+.studio-listitem {
+  margin-bottom: 0.35rem;
+}
+
+.studio-nested-listitem {
+  list-style-type: none;
+}
+
+/* Checklists */
+.studio-checklist {
+  list-style: none !important;
+  padding-inline-start: 0 !important;
+  margin: 0.75rem auto;
+  max-width: var(--vb-studio-measure-reading, 740px);
+}
+
+.studio-checklist-item,
+.studio-checklist-checked,
+.studio-checklist-unchecked {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-bottom: 0.45rem;
+  font-size: var(--vb-studio-text-lg);
+  line-height: var(--vb-studio-leading-normal);
+}
+
+.studio-checklist-checked span,
+.is-checked span {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.studio-checklist-item input[type="checkbox"],
+.studio-checklist-checked input[type="checkbox"],
+.studio-checklist-unchecked input[type="checkbox"] {
+  margin-top: 0.35rem;
+  accent-color: var(--vb-studio-primary);
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Tables */
+.studio-table-container {
+  overflow-x: auto;
+  margin: 1.5rem auto;
+  max-width: var(--vb-studio-measure-reading, 740px);
+  border-radius: var(--vb-studio-radius-md);
+  border: 1px solid var(--vb-studio-border);
+}
+
+.studio-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--vb-studio-text-sm);
+  text-align: start;
+}
+
+.studio-table th,
+.studio-table td,
+.studio-table-cell,
+.studio-table-cell-header {
+  border: 1px solid var(--vb-studio-border);
+  padding: 10px 14px;
+  text-align: start;
+}
+
+.studio-table th,
+.studio-table-cell-header {
+  background-color: var(--vb-studio-surface-muted);
+  font-weight: 600;
+  color: var(--vb-studio-foreground);
+}
+
+/* Code Blocks */
+.studio-code-block {
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 1.25rem;
+  border-radius: var(--vb-studio-radius-md);
+  font-family: var(--vb-studio-font-mono);
+  font-size: var(--vb-studio-text-sm);
+  line-height: 1.65;
+  overflow-x: auto;
+  margin: 1.5rem auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dark .studio-code-block {
+  background-color: #0b0c10;
+  border: 1px solid var(--vb-studio-border);
+}
+
+.studio-code {
+  background-color: var(--vb-studio-surface-muted);
+  color: var(--vb-studio-foreground);
+  padding: 2px 6px;
+  border-radius: var(--vb-studio-radius-sm);
+  font-size: 0.875em;
+  font-family: var(--vb-studio-font-mono);
+  border: 1px solid var(--vb-studio-border);
+}
+
+/* Inline text formatting */
+.studio-bold {
+  font-weight: 700;
+}
+.studio-italic {
+  font-style: italic;
+}
+.studio-underline {
+  text-decoration: underline;
+}
+.studio-strikethrough {
+  text-decoration: line-through;
+}
+
+/* ==========================================================================
+   Presentation Width System (Regular, Wide, Full)
+   ========================================================================== */
+
+.vibress-studio-editor [data-studio-card] {
+  max-width: var(--vb-studio-measure-reading, 740px);
+  margin-inline: auto;
+  margin-top: 1.25rem !important;
+  margin-bottom: 1.25rem !important;
+  display: block;
+  transition: max-width var(--vb-studio-transition-fast);
+}
+
+/* Wide breakout (960px) */
+.vibress-studio-editor [data-studio-card] .vb-width-wide,
+.vibress-studio-editor [data-studio-card]:has(.vb-width-wide) {
+  max-width: var(--vb-studio-measure-wide, 960px) !important;
+}
+
+/* Full breakout (100%) */
+.vibress-studio-editor [data-studio-card] .vb-width-full,
+.vibress-studio-editor [data-studio-card]:has(.vb-width-full) {
+  max-width: var(--vb-studio-measure-full, 100%) !important;
+}
+
+/* ==========================================================================
+   Floating Toolbars, Menus & Popovers
+   ========================================================================== */
+
+.studio-glassy-menu,
+.notion-slash-menu,
+.notion-block-menu,
+.notion-ai-popup,
+.floating-card-action-popup {
+  background: var(--vb-studio-popover) !important;
+  border: 1px solid var(--vb-studio-border) !important;
+  border-radius: var(--vb-studio-radius-lg) !important;
+  box-shadow: var(--vb-studio-shadow-popover) !important;
+  color: var(--vb-studio-popover-foreground) !important;
+}
+
+/* Media Floating Toolbar Visibility */
+[data-studio-toolbar="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--vb-studio-transition-fast);
+}
+
+.group:hover [data-studio-toolbar="true"],
+[data-studio-toolbar="true"]:hover,
+[data-studio-toolbar="true"]:focus-within,
+[data-studio-toolbar="true"][data-visible="true"] {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Slash Menu Elements */
+.studio-slash-header {
+  padding: 8px 12px 4px 12px;
+  font-size: var(--vb-studio-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vb-studio-foreground-muted);
+}
+
+[dir="rtl"] .studio-slash-header,
+html[dir="rtl"] .studio-slash-header {
+  letter-spacing: normal;
+}
+
+.studio-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--vb-studio-radius-md);
+  cursor: pointer;
+  background: transparent;
+  transition: background-color var(--vb-studio-transition-fast);
+  text-align: start;
+}
+
+.studio-slash-item:hover,
+.studio-slash-item.is-selected {
+  background: var(--vb-studio-surface-muted) !important;
+}
+
+.studio-slash-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--vb-studio-radius-md);
+  background: var(--vb-studio-surface);
+  border: 1px solid var(--vb-studio-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--vb-studio-shadow-xs);
+  color: var(--vb-studio-foreground);
+}
+
+.studio-slash-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+}
+
+.studio-slash-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vb-studio-foreground);
+}
+
+.studio-slash-desc {
+  font-size: var(--vb-studio-text-xs);
+  color: var(--vb-studio-foreground-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Block Handle Gutter */
+.notion-block-handle-gutter {
+  user-select: none;
+}
+
+.notion-block-handle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--vb-studio-radius-sm);
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--vb-studio-foreground-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast);
+}
+
+.notion-block-handle-btn:hover {
+  background-color: var(--vb-studio-surface-muted);
+  color: var(--vb-studio-foreground);
+  border-color: var(--vb-studio-border-subtle);
+}
+
+.notion-block-handle-btn:focus-visible {
+  outline: 2px solid var(--vb-studio-ring);
+  outline-offset: 1px;
+}
+
+/* Floating Format Toolbar */
+.notion-floating-format-popup {
+  background: var(--vb-studio-popover);
+  color: var(--vb-studio-popover-foreground);
+  border: 1px solid var(--vb-studio-border);
+  border-radius: var(--vb-studio-radius-md);
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  box-shadow: var(--vb-studio-shadow-popover);
+  z-index: 150;
+}
+
+.notion-format-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--vb-studio-radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--vb-studio-foreground-muted);
+  cursor: pointer;
+  font-size: var(--vb-studio-text-xs);
+  transition: background-color var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast);
+}
+
+.notion-format-btn:hover {
+  background-color: var(--vb-studio-surface-muted);
+  color: var(--vb-studio-foreground);
+}
+
+.notion-format-btn.is-active {
+  background-color: var(--vb-studio-surface-muted);
+  color: var(--vb-studio-primary);
+  font-weight: 600;
+}
+
+.notion-format-btn:focus-visible {
+  outline: 2px solid var(--vb-studio-ring);
+  outline-offset: 1px;
+}
+
+/* Modals & Dialogs */
+.studio-glassy-modal {
+  box-shadow: var(--vb-studio-shadow-modal) !important;
+}
+
+/* High-Contrast Accessible Focus Ring */
+:focus-visible {
+  outline: 2px solid var(--vb-studio-ring);
+  outline-offset: 1px;
+}
+
+/* Reduced Motion Preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mobile Responsive Optimization */
+@media (max-width: 768px) {
+  .vibress-studio-editor [contenteditable] {
+    padding-inline-start: 12px !important;
+    padding-inline-end: 12px !important;
+  }
+
+  .studio-paragraph {
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+
+  .studio-h1 {
+    font-size: 1.75rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .studio-h2 {
+    font-size: 1.375rem;
+    margin-top: 1.25rem;
+  }
+
+  .notion-block-handle-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .notion-format-btn {
+    min-width: 34px;
+    height: 34px;
+  }
+}
