@@ -358,7 +358,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
       {/* Editor Header Bar — Minimalist Ghost-style toolbar */}
-      <header className="flex h-14 items-center justify-between px-4 sm:px-6 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/20">
+      <header className="flex h-16 items-center justify-between px-6 sm:px-10 md:px-14 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/20">
         {/* Left: Back to Pages & Page State */}
         <div className="flex items-center gap-3">
           <button
@@ -401,23 +401,25 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         <div className="flex items-center gap-2">
           {pageId && canPublish && status !== "published" ? (
             <Button
+              variant="ghost"
               size="sm"
               onClick={handlePublishToggle}
               disabled={autosaveState === "conflict"}
               loading={saving}
               loadingLabel={tr("Publishing...")}
-              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
+              className="h-8 px-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition"
             >
               {tr("Publish Page")}
             </Button>
           ) : (
             <Button
+              variant="ghost"
               size="sm"
               onClick={handleManualSave}
               disabled={autosaveState === "conflict"}
               loading={saving}
               loadingLabel={tr("Saving...")}
-              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
+              className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition"
             >
               {pageId ? tr("Update Page") : tr("Create Page")}
             </Button>
@@ -440,9 +442,9 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         </div>
       </header>
 
-      {/* Main Canvas — Centered 740px editorial column */}
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 pt-8 sm:pt-12 pb-32">
-        <div className="w-full max-w-[740px] mx-auto space-y-6">
+      {/* Main Canvas — Centered 760px editorial column */}
+      <main className="min-h-0 flex-1 overflow-y-auto px-6 sm:px-12 md:px-16 pt-12 sm:pt-16 md:pt-20 pb-48">
+        <div className="w-full max-w-[760px] mx-auto space-y-8">
           {autosaveState === "conflict" && (
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
               <div>

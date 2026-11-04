@@ -55,8 +55,8 @@ export function WordCountPlugin({
       title={`${stats.characters.toLocaleString()} characters · ~${stats.readingTimeMinutes} min reading time`}
       style={{
         position: 'absolute',
-        bottom: '16px',
-        insetInlineEnd: '24px',
+        bottom: '24px',
+        insetInlineEnd: '32px',
         display: 'inline-flex',
         alignItems: 'center',
         gap: '6px',

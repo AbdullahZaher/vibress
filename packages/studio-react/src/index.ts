@@ -14,5 +14,6 @@ export * from "./components/ui/media-popovers/AudioMetadataPopover";
 export * from "./components/ui/media-popovers/GalleryMetadataPopover";
 export * from "./components/ui/media-popovers/FileMetadataPopover";
 export * from "./components/ui/media-popovers/EmbedMetadataPopover";
+export * from "./components/icons/UnsplashIcon";
 
 

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   RefreshCw,
-  Sparkles,
   Info,
   ChevronDown,
   ChevronUp,
@@ -10,6 +9,7 @@ import {
   Maximize2,
   Move,
 } from "lucide-react";
+import { UnsplashIcon } from "../icons/UnsplashIcon";
 
 export interface StudioMediaFloatingToolbarProps {
   /** Change media callback (opens library picker) */
@@ -136,11 +136,11 @@ export const StudioMediaFloatingToolbar: React.FC<
           type="button"
           disabled={disabled || unsplashDisabled}
           onClick={onUnsplash}
-          className="h-7 px-2.5 text-xs font-medium gap-1.5 rounded-md hover:bg-muted text-amber-600 dark:text-amber-400 transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+          className="h-7 px-2.5 text-xs font-medium gap-1.5 rounded-md hover:bg-muted text-foreground/80 hover:text-foreground transition-colors inline-flex items-center justify-center cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
           title="Replace from Unsplash"
           aria-label="Replace from Unsplash"
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <UnsplashIcon className="w-3.5 h-3.5" />
           <span className="hidden sm:inline">Unsplash</span>
         </button>
       )}

@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import {
   ImageIcon,
-  Sparkles,
   ExternalLink,
 } from "lucide-react";
+import { UnsplashIcon } from "../icons/UnsplashIcon";
 import { ApiMediaAsset } from "../../lib/api";
 import { useAdminLocale } from "../../lib/admin-locale";
 import {
@@ -50,7 +50,7 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
   // 1. EMPTY STATE — Minimalist Ghost-style clean trigger
   if (!featureImage) {
     return (
-      <div className="mb-4 flex items-center gap-1.5">
+      <div className="mb-6 flex items-center gap-2">
         <button
           type="button"
           disabled={disabled}
@@ -77,11 +77,11 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
           type="button"
           disabled={disabled}
           onClick={onOpenUnsplashModal}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground/60 hover:text-amber-500 hover:bg-muted/40 transition-colors focus:outline-none"
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/40 transition-colors focus:outline-none"
           title="Unsplash"
           aria-label="Add feature image from Unsplash"
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <UnsplashIcon className="w-3.5 h-3.5" />
         </button>
       </div>
     );
@@ -132,6 +132,7 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
               <span>{caption}</span>
             ) : unsplashMeta ? (
               <span className="flex items-center gap-1.5">
+                <UnsplashIcon className="w-3 h-3 opacity-70 shrink-0" />
                 <span>Photo by</span>
                 <a
                   href={unsplashMeta.photographerUrl}

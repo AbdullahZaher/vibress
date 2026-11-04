@@ -435,8 +435,8 @@ html[dir="rtl"] .studio-slash-header {
 
 .studio-word-count-dock {
   position: absolute;
-  bottom: 16px;
-  inset-inline-end: 24px;
+  bottom: 24px;
+  inset-inline-end: 32px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -482,7 +482,7 @@ html[dir="rtl"] .studio-slash-header {
 
 [dir="rtl"] .studio-word-count-dock,
 html[dir="rtl"] .studio-word-count-dock {
-  inset-inline-end: 24px;
+  inset-inline-end: 32px;
 }
 
 /* Block Handle Gutter */
