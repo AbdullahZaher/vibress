@@ -434,7 +434,7 @@ html[dir="rtl"] .studio-slash-header {
    ========================================================================== */
 
 .studio-word-count-dock {
-  position: absolute;
+  position: fixed;
   bottom: 24px;
   inset-inline-end: 32px;
   display: inline-flex;
@@ -446,7 +446,7 @@ html[dir="rtl"] .studio-slash-header {
   background: transparent;
   user-select: none;
   pointer-events: auto;
-  z-index: 20;
+  z-index: 30;
   transition: opacity var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast);
 }
 

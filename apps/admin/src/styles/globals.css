@@ -619,9 +619,9 @@ html[dir="rtl"] .studio-slash-header {
 
 /* Ghost-Style Editorial Word Count & Reading Time */
 .studio-word-count-dock {
-  position: absolute;
-  bottom: 24px;
-  inset-inline-end: 32px;
+  position: fixed !important;
+  bottom: 24px !important;
+  inset-inline-end: 32px !important;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -631,7 +631,7 @@ html[dir="rtl"] .studio-slash-header {
   background: transparent;
   user-select: none;
   pointer-events: auto;
-  z-index: 20;
+  z-index: 30 !important;
   transition: opacity 0.15s ease, color 0.15s ease;
   box-sizing: border-box;
 }

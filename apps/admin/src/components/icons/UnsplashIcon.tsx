@@ -23,3 +23,4 @@ export const UnsplashIcon: React.FC<UnsplashIconProps> = ({
     </svg>
   );
 };
+

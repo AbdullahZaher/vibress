@@ -54,7 +54,7 @@ export function WordCountPlugin({
       className={`studio-word-count-dock ${className}`}
       title={`${stats.characters.toLocaleString()} characters · ~${stats.readingTimeMinutes} min reading time`}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         bottom: '24px',
         insetInlineEnd: '32px',
         display: 'inline-flex',
@@ -66,7 +66,7 @@ export function WordCountPlugin({
         background: 'transparent',
         userSelect: 'none',
         pointerEvents: 'auto',
-        zIndex: 20,
+        zIndex: 30,
         boxSizing: 'border-box',
       }}
     >

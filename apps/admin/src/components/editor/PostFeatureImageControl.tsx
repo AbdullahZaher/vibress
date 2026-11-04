@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  ImageIcon,
   ExternalLink,
 } from "lucide-react";
 import { UnsplashIcon } from "../icons/UnsplashIcon";
@@ -60,17 +59,6 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
         >
           <span className="text-sm font-normal text-muted-foreground/60 group-hover:text-foreground">+</span>
           <span>{tr("Add feature image")}</span>
-        </button>
-
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onOpenMediaPicker}
-          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/40 transition-colors focus:outline-none ms-0.5"
-          title={tr("Upload feature image")}
-          aria-label={tr("Upload feature image")}
-        >
-          <ImageIcon className="w-3.5 h-3.5" />
         </button>
 
         <button
