@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from "lexical";
-import { TOGGLE_LINK_COMMAND } from "@lexical/link";
+import { TOGGLE_LINK_COMMAND, $isLinkNode } from "@lexical/link";
+import { $patchStyleText } from "@lexical/selection";
 import { createPortal } from "react-dom";
+import { FloatingLinkEditorPopover } from "../components/ui/FloatingLinkEditorPopover";
 import {
   Bold,
   Italic,
@@ -89,6 +91,9 @@ export function FloatingFormatToolbarPlugin({
   const [isUnderline, setIsUnderline] = useState(false);
   const [isStrikethrough, setIsStrikethrough] = useState(false);
   const [isCode, setIsCode] = useState(false);
+  const [isLink, setIsLink] = useState(false);
+  const [currentLinkUrl, setCurrentLinkUrl] = useState("");
+  const [isLinkEditorOpen, setIsLinkEditorOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<"turnInto" | "color" | null>(
     null,
   );
@@ -109,6 +114,7 @@ export function FloatingFormatToolbarPlugin({
           nativeSelection.isCollapsed)
       ) {
         setIsTextSelected(false);
+        setIsLinkEditorOpen(false);
         return;
       }
 
@@ -119,6 +125,19 @@ export function FloatingFormatToolbarPlugin({
         setIsUnderline(selection.hasFormat("underline"));
         setIsStrikethrough(selection.hasFormat("strikethrough"));
         setIsCode(selection.hasFormat("code"));
+
+        const node = selection.anchor.getNode();
+        const parent = node.getParent();
+        if ($isLinkNode(parent)) {
+          setIsLink(true);
+          setCurrentLinkUrl(parent.getURL());
+        } else if ($isLinkNode(node)) {
+          setIsLink(true);
+          setCurrentLinkUrl(node.getURL());
+        } else {
+          setIsLink(false);
+          setCurrentLinkUrl("");
+        }
       }
     });
   }, [editor]);
@@ -149,6 +168,20 @@ export function FloatingFormatToolbarPlugin({
     }
   }, [isTextSelected, anchorElem, editor, updatePopup]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (isLinkEditorOpen) {
+          setIsLinkEditorOpen(false);
+        } else if (openDropdown) {
+          setOpenDropdown(null);
+        }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isLinkEditorOpen, openDropdown]);
+
   if (!isTextSelected) {
     return null;
   }
@@ -162,25 +195,23 @@ export function FloatingFormatToolbarPlugin({
     editor.update(() => {
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
-        // Apply inline style to selection
-        const nodes = selection.getNodes();
-        nodes.forEach((node) => {
-          const dom = editor.getElementByKey(node.getKey());
-          if (dom) {
-            if (color !== "inherit") dom.style.color = color;
-            if (bg !== "transparent") dom.style.backgroundColor = bg;
-          }
+        $patchStyleText(selection, {
+          color: color === "inherit" ? null : color,
+          "background-color": bg === "transparent" ? null : bg,
         });
       }
     });
     setOpenDropdown(null);
   };
 
-  const handleLink = () => {
-    const url = prompt("Enter link URL:");
-    if (url) {
-      editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
-    }
+  const handleLinkSubmit = (url: string) => {
+    editor.dispatchCommand(TOGGLE_LINK_COMMAND, url);
+    setIsLinkEditorOpen(false);
+  };
+
+  const handleLinkRemove = () => {
+    editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+    setIsLinkEditorOpen(false);
   };
 
   return createPortal(
@@ -203,7 +234,16 @@ export function FloatingFormatToolbarPlugin({
         fontSize: "13px",
       }}
     >
-      {/* Ask AI button */}
+      {isLinkEditorOpen ? (
+        <FloatingLinkEditorPopover
+          initialUrl={currentLinkUrl}
+          onApply={handleLinkSubmit}
+          onRemove={handleLinkRemove}
+          onCancel={() => setIsLinkEditorOpen(false)}
+        />
+      ) : (
+        <>
+          {/* Ask AI button */}
       <button
         type="button"
         title="Ask AI"
@@ -401,10 +441,11 @@ export function FloatingFormatToolbarPlugin({
       </button>
       <button
         type="button"
-        title="Add Link"
-        aria-label="Add Link"
-        onClick={handleLink}
-        style={getFormatBtnStyle(false)}
+        title={isLink ? "Edit Link" : "Add Link"}
+        aria-label={isLink ? "Edit Link" : "Add Link"}
+        aria-pressed={isLink}
+        onClick={() => setIsLinkEditorOpen(true)}
+        style={getFormatBtnStyle(isLink)}
       >
         <Link size={13} />
       </button>
@@ -485,6 +526,8 @@ export function FloatingFormatToolbarPlugin({
           </div>
         )}
       </div>
+        </>
+      )}
     </div>,
     anchorElem,
   );

@@ -1,0 +1,111 @@
+/**
+ * Vibress Studio Design Tokens
+ * 
+ * Standalone-first design tokens with automatic bridging to host theme variables.
+ * When embedded in Vibress Admin or any CSS framework (Tailwind/shadcn),
+ * it seamlessly adopts host variables (--background, --foreground, --primary, etc.).
+ * When used standalone, high-quality editorial defaults apply.
+ */
+
+:root {
+  /* Canvas & Surfaces */
+  --vb-studio-canvas: var(--background, #ffffff);
+  --vb-studio-surface: var(--card, #ffffff);
+  --vb-studio-surface-muted: var(--muted, #f8fafc);
+  --vb-studio-popover: var(--popover, #ffffff);
+  --vb-studio-popover-foreground: var(--popover-foreground, #0f172a);
+
+  /* Foreground & Typography */
+  --vb-studio-foreground: var(--foreground, #0f172a);
+  --vb-studio-foreground-muted: var(--muted-foreground, #64748b);
+  --vb-studio-foreground-subtle: #94a3b8;
+
+  /* Borders & Dividers */
+  --vb-studio-border: var(--border, #e2e8f0);
+  --vb-studio-border-subtle: rgba(0, 0, 0, 0.06);
+
+  /* Brand / Primary / Focus */
+  --vb-studio-primary: var(--primary, #2563eb);
+  --vb-studio-primary-foreground: var(--primary-foreground, #ffffff);
+  --vb-studio-primary-hover: #1d4ed8;
+  --vb-studio-ring: var(--ring, #3b82f6);
+
+  /* Semantic Feedback */
+  --vb-studio-danger: var(--destructive, #ef4444);
+  --vb-studio-danger-foreground: var(--destructive-foreground, #ffffff);
+  --vb-studio-danger-muted: rgba(239, 68, 68, 0.1);
+  --vb-studio-success: #10b981;
+  --vb-studio-warning: #f59e0b;
+
+  /* Typography Sizing & Hierarchy */
+  --vb-studio-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --vb-studio-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --vb-studio-text-xs: 0.75rem;    /* 12px */
+  --vb-studio-text-sm: 0.875rem;   /* 14px */
+  --vb-studio-text-base: 1rem;     /* 16px */
+  --vb-studio-text-lg: 1.125rem;   /* 18px - editorial body default */
+  --vb-studio-text-xl: 1.25rem;    /* 20px */
+  --vb-studio-text-2xl: 1.625rem;  /* 26px - H2 */
+  --vb-studio-text-3xl: 2.25rem;   /* 36px - H1 */
+
+  /* Leading (Line Heights) */
+  --vb-studio-leading-tight: 1.25;
+  --vb-studio-leading-snug: 1.35;
+  --vb-studio-leading-normal: 1.5;
+  --vb-studio-leading-relaxed: 1.8;   /* Editorial English body */
+  --vb-studio-leading-arabic: 1.95;   /* Optimal Arabic body rhythm */
+
+  /* Radii */
+  --vb-studio-radius-sm: var(--radius-sm, 6px);
+  --vb-studio-radius-md: var(--radius-md, 8px);
+  --vb-studio-radius-lg: var(--radius-lg, 12px);
+  --vb-studio-radius-xl: 16px;
+  --vb-studio-radius-full: 9999px;
+
+  /* Elevation Shadows */
+  --vb-studio-shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --vb-studio-shadow-sm: 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --vb-studio-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --vb-studio-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --vb-studio-shadow-popover: 0 12px 32px -4px rgba(0, 0, 0, 0.12), 0 0 0 1px var(--vb-studio-border);
+  --vb-studio-shadow-modal: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--vb-studio-border);
+
+  /* Editorial Layout Measures */
+  --vb-studio-measure-reading: 740px;
+  --vb-studio-measure-wide: 960px;
+  --vb-studio-measure-full: 100%;
+
+  /* Transitions */
+  --vb-studio-transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --vb-studio-transition-normal: 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dark Mode Tokens */
+.dark,
+[data-theme="dark"],
+[data-mode="dark"] {
+  --vb-studio-canvas: var(--background, #090a0f);
+  --vb-studio-surface: var(--card, #13151a);
+  --vb-studio-surface-muted: var(--muted, rgba(255, 255, 255, 0.04));
+  --vb-studio-popover: var(--popover, #13151a);
+  --vb-studio-popover-foreground: var(--popover-foreground, #f8fafc);
+
+  --vb-studio-foreground: var(--foreground, #f8fafc);
+  --vb-studio-foreground-muted: var(--muted-foreground, #94a3b8);
+  --vb-studio-foreground-subtle: #64748b;
+
+  --vb-studio-border: var(--border, rgba(255, 255, 255, 0.12));
+  --vb-studio-border-subtle: rgba(255, 255, 255, 0.06);
+
+  --vb-studio-primary: var(--primary, #3b82f6);
+  --vb-studio-primary-foreground: var(--primary-foreground, #ffffff);
+  --vb-studio-primary-hover: #60a5fa;
+  --vb-studio-ring: var(--ring, #60a5fa);
+
+  --vb-studio-danger: var(--destructive, #f87171);
+  --vb-studio-danger-foreground: var(--destructive-foreground, #ffffff);
+  --vb-studio-danger-muted: rgba(248, 113, 113, 0.15);
+
+  --vb-studio-shadow-popover: 0 20px 48px -8px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  --vb-studio-shadow-modal: 0 30px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
