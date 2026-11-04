@@ -314,14 +314,35 @@ html[dir="rtl"] .studio-h3 {
   pointer-events: auto !important;
 }
 
-/* Slash Menu Elements */
+/* Slash Menu Popover & Notion-Style 3-Column Grid */
+.notion-slash-menu {
+  width: 540px !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: 380px !important;
+  padding: 8px 10px !important;
+  border-radius: var(--vb-studio-radius-lg, 12px) !important;
+  background: var(--vb-studio-popover, #ffffff) !important;
+  border: 1px solid var(--vb-studio-border, #e2e8f0) !important;
+  box-shadow: var(--vb-studio-shadow-popover) !important;
+  color: var(--vb-studio-popover-foreground, #0f172a) !important;
+  overflow-y: auto !important;
+  z-index: 250 !important;
+}
+
+.studio-slash-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 6px;
+}
+
 .studio-slash-header {
-  padding: 8px 12px 4px 12px;
-  font-size: var(--vb-studio-text-xs);
+  padding: 4px 8px 6px 8px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--vb-studio-foreground-muted);
+  color: var(--vb-studio-foreground-subtle, #94a3b8);
+  user-select: none;
 }
 
 [dir="rtl"] .studio-slash-header,
@@ -332,32 +353,65 @@ html[dir="rtl"] .studio-slash-header {
 .studio-slash-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--vb-studio-radius-md);
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--vb-studio-radius-sm, 6px);
   cursor: pointer;
   background: transparent;
-  transition: background-color var(--vb-studio-transition-fast);
+  transition: background-color var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast);
+  min-height: 34px;
   text-align: start;
+  user-select: none;
 }
 
 .studio-slash-item:hover,
 .studio-slash-item.is-selected {
-  background: var(--vb-studio-surface-muted) !important;
+  background: var(--vb-studio-surface-muted, #f1f5f9) !important;
 }
 
-.studio-slash-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--vb-studio-radius-md);
-  background: var(--vb-studio-surface);
-  border: 1px solid var(--vb-studio-border);
+.studio-slash-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--vb-studio-radius-sm, 4px);
+  background: var(--vb-studio-surface, #ffffff);
+  border: 1px solid var(--vb-studio-border, #e2e8f0);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   box-shadow: var(--vb-studio-shadow-xs);
+  color: var(--vb-studio-foreground, #0f172a);
+  line-height: 1;
+}
+
+.dark .studio-slash-badge {
+  background: var(--vb-studio-surface);
+  border-color: var(--vb-studio-border);
   color: var(--vb-studio-foreground);
+}
+
+.studio-slash-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vb-studio-foreground, #0f172a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* Fallback for legacy 1-column items */
+.studio-slash-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--vb-studio-radius-sm, 4px);
+  background: var(--vb-studio-surface, #ffffff);
+  border: 1px solid var(--vb-studio-border, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--vb-studio-foreground, #0f172a);
 }
 
 .studio-slash-content {
@@ -365,21 +419,60 @@ html[dir="rtl"] .studio-slash-header {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  text-align: start;
-}
-
-.studio-slash-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--vb-studio-foreground);
 }
 
 .studio-slash-desc {
-  font-size: var(--vb-studio-text-xs);
-  color: var(--vb-studio-foreground-muted);
+  font-size: var(--vb-studio-text-xs, 12px);
+  color: var(--vb-studio-foreground-muted, #64748b);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   Ghost-Style Editorial Word Count & Reading Time (Image 1 Parity)
+   ========================================================================== */
+
+.studio-word-count-dock {
+  position: absolute;
+  bottom: 12px;
+  inset-inline-end: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: var(--vb-studio-text-xs, 12px);
+  color: var(--vb-studio-foreground-subtle, #94a3b8);
+  background: var(--vb-studio-surface, #ffffff);
+  border: 1px solid var(--vb-studio-border, #e2e8f0);
+  border-radius: var(--vb-studio-radius-full, 9999px);
+  box-shadow: var(--vb-studio-shadow-xs);
+  user-select: none;
+  pointer-events: auto;
+  z-index: 20;
+  transition: opacity var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast), border-color var(--vb-studio-transition-fast);
+}
+
+.studio-word-count-dock:hover {
+  color: var(--vb-studio-foreground, #0f172a);
+  border-color: var(--vb-studio-border-subtle);
+}
+
+.studio-word-count-dot {
+  opacity: 0.5;
+}
+
+.studio-word-count-val {
+  font-weight: 500;
+}
+
+.studio-word-count-time {
+  font-weight: 400;
+}
+
+[dir="rtl"] .studio-word-count-dock,
+html[dir="rtl"] .studio-word-count-dock {
+  inset-inline-end: 20px;
 }
 
 /* Block Handle Gutter */
@@ -515,3 +608,4 @@ html[dir="rtl"] .studio-slash-header {
     height: 34px;
   }
 }
+

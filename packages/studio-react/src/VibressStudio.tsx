@@ -25,6 +25,7 @@ import { FloatingFormatToolbarPlugin } from "./plugins/FloatingFormatToolbarPlug
 import { FloatingCardActionToolbarPlugin } from "./plugins/FloatingCardActionToolbarPlugin";
 import { BlockHandleGutterPlugin } from "./plugins/BlockHandleGutterPlugin";
 import { InlineAIPlugin } from "./plugins/InlineAIPlugin";
+import { WordCountPlugin } from "./plugins/WordCountPlugin";
 import { STUDIO_CORE_NODES } from "@vibress/studio-nodes";
 import { StudioCardNode } from "@vibress/studio-cards";
 import { ReactStudioCardNode } from "./nodes/ReactStudioCardNode";
@@ -52,6 +53,7 @@ export interface VibressStudioProps {
    *  must use this instead of transient blob: URLs. */
   uploadMedia?: StudioUploadApi["uploadMedia"] | undefined;
   collaboration?: CollaborationConfig | undefined;
+  showWordCount?: boolean | undefined;
   className?: string | undefined;
 }
 
@@ -163,6 +165,7 @@ export function VibressStudio({
   allowUnsplash,
   uploadMedia,
   collaboration,
+  showWordCount = true,
   className = "",
 }: VibressStudioProps) {
   const parsedDoc = useMemo(() => migrateDocument(value), [value]);
@@ -317,6 +320,7 @@ export function VibressStudio({
               <FloatingFormatToolbarPlugin />
               <FloatingCardActionToolbarPlugin />
               {!readOnly && <BlockHandleGutterPlugin />}
+              {showWordCount && <WordCountPlugin />}
               {!readOnly && enableAi && (
                 <InlineAIPlugin
                   disabled={!enableAi}
