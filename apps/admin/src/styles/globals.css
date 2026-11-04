@@ -476,6 +476,24 @@ html[dir="rtl"] .studio-h2 {
   color: #f8fafc !important;
 }
 
+/* Slash Menu Popover & Notion-Style 3-Column Grid */
+.notion-slash-menu {
+  width: 540px !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: 380px !important;
+  padding: 8px 10px !important;
+  overflow-y: auto !important;
+  z-index: 250 !important;
+  box-sizing: border-box !important;
+}
+
+.studio-slash-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 4px 6px !important;
+  box-sizing: border-box !important;
+}
+
 /* ==========================================================================
    Media Floating Toolbar Visibility & Hover UX
    ========================================================================== */
@@ -496,12 +514,13 @@ html[dir="rtl"] .studio-h2 {
 
 /* Slash Menu Elements */
 .studio-slash-header {
-  padding: 8px 12px 4px 12px;
+  padding: 4px 8px 6px 8px;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+  user-select: none;
 }
 
 [dir="rtl"] .studio-slash-header,
@@ -512,12 +531,15 @@ html[dir="rtl"] .studio-slash-header {
 .studio-slash-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
   cursor: pointer;
   background: transparent;
   transition: background-color 0.15s ease;
+  min-height: 34px;
+  box-sizing: border-box;
+  user-select: none;
 }
 
 .studio-slash-item:hover,
@@ -530,10 +552,10 @@ html[dir="rtl"] .studio-slash-header {
   background: rgba(255, 255, 255, 0.08) !important;
 }
 
-.studio-slash-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.studio-slash-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
   background: var(--card);
   border: 1px solid var(--border);
   display: flex;
@@ -542,12 +564,42 @@ html[dir="rtl"] .studio-slash-header {
   flex-shrink: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   color: var(--foreground);
+  font-size: 11px;
+  line-height: 1;
 }
 
-.dark .studio-slash-icon {
+.dark .studio-slash-badge {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #f8fafc;
+}
+
+.studio-slash-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.dark .studio-slash-title {
+  color: #f8fafc;
+}
+
+/* Fallback for legacy 1-column items */
+.studio-slash-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--foreground);
 }
 
 .studio-slash-content {
@@ -555,17 +607,6 @@ html[dir="rtl"] .studio-slash-header {
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  text-align: start;
-}
-
-.studio-slash-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--foreground);
-}
-
-.dark .studio-slash-title {
-  color: #f8fafc;
 }
 
 .studio-slash-desc {
@@ -574,6 +615,50 @@ html[dir="rtl"] .studio-slash-header {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Ghost-Style Editorial Word Count & Reading Time */
+.studio-word-count-dock {
+  position: absolute;
+  bottom: 12px;
+  inset-inline-end: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  user-select: none;
+  pointer-events: auto;
+  z-index: 20;
+  transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.studio-word-count-dock:hover {
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.studio-word-count-dot {
+  opacity: 0.5;
+}
+
+.studio-word-count-val {
+  font-weight: 500;
+}
+
+.studio-word-count-time {
+  font-weight: 400;
+}
+
+[dir="rtl"] .studio-word-count-dock,
+html[dir="rtl"] .studio-word-count-dock {
+  inset-inline-end: 20px;
 }
 
 /* Notion Block Context Menu */

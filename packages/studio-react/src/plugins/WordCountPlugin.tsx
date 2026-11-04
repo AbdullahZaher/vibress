@@ -53,12 +53,31 @@ export function WordCountPlugin({
       aria-atomic="true"
       className={`studio-word-count-dock ${className}`}
       title={`${stats.characters.toLocaleString()} characters · ~${stats.readingTimeMinutes} min reading time`}
+      style={{
+        position: 'absolute',
+        bottom: '12px',
+        insetInlineEnd: '20px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        padding: '4px 10px',
+        fontSize: '12px',
+        color: 'var(--vb-studio-foreground-muted, var(--muted-foreground, #64748b))',
+        background: 'var(--vb-studio-surface, var(--card, #ffffff))',
+        border: '1px solid var(--vb-studio-border, var(--border, #e2e8f0))',
+        borderRadius: '9999px',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+        userSelect: 'none',
+        pointerEvents: 'auto',
+        zIndex: 20,
+        boxSizing: 'border-box',
+      }}
     >
-      <span className="studio-word-count-val">{formattedWords} words</span>
+      <span className="studio-word-count-val" style={{ fontWeight: 500 }}>{formattedWords} words</span>
       {showReadingTime && stats.words > 0 && (
         <>
-          <span className="studio-word-count-dot">·</span>
-          <span className="studio-word-count-time">{stats.readingTimeMinutes} min read</span>
+          <span className="studio-word-count-dot" style={{ opacity: 0.5 }}>·</span>
+          <span className="studio-word-count-time" style={{ fontWeight: 400 }}>{stats.readingTimeMinutes} min read</span>
         </>
       )}
     </div>

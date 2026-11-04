@@ -381,11 +381,46 @@ export function SlashMenuPlugin({
             role="listbox"
             aria-label="Insert card"
             className="notion-slash-menu studio-glassy-menu"
+            style={{
+              position: 'absolute',
+              width: '540px',
+              maxWidth: 'calc(100vw - 32px)',
+              maxHeight: '380px',
+              overflowY: 'auto',
+              zIndex: 250,
+              padding: '8px 10px',
+              boxSizing: 'border-box',
+              background: 'var(--vb-studio-popover, var(--popover, #ffffff))',
+              border: '1px solid var(--vb-studio-border, var(--border, #e2e8f0))',
+              borderRadius: '12px',
+              boxShadow: 'var(--vb-studio-shadow-popover, 0 12px 32px -4px rgba(0, 0, 0, 0.12))',
+              color: 'var(--vb-studio-popover-foreground, var(--popover-foreground, #0f172a))',
+            }}
           >
-            <div role="presentation" className="studio-slash-header">
+            <div
+              role="presentation"
+              className="studio-slash-header"
+              style={{
+                padding: '4px 8px 6px 8px',
+                fontSize: '11px',
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: 'var(--vb-studio-foreground-muted, var(--muted-foreground, #64748b))',
+                userSelect: 'none',
+              }}
+            >
               Block Types
             </div>
-            <div className="studio-slash-grid">
+            <div
+              className="studio-slash-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: '4px 6px',
+                boxSizing: 'border-box',
+              }}
+            >
               {options.map((option, index) => {
                 const isSelected = selectedIndex === index;
                 return (
@@ -399,11 +434,52 @@ export function SlashMenuPlugin({
                     onClick={() => selectOptionAndCleanUp(option)}
                     onMouseEnter={() => setHighlightedIndex(index)}
                     className={`studio-slash-item ${isSelected ? 'is-selected' : ''}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '6px 8px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      minHeight: '34px',
+                      boxSizing: 'border-box',
+                      userSelect: 'none',
+                      background: isSelected ? 'var(--vb-studio-surface-muted, var(--muted, #f1f5f9))' : 'transparent',
+                    }}
                   >
-                    <div className="studio-slash-badge" aria-hidden="true">
+                    <div
+                      className="studio-slash-badge"
+                      aria-hidden="true"
+                      style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        background: 'var(--vb-studio-surface, var(--card, #ffffff))',
+                        border: '1px solid var(--vb-studio-border, var(--border, #e2e8f0))',
+                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+                        color: 'var(--vb-studio-foreground, var(--foreground, #0f172a))',
+                        fontSize: '11px',
+                        lineHeight: 1,
+                      }}
+                    >
                       {option.badge || option.icon}
                     </div>
-                    <span className="studio-slash-title">
+                    <span
+                      className="studio-slash-title"
+                      style={{
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: 'var(--vb-studio-foreground, var(--foreground, #0f172a))',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        flex: 1,
+                      }}
+                    >
                       {option.title}
                     </span>
                   </div>
