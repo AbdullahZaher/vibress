@@ -55,31 +55,47 @@ export function WordCountPlugin({
       title={`${stats.characters.toLocaleString()} characters · ~${stats.readingTimeMinutes} min reading time`}
       style={{
         position: 'absolute',
-        bottom: '12px',
-        insetInlineEnd: '20px',
+        bottom: '16px',
+        insetInlineEnd: '24px',
         display: 'inline-flex',
         alignItems: 'center',
         gap: '6px',
-        padding: '4px 10px',
+        padding: '4px 8px',
         fontSize: '12px',
         color: 'var(--vb-studio-foreground-muted, var(--muted-foreground, #64748b))',
-        background: 'var(--vb-studio-surface, var(--card, #ffffff))',
-        border: '1px solid var(--vb-studio-border, var(--border, #e2e8f0))',
-        borderRadius: '9999px',
-        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
+        background: 'transparent',
         userSelect: 'none',
         pointerEvents: 'auto',
         zIndex: 20,
         boxSizing: 'border-box',
       }}
     >
-      <span className="studio-word-count-val" style={{ fontWeight: 500 }}>{formattedWords} words</span>
+      <span className="studio-word-count-val" style={{ fontWeight: 400 }}>{formattedWords} words</span>
       {showReadingTime && stats.words > 0 && (
         <>
           <span className="studio-word-count-dot" style={{ opacity: 0.5 }}>·</span>
           <span className="studio-word-count-time" style={{ fontWeight: 400 }}>{stats.readingTimeMinutes} min read</span>
         </>
       )}
+      <span
+        className="studio-word-count-help"
+        aria-hidden="true"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '14px',
+          height: '14px',
+          borderRadius: '50%',
+          border: '1px solid currentColor',
+          fontSize: '10px',
+          lineHeight: 1,
+          opacity: 0.6,
+          cursor: 'help',
+        }}
+      >
+        ?
+      </span>
     </div>
   );
 }

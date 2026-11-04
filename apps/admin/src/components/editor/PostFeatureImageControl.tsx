@@ -47,30 +47,41 @@ export const PostFeatureImageControl: React.FC<PostFeatureImageControlProps> = (
 
   const unsplashMeta = (featureImage?.metadata as any)?.unsplash;
 
-  // 1. EMPTY STATE
+  // 1. EMPTY STATE — Minimalist Ghost-style clean trigger
   if (!featureImage) {
     return (
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-1.5">
         <button
           type="button"
           disabled={disabled}
           onClick={onOpenMediaPicker}
-          className="group inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg border border-dashed border-border/70 hover:border-border hover:bg-muted/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="group inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground/75 hover:text-foreground transition-colors py-1 focus:outline-none"
           aria-label={tr("Add feature image")}
         >
-          <ImageIcon className="w-3.5 h-3.5 text-muted-foreground/70 group-hover:text-primary transition-colors" />
+          <span className="text-sm font-normal text-muted-foreground/60 group-hover:text-foreground">+</span>
           <span>{tr("Add feature image")}</span>
         </button>
 
         <button
           type="button"
           disabled={disabled}
+          onClick={onOpenMediaPicker}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground/60 hover:text-foreground hover:bg-muted/40 transition-colors focus:outline-none ms-0.5"
+          title={tr("Upload feature image")}
+          aria-label={tr("Upload feature image")}
+        >
+          <ImageIcon className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          disabled={disabled}
           onClick={onOpenUnsplashModal}
-          className="group inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-lg border border-dashed border-border/70 hover:border-border hover:bg-muted/30 transition-all focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground/60 hover:text-amber-500 hover:bg-muted/40 transition-colors focus:outline-none"
+          title="Unsplash"
           aria-label="Add feature image from Unsplash"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500/80 group-hover:text-amber-500 transition-colors" />
-          <span>Unsplash</span>
+          <Sparkles className="w-3.5 h-3.5" />
         </button>
       </div>
     );

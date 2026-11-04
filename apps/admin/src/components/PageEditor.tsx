@@ -1,5 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
-import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   apiRequest,
   ApiMediaAsset,
@@ -8,8 +8,6 @@ import {
   generateAiCompletion,
 } from "../lib/api";
 import { VibressStudio } from "@vibress/studio-react";
-import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
-import { FileText } from "lucide-react";
 import {
   StudioDocument,
   migrateDocument,
@@ -18,9 +16,7 @@ import {
 import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
-import { IconButton } from "./ui/icon-button";
-import { Badge } from "./ui/badge";
-import { ArrowLeft, Save, CheckCircle2, Clock, Settings } from "lucide-react";
+import { ChevronLeft, PanelRight, Clock } from "lucide-react";
 import { PageSettingsSidebar } from "./editor/PageSettingsSidebar";
 
 interface PageEditorProps {
@@ -38,7 +34,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr, formatNumber } = useAdminLocale();
+  const { tr } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -73,17 +69,6 @@ export const PageEditor: React.FC<PageEditorProps> = ({
     },
     [title],
   );
-
-  const docStats = useMemo(() => {
-    try {
-      const text = `${title} ${renderStudioDocumentToPlainText(studioDoc)}`.trim();
-      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
-      const readingTime = Math.max(1, Math.ceil(words / 200));
-      return { words, readingTime };
-    } catch {
-      return { words: 0, readingTime: 1 };
-    }
-  }, [title, studioDoc]);
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   // A timer created during an editor change must save the latest document, not
@@ -372,79 +357,94 @@ export const PageEditor: React.FC<PageEditorProps> = ({
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
-      {/* Editor Header Bar */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-4 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/50">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
+      {/* Editor Header Bar — Minimalist Ghost-style toolbar */}
+      <header className="flex h-14 items-center justify-between px-4 sm:px-6 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/20">
+        {/* Left: Back to Pages & Page State */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
             onClick={() => onNavigate("/admin/pages")}
-            className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group focus:outline-none"
+            aria-label={tr("Back to Pages")}
           >
-            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span className="hidden sm:inline">{tr("Back to Pages")}</span>
-          </Button>
-          <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
-            {tr("Page")}
-          </span>
-          <div className="h-4 w-[1px] bg-border hidden sm:block" />
-          <Badge variant={status === "published" ? "published" : status === "scheduled" ? "scheduled" : "draft"}>
-            {tr(({ published: "Published", draft: "Draft", scheduled: "Scheduled", archived: "Archived" } as Record<string, string>)[status] ?? status.replaceAll("_", " "))}
-          </Badge>
-          {autosaveState === "saving" && (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3 w-3 animate-spin" /> {tr("Saving...")}
-            </span>
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180 transition-transform group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5" />
+            <span>{tr("Pages")}</span>
+          </button>
+
+          <span className="text-muted-foreground/30 font-light select-none">|</span>
+
+          {/* Status badge */}
+          {!pageId ? (
+            <span className="text-xs text-muted-foreground/80 font-normal">{tr("New")}</span>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 text-xs">
+              {autosaveState === "saving" && (
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <Clock className="h-3 w-3 animate-spin" /> {tr("Saving...")}
+                </span>
+              )}
+              {autosaveState === "saved" && (
+                <span className="text-muted-foreground/80 font-normal">
+                  {status === "published" ? tr("Published") : tr("Draft - Saved")}
+                </span>
+              )}
+              {autosaveState === "idle" && (
+                <span className="text-muted-foreground/80 font-normal">
+                  {status === "published" ? tr("Published") : tr("Draft")}
+                </span>
+              )}
+            </div>
           )}
-          {autosaveState === "saved" && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium">
-              <CheckCircle2 className="h-3.5 w-3.5" /> {tr("Saved")}
-            </span>
-          )}
-          <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums ms-2">
-            <FileText className="h-3.5 w-3.5" />
-            {formatNumber(docStats.words)} {tr("words")} ({formatNumber(docStats.readingTime)} {tr("min read")})
-          </span>
         </div>
 
-        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-          {pageId && canPublish && (
+        {/* Right: Actions & Settings Panel Toggle */}
+        <div className="flex items-center gap-2">
+          {pageId && canPublish && status !== "published" ? (
             <Button
-              variant="outline"
               size="sm"
               onClick={handlePublishToggle}
-              className="text-xs"
+              disabled={autosaveState === "conflict"}
+              loading={saving}
+              loadingLabel={tr("Publishing...")}
+              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
             >
-              {status === "published" ? tr("Unpublish") : tr("Publish Page")}
+              {tr("Publish Page")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleManualSave}
+              disabled={autosaveState === "conflict"}
+              loading={saving}
+              loadingLabel={tr("Saving...")}
+              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
+            >
+              {pageId ? tr("Update Page") : tr("Create Page")}
             </Button>
           )}
 
-          <Button
-            onClick={handleManualSave}
-            disabled={autosaveState === "conflict"}
-            loading={saving}
-            loadingLabel={tr("Saving...")}
-            className="gap-1.5"
+          {/* Ghost Settings Panel Toggle (◫) */}
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            aria-label={tr("Page settings")}
+            title={tr("Page settings")}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus:outline-none ${
+              showSettings
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            }`}
           >
-            <Save className="size-4" aria-hidden="true" />
-            {pageId ? tr("Update Page") : tr("Create Page")}
-          </Button>
-
-          <IconButton
-            label={tr("Settings")}
-            onClick={() => setShowSettings(true)}
-            className="ms-2 text-muted-foreground hover:text-foreground"
-          >
-            <Settings className="h-5 w-5" aria-hidden="true" />
-          </IconButton>
+            <PanelRight className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
-      {/* Main Canvas */}
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 py-8 sm:py-10 pb-32">
-        <div className="w-full max-w-[1140px] mx-auto space-y-8">
+      {/* Main Canvas — Centered 740px editorial column */}
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 pt-8 sm:pt-12 pb-32">
+        <div className="w-full max-w-[740px] mx-auto space-y-6">
           {autosaveState === "conflict" && (
-            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
               <div>
                 <strong>{tr("Version Conflict Detected:")}</strong> {tr("This content was updated in another session.")}
               </div>
@@ -460,18 +460,18 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           )}
 
           {errorMsg && (
-            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
             </div>
           )}
 
-          <div className="max-w-[740px] mx-auto">
+          <div>
             <textarea
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={tr("Page Title")}
-              aria-label={tr("Page Title")}
-              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground leading-tight p-0 text-foreground"
+              placeholder={tr("Page title")}
+              aria-label={tr("Page title")}
+              className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground tracking-tight"
               rows={1}
               onInput={(e) => {
                 e.currentTarget.style.height = "auto";
@@ -485,6 +485,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             key={pageId || "new"}
             value={studioDoc}
             onChange={handleStudioChange}
+            placeholder={tr("Begin writing your page...")}
             requestMedia={handleRequestMedia}
             uploadMedia={handleUploadMedia}
             enableAi={aiEnabled}

@@ -14,8 +14,6 @@ import {
   YDoc,
   type CollaborationConfig,
 } from "@vibress/studio-react";
-import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
-import { FileText } from "lucide-react";
 import {
   StudioDocument,
   migrateDocument,
@@ -25,17 +23,11 @@ import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
 import { MediaPicker } from "./MediaPicker";
 
 import { Button } from "./ui/button";
-import { IconButton } from "./ui/icon-button";
 import {
-  ArrowLeft,
-  Save,
-  CheckCircle2,
+  ChevronLeft,
+  PanelRight,
   AlertCircle,
   Clock,
-  Settings,
-  Users,
-  ArrowLeftRight,
-  MoreHorizontal,
 } from "lucide-react";
 import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
@@ -93,7 +85,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr, formatNumber } = useAdminLocale();
+  const { tr } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -144,17 +136,6 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [saving, setSaving] = useState(false);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const docStats = useMemo(() => {
-    try {
-      const text = `${title} ${renderStudioDocumentToPlainText(studioDoc)}`.trim();
-      const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
-      const readingTime = Math.max(1, Math.ceil(words / 200));
-      return { words, readingTime };
-    } catch {
-      return { words: 0, readingTime: 1 };
-    }
-  }, [title, studioDoc]);
 
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
@@ -726,10 +707,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePublish = async () => {
     if (!postId || !canPublish) return;
     try {
+      setSaving(true);
       await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
       setStatus("published");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Publish failed");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -783,6 +767,23 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     }
   };
 
+  const handleWorkflowTransition = async (newStatus: string) => {
+    if (postId) {
+      try {
+        await transitionPostWorkflow(postId, newStatus);
+        setStatus(newStatus);
+      } catch (err) {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : "Failed to transition workflow status",
+        );
+      }
+    } else {
+      setStatus(newStatus);
+    }
+  };
+
   const renderAutosaveStatus = () => {
     if (!postId) return null;
     switch (autosaveState) {
@@ -794,13 +795,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         );
       case "saved":
         return (
-          <span className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-mono font-medium">
-            <CheckCircle2 className="h-3.5 w-3.5" /> {tr("Saved")}
+          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80 font-normal">
+            {status === "published" ? tr("Published") : tr("Draft - Saved")}
           </span>
         );
       case "failed":
         return (
-          <span className="inline-flex items-center gap-1 text-xs text-foreground font-mono font-medium">
+          <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
             <AlertCircle className="h-3 w-3" /> {tr("Save failed")}
           </span>
         );
@@ -811,7 +812,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           </span>
         );
       default:
-        return null;
+        return (
+          <span className="text-xs text-muted-foreground/80 font-normal">
+            {status === "published" ? tr("Published") : tr("Draft")}
+          </span>
+        );
     }
   };
 
@@ -826,151 +831,78 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-background">
-      {/* Editor Header Bar */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 sm:py-4 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/50">
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
+      {/* Editor Header Bar — Minimalist Ghost-style full-screen toolbar */}
+      <header className="flex h-14 items-center justify-between px-4 sm:px-6 shrink-0 bg-background/95 backdrop-blur z-10 border-b border-border/20">
+        {/* Left: Back to Posts & Post State */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
             onClick={() => onNavigate("/admin/posts")}
-            className="min-h-10 gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group focus:outline-none"
+            aria-label={tr("Back to Posts")}
           >
-            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
-            <span className="hidden sm:inline">{tr("Back to Posts")}</span>
-          </Button>
-          <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-muted text-muted-foreground border border-border/60">
-            {tr("Post")}
-          </span>
-          <div className="h-4 w-[1px] bg-border hidden sm:block" />
-          <select
-            aria-label={tr("Publication status")}
-            value={status}
-            onChange={async (e) => {
-              const newStatus = e.target.value;
-              if (postId) {
-                try {
-                  await transitionPostWorkflow(postId, newStatus);
-                  setStatus(newStatus);
-                } catch (err) {
-                  setErrorMsg(
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to transition workflow status",
-                  );
-                }
-              } else {
-                setStatus(newStatus);
-              }
-            }}
-            className="min-h-10 text-sm font-semibold px-2.5 py-2 rounded-md border border-border/70 bg-card hover:border-border text-foreground uppercase cursor-pointer focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-          >
-            <option value="draft">{tr("Draft")}</option>
-            <option value="in_review">{tr("In Review")}</option>
-            <option value="changes_requested">{tr("Changes Requested")}</option>
-            <option value="approved">{tr("Approved")}</option>
-            <option value="scheduled">{tr("Scheduled")}</option>
-            <option value="published">{tr("Published")}</option>
-            <option value="archived">{tr("Archived")}</option>
-          </select>
-          {renderAutosaveStatus()}
-          <span className="hidden xl:inline-flex items-center gap-1.5 text-xs text-muted-foreground font-mono tabular-nums ms-2">
-            <FileText className="h-3.5 w-3.5" />
-            {formatNumber(docStats.words)} {tr("words")} ({formatNumber(docStats.readingTime)} {tr("min read")})
-          </span>
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180 transition-transform group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5" />
+            <span>{tr("Posts")}</span>
+          </button>
+
+          <span className="text-muted-foreground/30 font-light select-none">|</span>
+
+          {/* Status badge */}
+          {!postId ? (
+            <span className="text-xs text-muted-foreground/80 font-normal">{tr("New")}</span>
+          ) : (
+            renderAutosaveStatus()
+          )}
         </div>
 
-        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDiffModal(true)}
-            className="hidden md:inline-flex text-xs text-muted-foreground hover:text-foreground gap-1.5"
-            title={tr("Compare Revisions")}
-          >
-            <ArrowLeftRight className="h-3.5 w-3.5" />
-            {tr("Diff")}
-          </Button>
-
-          {postId && (
+        {/* Right: Actions & Settings Panel Toggle */}
+        <div className="flex items-center gap-2">
+          {postId && status !== "published" && canPublish ? (
             <Button
-              variant="ghost"
               size="sm"
-              onClick={() => setShowCollabPanel((prev) => !prev)}
-              className={`hidden md:inline-flex text-xs gap-1.5 ${
-                showCollabPanel ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Editorial Collaboration & Presence"
+              onClick={handlePublish}
+              disabled={autosaveState === "conflict"}
+              loading={saving}
+              loadingLabel={tr("Publishing...")}
+              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
             >
-              <Users className="h-3.5 w-3.5" />
-              {tr("Collaborate")}
+              {tr("Publish")}
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={autosaveState === "conflict"}
+              loading={saving}
+              loadingLabel={tr("Saving...")}
+              className="h-8 px-3.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-sm transition"
+            >
+              {status === "published" ? tr("Update") : tr("Save Draft")}
             </Button>
           )}
 
-          <details className="group relative md:hidden">
-            <summary aria-label={tr("More actions")} className="flex size-10 cursor-pointer list-none items-center justify-center rounded-lg border border-border text-foreground focus-visible:outline-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-              <MoreHorizontal className="size-5" aria-hidden="true" />
-            </summary>
-            <div className="absolute end-0 top-full z-30 mt-2 min-w-44 rounded-xl border border-border bg-popover p-1 shadow-xl">
-              <button type="button" onClick={() => setShowDiffModal(true)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-start text-sm text-popover-foreground hover:bg-muted">
-                <ArrowLeftRight className="size-4" />{tr("Compare Revisions")}
-              </button>
-              {postId && (
-                <button type="button" onClick={() => setShowCollabPanel((prev) => !prev)} className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-start text-sm text-popover-foreground hover:bg-muted">
-                  <Users className="size-4" />{tr("Collaborate")}
-                </button>
-              )}
-            </div>
-          </details>
-          {postId && canPublish && (
-            <>
-              {status === "published" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUnpublish}
-                  className="text-xs"
-                >
-                  {tr("Unpublish")}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handlePublish}
-                  className="text-xs font-semibold"
-                >
-                  {tr("Publish Now")}
-                </Button>
-              )}
-            </>
-          )}
-
-          <Button
-            onClick={handleSave}
-            disabled={autosaveState === "conflict"}
-            loading={saving}
-            loadingLabel={tr("Saving...")}
-            className="gap-1.5"
+          {/* Ghost Settings Panel Toggle (◫) */}
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            aria-label={tr("Post settings")}
+            title={tr("Post settings")}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus:outline-none ${
+              showSettings
+                ? "bg-muted text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            }`}
           >
-            <Save className="size-4" aria-hidden="true" />
-            {postId ? tr("Update") : tr("Save Draft")}
-          </Button>
-
-          <IconButton
-            label={tr("Settings")}
-            onClick={() => setShowSettings(true)}
-            className="ms-1 text-muted-foreground hover:text-foreground"
-          >
-            <Settings className="h-5 w-5" aria-hidden="true" />
-          </IconButton>
+            <PanelRight className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
-      {/* Main Canvas */}
-      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 py-8 sm:py-10 pb-32">
-        <div className="w-full max-w-[1140px] mx-auto space-y-8">
+      {/* Main Canvas — Centered 740px editorial column */}
+      <main className="min-h-0 flex-1 overflow-y-auto px-4 sm:px-8 pt-8 sm:pt-12 pb-32">
+        <div className="w-full max-w-[740px] mx-auto space-y-6">
           {autosaveState === "conflict" && (
-            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 text-sm flex items-center justify-between">
               <div>
                 <strong>{tr("Version Conflict Detected:")}</strong> {tr("This content was updated in another session.")}
               </div>
@@ -986,12 +918,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           )}
 
           {errorMsg && (
-            <div className="max-w-[740px] mx-auto p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
+            <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
             </div>
           )}
 
-          <div className="max-w-[740px] mx-auto">
+          <div>
             <PostFeatureImageControl
               featureImage={featureImage}
               featureImageAlt={featureImageAlt}
@@ -1005,9 +937,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             <textarea
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder={tr("Post Title")}
-              aria-label={tr("Post Title")}
-              className="w-full text-3xl sm:text-5xl font-bold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground leading-tight p-0 text-foreground"
+              placeholder={tr("Post title")}
+              aria-label={tr("Post title")}
+              className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground tracking-tight"
               rows={1}
               onInput={(e) => {
                 e.currentTarget.style.height = "auto";
@@ -1020,6 +952,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             key={`${postId || "new"}-${restoreKey}`}
             value={studioDoc}
             onChange={handleDocChange}
+            placeholder={tr("Begin writing your post...")}
             requestMedia={handleRequestMedia}
             allowUnsplash={true}
             uploadMedia={handleUploadMedia}
@@ -1058,6 +991,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         revisions={revisions}
         handleRestoreRevision={handleRestoreRevision}
         onNavigate={onNavigate}
+        status={status}
+        onStatusChange={handleWorkflowTransition}
+        onUnpublish={handleUnpublish}
+        onOpenDiff={() => setShowDiffModal(true)}
+        onOpenCollaboration={postId ? () => setShowCollabPanel(true) : undefined}
       />
 
       {postId && (

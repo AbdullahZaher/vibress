@@ -159,7 +159,7 @@ export function VibressStudio({
   readOnly = false,
   enableAi = false,
   onAiGenerate,
-  placeholder = 'Write content with Vibress Studio (type "/" for commands)...',
+  placeholder = 'Begin writing your post...',
   onError,
   requestMedia,
   allowUnsplash,

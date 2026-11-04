@@ -10,6 +10,8 @@ import {
   Sparkles,
   History,
   RotateCcw,
+  ArrowLeftRight,
+  Users,
 } from "lucide-react";
 import { TranslationSidebarSection } from "../translations/TranslationSidebarSection";
 import { useAdminLocale } from "../../lib/admin-locale";
@@ -54,6 +56,11 @@ interface PostSettingsSidebarProps {
   revisions: Revision[];
   handleRestoreRevision: (id: string) => void;
   onNavigate?: ((path: string) => void) | undefined;
+  status?: string | undefined;
+  onStatusChange?: ((newStatus: string) => void) | undefined;
+  onUnpublish?: (() => void) | undefined;
+  onOpenDiff?: (() => void) | undefined;
+  onOpenCollaboration?: (() => void) | undefined;
 }
 
 export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
@@ -84,6 +91,11 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
   revisions,
   handleRestoreRevision,
   onNavigate,
+  status,
+  onStatusChange,
+  onUnpublish,
+  onOpenDiff,
+  onOpenCollaboration,
 }) => {
   const { tr } = useAdminLocale();
   const [generatingSeo, setGeneratingSeo] = useState(false);
@@ -134,6 +146,69 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
         </div>
 
         <div className="p-4 space-y-8">
+          {/* Status & Workflow Transition */}
+          {status && onStatusChange && (
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {tr("Publication Status")}
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  aria-label={tr("Publication status")}
+                  value={status}
+                  onChange={(e) => onStatusChange(e.target.value)}
+                  className="flex-1 h-9 text-xs font-semibold px-2.5 rounded-lg border border-border bg-background text-foreground uppercase cursor-pointer focus:ring-1 focus:ring-ring"
+                >
+                  <option value="draft">{tr("Draft")}</option>
+                  <option value="in_review">{tr("In Review")}</option>
+                  <option value="changes_requested">{tr("Changes Requested")}</option>
+                  <option value="approved">{tr("Approved")}</option>
+                  <option value="scheduled">{tr("Scheduled")}</option>
+                  <option value="published">{tr("Published")}</option>
+                  <option value="archived">{tr("Archived")}</option>
+                </select>
+                {status === "published" && onUnpublish && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onUnpublish}
+                    className="h-9 text-xs text-destructive hover:bg-destructive/10"
+                  >
+                    {tr("Unpublish")}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Quick Editorial Tools */}
+          {(onOpenDiff || onOpenCollaboration) && (
+            <div className="flex items-center gap-2 pt-1 border-b border-border/50 pb-5">
+              {onOpenDiff && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenDiff}
+                  className="flex-1 text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeftRight className="h-3.5 w-3.5" />
+                  {tr("Compare Diff")}
+                </Button>
+              )}
+              {onOpenCollaboration && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onOpenCollaboration}
+                  className="flex-1 text-xs gap-1.5 h-8 text-muted-foreground hover:text-foreground"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  {tr("Collaborators")}
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Basic Meta */}
           <div className="space-y-4">
             <div className="space-y-2">

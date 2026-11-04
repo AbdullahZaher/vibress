@@ -341,7 +341,7 @@ html[dir="rtl"] .studio-h3 {
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--vb-studio-foreground-subtle, #94a3b8);
+  color: var(--vb-studio-foreground-muted, #64748b);
   user-select: none;
 }
 
@@ -435,27 +435,23 @@ html[dir="rtl"] .studio-slash-header {
 
 .studio-word-count-dock {
   position: absolute;
-  bottom: 12px;
-  inset-inline-end: 20px;
+  bottom: 16px;
+  inset-inline-end: 24px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
+  padding: 4px 8px;
   font-size: var(--vb-studio-text-xs, 12px);
-  color: var(--vb-studio-foreground-subtle, #94a3b8);
-  background: var(--vb-studio-surface, #ffffff);
-  border: 1px solid var(--vb-studio-border, #e2e8f0);
-  border-radius: var(--vb-studio-radius-full, 9999px);
-  box-shadow: var(--vb-studio-shadow-xs);
+  color: var(--vb-studio-foreground-muted, #64748b);
+  background: transparent;
   user-select: none;
   pointer-events: auto;
   z-index: 20;
-  transition: opacity var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast), border-color var(--vb-studio-transition-fast);
+  transition: opacity var(--vb-studio-transition-fast), color var(--vb-studio-transition-fast);
 }
 
 .studio-word-count-dock:hover {
   color: var(--vb-studio-foreground, #0f172a);
-  border-color: var(--vb-studio-border-subtle);
 }
 
 .studio-word-count-dot {
@@ -463,16 +459,30 @@ html[dir="rtl"] .studio-slash-header {
 }
 
 .studio-word-count-val {
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .studio-word-count-time {
   font-weight: 400;
 }
 
+.studio-word-count-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.6;
+  cursor: help;
+}
+
 [dir="rtl"] .studio-word-count-dock,
 html[dir="rtl"] .studio-word-count-dock {
-  inset-inline-end: 20px;
+  inset-inline-end: 24px;
 }
 
 /* Block Handle Gutter */
