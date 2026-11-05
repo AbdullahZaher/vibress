@@ -90,14 +90,14 @@ In the tracking system, add numeric risk score and due dates after actual risk a
 
 ## 6. G0-06 closure evidence checklist
 
-- [ ] G0-04 approved scope/exclusions and investment policy linked.
-- [ ] G0-05 signed named owners, actual allocations, alternate coverage, cost envelope linked.
+- [ ] [G0-04](plugin-platform-g0-04-scope-approval.md) approved scope/exclusions and investment policy linked.
+- [ ] [G0-05](plugin-platform-g0-05-capacity-ownership.md) signed named owners, actual allocations, alternate coverage, cost envelope linked.
 - [ ] Relative schedule converted to calendar dates only after G0 decision and resource calendars confirmed.
 - [ ] Each milestone has owner, predecessor, acceptance evidence and measurable gate.
 - [ ] RAID entries have named owners, review cadence, triggers and actual due dates.
-- [ ] G0-07 live operational gaps explicitly scheduled and linked to G1 evidence collection.
+- [ ] [G0-07](plugin-platform-r1-operational-gap-g0-07.md) live operational gaps explicitly scheduled and linked to G1 evidence collection.
 - [ ] Exact-HEAD CI status and approved engineering review evidence linked.
 - [ ] Baseline document revision and decision log reviewed by Architect, Security, QA, Operations, Product and Sponsor.
-- [ ] G0-09 Go/No-Go minutes record signed decision, scope, schedule, funding and open conditions.
+- [ ] [G0-09](plugin-platform-g0-09-executive-decision.md) Go/No-Go minutes record signed decision, scope, schedule, funding and open conditions.
 
 **G0-06 current disposition: PREPARED FOR REVIEW; PENDING ACTUAL OWNER/SCHEDULE/SIGN-OFF.**
