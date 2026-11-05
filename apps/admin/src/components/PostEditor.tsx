@@ -184,6 +184,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const latestCanonicalUrlRef = useRef(canonicalUrl);
   const latestTagIdsRef = useRef(selectedTagIds);
   const latestFeaturedRef = useRef(featured);
+  const latestFeatureImageRef = useRef(featureImage);
+  const latestFeatureImageAltRef = useRef(featureImageAlt);
+  const latestFeatureImageCaptionRef = useRef(featureImageCaption);
   const latestVersionRef = useRef(version);
 
   useEffect(() => { latestDocRef.current = studioDoc; }, [studioDoc]);
@@ -195,6 +198,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => { latestCanonicalUrlRef.current = canonicalUrl; }, [canonicalUrl]);
   useEffect(() => { latestTagIdsRef.current = selectedTagIds; }, [selectedTagIds]);
   useEffect(() => { latestFeaturedRef.current = featured; }, [featured]);
+  useEffect(() => { latestFeatureImageRef.current = featureImage; }, [featureImage]);
+  useEffect(() => { latestFeatureImageAltRef.current = featureImageAlt; }, [featureImageAlt]);
+  useEffect(() => { latestFeatureImageCaptionRef.current = featureImageCaption; }, [featureImageCaption]);
   useEffect(() => { latestVersionRef.current = version; }, [version]);
 
   useEffect(() => {
@@ -436,6 +442,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
     const currentDoc = latestDocRef.current;
     const currentVersion = latestVersionRef.current;
+    const featureSnapshot = {
+      featureImageId: latestFeatureImageRef.current?.id ?? null,
+      featureImageAlt: latestFeatureImageAltRef.current || null,
+      featureImageCaption: latestFeatureImageCaptionRef.current || null,
+    };
     const saveTicket = autosaveGenerationsRef.current.beginSave();
     const currentSeq = saveTicket.sequence;
 
@@ -487,6 +498,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           signal: controller.signal,
         },
       );
+
+      // Persist feature-image changes made during the first-create POST.
+      // This separate endpoint does not increment the content version.
+      // Do not navigate until it acknowledges the same captured generation.
+      if (!postId && createdPostRef.current?.id === savePostId) {
+        if (res.post.version >= latestVersionRef.current) {
+          latestVersionRef.current = res.post.version;
+          setVersion(res.post.version);
+        }
+        await apiRequest(`/posts/${savePostId}/feature-image`, {
+          method: "PATCH",
+          body: JSON.stringify(featureSnapshot),
+          signal: controller.signal,
+        });
+      }
 
       // Ignore superseded or obsolete responses; never regress the server revision.
       const acknowledgement = autosaveGenerationsRef.current.acknowledge(saveTicket);
@@ -601,8 +627,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       caption?: string | null,
     ) => {
       setFeatureImage(asset);
-      if (alt !== undefined) setFeatureImageAlt(alt || "");
-      if (caption !== undefined) setFeatureImageCaption(caption || "");
+      latestFeatureImageRef.current = asset;
+      if (alt !== undefined) {
+        setFeatureImageAlt(alt || "");
+        latestFeatureImageAltRef.current = alt || "";
+      }
+      if (caption !== undefined) {
+        setFeatureImageCaption(caption || "");
+        latestFeatureImageCaptionRef.current = caption || "";
+      }
 
       if (!postId) {
         autosaveGenerationsRef.current.markEdited();
@@ -680,6 +713,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     // Explicit save supersedes pending autosave responses, without authorizing
     // the server to overwrite any newer local draft.
     const saveTicket = autosaveGenerationsRef.current.beginSave();
+    const featureSnapshot = {
+      featureImageId: latestFeatureImageRef.current?.id ?? null,
+      featureImageAlt: latestFeatureImageAltRef.current || null,
+      featureImageCaption: latestFeatureImageCaptionRef.current || null,
+    };
     abortControllerRef.current?.abort();
 
     try {
@@ -706,6 +744,16 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             body: JSON.stringify(payload),
           },
         );
+        if (!postId && createdPostRef.current?.id === savePostId) {
+          if (res.post.version >= latestVersionRef.current) {
+            latestVersionRef.current = res.post.version;
+            setVersion(res.post.version);
+          }
+          await apiRequest(`/posts/${savePostId}/feature-image`, {
+            method: "PATCH",
+            body: JSON.stringify(featureSnapshot),
+          });
+        }
         const acknowledgment = autosaveGenerationsRef.current.acknowledge(saveTicket);
         if (acknowledgment.latestRequest && res.post.version >= latestVersionRef.current) {
           setVersion(res.post.version);
