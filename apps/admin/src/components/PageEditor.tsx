@@ -82,6 +82,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const saveQueuedRef = useRef(false);
   const savePageRef = useRef<(isAutosave?: boolean) => Promise<void>>(async () => {});
   const conflictRef = useRef(false);
+  const createdPageRef = useRef<{ id: string; version: number } | null>(null);
   const activePageIdRef = useRef(pageId);
   activePageIdRef.current = pageId;
   const latestMetadataRef = useRef({ title, slug, excerpt, metaTitle, metaDescription, canonicalUrl });
@@ -267,7 +268,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const savePage = useCallback(
     async (isAutosave = false) => {
       const fields = latestMetadataRef.current;
-      if (isAutosave && (!pageId || !fields.title.trim())) return;
+      if (isAutosave && (!(pageId || createdPageRef.current) || !fields.title.trim())) return;
       if (conflictRef.current) return;
       // Serializing requests avoids false optimistic-version conflicts and
       // ensures that responses cannot update the revision out of order.
@@ -279,7 +280,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       const ticket = editGenerationsRef.current.beginSave();
       const submittedDoc = latestStudioDocRef.current;
       const metadataSnapshot = { ...fields };
-      const submittedPageId = pageId;
+      const submittedPageId = pageId ?? createdPageRef.current?.id;
+      const originatingPageId = pageId;
       const payload = {
         title: metadataSnapshot.title || "Untitled Page",
         slug: metadataSnapshot.slug || undefined,
@@ -303,7 +305,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             `/pages/${submittedPageId}`,
             { method: "PUT", body: JSON.stringify(payload) },
           );
-          if (activePageIdRef.current !== submittedPageId) return;
+          if (activePageIdRef.current !== originatingPageId) return;
           const acknowledgement = editGenerationsRef.current.acknowledge(ticket);
           if (!acknowledgement.latestRequest || res.page.version < latestVersionRef.current) return;
           latestVersionRef.current = res.page.version;
@@ -311,6 +313,10 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           if (acknowledgement.latestEdit) {
             pendingLocalEditsRef.current = false;
             setAutosaveState("saved");
+            if (!pageId && createdPageRef.current?.id === submittedPageId) {
+              createdPageRef.current = null;
+              onNavigate(`/admin/pages/${submittedPageId}`);
+            }
           } else {
             // This response only saved the captured snapshot; a newer author
             // change still needs to be persisted.
@@ -319,18 +325,30 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             setAutosaveState("idle");
           }
         } else {
-          const res = await apiRequest<{ page: { id: string } }>("/pages", {
+          const res = await apiRequest<{ page: { id: string; version: number } }>("/pages", {
             method: "POST",
             body: JSON.stringify(payload),
           });
-          if (activePageIdRef.current !== submittedPageId) return;
+          if (activePageIdRef.current !== originatingPageId) return;
+          if (!res.page.id || !Number.isSafeInteger(res.page.version)) {
+            throw new Error("The server did not return a recoverable page ID and revision.");
+          }
+          createdPageRef.current = { id: res.page.id, version: res.page.version };
+          latestVersionRef.current = res.page.version;
           if (editGenerationsRef.current.isCurrent(ticket)) {
             pendingLocalEditsRef.current = false;
+            createdPageRef.current = null;
+            onNavigate(`/admin/pages/${res.page.id}`);
+          } else {
+            pendingLocalEditsRef.current = true;
+            saveQueuedRef.current = true;
+            setAutosaveState("idle");
+            setErrorMsg("Page created, but newer edits are not yet saved. Stay in this editor until the latest draft is saved.");
           }
-          onNavigate(`/admin/pages/${res.page.id}`);
         }
       } catch (err: unknown) {
-        if (activePageIdRef.current !== submittedPageId) return;
+        if (activePageIdRef.current !== originatingPageId) return;
+        saveQueuedRef.current = false; // Failures require explicit retry, not an infinite loop.
         const errorObj = err as { code?: string; message?: string };
         pendingLocalEditsRef.current = true;
         if (errorObj.code === "CONTENT_CONFLICT") {
@@ -344,8 +362,9 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       } finally {
         saveInFlightRef.current = false;
         setSaving(false);
-        if (activePageIdRef.current === submittedPageId && !conflictRef.current &&
-            pendingLocalEditsRef.current && saveQueuedRef.current && submittedPageId) {
+        if (activePageIdRef.current === originatingPageId && !conflictRef.current &&
+            pendingLocalEditsRef.current && saveQueuedRef.current &&
+            (submittedPageId || createdPageRef.current?.id)) {
           saveQueuedRef.current = false;
           if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
           autosaveTimerRef.current = setTimeout(() => { void savePageRef.current(true); }, 1200);
@@ -361,7 +380,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
     editGenerationsRef.current.markEdited();
     pendingLocalEditsRef.current = true;
     setAutosaveState((state) => state === "conflict" ? state : "idle");
-    if (!pageId || conflictRef.current) return;
+    if (!(pageId || createdPageRef.current) || conflictRef.current) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => { void savePage(true); }, 1200);
   };
@@ -477,7 +496,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
               loadingLabel={tr("Saving...")}
               className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition"
             >
-              {pageId ? tr("Update Page") : tr("Create Page")}
+              {pageId ? tr("Update Page") :
+                createdPageRef.current ? tr("Save Latest Changes") : tr("Create Page")}
             </Button>
           )}
 
