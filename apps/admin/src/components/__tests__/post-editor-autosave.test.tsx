@@ -343,9 +343,9 @@ describe("PostEditor network-acknowledgement integrity", () => {
       await Promise.resolve();
     });
     await act(async () => {
-      vi.advanceTimersByTime(2000);
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(2000);
     });
+    expect(updateCalls).toBe(1);
     expect(navigate).not.toHaveBeenCalled();
     expect(element.textContent).toContain("Offline");
     await act(async () => { save()?.click(); await Promise.resolve(); });
