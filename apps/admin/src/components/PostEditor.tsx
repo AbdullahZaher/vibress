@@ -1,4 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
+import { EditorialAutosaveGenerations } from "../lib/editorial-autosave-generations";
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   apiRequest,
@@ -171,8 +172,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const autosaveSeqRef = useRef(0);
-  const lastSavedSeqRef = useRef(0);
+  const autosaveGenerationsRef = useRef(new EditorialAutosaveGenerations());
   const latestDocRef = useRef(studioDoc);
   const latestTitleRef = useRef(title);
   const latestSlugRef = useRef(slug);
@@ -196,7 +196,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => { latestVersionRef.current = version; }, [version]);
 
   useEffect(() => {
+    const warnIfUnsaved = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChangesRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnIfUnsaved);
     return () => {
+      window.removeEventListener("beforeunload", warnIfUnsaved);
       if (autosaveTimerRef.current) {
         clearTimeout(autosaveTimerRef.current);
       }
@@ -365,6 +372,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setFeatured(p.featured ?? false);
         latestFeaturedRef.current = p.featured ?? false;
         setVersion(p.version || 1);
+        latestVersionRef.current = p.version || 1;
         if (p.featureImage !== undefined) {
           setFeatureImage(p.featureImage || null);
         }
@@ -424,7 +432,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
     const currentDoc = latestDocRef.current;
     const currentVersion = latestVersionRef.current;
-    const currentSeq = ++autosaveSeqRef.current;
+    const saveTicket = autosaveGenerationsRef.current.beginSave();
+    const currentSeq = saveTicket.sequence;
 
     const stats = extractDocStats(currentDoc);
     logForensicEvent("BEFORE_AUTOSAVE", {
@@ -475,11 +484,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         },
       );
 
-      // Guard against out-of-order responses
-      if (currentSeq < lastSavedSeqRef.current) {
+      // Ignore superseded or obsolete responses; never regress the server revision.
+      const acknowledgement = autosaveGenerationsRef.current.acknowledge(saveTicket);
+      if (!acknowledgement.latestRequest || res.post.version < latestVersionRef.current) {
         return;
       }
-      lastSavedSeqRef.current = currentSeq;
 
       const returnedStats = extractDocStats(res.post.content);
       logForensicEvent("API_RESPONSE", {
@@ -494,16 +503,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
       setVersion(res.post.version);
       latestVersionRef.current = res.post.version;
-      setAutosaveState("saved");
-
-      // Only mark unsaved changes as false if no newer edits occurred while in flight
-      if (currentSeq === autosaveSeqRef.current) {
+      if (acknowledgement.latestEdit) {
         hasUnsavedChangesRef.current = false;
+        setAutosaveState("saved");
+      } else {
+        // Another local edit occurred after this immutable request snapshot.
+        // Its debounce timer is already pending and must not be invalidated.
+        hasUnsavedChangesRef.current = true;
+        setAutosaveState("idle");
       }
     } catch (err: unknown) {
-      if ((err as Error)?.name === "AbortError") {
+      if ((err as Error)?.name === "AbortError" ||
+          !autosaveGenerationsRef.current.acknowledge(saveTicket).latestRequest) {
         return;
       }
+      hasUnsavedChangesRef.current = true;
       if (
         err instanceof ApiError &&
         (err.statusCode === 409 || err.message.includes("Version conflict"))
@@ -523,7 +537,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   }, [postId]);
 
   const triggerAutosaveDebounced = useCallback(() => {
+    autosaveGenerationsRef.current.markEdited();
     hasUnsavedChangesRef.current = true;
+    setAutosaveState((state) => state === "conflict" ? state : "idle");
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }
@@ -579,6 +595,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       if (caption !== undefined) setFeatureImageCaption(caption || "");
 
       if (!postId) {
+        autosaveGenerationsRef.current.markEdited();
         hasUnsavedChangesRef.current = true;
         return;
       }
@@ -648,6 +665,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     e.preventDefault();
     setSaving(true);
     setErrorMsg(null);
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    // Explicit save supersedes pending autosave responses, without authorizing
+    // the server to overwrite any newer local draft.
+    const saveTicket = autosaveGenerationsRef.current.beginSave();
+    abortControllerRef.current?.abort();
 
     try {
       const payload = {
@@ -660,7 +682,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         content: studioDoc,
         tagIds: selectedTagIds,
         featured,
-        expectedVersion: postId ? version : undefined,
+        expectedVersion: postId ? latestVersionRef.current : undefined,
       };
 
       if (postId) {
@@ -671,9 +693,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             body: JSON.stringify(payload),
           },
         );
-        setVersion(res.post.version);
-        setAutosaveState("saved");
-        hasUnsavedChangesRef.current = false;
+        const acknowledgment = autosaveGenerationsRef.current.acknowledge(saveTicket);
+        if (acknowledgment.latestRequest && res.post.version >= latestVersionRef.current) {
+          setVersion(res.post.version);
+          latestVersionRef.current = res.post.version;
+          if (acknowledgment.latestEdit) {
+            setAutosaveState("saved");
+            hasUnsavedChangesRef.current = false;
+          } else {
+            setAutosaveState("idle");
+            hasUnsavedChangesRef.current = true;
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+            autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2000);
+          }
+        }
       } else {
         const res = await apiRequest<{ post: AdminPostDetail }>("/posts", {
           method: "POST",
@@ -745,6 +778,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     if (!postId) return;
     if (!confirm("Restore this revision? Unsaved changes will be overwritten."))
       return;
+    autosaveGenerationsRef.current.reset();
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    abortControllerRef.current?.abort();
     try {
       const res = await apiRequest<{ post: AdminPostDetail }>(
         `/posts/${postId}/revisions/${revisionId}/restore`,
@@ -759,6 +795,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       latestVersionRef.current = p.version;
       setRestoreKey((k) => k + 1);
       hasUnsavedChangesRef.current = false;
+      setAutosaveState("saved");
       alert("Revision restored successfully");
     } catch (err) {
       setErrorMsg(
@@ -782,6 +819,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     } else {
       setStatus(newStatus);
     }
+  };
+
+  const navigateSafely = (path: string) => {
+    if (hasUnsavedChangesRef.current &&
+        !window.confirm("This post has unsaved changes. Leave without saving?")) return;
+    onNavigate(path);
   };
 
   const renderAutosaveStatus = () => {
@@ -837,7 +880,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => onNavigate("/admin/posts")}
+            onClick={() => navigateSafely("/admin/posts")}
             className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group focus:outline-none"
             aria-label={tr("Back to Posts")}
           >
@@ -992,7 +1035,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         postId={postId || ""}
         revisions={revisions}
         handleRestoreRevision={handleRestoreRevision}
-        onNavigate={onNavigate}
+        onNavigate={navigateSafely}
         status={status}
         onStatusChange={handleWorkflowTransition}
         onUnpublish={handleUnpublish}
