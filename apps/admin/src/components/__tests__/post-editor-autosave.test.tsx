@@ -201,4 +201,97 @@ describe("PostEditor network-acknowledgement integrity", () => {
     expect(confirm).toHaveBeenCalled();
     confirm.mockRestore();
   });
+
+  it("first-create race: saves draft B to newly created post before navigating", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const create = deferred<{ post: typeof initial }>();
+    const updates: Array<{
+      body: { content: unknown; expectedVersion: number };
+      pending: ReturnType<typeof deferred<{ post: typeof initial }>>;
+    }> = [];
+    const navigate = vi.fn();
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts" && options?.method === "POST") return create.promise;
+      if (url === "/posts/post-created" && options?.method === "PUT") {
+        const pending = deferred<{ post: typeof initial }>();
+        updates.push({ body: JSON.parse(String(options.body)), pending });
+        return pending.promise;
+      }
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor currentUserId="author" canPublish={false} onNavigate={navigate} />);
+      await Promise.resolve();
+    });
+    await click("edit-a");
+    const button = Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Save Draft");
+    expect(button).toBeDefined();
+    await act(async () => { button?.click(); });
+    await click("edit-b");
+    await act(async () => {
+      create.resolve({ post: { ...initial, id: "post-created", version: 1 } });
+      await Promise.resolve();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(element.textContent).toContain("newer edits are not yet saved");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(updates).toHaveLength(1);
+    expect(JSON.stringify(updates[0]?.body.content)).toContain("Draft B");
+    expect(updates[0]?.body.expectedVersion).toBe(1);
+    expect(navigate).not.toHaveBeenCalled();
+    await act(async () => {
+      updates[0]!.pending.resolve({ post: { ...initial, id: "post-created", version: 2 } });
+      await Promise.resolve();
+    });
+    expect(navigate).toHaveBeenCalledWith("/admin/posts/post-created");
+  });
+
+  it("first-create retry: failed post-create update never duplicates the created post", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const created = deferred<{ post: typeof initial }>();
+    let postCalls = 0;
+    let updateCalls = 0;
+    const navigate = vi.fn();
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts" && options?.method === "POST") {
+        postCalls += 1;
+        return created.promise;
+      }
+      if (url === "/posts/post-created" && options?.method === "PUT") {
+        updateCalls += 1;
+        if (updateCalls === 1) return Promise.reject(new Error("Offline"));
+        return Promise.resolve({ post: { ...initial, id: "post-created", version: 2 } });
+      }
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor currentUserId="author" canPublish={false} onNavigate={navigate} />);
+      await Promise.resolve();
+    });
+    await click("edit-a");
+    const save = () => Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Save Draft");
+    await act(async () => { save()?.click(); });
+    await click("edit-b");
+    await act(async () => {
+      created.resolve({ post: { ...initial, id: "post-created", version: 1 } });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(element.textContent).toContain("Offline");
+    await act(async () => { save()?.click(); await Promise.resolve(); });
+    expect(postCalls).toBe(1);
+    expect(updateCalls).toBe(2);
+    expect(navigate).toHaveBeenCalledWith("/admin/posts/post-created");
+  });
+
 });
