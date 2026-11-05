@@ -17,7 +17,7 @@ vi.mock("../../lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 vi.mock("@vibress/studio-react", () => ({
-  VibressStudio: () => <div data-testid="live-lexical-editor">Editable content</div>,
+  VibressStudio: ({ value }: { value: unknown }) => <div data-testid="live-lexical-editor" data-document={JSON.stringify(value)}>Editable content</div>,
   WebSocketCollaborationProvider: class {},
   YDoc: class {},
 }));
@@ -53,11 +53,12 @@ describe("host rejects persisted documents that would otherwise become empty edi
     element.remove();
   });
 
-  it("PostEditor blocks Save Draft and preserves recovery export when loading unsupported content", async () => {
+  it.each([unsupported, { schema: "vibress-studio", version: 1,
+    root: { type: "paragraph", children: [{ type: "text", text: "Retain invalid root content" }] } }])("PostEditor preserves recovery for unsupported or malformed content %#", async (content) => {
     vi.mocked(apiRequest).mockImplementation((url) => {
       if (url === "/posts/post-1") return Promise.resolve({ post: {
         id: "post-1", title: "Stored original", status: "draft",
-        slug: "stored", version: 7, content: unsupported, contentJson: null, tags: [],
+        slug: "stored", version: 7, content, contentJson: null, tags: [],
       } });
       if (url === "/tags") return Promise.resolve({ tags: [] });
       if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
@@ -78,11 +79,12 @@ describe("host rejects persisted documents that would otherwise become empty edi
       path === "/posts/post-1" && init?.method === "PUT")).toBe(false);
   });
 
-  it("PageEditor cannot silently save unsupported persisted content", async () => {
+  it.each([unsupported, { schema: "vibress-studio", version: 1,
+    root: { type: "paragraph", children: [{ type: "text", text: "Retain invalid root content" }] } }])("PageEditor preserves recovery for unsupported or malformed content %#", async (content) => {
     vi.mocked(apiRequest).mockImplementation((url) => {
       if (url === "/pages/page-1") return Promise.resolve({ page: {
         id: "page-1", title: "Stored original", status: "draft",
-        slug: "page", version: 6, content: unsupported,
+        slug: "page", version: 6, content,
       } });
       return Promise.resolve({});
     });
@@ -96,5 +98,28 @@ describe("host rejects persisted documents that would otherwise become empty edi
       (button) => button.textContent?.includes("Update Page"))).toBe(false);
     expect(vi.mocked(apiRequest).mock.calls.some(([path, init]) =>
       path === "/pages/page-1" && init?.method === "PUT")).toBe(false);
+  });
+
+  it.each(["post", "page"])("opens historical empty %s roots through the canonical editor contract", async (kind) => {
+    vi.mocked(apiRequest).mockImplementation((url) => {
+      const record = { id: `${kind}-1`, title: "Historical blank", status: "draft", slug: "historical", version: 1,
+        content: { version: 1, root: {} }, tags: [] };
+      if (url === `/${kind}s/${kind}-1`) return Promise.resolve({ [kind]: record });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      if (url.endsWith("/revisions")) return Promise.resolve({ revisions: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(kind === "post"
+        ? <PostEditor postId="post-1" currentUserId="staff" canPublish={false} onNavigate={vi.fn()} />
+        : <PageEditor pageId="page-1" currentUserId="staff" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    const editor = element.querySelector('[data-testid="live-lexical-editor"]');
+    expect(editor).not.toBeNull();
+    expect(JSON.parse(editor?.getAttribute("data-document") || "null")).toMatchObject({
+      schema: "vibress-studio", version: 1, root: { type: "root", children: [] },
+    });
+    expect(element.textContent).not.toContain("INVALID_STUDIO_DOCUMENT");
   });
 });

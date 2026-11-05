@@ -141,8 +141,13 @@ function InitialStatePlugin({ document }: { document: StudioDocument }) {
     }
 
     try {
+      // Historical blank roots have no children. Lexical requires an editable
+      // paragraph before setEditorState; retain the persisted root's metadata.
+      const root = document.root.children.length ? document.root : {
+        ...document.root, children: createEmptyStudioDocument().root.children,
+      };
       const editorState = editor.parseEditorState({
-        root: { ...document.root, version: 1 },
+        root: { ...root, version: 1 },
       } as never);
       editor.setEditorState(editorState);
       logForensicEvent("INITIAL_STATE_APPLIED", {

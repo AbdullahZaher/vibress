@@ -48,12 +48,12 @@ export const StudioDocumentSchema = z.object({
 
 export function validateStudioDocument(doc: unknown): StudioDocument {
   if (!doc || typeof doc !== "object") {
-    throw new Error("INVALID_STUDIO_DOCUMENT: Document must be an object");
+    throw new StudioMigrationError("INVALID_STUDIO_DOCUMENT: Document must be an object", doc, "INVALID_DOCUMENT");
   }
 
   const result = StudioDocumentSchema.safeParse(doc);
   if (!result.success) {
-    throw new Error(`INVALID_STUDIO_DOCUMENT: ${result.error.message}`);
+    throw new StudioMigrationError(`INVALID_STUDIO_DOCUMENT: ${result.error.message}`, doc, "INVALID_DOCUMENT");
   }
 
   return result.data as StudioDocument;
@@ -177,6 +177,28 @@ export function createDefaultStudioDocument(text = ""): StudioDocument {
   };
 }
 
+/** Historical content used root: {} or root: { children: [...] }. Restore only
+ * unambiguous structural fields; an explicit type or other incomplete payload
+ * must still fail validation with its original content available for recovery. */
+function migrateLegacyRoot(root: unknown): unknown {
+  if (!root || typeof root !== "object" || Array.isArray(root) || "type" in root) return root;
+  if ("children" in root && Array.isArray(root.children)) return { ...root, type: "root" };
+  if (Object.keys(root).length === 0) return { type: "root", children: [] };
+  return root;
+}
+
+function validateMigratedDocument(candidate: unknown, original: unknown, limits?: DocumentResourceLimits): StudioDocument {
+  try {
+    checkDocumentResourceLimits(candidate, limits);
+    return validateStudioDocument(candidate);
+  } catch (error) {
+    if (error instanceof StudioMigrationError) {
+      throw new StudioMigrationError(error.message, original, error.code);
+    }
+    throw error;
+  }
+}
+
 /** Migration never silently turns a non-null unsupported persisted record into
  * an empty editor document. Keep the input on StudioMigrationError for recovery.
  */
@@ -222,9 +244,8 @@ export function migrateDocument(rawDoc: unknown, limits?: DocumentResourceLimits
     if (!obj.root) {
       throw new StudioMigrationError("Studio document is missing its root.", rawDoc, "INVALID_DOCUMENT");
     }
-    const normalized = normalizeStudioDocument(rawDoc);
-    checkDocumentResourceLimits(normalized, limits);
-    return validateStudioDocument(normalized);
+    const normalized = normalizeStudioDocument({ ...obj, root: migrateLegacyRoot(obj.root) });
+    return validateMigratedDocument(normalized, rawDoc, limits);
   }
 
   if ("schema" in obj) {
@@ -237,14 +258,14 @@ export function migrateDocument(rawDoc: unknown, limits?: DocumentResourceLimits
     return legacyText;
   }
   if (obj.root && typeof obj.root === "object" && !Array.isArray(obj.root)) {
-    const legacy: StudioDocument = {
+    const legacy = {
       schema: STUDIO_SCHEMA_NAME,
       version: CURRENT_STUDIO_VERSION,
       editor: { lexicalVersion: "0.13.1" },
-      root: normalizeStudioDocument(obj.root as StudioDocument["root"]),
+      root: normalizeStudioDocument(obj.version === undefined || obj.version === CURRENT_STUDIO_VERSION
+        ? migrateLegacyRoot(obj.root) : obj.root),
     };
-    checkDocumentResourceLimits(legacy, limits);
-    return validateStudioDocument(legacy);
+    return validateMigratedDocument(legacy, rawDoc, limits);
   }
 
   throw new StudioMigrationError("Unrecognized Studio document. Original input has been preserved.", rawDoc, "UNSUPPORTED_DOCUMENT");
