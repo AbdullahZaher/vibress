@@ -204,7 +204,8 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
       await seedFixturePost();
       await loginUser(page);
       await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
-      await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 15000 });
+      await expect(page.getByRole("textbox", { name: "Post title", exact: true }))
+        .toBeVisible({ timeout: 15000 });
 
       const settingsButton = page.locator('button[aria-label="Post settings"]');
       if (await settingsButton.isVisible()) {
