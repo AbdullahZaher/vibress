@@ -81,6 +81,9 @@ export function checkDocumentResourceLimits(rawDocument: unknown, limits?: Docum
     }
     ancestors.add(object);
     if (Array.isArray(object)) {
+      if (Object.getOwnPropertyDescriptor(object, "toJSON")) {
+        fail("Array toJSON overrides are not supported.", "INVALID_DOCUMENT");
+      }
       for (let index = 0; index < object.length; index++) {
         const property = Object.getOwnPropertyDescriptor(object, String(index));
         if (!property || !("value" in property)) {
@@ -90,7 +93,9 @@ export function checkDocumentResourceLimits(rawDocument: unknown, limits?: Docum
       }
     } else {
       const record = object as Record<string, unknown>;
-      if (isAst && typeof record.type === "string") {
+      const typeDescriptor = Object.getOwnPropertyDescriptor(record, "type");
+      if (isAst && typeDescriptor && "value" in typeDescriptor &&
+          typeof typeDescriptor.value === "string") {
         nodes++;
         if (nodes > policy.maxNodeCount) fail("Document exceeds maximum AST node count.", "RESOURCE_LIMIT_EXCEEDED");
       }
