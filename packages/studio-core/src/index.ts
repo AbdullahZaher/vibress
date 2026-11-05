@@ -1,4 +1,18 @@
 import { z } from "zod";
+import {
+  checkDocumentResourceLimits,
+  StudioMigrationError,
+  type DocumentResourceLimits,
+} from "./resource-limits";
+
+export {
+  checkDocumentResourceLimits,
+  getDocumentUtf8ByteLength,
+  resolveDocumentResourceLimits,
+  DEFAULT_DOCUMENT_RESOURCE_LIMITS,
+  StudioMigrationError,
+} from "./resource-limits";
+export type { DocumentResourceLimits } from "./resource-limits";
 
 export const STUDIO_SCHEMA_NAME = "vibress-studio";
 export const CURRENT_STUDIO_VERSION = 1;
@@ -163,45 +177,75 @@ export function createDefaultStudioDocument(text = ""): StudioDocument {
   };
 }
 
-export function migrateDocument(rawDoc: unknown): StudioDocument {
-  if (!rawDoc) {
-    return createEmptyStudioDocument();
-  }
+/** Migration never silently turns a non-null unsupported persisted record into
+ * an empty editor document. Keep the input on StudioMigrationError for recovery.
+ */
+export function migrateDocument(rawDoc: unknown, limits?: DocumentResourceLimits): StudioDocument {
+  if (rawDoc === null || rawDoc === undefined) return createEmptyStudioDocument();
+  checkDocumentResourceLimits(rawDoc, limits);
 
-  // Handle legacy string content from Batch 2
   if (typeof rawDoc === "string") {
+    if (!rawDoc.trim()) return createEmptyStudioDocument();
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(rawDoc);
-      return migrateDocument(parsed);
+      parsed = JSON.parse(rawDoc);
     } catch {
-      return createDefaultStudioDocument(rawDoc);
+      if (/^[\\s]*[\\[{]/.test(rawDoc)) {
+        throw new StudioMigrationError("Persisted document contains malformed JSON.", rawDoc, "CORRUPTED_DOCUMENT");
+      }
+      const legacyText = createDefaultStudioDocument(rawDoc);
+      checkDocumentResourceLimits(legacyText, limits);
+      return legacyText;
     }
+    if (parsed && typeof parsed === "object") {
+      try { return migrateDocument(parsed, limits); }
+      catch (error) {
+        if (error instanceof StudioMigrationError) {
+          throw new StudioMigrationError(error.message, rawDoc, error.code);
+        }
+        throw error;
+      }
+    }
+    const text = createDefaultStudioDocument(typeof parsed === "string" ? parsed : rawDoc);
+    checkDocumentResourceLimits(text, limits);
+    return text;
   }
 
-  // Handle legacy object from Batch 2 (e.g. { version: 1, text: "..." })
-  if (typeof rawDoc === "object" && rawDoc !== null) {
-    const obj = rawDoc as Record<string, unknown>;
-
-    // If it is already a valid Studio document, normalize legacy card nodes
-    // to the canonical representation (react-studio-card → studio-card).
-    if (obj.schema === "vibress-studio" && obj.root) {
-      return validateStudioDocument(normalizeStudioDocument(rawDoc));
+  if (typeof rawDoc !== "object" || Array.isArray(rawDoc)) {
+    throw new StudioMigrationError("Unsupported Studio document payload.", rawDoc, "UNSUPPORTED_DOCUMENT");
+  }
+  const obj = rawDoc as Record<string, unknown>;
+  if (obj.schema === STUDIO_SCHEMA_NAME) {
+    if (obj.version !== CURRENT_STUDIO_VERSION) {
+      throw new StudioMigrationError("Document version is not supported by this editor.", rawDoc, "UNSUPPORTED_DOCUMENT");
     }
-
-    // Legacy Batch 2 format: { text: "..." } or { root: ... } without schema envelope
-    if (typeof obj.text === "string") {
-      return createDefaultStudioDocument(obj.text);
+    if (!obj.root) {
+      throw new StudioMigrationError("Studio document is missing its root.", rawDoc, "INVALID_DOCUMENT");
     }
-
-    if (obj.root && typeof obj.root === "object") {
-      return {
-        schema: STUDIO_SCHEMA_NAME,
-        version: CURRENT_STUDIO_VERSION,
-        editor: { lexicalVersion: "0.13.1" },
-        root: normalizeStudioDocument(obj.root as StudioDocument["root"]),
-      };
-    }
+    const normalized = normalizeStudioDocument(rawDoc);
+    checkDocumentResourceLimits(normalized, limits);
+    return validateStudioDocument(normalized);
   }
 
-  return createEmptyStudioDocument();
+  if ("schema" in obj) {
+    throw new StudioMigrationError("Unrecognized document schema.", rawDoc, "UNSUPPORTED_DOCUMENT");
+  }
+
+  if (typeof obj.text === "string") {
+    const legacyText = createDefaultStudioDocument(obj.text);
+    checkDocumentResourceLimits(legacyText, limits);
+    return legacyText;
+  }
+  if (obj.root && typeof obj.root === "object" && !Array.isArray(obj.root)) {
+    const legacy: StudioDocument = {
+      schema: STUDIO_SCHEMA_NAME,
+      version: CURRENT_STUDIO_VERSION,
+      editor: { lexicalVersion: "0.13.1" },
+      root: normalizeStudioDocument(obj.root as StudioDocument["root"]),
+    };
+    checkDocumentResourceLimits(legacy, limits);
+    return validateStudioDocument(legacy);
+  }
+
+  throw new StudioMigrationError("Unrecognized Studio document. Original input has been preserved.", rawDoc, "UNSUPPORTED_DOCUMENT");
 }
