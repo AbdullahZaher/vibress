@@ -154,7 +154,9 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
                 {destination.url}
               </a>
             ) : (
-              <span className="break-all" dir="auto">Unsupported or unsafe embed URL.</span>
+              <span className="break-all" dir="auto">
+                Unsupported or unsafe embed URL: {cardData.url}
+              </span>
             )}
           </div>
         )}
