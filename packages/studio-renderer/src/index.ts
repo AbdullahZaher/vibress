@@ -12,6 +12,27 @@ export interface RenderOptions {
   target?: "web" | "email";
 }
 
+/** Allocates one unique slug stream across *all* heading levels and TOC entries. */
+class HeadingSlugAllocator {
+  private used = new Set<string>();
+  private next = new Map<string, number>();
+
+  allocate(text: string): string {
+    const raw = text.trim();
+    const base = slugifyHeading(raw) || (raw ? "heading" : "");
+    if (!base) return "";
+    let number = this.next.get(base) ?? 0;
+    let slug = number ? `${base}-${number}` : base;
+    while (this.used.has(slug)) {
+      number++;
+      slug = `${base}-${number}`;
+    }
+    this.next.set(base, number + 1);
+    this.used.add(slug);
+    return slug;
+  }
+}
+
 export function renderStudioDocumentToHtml(
   docInput: unknown,
   options: RenderOptions = {},
@@ -23,8 +44,9 @@ export function renderStudioDocumentToHtml(
     return "";
   }
 
+  const slugs = new HeadingSlugAllocator();
   const raw = doc.root.children
-    .map((node) => renderNodeToHtml(node, options))
+    .map((node) => renderNodeToHtml(node, options, slugs))
     .join("");
 
   // FINAL security boundary: every Studio card's rendered markup passes
@@ -33,7 +55,7 @@ export function renderStudioDocumentToHtml(
   return sanitizeStudioHtml(raw);
 }
 
-function renderNodeToHtml(node: unknown, options: RenderOptions): string {
+function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingSlugAllocator): string {
   if (!node || typeof node !== "object") return "";
   const n = node as {
     type?: string;
@@ -73,7 +95,7 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
   const renderChildren = () => {
     if (Array.isArray(n.children)) {
       return n.children
-        .map((child: unknown) => renderNodeToHtml(child, options))
+        .map((child: unknown) => renderNodeToHtml(child, options, slugs))
         .join("");
     }
     return "";
@@ -111,11 +133,14 @@ function renderNodeToHtml(node: unknown, options: RenderOptions): string {
         ? ` style="${escapeHtml(String(n.style))}"`
         : "";
       const childrenHtml = renderChildren();
-      const rawText = extractNodeText(n);
-      const slug = slugifyHeading(rawText);
+      const rawText = extractNodeText(n).trim();
+      const slug = slugs.allocate(rawText);
       const idAttr = slug ? ` id="${escapeHtml(slug)}"` : "";
+      // Focusable links cannot be aria-hidden. Labels include the visible
+      // heading (English, Arabic or mixed direction) with escaped attributes.
+      const label = rawText.length > 120 ? `${rawText.slice(0, 120)}…` : rawText;
       const anchor = slug
-        ? `<a href="#${escapeHtml(slug)}" class="heading-anchor" aria-label="Link to section" aria-hidden="true">#</a>`
+        ? `<a href="#${escapeHtml(slug)}" class="heading-anchor" aria-label="Link to section: ${escapeHtml(label)}">#</a>`
         : "";
       return `<${level}${idAttr}${styleAttr}>${childrenHtml}${anchor}</${level}>`;
     }
@@ -320,28 +345,18 @@ export function extractTableOfContentsFromDocument(
   }
 
   const items: TableOfContentsItem[] = [];
-  const seenSlugs = new Map<string, number>();
+  const slugs = new HeadingSlugAllocator();
 
   for (const node of doc.root.children) {
     if (!node || typeof node !== "object") continue;
     const n = node as { type?: string; tag?: string; children?: unknown[] };
-    if (n.type === "heading") {
-      const tag = (n.tag || "h2").toLowerCase();
-      if (["h2", "h3"].includes(tag)) {
-        const text = extractNodeText(n).trim();
-        if (text) {
-          let baseSlug = slugifyHeading(text);
-          if (!baseSlug) baseSlug = "heading";
-          const count = seenSlugs.get(baseSlug) || 0;
-          seenSlugs.set(baseSlug, count + 1);
-          const slug = count > 0 ? `${baseSlug}-${count}` : baseSlug;
-          items.push({
-            id: slug,
-            text,
-            level: tag === "h2" ? 2 : 3,
-          });
-        }
-      }
+    if (n.type !== "heading") continue;
+    const tag = typeof n.tag === "string" ? n.tag.toLowerCase() : "h2";
+    const text = extractNodeText(n).trim();
+    // H1/H4/H5/H6 reserve their slugs even though the TOC exposes only H2/H3.
+    const slug = slugs.allocate(text);
+    if (text && slug && (tag === "h2" || tag === "h3")) {
+      items.push({ id: slug, text, level: tag === "h2" ? 2 : 3 });
     }
   }
 
