@@ -59,7 +59,7 @@ export function checkDocumentResourceLimits(rawDocument: unknown, limits?: Docum
 
   let nodes = 0;
   const ancestors = new Set<object>();
-  const fail = (message: string, code: StudioMigrationError["code"]) => {
+  const fail = (message: string, code: StudioMigrationError["code"]): never => {
     throw new StudioMigrationError(message, rawDocument, code);
   };
   function scan(value: unknown, depth: number, isAst: boolean): void {
