@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PostEditor } from "../PostEditor";
-import { apiRequest } from "../../lib/api";
+import { apiRequest, ApiError } from "../../lib/api";
 import { createDefaultStudioDocument } from "@vibress/studio-core";
 
 vi.mock("../../lib/admin-locale", () => ({
@@ -17,8 +17,10 @@ vi.mock("../../lib/api", () => ({
   generateAiCompletion: vi.fn(),
   ApiError: class ApiError extends Error {
     statusCode: number;
-    constructor(message: string, statusCode = 409) {
+    code: string;
+    constructor(code: string, message: string, statusCode = 409) {
       super(message);
+      this.code = code;
       this.statusCode = statusCode;
     }
   },
@@ -142,6 +144,39 @@ describe("PostEditor network-acknowledgement integrity", () => {
 
     await act(async () => {
       saves[1]!.pending.resolve({ post: { ...initial, version: 3 } });
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Draft - Saved");
+  });
+
+  it("scenario D: HTTP 409 preserves the author's draft and prevents automatic conflict retries", async () => {
+    await click("edit-a");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(saves).toHaveLength(1);
+    await act(async () => {
+      saves[0]!.pending.reject(new ApiError("CONTENT_CONFLICT", "Version conflict", 409));
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Version conflict");
+    await click("edit-b");
+    await act(async () => { vi.advanceTimersByTime(5000); });
+    expect(saves).toHaveLength(1);
+    expect(element.textContent).toContain("Version conflict");
+  });
+
+  it("scenario B: out-of-order network responses cannot regress revision or acknowledge older edits", async () => {
+    await click("edit-a");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    await click("edit-b");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(saves).toHaveLength(2);
+    await act(async () => {
+      saves[1]!.pending.resolve({ post: { ...initial, version: 3 } });
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Draft - Saved");
+    await act(async () => {
+      saves[0]!.pending.resolve({ post: { ...initial, version: 2 } });
       await Promise.resolve();
     });
     expect(element.textContent).toContain("Draft - Saved");
