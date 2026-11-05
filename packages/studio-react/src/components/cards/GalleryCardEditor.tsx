@@ -78,7 +78,7 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
         const existing = Array.isArray(current.images) ? current.images as GalleryCardData["images"] : [];
         const merged = appendDurableGalleryImages(existing, results);
         if (merged.length > existing.length) node.setCardData({ ...current, images: merged });
-      });
+      }, { tag: "history-push" });
     }).finally(() => setUploading(false));
   };
 
@@ -99,7 +99,7 @@ export function GalleryCardEditor({ nodeKey, cardData }: Props) {
         const existing = Array.isArray(current.images) ? current.images as GalleryCardData["images"] : [];
         const merged = appendDurableGalleryImages(existing, candidates);
         if (merged.length > existing.length) node.setCardData({ ...current, images: merged });
-      });
+      }, { tag: "history-push" });
     } catch {
       setPickerError("The media library failed. Your existing images were preserved.");
     }

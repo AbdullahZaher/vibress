@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { $getNodeByKey, $getRoot, type LexicalEditor } from "lexical";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { HistoryPlugin, createEmptyHistoryState } from "@lexical/react/LexicalHistoryPlugin";
 import { UNDO_COMMAND, REDO_COMMAND } from "lexical";
 import { StudioCardNode, type GalleryCardData } from "@vibress/studio-cards";
 import { ReactStudioCardNode, $createReactStudioCardNode } from "../../../nodes/ReactStudioCardNode";
@@ -69,6 +69,7 @@ describe("actual host GalleryCardEditor additive picker", () => {
   });
 
   async function mount(requestMedia: () => Promise<Record<string, unknown> | null>) {
+    const historyState = createEmptyHistoryState();
     const element = document.createElement("div");
     document.body.appendChild(element);
     const root = createRoot(element);
@@ -81,8 +82,8 @@ describe("actual host GalleryCardEditor additive picker", () => {
         <StudioMediaContext.Provider value={{ requestMedia }}>
           <LexicalComposer initialConfig={{ namespace: "GalleryIntegration", nodes: [StudioCardNode, ReactStudioCardNode],
             onError(error: Error) { throw error; } }}>
+            <HistoryPlugin externalHistoryState={historyState} />
             <Setup ready={ready} />
-            <HistoryPlugin />
           </LexicalComposer>
         </StudioMediaContext.Provider>,
       );
@@ -94,8 +95,8 @@ describe("actual host GalleryCardEditor additive picker", () => {
         <StudioMediaContext.Provider value={{ requestMedia }}>
           <LexicalComposer initialConfig={{ namespace: "GalleryIntegration", nodes: [StudioCardNode, ReactStudioCardNode],
             onError(error: Error) { throw error; } }}>
+            <HistoryPlugin externalHistoryState={historyState} />
             <Setup ready={ready} />
-            <HistoryPlugin />
             <GalleryCardEditor nodeKey={cardKey} cardData={source} />
           </LexicalComposer>
         </StudioMediaContext.Provider>,
@@ -117,7 +118,7 @@ describe("actual host GalleryCardEditor additive picker", () => {
       expect(button).not.toBeNull();
       await act(async () => { button?.click(); });
     };
-    return { element, editor: activeEditor, cardKey, readData, openPicker };
+    return { element, editor: activeEditor, cardKey, readData, openPicker, historyState };
   }
 
   it("preserves earlier images, current concurrent caption and width edits, and reloads all three", async () => {
