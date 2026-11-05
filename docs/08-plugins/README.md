@@ -154,3 +154,10 @@ The private `AbdullahZaher/vibress-lms` repository is the proposed integration/a
 - Do not treat planning estimates as committed dates or claim release readiness based on documentation alone.
 
 **Native UI release gates:** [NUI-06 production acceptance](native-admin-ui-production-acceptance.md) and [NUI-07 experimental SDK conformance](native-admin-ui-sdk-conformance.md). These documents do not constitute production approval or a published stable SDK.
+## G0 Executive Closure Decision Records (review draft)
+
+The following G0-04/G0-05/G0-06 documents are **proposals awaiting named organizational approvals**. They do not close G0 or authorize production changes:
+
+- [G0-04 — Product scope and investment decision](plugin-platform-g0-04-scope-approval.md)
+- [G0-05 — Capacity, accountability and resource commitment](plugin-platform-g0-05-capacity-ownership.md)
+- [G0-06 — Integrated schedule, critical path and RAID register](plugin-platform-g0-06-schedule-raid.md)
