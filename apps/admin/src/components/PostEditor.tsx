@@ -174,6 +174,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const autosaveGenerationsRef = useRef(new EditorialAutosaveGenerations());
   const autosaveConflictRef = useRef(false);
+  const createdPostRef = useRef<{ id: string; version: number } | null>(null);
   const latestDocRef = useRef(studioDoc);
   const latestTitleRef = useRef(title);
   const latestSlugRef = useRef(slug);
@@ -430,7 +431,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   }, [postId]);
 
   const performAutosave = useCallback(async () => {
-    if (!postId || !hasUnsavedChangesRef.current || autosaveConflictRef.current) return;
+    const savePostId = postId ?? createdPostRef.current?.id;
+    if (!savePostId || !hasUnsavedChangesRef.current || autosaveConflictRef.current) return;
 
     const currentDoc = latestDocRef.current;
     const currentVersion = latestVersionRef.current;
@@ -469,7 +471,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       };
 
       logForensicEvent("AUTOSAVE_PAYLOAD", {
-        postId,
+        postId: savePostId,
         version: currentVersion,
         childCount: stats.childCount,
         wordCount: stats.wordCount,
@@ -478,7 +480,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       });
 
       const res = await apiRequest<{ post: AdminPostDetail }>(
-        `/posts/${postId}`,
+        `/posts/${savePostId}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
@@ -494,7 +496,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
       const returnedStats = extractDocStats(res.post.content);
       logForensicEvent("API_RESPONSE", {
-        postId,
+        postId: savePostId,
         sentVersion: currentVersion,
         returnedVersion: res.post.version,
         returnedChildCount: returnedStats.childCount,
@@ -508,6 +510,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       if (acknowledgement.latestEdit) {
         hasUnsavedChangesRef.current = false;
         setAutosaveState("saved");
+        if (!postId && createdPostRef.current?.id === savePostId) {
+          createdPostRef.current = null;
+          onNavigate(`/admin/posts/${savePostId}`);
+        }
       } else {
         // Another local edit occurred after this immutable request snapshot.
         // Its debounce timer is already pending and must not be invalidated.
@@ -537,7 +543,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         abortControllerRef.current = null;
       }
     }
-  }, [postId]);
+  }, [postId, onNavigate]);
 
   const triggerAutosaveDebounced = useCallback(() => {
     autosaveGenerationsRef.current.markEdited();
@@ -687,12 +693,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         content: studioDoc,
         tagIds: selectedTagIds,
         featured,
-        expectedVersion: postId ? latestVersionRef.current : undefined,
+        expectedVersion: postId || createdPostRef.current
+          ? latestVersionRef.current : undefined,
       };
 
-      if (postId) {
+      const savePostId = postId ?? createdPostRef.current?.id;
+      if (savePostId) {
         const res = await apiRequest<{ post: AdminPostDetail }>(
-          `/posts/${postId}`,
+          `/posts/${savePostId}`,
           {
             method: "PUT",
             body: JSON.stringify(payload),
@@ -705,6 +713,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           if (acknowledgment.latestEdit) {
             setAutosaveState("saved");
             hasUnsavedChangesRef.current = false;
+            if (!postId && createdPostRef.current?.id === savePostId) {
+              createdPostRef.current = null;
+              onNavigate(`/admin/posts/${savePostId}`);
+            }
           } else {
             setAutosaveState("idle");
             hasUnsavedChangesRef.current = true;
@@ -724,7 +736,24 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             authorIds: [currentUserId],
           }),
         });
-        onNavigate(`/admin/posts/${res.post.id}`);
+        // A POST can acknowledge snapshot A after the author has typed B.
+        const createdId = res.post.id;
+        if (!createdId || !Number.isSafeInteger(res.post.version)) {
+          throw new Error("The server did not return a recoverable post ID and revision.");
+        }
+        createdPostRef.current = { id: createdId, version: res.post.version };
+        latestVersionRef.current = res.post.version;
+        if (autosaveGenerationsRef.current.isCurrent(saveTicket)) {
+          hasUnsavedChangesRef.current = false;
+          createdPostRef.current = null;
+          onNavigate(`/admin/posts/${createdId}`);
+        } else {
+          hasUnsavedChangesRef.current = true;
+          setAutosaveState("idle");
+          setErrorMsg("Post created, but newer edits are not yet saved. Stay in this editor until the latest draft is saved.");
+          if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2000);
+        }
       }
     } catch (err) {
       if (
