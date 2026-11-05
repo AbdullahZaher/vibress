@@ -578,6 +578,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         );
       } else {
         setAutosaveState("failed");
+        setErrorMsg(err instanceof Error ? err.message : "Save failed");
       }
     } finally {
       if (abortControllerRef.current === controller) {
