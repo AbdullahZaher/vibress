@@ -212,9 +212,12 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
         await settingsButton.click();
       }
 
-      const featureImageTrigger = page.locator(
-        'button:has-text("Add feature image"), button:has-text("Change"), [data-testid="feature-image-trigger"]',
-      ).first();
+      // Only the feature-image control opens this picker; generic "Change"
+      // buttons may edit unrelated metadata or rich cards.
+      const featureImageTrigger = page.getByRole("button", {
+        name: "Add feature image",
+        exact: true,
+      });
       await expect(featureImageTrigger).toBeVisible({ timeout: 5000 });
       await featureImageTrigger.click({ force: true });
 
