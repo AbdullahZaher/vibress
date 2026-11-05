@@ -105,7 +105,11 @@ describe("actual host GalleryCardEditor additive picker", () => {
     if (!activeEditor) throw new Error("Lexical editor missing");
     const readData = () => {
       const doc = serializeStudioDocument(activeEditor.getEditorState().toJSON().root);
-      const node = doc.root.children[0] as { cardData?: GalleryCardData };
+      const node = doc.root.children.find((candidate) =>
+        candidate && typeof candidate === "object" &&
+        "cardType" in candidate && candidate.cardType === "gallery",
+      ) as { cardData?: GalleryCardData } | undefined;
+      if (!node?.cardData) throw new Error("Serialized gallery not found");
       return { doc, data: node.cardData };
     };
     const openPicker = async () => {
