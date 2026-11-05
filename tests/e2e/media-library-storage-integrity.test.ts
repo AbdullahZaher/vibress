@@ -204,20 +204,19 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
       await seedFixturePost();
       await loginUser(page);
       await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
-      await expect(page.getByRole("textbox", { name: "Post title", exact: true }))
-        .toBeVisible({ timeout: 15000 });
+      await expect(
+        page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
+      ).toBeVisible({ timeout: 15000 });
 
       const settingsButton = page.locator('button[aria-label="Post settings"]');
       if (await settingsButton.isVisible()) {
         await settingsButton.click();
       }
 
-      // Only the feature-image control opens this picker; generic "Change"
-      // buttons may edit unrelated metadata or rich cards.
-      const featureImageTrigger = page.getByRole("button", {
-        name: "Add feature image",
-        exact: true,
-      });
+      // Feature-image control opens this picker; support both English and Arabic labels
+      const featureImageTrigger = page.locator(
+        'button:has-text("Add feature image"), button:has-text("إضافة صورة مميزة"), button:has-text("Change"), button:has-text("تغيير"), [data-testid="feature-image-trigger"]',
+      ).first();
       await expect(featureImageTrigger).toBeVisible({ timeout: 5000 });
       await featureImageTrigger.click({ force: true });
 
