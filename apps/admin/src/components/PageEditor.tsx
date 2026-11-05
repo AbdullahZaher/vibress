@@ -80,6 +80,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const pendingLocalEditsRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const saveQueuedRef = useRef(false);
+  const savePageRef = useRef<(isAutosave?: boolean) => Promise<void>>(async () => {});
   const conflictRef = useRef(false);
   const activePageIdRef = useRef(pageId);
   activePageIdRef.current = pageId;
@@ -347,12 +348,14 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             pendingLocalEditsRef.current && saveQueuedRef.current && submittedPageId) {
           saveQueuedRef.current = false;
           if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-          autosaveTimerRef.current = setTimeout(() => { void savePage(true); }, 1200);
+          autosaveTimerRef.current = setTimeout(() => { void savePageRef.current(true); }, 1200);
         }
       }
     },
     [pageId, currentUserId, onNavigate],
   );
+
+  savePageRef.current = savePage;
 
   const schedulePageAutosave = () => {
     editGenerationsRef.current.markEdited();
