@@ -1,4 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
+import { EditorialAutosaveGenerations } from "../lib/editorial-autosave-generations";
 import { StudioDocumentRecovery } from "./editor/StudioDocumentRecovery";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
@@ -79,6 +80,30 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   // the state captured by the render that scheduled it.
   const latestStudioDocRef = useRef(studioDoc);
   const latestVersionRef = useRef(version);
+  const editGenerationsRef = useRef(new EditorialAutosaveGenerations());
+  const pendingLocalEditsRef = useRef(false);
+  const saveInFlightRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+  const savePageRef = useRef<(isAutosave?: boolean) => Promise<void>>(async () => {});
+  const conflictRef = useRef(false);
+  const createdPageRef = useRef<{ id: string; version: number } | null>(null);
+  const activePageIdRef = useRef(pageId);
+  activePageIdRef.current = pageId;
+  const latestMetadataRef = useRef({ title, slug, excerpt, metaTitle, metaDescription, canonicalUrl });
+  latestMetadataRef.current = { title, slug, excerpt, metaTitle, metaDescription, canonicalUrl };
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!pendingLocalEditsRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     latestStudioDocRef.current = studioDoc;
@@ -246,6 +271,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           }
           setStatus(p.status);
           setVersion(p.version);
+          latestVersionRef.current = p.version;
+          conflictRef.current = false;
         })
         .catch((err: { message?: string }) =>
           setErrorMsg(err.message || "Failed to load page"),
@@ -256,92 +283,140 @@ export const PageEditor: React.FC<PageEditorProps> = ({
 
   const savePage = useCallback(
     async (isAutosave = false) => {
-      if (!title.trim() && isAutosave) return;
-      if (autosaveState === "conflict") return;
-
-      setErrorMsg(null);
-      if (isAutosave) {
-        setAutosaveState("saving");
-      } else {
-        setSaving(true);
+      const fields = latestMetadataRef.current;
+      if (isAutosave && !(pageId || createdPageRef.current)) return;
+      if (conflictRef.current) return;
+      // Serializing requests avoids false optimistic-version conflicts and
+      // ensures that responses cannot update the revision out of order.
+      if (saveInFlightRef.current) {
+        saveQueuedRef.current = true;
+        return;
       }
 
-      const submittedDoc = isAutosave ? latestStudioDocRef.current : studioDoc;
+      const ticket = editGenerationsRef.current.beginSave();
+      const submittedDoc = latestStudioDocRef.current;
+      const metadataSnapshot = { ...fields };
+      const submittedPageId = pageId ?? createdPageRef.current?.id;
+      const originatingPageId = pageId;
       const payload = {
-        title: title || "Untitled Page",
-        slug: slug || undefined,
-        excerpt: excerpt || null,
-        metaTitle: metaTitle || null,
-        metaDescription: metaDescription || null,
-        canonicalUrl: canonicalUrl || null,
+        title: metadataSnapshot.title || "Untitled Page",
+        slug: metadataSnapshot.slug || undefined,
+        excerpt: metadataSnapshot.excerpt || null,
+        metaTitle: metadataSnapshot.metaTitle || null,
+        metaDescription: metadataSnapshot.metaDescription || null,
+        canonicalUrl: metadataSnapshot.canonicalUrl || null,
         content: submittedDoc,
         primaryAuthorId: currentUserId,
-        expectedVersion: pageId ? latestVersionRef.current : undefined,
+        expectedVersion: submittedPageId ? latestVersionRef.current : undefined,
       };
 
+      saveInFlightRef.current = true;
+      setErrorMsg(null);
+      if (isAutosave) setAutosaveState("saving");
+      else setSaving(true);
+
       try {
-        if (pageId) {
+        if (submittedPageId) {
           const res = await apiRequest<{ page: { version: number } }>(
-            `/pages/${pageId}`,
-            {
-              method: "PUT",
-              body: JSON.stringify(payload),
-            },
+            `/pages/${submittedPageId}`,
+            { method: "PUT", body: JSON.stringify(payload) },
           );
+          if (activePageIdRef.current !== originatingPageId) return;
+          const acknowledgement = editGenerationsRef.current.acknowledge(ticket);
+          if (!acknowledgement.latestRequest || res.page.version < latestVersionRef.current) return;
           latestVersionRef.current = res.page.version;
           setVersion(res.page.version);
-          // Edits made while the request was in flight are not yet saved.
-          setAutosaveState(latestStudioDocRef.current === submittedDoc ? "saved" : "idle");
+          if (acknowledgement.latestEdit) {
+            pendingLocalEditsRef.current = false;
+            setAutosaveState("saved");
+            if (!pageId && createdPageRef.current?.id === submittedPageId) {
+              createdPageRef.current = null;
+              onNavigate(`/admin/pages/${submittedPageId}`);
+            }
+          } else {
+            // This response only saved the captured snapshot; a newer author
+            // change still needs to be persisted.
+            pendingLocalEditsRef.current = true;
+            saveQueuedRef.current = true;
+            setAutosaveState("idle");
+          }
         } else {
-          const res = await apiRequest<{ page: { id: string } }>("/pages", {
+          const res = await apiRequest<{ page: { id: string; version: number } }>("/pages", {
             method: "POST",
             body: JSON.stringify(payload),
           });
-          onNavigate(`/admin/pages/${res.page.id}`);
+          if (activePageIdRef.current !== originatingPageId) return;
+          if (!res.page.id || !Number.isSafeInteger(res.page.version)) {
+            throw new Error("The server did not return a recoverable page ID and revision.");
+          }
+          createdPageRef.current = { id: res.page.id, version: res.page.version };
+          latestVersionRef.current = res.page.version;
+          if (editGenerationsRef.current.isCurrent(ticket)) {
+            pendingLocalEditsRef.current = false;
+            createdPageRef.current = null;
+            onNavigate(`/admin/pages/${res.page.id}`);
+          } else {
+            pendingLocalEditsRef.current = true;
+            saveQueuedRef.current = true;
+            setAutosaveState("idle");
+            setErrorMsg("Page created, but newer edits are not yet saved. Stay in this editor until the latest draft is saved.");
+          }
         }
       } catch (err: unknown) {
+        if (activePageIdRef.current !== originatingPageId) return;
+        saveQueuedRef.current = false; // Failures require explicit retry, not an infinite loop.
         const errorObj = err as { code?: string; message?: string };
+        pendingLocalEditsRef.current = true;
         if (errorObj.code === "CONTENT_CONFLICT") {
+          conflictRef.current = true;
           setAutosaveState("conflict");
-          setErrorMsg("Conflict: Page modified by another request.");
+          setErrorMsg("Conflict: Page modified by another request. Your draft remains in the editor.");
         } else {
           setAutosaveState("failed");
-          setErrorMsg(errorObj.message || "Save failed");
+          setErrorMsg(errorObj.message || "Save failed. Your draft remains in the editor.");
         }
       } finally {
+        saveInFlightRef.current = false;
         setSaving(false);
+        if (activePageIdRef.current === originatingPageId && !conflictRef.current &&
+            pendingLocalEditsRef.current && saveQueuedRef.current &&
+            (submittedPageId || createdPageRef.current?.id)) {
+          saveQueuedRef.current = false;
+          if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = setTimeout(() => { void savePageRef.current(true); }, 1200);
+        }
       }
     },
-    [
-      title,
-      slug,
-      excerpt,
-      metaTitle,
-      metaDescription,
-      canonicalUrl,
-      studioDoc,
-      currentUserId,
-      pageId,
-      version,
-      autosaveState,
-      onNavigate,
-    ],
+    [pageId, currentUserId, onNavigate],
   );
+
+  savePageRef.current = savePage;
+
+  const schedulePageAutosave = () => {
+    editGenerationsRef.current.markEdited();
+    pendingLocalEditsRef.current = true;
+    setAutosaveState((state) => state === "conflict" ? state : "idle");
+    if (!(pageId || createdPageRef.current) || conflictRef.current) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => { void savePage(true); }, 1200);
+  };
 
   const handleStudioChange = (newDoc: StudioDocument) => {
     latestStudioDocRef.current = newDoc;
     setStudioDoc(newDoc);
-    if (!pageId || autosaveState === "conflict") return;
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => {
-      savePage(true);
-    }, 1200);
+    schedulePageAutosave();
   };
 
   const handleManualSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    savePage(false);
+    void savePage(false);
+  };
+
+  const navigateSafely = (path: string) => {
+    if (pendingLocalEditsRef.current &&
+        !window.confirm("This page has unsaved changes. Leave without saving?")) return;
+    onNavigate(path);
   };
 
   const handlePublishToggle = async () => {
@@ -386,7 +461,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => onNavigate("/admin/pages")}
+            onClick={() => navigateSafely("/admin/pages")}
             className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors group focus:outline-none"
             aria-label={tr("Back to Pages")}
           >
@@ -444,7 +519,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
               loadingLabel={tr("Saving...")}
               className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition"
             >
-              {pageId ? tr("Update Page") : tr("Create Page")}
+              {pageId ? tr("Update Page") :
+                createdPageRef.current ? tr("Save Latest Changes") : tr("Create Page")}
             </Button>
           )}
 
@@ -493,7 +569,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           <div>
             <textarea
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => { setTitle(e.target.value); schedulePageAutosave(); }}
               placeholder={tr("Page title")}
               aria-label={tr("Page title")}
               className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground tracking-tight"
@@ -525,17 +601,17 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         pageTitle={title}
         contentContext={excerpt}
         slug={slug}
-        setSlug={setSlug}
+        setSlug={(next) => { setSlug(next); schedulePageAutosave(); }}
         excerpt={excerpt}
-        setExcerpt={setExcerpt}
+        setExcerpt={(next) => { setExcerpt(next); schedulePageAutosave(); }}
         metaTitle={metaTitle}
-        setMetaTitle={setMetaTitle}
+        setMetaTitle={(next) => { setMetaTitle(next); schedulePageAutosave(); }}
         metaDescription={metaDescription}
-        setMetaDescription={setMetaDescription}
+        setMetaDescription={(next) => { setMetaDescription(next); schedulePageAutosave(); }}
         canonicalUrl={canonicalUrl}
-        setCanonicalUrl={setCanonicalUrl}
+        setCanonicalUrl={(next) => { setCanonicalUrl(next); schedulePageAutosave(); }}
         pageId={pageId}
-        onNavigate={onNavigate}
+        onNavigate={navigateSafely}
       />
 
       {/* Media Modal */}
