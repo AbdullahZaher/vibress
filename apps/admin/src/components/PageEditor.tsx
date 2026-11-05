@@ -268,7 +268,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const savePage = useCallback(
     async (isAutosave = false) => {
       const fields = latestMetadataRef.current;
-      if (isAutosave && (!(pageId || createdPageRef.current) || !fields.title.trim())) return;
+      if (isAutosave && !(pageId || createdPageRef.current)) return;
       if (conflictRef.current) return;
       // Serializing requests avoids false optimistic-version conflicts and
       // ensures that responses cannot update the revision out of order.
