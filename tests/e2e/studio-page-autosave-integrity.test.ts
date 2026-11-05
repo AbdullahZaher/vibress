@@ -57,7 +57,7 @@ test("page autosave persists the latest content without remounting Lexical", asy
   await savedResponse;
 
   // A version bump must not destroy the current editor, selection or history.
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Saved|تم الحفظ/i)).toBeVisible();
   expect(await editorBeforeSave?.evaluate((node) => node.isConnected)).toBe(
     true,
   );

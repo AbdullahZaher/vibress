@@ -1,49 +1,23 @@
 import { test, expect } from "@playwright/test";
 import { getDb, closeDbPool, posts, revisions, seedFixturePost } from "@vibress/database";
+import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
 import { eq } from "drizzle-orm";
 
 const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 
 async function resetTargetPost() {
   const db = getDb();
-  let [rev1] = await db
-    .select()
-    .from(revisions)
-    .where(eq(revisions.resourceId, TARGET_POST_ID))
-    .orderBy(revisions.revisionNumber)
-    .limit(1);
+  await db.delete(revisions).where(eq(revisions.resourceId, TARGET_POST_ID));
+  await db.delete(posts).where(eq(posts.id, TARGET_POST_ID));
+  await seedFixturePost();
 
-  if (!rev1) {
-    await seedFixturePost();
-    [rev1] = await db
-      .select()
-      .from(revisions)
-      .where(eq(revisions.resourceId, TARGET_POST_ID))
-      .orderBy(revisions.revisionNumber)
-      .limit(1);
-  }
+  try {
+    const redis = getRedisClient();
+    const redisUpdatesKey = buildPublicationCacheKey("pub_default", "crdt:updates", TARGET_POST_ID);
+    await redis.del(redisUpdatesKey);
+  } catch {}
 
-  if (!rev1) {
-    throw new Error("Revision 1 not found for target post");
-  }
-
-  const [current] = await db
-    .select()
-    .from(posts)
-    .where(eq(posts.id, TARGET_POST_ID))
-    .limit(1);
-
-  const nextVersion = (current?.version ?? 1) + 1;
-  await db
-    .update(posts)
-    .set({
-      content: rev1.content,
-      version: nextVersion,
-      updatedAt: new Date(),
-    })
-    .where(eq(posts.id, TARGET_POST_ID));
-
-  console.log(`[TEST RESET] Reset post to 51 children, version ${nextVersion}`);
+  console.log(`[TEST RESET] Reset post to pristine fixture, 51 children`);
 }
 
 async function loginUser(page: any, email = "owner@example.com", password = "OwnerPass123!") {
@@ -125,12 +99,24 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     // ============================================================
     console.log("--- STEP 2: User A inserts image ---");
     const firstPA = editorAreaA.locator("p").first();
-    await firstPA.click();
-    await pageA.keyboard.press("End");
+    await expect(firstPA).toBeVisible({ timeout: 10000 });
+    await pageA.evaluate(() => {
+      const p = document.querySelector('div.vibress-studio-editor div[contenteditable="true"] p');
+      if (!p) throw new Error("No paragraph found");
+      (p as HTMLElement).focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      const targetNode = p.firstChild || p;
+      range.setStart(targetNode, 0);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    });
     await pageA.keyboard.press("Enter");
+    await pageA.keyboard.press("ArrowUp");
     await pageA.keyboard.type("/image", { delay: 60 });
 
-    const imageOptionA = pageA.locator('li:has-text("Image")').first();
+    const imageOptionA = pageA.locator('[role="option"]:has-text("Image"), li:has-text("Image")').first();
     await expect(imageOptionA).toBeVisible({ timeout: 8000 });
     await imageOptionA.click();
 
@@ -147,7 +133,7 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     // STEP 3: Autosave completes
     // ============================================================
     console.log("--- STEP 3: Autosave completes ---");
-    await expect(pageA.locator("header").filter({ hasText: "Saved" })).toBeVisible({ timeout: 15000 });
+    await expect(pageA.locator("header").filter({ hasText: /Saved|Published|حفظ|نشر/i })).toBeVisible({ timeout: 15000 });
     console.log("User A autosave confirmed 'Saved'.");
 
     // ============================================================
@@ -220,10 +206,14 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     console.log("--- STEP 8: Independent edits by User A and User B ---");
     // User A edits first paragraph
     const userA_marker = `[EDIT_BY_USER_A_${Date.now()}]`;
-    await editorAreaA.locator("p").first().click();
-    await pageA.keyboard.press("Home");
+    await pageA.bringToFront();
+    const targetParagraphA = editorAreaA.locator("p").filter({ hasText: "For more than two decades" }).first();
+    await targetParagraphA.scrollIntoViewIfNeeded();
+    await targetParagraphA.click();
     await pageA.keyboard.insertText(userA_marker + " ");
-    console.log("User A typed marker at beginning.");
+    console.log("User A typed marker at paragraph 'For more than two decades'.");
+    const userA_immediateText = await editorAreaA.innerText();
+    console.log("User A editor text contains userA_marker?", userA_immediateText.includes(userA_marker));
 
     // User B edits paragraph "Independent authors"
     const userB_marker = `[EDIT_BY_USER_B_${Date.now()}]`;

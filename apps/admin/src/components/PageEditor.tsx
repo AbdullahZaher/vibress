@@ -570,8 +570,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             <textarea
               value={title}
               onChange={(e) => { setTitle(e.target.value); schedulePageAutosave(); }}
-              placeholder={tr("Page title")}
-              aria-label={tr("Page title")}
+              placeholder={tr("Page Title")}
+              aria-label={tr("Page Title")}
               className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground tracking-tight"
               rows={1}
               onInput={(e) => {

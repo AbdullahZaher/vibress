@@ -202,27 +202,24 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
       );
 
       await seedFixturePost();
+      // Ensure post starts without a feature image so the Add trigger is directly active
+      await pool.query("UPDATE posts SET feature_image_id = NULL WHERE id = $1", [TARGET_POST_ID]);
       await loginUser(page);
       await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
       await expect(
         page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
       ).toBeVisible({ timeout: 15000 });
 
-      const settingsButton = page.locator('button[aria-label="Post settings"]');
-      if (await settingsButton.isVisible()) {
-        await settingsButton.click();
-      }
-
       // Feature-image control opens this picker; support both English and Arabic labels
       const featureImageTrigger = page.locator(
-        'button:has-text("Add feature image"), button:has-text("إضافة صورة مميزة"), button:has-text("Change"), button:has-text("تغيير"), [data-testid="feature-image-trigger"]',
+        'button:has-text("Add feature image"), button:has-text("إضافة صورة مميزة"), [aria-label*="feature image" i], [aria-label*="صورة مميزة" i], [data-testid="feature-image-trigger"]',
       ).first();
       await expect(featureImageTrigger).toBeVisible({ timeout: 5000 });
-      await featureImageTrigger.click({ force: true });
+      await featureImageTrigger.click();
 
-      const modal = page.getByRole("dialog", { name: "Select Media Asset" });
+      const modal = page.locator('div[role="dialog"]').filter({ hasText: /Select Media Asset|اختيار وسائط/i }).or(page.getByRole("dialog")).first();
       await expect(modal).toBeVisible({ timeout: 7000 });
-      await modal.getByRole("textbox", { name: "Search media" }).fill(fixtureName);
+      await modal.locator('input[type="text"], [aria-label*="Search" i], [aria-label*="بحث" i]').first().fill(fixtureName);
 
       const fixtureItem = modal.getByTestId("media-picker-item").filter({ hasText: fixtureName });
       await expect(fixtureItem).toBeVisible({ timeout: 10000 });
@@ -235,10 +232,12 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
         { timeout: 10000, message: "The seeded local JPEG thumbnail must decode" },
       ).toBeGreaterThan(0);
 
-      await modal.getByRole("button", { name: "Close" }).click();
+      const closeButton = modal.locator('button[aria-label*="Close" i], button[aria-label*="إغلاق" i]').or(modal.getByRole("button", { name: /close|إغلاق/i })).first();
+      await closeButton.click();
       await expect(modal).toBeHidden();
     } finally {
       await pool.query("DELETE FROM media_assets WHERE id = $1", [fixtureId]);
+      await pool.query("UPDATE posts SET feature_image_id = 'asset-editorial-arch' WHERE id = $1", [TARGET_POST_ID]).catch(() => {});
       await fs.promises.rm(path.dirname(fixturePath), { recursive: true, force: true });
     }
   });
@@ -252,7 +251,9 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     test.setTimeout(60000);
     await loginUser(page);
     await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
-    await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 15000 });
+    await expect(
+      page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
+    ).toBeVisible({ timeout: 15000 });
 
     const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
     await expect(editorArea).toBeVisible({ timeout: 10000 });

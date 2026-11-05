@@ -1088,8 +1088,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             <textarea
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder={tr("Post title")}
-              aria-label={tr("Post title")}
+              placeholder={tr("Post Title")}
+              aria-label={tr("Post Title")}
               className="w-full text-4xl sm:text-5xl font-extrabold bg-transparent border-none outline-none resize-none overflow-hidden focus:ring-0 placeholder:text-muted-foreground/30 leading-tight p-0 text-foreground tracking-tight"
               rows={1}
               onInput={(e) => {

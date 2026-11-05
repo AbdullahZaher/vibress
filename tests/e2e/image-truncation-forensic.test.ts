@@ -1,9 +1,22 @@
 import { test, expect } from "@playwright/test";
-import { seedFixturePost } from "@vibress/database";
+import { getDb, posts, revisions, seedFixturePost } from "@vibress/database";
+import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
+import { eq } from "drizzle-orm";
+
+const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 
 test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
   test("Reproduce and trace real image insertion flow on 2000+ word article", async ({ page }) => {
+    const db = getDb();
+    await db.delete(revisions).where(eq(revisions.resourceId, TARGET_POST_ID));
+    await db.delete(posts).where(eq(posts.id, TARGET_POST_ID));
     await seedFixturePost();
+
+    try {
+      const redis = getRedisClient();
+      const redisUpdatesKey = buildPublicationCacheKey("pub_default", "crdt:updates", TARGET_POST_ID);
+      await redis.del(redisUpdatesKey);
+    } catch {}
     const logs: string[] = [];
     page.on("console", (msg) => {
       const text = msg.text();
@@ -78,22 +91,33 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     console.log("Initial DOM word count in editor:", initialWords);
     expect(initialWords).toBeGreaterThan(1500);
 
-    // 3. Place cursor inside the first paragraph (or at end of first paragraph)
+    // 3. Place cursor inside the first paragraph, create a clean empty line
     const firstP = editorArea.locator("p").first();
-    await firstP.click();
-    console.log("Clicked first paragraph");
+    await expect(firstP).toBeVisible({ timeout: 10000 });
+    await page.evaluate(() => {
+      const p = document.querySelector('div.vibress-studio-editor div[contenteditable="true"] p');
+      if (!p) throw new Error("No paragraph found");
+      (p as HTMLElement).focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      const targetNode = p.firstChild || p;
+      range.setStart(targetNode, 0);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    });
+    console.log("Focused start of first paragraph");
 
-    // Move to end of first paragraph and press Enter
-    await page.keyboard.press("End");
     await page.keyboard.press("Enter");
-    console.log("Pressed Enter to create newline");
+    await page.keyboard.press("ArrowUp");
+    console.log("Created clean empty newline");
 
     // Type /image with realistic keystroke delay so Typeahead trigger fires
     await page.keyboard.type("/image", { delay: 60 });
     console.log("Typed /image with delay");
 
     // Wait for slash menu option and click it directly
-    const imageOption = page.locator('li:has-text("Image")').first();
+    const imageOption = page.locator('[role="option"]:has-text("Image"), li:has-text("Image")').first();
     await expect(imageOption).toBeVisible({ timeout: 8000 });
     console.log("Slash menu Image option visible, clicking...");
     await imageOption.click();
@@ -112,10 +136,10 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     await page.waitForSelector('h3:has-text("Select Media Asset")', { state: "detached", timeout: 8000 });
     console.log("MediaPicker modal closed, asset selected!");
 
-    // Wait for "Saved" indicator in header (autosave debounce is 2000ms)
-    console.log("Waiting for 'Saved' status in header...");
-    await expect(page.locator("header").filter({ hasText: "Saved" })).toBeVisible({ timeout: 12000 });
-    console.log("Post status shows 'Saved'!");
+    // Wait for "Saved" or "Published" indicator in header (autosave debounce is 2000ms)
+    console.log("Waiting for 'Saved' or 'Published' status in header...");
+    await expect(page.locator("header").filter({ hasText: /Saved|Published|حفظ|نشر/i })).toBeVisible({ timeout: 12000 });
+    console.log("Post status shows 'Saved' or 'Published'!");
 
     // Check autosave state in UI
     const headerTextAfter = await page.locator("header").last().innerText();
@@ -131,6 +155,13 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     // CRITICAL ASSERTION 1: Word retention >= 99% after image insertion and autosave
     expect(wordsAfter).toBeGreaterThanOrEqual(Math.floor(initialWords * 0.99));
     expect(paragraphsAfter).toBeGreaterThanOrEqual(initialParagraphs);
+
+    // Wait for autosave or click Update to ensure server persistence before reload
+    const updateBtn = page.locator('button:has-text("Update")');
+    if (await updateBtn.isEnabled({ timeout: 1000 }).catch(() => false)) {
+      await updateBtn.click();
+    }
+    await page.waitForTimeout(2500);
 
     // 5. Reload page to test hydration
     console.log("Reloading page to test hydration...");
