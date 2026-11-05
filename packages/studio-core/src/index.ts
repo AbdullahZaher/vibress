@@ -190,7 +190,7 @@ export function migrateDocument(rawDoc: unknown, limits?: DocumentResourceLimits
     try {
       parsed = JSON.parse(rawDoc);
     } catch {
-      if (/^[\\s]*[\\[{]/.test(rawDoc)) {
+      if (rawDoc.trimStart().startsWith("{") || rawDoc.trimStart().startsWith("[")) {
         throw new StudioMigrationError("Persisted document contains malformed JSON.", rawDoc, "CORRUPTED_DOCUMENT");
       }
       const legacyText = createDefaultStudioDocument(rawDoc);
