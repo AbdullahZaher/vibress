@@ -23,6 +23,38 @@ function card(
 }
 
 describe("renderStudioDocumentToHtml — all Studio cards", () => {
+  it("makes heading permalinks keyboard-focusable, accessible and TOC-compatible in Arabic/English", () => {
+    const article = doc([
+      { type: "heading", tag: "h1", children: [{ type: "text", text: "Introduction" }] },
+      { type: "heading", tag: "h2", children: [{ type: "text", text: "Introduction" }] },
+      { type: "heading", tag: "h2", children: [{ type: "text", text: "مقدمة English" }] },
+      { type: "heading", tag: "h3", children: [{ type: "text", text: "مقدمة English" }] },
+      { type: "heading", tag: "h2", children: [{ type: "text", text: "Introduction-1" }] },
+    ]);
+    const html = renderStudioDocumentToHtml(article);
+    const toc = extractTableOfContentsFromDocument(article);
+    expect(toc).toHaveLength(4);
+    expect(toc.map((item) => item.id))
+      .toEqual(["introduction-1", "مقدمة-english", "مقدمة-english-1", "introduction-1-1"]);
+    for (const item of toc) {
+      expect(html).toContain(`id="${item.id}"`);
+      expect(html).toContain(`href="#${item.id}"`);
+      expect(html).toContain(`aria-label="Link to section: ${item.text}"`);
+    }
+    expect(html).not.toContain('aria-hidden="true"');
+    // A native anchor with href is keyboard reachable without a tabindex hack.
+    expect(html).toContain('class="heading-anchor"');
+  });
+
+  it("escapes unsafe heading characters in link accessible names after final sanitization", () => {
+    const html = renderStudioDocumentToHtml(doc([
+      { type: "heading", tag: "h2",
+        children: [{ type: "text", text: 'عنوان "مزدوج" & English' }] },
+    ]));
+    expect(html).toContain('aria-label="Link to section: عنوان &quot;مزدوج&quot; &amp; English"');
+    expect(html).not.toContain('aria-hidden="true"');
+  });
+
   it("renders text/heading/list/link/code", () => {
     const html = renderStudioDocumentToHtml(
       doc([
