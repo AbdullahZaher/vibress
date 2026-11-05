@@ -134,4 +134,96 @@ describe("PageEditor host autosave generations (real component and mocked HTTP)"
     await act(async () => { vi.advanceTimersByTime(5000); });
     expect(requests).toHaveLength(1);
   });
+
+  it("first-create race: does not navigate until newer page edits are saved at created revision", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const creation = deferred<{ page: { id: string; version: number } }>();
+    const pending = deferred<{ page: { version: number } }>();
+    const updates: Array<{ content: unknown; expectedVersion: number }> = [];
+    let creations = 0;
+    const navigate = vi.fn();
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/pages" && options?.method === "POST") {
+        creations++;
+        return creation.promise;
+      }
+      if (url === "/pages/new-page" && options?.method === "PUT") {
+        updates.push(JSON.parse(String(options.body)));
+        return pending.promise;
+      }
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PageEditor currentUserId="author" canPublish={false} onNavigate={navigate} />);
+      await Promise.resolve();
+    });
+    await edit("page-a");
+    const create = Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Create Page");
+    expect(create).toBeDefined();
+    await act(async () => { create?.click(); });
+    await edit("page-b");
+    await act(async () => {
+      creation.resolve({ page: { id: "new-page", version: 1 } });
+      await Promise.resolve();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(1200); });
+    expect(updates).toHaveLength(1);
+    expect(JSON.stringify(updates[0]?.content)).toContain("Page B");
+    expect(updates[0]?.expectedVersion).toBe(1);
+    expect(navigate).not.toHaveBeenCalled();
+    await act(async () => {
+      pending.resolve({ page: { version: 2 } });
+      await Promise.resolve();
+    });
+    expect(navigate).toHaveBeenCalledWith("/admin/pages/new-page");
+    expect(creations).toBe(1);
+  });
+
+  it("first-create failure: keeps draft and retries via PUT without repeating POST", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const creation = deferred<{ page: { id: string; version: number } }>();
+    let creations = 0;
+    let updates = 0;
+    const navigate = vi.fn();
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/pages" && options?.method === "POST") {
+        creations++;
+        return creation.promise;
+      }
+      if (url === "/pages/new-page" && options?.method === "PUT") {
+        updates++;
+        if (updates === 1) return Promise.reject(new Error("Network offline"));
+        return Promise.resolve({ page: { version: 2 } });
+      }
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PageEditor currentUserId="author" canPublish={false} onNavigate={navigate} />);
+      await Promise.resolve();
+    });
+    await edit("page-a");
+    const create = Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Create Page");
+    await act(async () => { create?.click(); });
+    await edit("page-b");
+    await act(async () => {
+      creation.resolve({ page: { id: "new-page", version: 1 } });
+      await Promise.resolve();
+    });
+    await act(async () => { vi.advanceTimersByTime(1200); await Promise.resolve(); });
+    expect(element.textContent).toContain("Network offline");
+    expect(navigate).not.toHaveBeenCalled();
+    const retry = Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Save Latest Changes");
+    expect(retry).toBeDefined();
+    await act(async () => { retry?.click(); await Promise.resolve(); });
+    expect(creations).toBe(1);
+    expect(updates).toBe(2);
+    expect(navigate).toHaveBeenCalledWith("/admin/pages/new-page");
+  });
+
 });
