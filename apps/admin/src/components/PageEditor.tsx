@@ -1,5 +1,6 @@
 import { useAdminLocale } from "../lib/admin-locale";
 import { EditorialAutosaveGenerations } from "../lib/editorial-autosave-generations";
+import { StudioDocumentRecovery } from "./editor/StudioDocumentRecovery";
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   apiRequest,
@@ -12,6 +13,7 @@ import { VibressStudio } from "@vibress/studio-react";
 import {
   StudioDocument,
   migrateDocument,
+  StudioMigrationError,
   createEmptyStudioDocument,
 } from "@vibress/studio-core";
 import { MediaPicker } from "./MediaPicker";
@@ -51,6 +53,8 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const [loading, setLoading] = useState(Boolean(pageId));
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [unsupportedSource, setUnsupportedSource] = useState<unknown | null>(null);
+  const [unsupportedMessage, setUnsupportedMessage] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
 
@@ -252,7 +256,19 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           setMetaTitle(p.metaTitle || "");
           setMetaDescription(p.metaDescription || "");
           setCanonicalUrl(p.canonicalUrl || "");
-          setStudioDoc(migrateDocument(p.content));
+          try {
+            const migrated = migrateDocument(p.content);
+            setStudioDoc(migrated);
+            setUnsupportedSource(null);
+            setUnsupportedMessage(null);
+          } catch (error) {
+            if (error instanceof StudioMigrationError) {
+              setUnsupportedSource(p.content);
+              setUnsupportedMessage(error.message);
+            } else {
+              throw error;
+            }
+          }
           setStatus(p.status);
           setVersion(p.version);
           latestVersionRef.current = p.version;
@@ -420,6 +436,13 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       setErrorMsg(errorObj.message || "Publish toggle failed");
     }
   };
+
+  if (!loading && unsupportedMessage) {
+    return (
+      <StudioDocumentRecovery message={unsupportedMessage}
+        rawDocument={unsupportedSource} resourceLabel="page" />
+    );
+  }
 
   if (loading) {
     return (
