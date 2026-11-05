@@ -59,6 +59,10 @@ vibress-documentation/
 │   ├── storage-architecture.md
 │   ├── upload-security.md
 ├── 08-plugins/
+│   ├── plugin-platform-consumer-inventory-g0-01.md
+│   ├── plugin-platform-delivery-plan-v2.md
+│   ├── plugin-platform-milestone-reconciliation-g0-02.md
+│   ├── plugin-platform-r1-operational-gap-g0-07.md
 │   ├── plugin-sdk.md
 │   ├── plugin-system.md
 ├── 09-studio/

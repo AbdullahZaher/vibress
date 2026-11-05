@@ -1,8 +1,17 @@
 # Plugin extensibility: current implementation and proposed platform
 
-**Documentation status: historical milestone narrative (2026-10-22), supplemented by the active 2026-10-24 plan.**
-PR #77, PR #78 and PR #86 are now merged into `main`; the platform is **not declared generally
+**Documentation status: enterprise program delivery plan v2.0 adopted (2026-11-05), planning baseline commit `9894340d`.**
+PR #77, PR #78, PR #86, PR #96 and subsequent hardening are merged into `main`; the platform is **not declared generally
 supported for untrusted plugins** or complete for external SDK release.
+
+## Enterprise Program Delivery & Development Plan v2.0 (2026-11-05)
+
+**Strategic program baseline:** [Enterprise Program Delivery & Development Plan v2.0](plugin-platform-delivery-plan-v2.md) establishes the formal delivery strategy and stage-gate governance across R1–R5 (planning baseline: `main` at commit `9894340d`). It separates trusted-plugin delivery (R1–R3) from untrusted isolation certification (R4) and public marketplace investment (R5).
+
+**G0 baseline closure evidence:**
+- [Consumer, Migration, and Runtime Inventory (G0-01)](plugin-platform-consumer-inventory-g0-01.md): Reproducible AST and grep inventory confirming zero runtime legacy `@vibress/plugin-core` consumers and strict canonical `@vibress/plugin-sdk` ABI `1.0.0` adherence.
+- [Milestone Reconciliation & Source-of-Truth Ledger (G0-02)](plugin-platform-milestone-reconciliation-g0-02.md): Reconciles historical M0–M8, `PLUG-*`, `EXT-*`, and `NUI-*` tickets to R1–R5 across 4 independent maturity states (*Code*, *Tests*, *Ops*, *Approval*).
+- [R1 Operational Recovery & Evidence Gap Assessment (G0-07)](plugin-platform-r1-operational-gap-g0-07.md): Audits the operational tooling and defines the exact live disaster recovery, secret rotation, multi-replica drain, and signer revocation exercises required for Gate G1 certification.
 
 ## Unified forward roadmap and Native SDK — revised 2026-10-28
 
