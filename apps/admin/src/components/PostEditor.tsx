@@ -1,4 +1,5 @@
 import { useAdminLocale } from "../lib/admin-locale";
+import { StudioDocumentRecovery } from "./editor/StudioDocumentRecovery";
 import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
   apiRequest,
@@ -17,6 +18,7 @@ import {
 import {
   StudioDocument,
   migrateDocument,
+  StudioMigrationError,
   createEmptyStudioDocument,
 } from "@vibress/studio-core";
 import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
@@ -136,6 +138,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [saving, setSaving] = useState(false);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [unsupportedSource, setUnsupportedSource] = useState<unknown | null>(null);
+  const [unsupportedMessage, setUnsupportedMessage] = useState<string | null>(null);
 
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
@@ -383,8 +387,19 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           setSelectedTagIds(p.tags.map((t: Tag) => t.id));
         }
 
-        if (p.content || p.contentJson) {
-          setStudioDoc(migrateDocument(p.content || p.contentJson));
+        const source = p.content ?? p.contentJson;
+        try {
+          const migrated = migrateDocument(source);
+          setStudioDoc(migrated);
+          setUnsupportedSource(null);
+          setUnsupportedMessage(null);
+        } catch (error) {
+          if (error instanceof StudioMigrationError) {
+            setUnsupportedSource(source);
+            setUnsupportedMessage(error.message);
+          } else {
+            throw error;
+          }
         }
       } catch (err) {
         if (
@@ -819,6 +834,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         );
     }
   };
+
+  if (!loading && unsupportedMessage) {
+    return (
+      <StudioDocumentRecovery message={unsupportedMessage}
+        rawDocument={unsupportedSource} resourceLabel="post" />
+    );
+  }
 
   if (loading) {
     return (
