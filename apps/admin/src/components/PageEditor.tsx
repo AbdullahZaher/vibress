@@ -37,7 +37,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr } = useAdminLocale();
+  const { tr, locale } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -585,6 +585,10 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             // Keep Lexical mounted across autosave and publish version bumps.
             key={pageId || "new"}
             value={studioDoc}
+            metadataRevision={version}
+            recoveryLocale={locale}
+            revisionId={version}
+            replacementId={pageId || "new"}
             onChange={handleStudioChange}
             placeholder={tr("Begin writing your page...")}
             requestMedia={handleRequestMedia}

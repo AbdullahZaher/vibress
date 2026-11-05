@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useRef,
   useMemo,
   useState,
@@ -31,8 +32,11 @@ import { STUDIO_CORE_NODES } from "@vibress/studio-nodes";
 import { StudioCardNode } from "@vibress/studio-cards";
 import { ReactStudioCardNode } from "./nodes/ReactStudioCardNode";
 import {
-  StudioDocument, migrateDocument, createEmptyStudioDocument,
-  StudioMigrationError, type DocumentResourceLimits,
+  StudioDocument,
+  migrateDocument,
+  createEmptyStudioDocument,
+  StudioMigrationError,
+  type DocumentResourceLimits,
 } from "@vibress/studio-core";
 import { serializeStudioDocument } from "@vibress/studio-serializer";
 import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
@@ -44,6 +48,16 @@ export interface VibressStudioProps {
   value?: unknown;
   /** Shared inbound/outgoing resource admission (5 MiB / 50k AST / depth 64 by default). */
   resourceLimits?: DocumentResourceLimits | undefined;
+  /** Informational persistence label; never authorizes draft replacement. */
+  revisionId?: string | number | undefined;
+  /** Explicit replacement command for non-collaborative documents. In Yjs mode,
+   * replace the collaboration session/provider through the host instead. */
+  replacementId?: string | number | undefined;
+  /** Monotonic non-negative safe integer per replacement epoch. Authorizes
+   * envelope-only updates; assign at the metadata source, never arrival order. */
+  metadataRevision?: number | undefined;
+  /** UI locale for recovery messages; independent of document direction. */
+  recoveryLocale?: "en" | "ar" | undefined;
   onChange?: ((doc: StudioDocument) => void) | undefined;
   readOnly?: boolean | undefined;
   enableAi?: boolean | undefined;
@@ -105,73 +119,117 @@ class StudioErrorBoundary extends Component<
   }
 }
 
-function InitialStatePlugin({ document }: { document: StudioDocument }) {
+const EXTERNAL_SYNC_TAG = "studio-host-external-sync";
+
+function InitialStatePlugin({
+  document,
+  replacementId,
+  metadataRevision,
+  syncRoot,
+  hasLocalEdits,
+  onApplied,
+  onError,
+}: {
+  document: StudioDocument | null;
+  replacementId: string | number | undefined;
+  metadataRevision: number | undefined;
+  syncRoot: boolean;
+  hasLocalEdits: () => boolean;
+  onApplied: (document: StudioDocument, resetDraft: boolean) => void;
+  onError: ((error: Error) => void) | undefined;
+}) {
   const [editor] = useLexicalComposerContext();
-  const lastDocRef = useRef<StudioDocument | null>(null);
-
+  const lastIncoming = useRef<string | null>(null);
+  const lastReplacement = useRef(replacementId);
+  const metadataSequence = useRef(-1);
+  const orderedMetadata = useRef(false);
   useEffect(() => {
-    if (!document || !document.root) return;
-    const stats = extractDocStats(document);
-    logForensicEvent("INITIAL_STATE_RECEIVED", {
-      childCount: stats.childCount,
-      wordCount: stats.wordCount,
-      hash: stats.hash,
-      isSameRef: lastDocRef.current === document,
-    });
-    if (lastDocRef.current === document) return;
-    lastDocRef.current = document;
-
-    const currentRoot = editor.getEditorState().toJSON().root;
-    const currentDoc = serializeStudioDocument(currentRoot);
-    const currentStats = extractDocStats(currentDoc);
-
-    // 1. Content Hash Equality: if current editor state serializes to identical content hash, skip
-    if (currentStats.hash === stats.hash) {
+    if (!document) return; // Invalid input must not consume authorization.
+    const first = lastIncoming.current === null;
+    const replacement =
+      replacementId !== undefined && replacementId !== lastReplacement.current;
+    const ordered =
+      metadataRevision !== undefined &&
+      Number.isSafeInteger(metadataRevision) &&
+      metadataRevision >= 0;
+    if (
+      !first &&
+      !replacement &&
+      (metadataRevision !== undefined || orderedMetadata.current)
+    ) {
+      if (ordered && metadataRevision > metadataSequence.current) {
+        onApplied(document, false);
+        metadataSequence.current = metadataRevision;
+        orderedMetadata.current = true;
+      }
       return;
     }
-
-    // 2. Destructive downscaling protection:
-    // Never allow an incoming external document with drastically reduced content to overwrite
-    // a richer active editor state (unless explicitly empty initial load).
-    if (currentStats.wordCount >= 50 && stats.wordCount < currentStats.wordCount * 0.3) {
-      console.warn(
-        `[InitialStatePlugin] Blocked destructive state replacement: current has ${currentStats.wordCount} words, incoming has ${stats.wordCount} words.`,
-      );
-      return;
-    }
-
+    const incoming = JSON.stringify(document.root);
+    if (!first && !replacement && incoming === lastIncoming.current) return;
     try {
-      // Historical blank roots have no children. Lexical requires an editable
-      // paragraph before setEditorState; retain the persisted root's metadata.
-      const root = document.root.children.length ? document.root : {
-        ...document.root, children: createEmptyStudioDocument().root.children,
-      };
-      const editorState = editor.parseEditorState({
-        root: { ...root, version: 1 },
-      } as never);
-      editor.setEditorState(editorState);
-      logForensicEvent("INITIAL_STATE_APPLIED", {
-        childCount: stats.childCount,
-        wordCount: stats.wordCount,
-        hash: stats.hash,
-      });
-    } catch (err) {
-      console.error("Failed to sync external editor state", err);
+      const current = JSON.stringify(
+        serializeStudioDocument(editor.getEditorState().toJSON().root).root,
+      );
+      if (syncRoot && current !== incoming) {
+        if (!replacement && hasLocalEdits()) return;
+        const root = document.root.children.length
+          ? document.root
+          : {
+              ...document.root,
+              children: createEmptyStudioDocument().root.children,
+            };
+        editor.setEditorState(
+          editor.parseEditorState(
+            JSON.stringify({ root: { ...root, version: 1 } }),
+          ),
+          { tag: EXTERNAL_SYNC_TAG },
+        );
+      }
+      lastIncoming.current = incoming;
+      lastReplacement.current = replacementId;
+      metadataSequence.current = ordered ? metadataRevision : -1;
+      orderedMetadata.current = metadataRevision !== undefined;
+      onApplied(document, syncRoot);
+    } catch (error) {
+      onError?.(
+        error instanceof Error
+          ? error
+          : new Error("Unable to load Studio document"),
+      );
     }
-  }, [document, editor]);
-
+  }, [
+    editor,
+    document,
+    replacementId,
+    metadataRevision,
+    syncRoot,
+    hasLocalEdits,
+    onApplied,
+    onError,
+  ]);
   return null;
 }
 
+function EditorEditablePlugin({ paused }: { paused: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    editor.setEditable(!paused);
+  }, [editor, paused]);
+  return null;
+}
 
 export function VibressStudio({
   value,
   resourceLimits,
+  revisionId,
+  replacementId,
+  metadataRevision,
+  recoveryLocale = "en",
   onChange,
   readOnly = false,
   enableAi = false,
   onAiGenerate,
-  placeholder = 'Begin writing your post...',
+  placeholder = "Begin writing your post...",
   onError,
   requestMedia,
   allowUnsplash,
@@ -181,20 +239,54 @@ export function VibressStudio({
   className = "",
 }: VibressStudioProps) {
   const [snapshotError, setSnapshotError] = useState<Error | null>(null);
+  const dirty = useRef(false);
+  const lastEditorRoot = useRef<string | null>(null);
+  const acceptedDocument = useRef<StudioDocument | undefined>(undefined);
+  const [hasLoadedDocument, setHasLoadedDocument] = useState(false);
+  const hasLocalEdits = useCallback(() => dirty.current, []);
+  const onApplied = useCallback(
+    (document: StudioDocument, resetDraft: boolean) => {
+      acceptedDocument.current = document;
+      if (resetDraft) {
+        dirty.current = false;
+        lastEditorRoot.current = JSON.stringify(document.root);
+        setSnapshotError(null);
+      }
+    },
+    [],
+  );
+  void revisionId;
   const { parsedDoc, migrationError } = useMemo(() => {
     try {
       const document = migrateDocument(value, resourceLimits);
       // Lexical cannot round-trip forward unknown nodes it has not registered;
       // never emit a smaller onChange snapshot from a partially loaded tree.
       const allowed = new Set([
-        "root", "paragraph", "text", "linebreak", "tab", "heading", "quote",
-        "list", "listitem", "link", "autolink", "code", "code-highlight",
-        "table", "tablerow", "tablecell", "studio-card", "react-studio-card",
+        "root",
+        "paragraph",
+        "text",
+        "linebreak",
+        "tab",
+        "heading",
+        "quote",
+        "list",
+        "listitem",
+        "link",
+        "autolink",
+        "code",
+        "code-highlight",
+        "table",
+        "tablerow",
+        "tablecell",
+        "studio-card",
+        "react-studio-card",
       ]);
       const inspect = (node: unknown): string | null => {
-        if (!node || typeof node !== "object" || Array.isArray(node)) return "invalid node";
+        if (!node || typeof node !== "object" || Array.isArray(node))
+          return "invalid node";
         const entry = node as { type?: unknown; children?: unknown };
-        if (typeof entry.type !== "string" || !allowed.has(entry.type)) return String(entry.type);
+        if (typeof entry.type !== "string" || !allowed.has(entry.type))
+          return String(entry.type);
         if (entry.children !== undefined) {
           if (!Array.isArray(entry.children)) return "invalid children";
           for (const child of entry.children) {
@@ -208,13 +300,17 @@ export function VibressStudio({
       if (unsupported) {
         throw new StudioMigrationError(
           `Unsupported editor node "${unsupported}" — original document preserved.`,
-          value, "UNSUPPORTED_DOCUMENT",
+          value,
+          "UNSUPPORTED_DOCUMENT",
         );
       }
       return { parsedDoc: document, migrationError: null as Error | null };
     } catch (error) {
-      return { parsedDoc: null as StudioDocument | null,
-        migrationError: error instanceof Error ? error : new Error(String(error)) };
+      return {
+        parsedDoc: null as StudioDocument | null,
+        migrationError:
+          error instanceof Error ? error : new Error(String(error)),
+      };
     }
   }, [value, resourceLimits]);
 
@@ -222,7 +318,13 @@ export function VibressStudio({
     if (migrationError) onError?.(migrationError);
   }, [migrationError, onError]);
 
-  const initialDocRef = useRef<StudioDocument>(parsedDoc ?? createEmptyStudioDocument());
+  useEffect(() => {
+    if (parsedDoc) setHasLoadedDocument(true);
+  }, [parsedDoc]);
+  const editingPaused = readOnly || Boolean(migrationError);
+  const initialDocRef = useRef<StudioDocument>(
+    parsedDoc ?? createEmptyStudioDocument(),
+  );
 
   const initialEditorState = useMemo<string | null>(() => {
     const initialDoc = initialDocRef.current;
@@ -305,16 +407,41 @@ export function VibressStudio({
     [readOnly, onError],
   );
 
-  if (migrationError || !parsedDoc) {
-    return (
-      <div role="alert" aria-live="assertive" className="vibress-studio-document-recovery">
-        <strong>Document recovery: editor did not overwrite your content.</strong>
-        <p>The persisted document cannot safely be edited or saved in this version.
-          The host must retain the original document for export or migration.</p>
-        <code>{migrationError?.message}</code>
-      </div>
-    );
-  }
+  const recoveryCopy =
+    recoveryLocale === "ar"
+      ? {
+          title: "استعادة المستند: لم يُستبدل محتواك.",
+          draft:
+            "مسودتك الحالية محفوظة داخل المحرر. عالج مشكلة المستند الوارد لمتابعة التحرير.",
+          source:
+            "لا يمكن تحرير هذا المستند أو حفظه بأمان في هذا الإصدار. يجب الاحتفاظ بالأصل للتصدير أو الترحيل.",
+          details: "التفاصيل التقنية",
+        }
+      : {
+          title: "Document recovery: editor did not overwrite your content.",
+          draft:
+            "Your active draft remains in this editor. Resolve the incoming document error before continuing.",
+          source:
+            "The persisted document cannot safely be edited or saved in this version. The host must retain the original document for export or migration.",
+          details: "Technical details",
+        };
+  const recoveryNotice = migrationError ? (
+    <div
+      role="alert"
+      aria-live="assertive"
+      lang={recoveryLocale}
+      dir={recoveryLocale === "ar" ? "rtl" : "ltr"}
+      className="vibress-studio-document-recovery"
+    >
+      <strong>{recoveryCopy.title}</strong>
+      <p>{hasLoadedDocument ? recoveryCopy.draft : recoveryCopy.source}</p>
+      <details>
+        <summary>{recoveryCopy.details}</summary>
+        <code>{migrationError.message}</code>
+      </details>
+    </div>
+  ) : null;
+  if (!parsedDoc && !hasLoadedDocument) return recoveryNotice;
 
   return (
     <StudioErrorBoundary onError={onError}>
@@ -323,107 +450,152 @@ export function VibressStudio({
           value={{ uploadMedia, requestMedia, allowUnsplash }}
         >
           <div className={`vibress-studio-editor ${className}`}>
+            {recoveryNotice}
             {snapshotError && (
               <div role="alert" aria-live="polite">
-                <strong>Draft not saved:</strong> {snapshotError.message}
-                {" "}Your current edits remain in the editor. Reduce content size and retry.
+                <strong>Draft not saved:</strong> {snapshotError.message} Your
+                current edits remain in the editor. Reduce content size and
+                retry.
               </div>
             )}
-            <LexicalComposer initialConfig={initialConfig}>
-            <div
-              className="vibress-studio-canvas"
-              style={{
-                position: "relative",
-                minHeight: "40vh",
-              }}
+            <fieldset
+              disabled={editingPaused}
+              style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
             >
-              <RichTextPlugin
-                contentEditable={
-                  <ContentEditable
-                    className="vibress-studio-content focus:outline-none"
-                    style={{
-                      outline: "none",
-                      minHeight: "40vh",
-                      color: "inherit",
+              <LexicalComposer initialConfig={initialConfig}>
+                <div
+                  className="vibress-studio-canvas"
+                  style={{
+                    position: "relative",
+                    minHeight: "40vh",
+                  }}
+                >
+                  <RichTextPlugin
+                    contentEditable={
+                      <ContentEditable
+                        className="vibress-studio-content focus:outline-none"
+                        style={{
+                          outline: "none",
+                          minHeight: "40vh",
+                          color: "inherit",
+                        }}
+                      />
+                    }
+                    placeholder={
+                      <div
+                        className="vibress-studio-placeholder select-none"
+                        style={{
+                          position: "absolute",
+                          top: "0",
+                          insetInline: "0",
+                          maxWidth: "740px",
+                          marginInline: "auto",
+                          color: "var(--muted-foreground)",
+                          opacity: 0.55,
+                          pointerEvents: "none",
+                          fontSize: "1.125rem",
+                          lineHeight: "1.8",
+                        }}
+                      >
+                        {placeholder}
+                      </div>
+                    }
+                    ErrorBoundary={LexicalErrorBoundary}
+                  />
+                  {collaboration ? (
+                    <CollaborationPlugin
+                      id={collaboration.id}
+                      providerFactory={collaboration.providerFactory}
+                      shouldBootstrap={true}
+                      username={collaboration.user.name}
+                      cursorColor={
+                        collaboration.cursorColor || collaboration.user.color
+                      }
+                      initialEditorState={initialEditorState}
+                    />
+                  ) : (
+                    <HistoryPlugin />
+                  )}
+                  <ListPlugin />
+                  <CheckListPlugin />
+                  <TablePlugin
+                    hasCellMerge
+                    hasCellBackgroundColor
+                    hasTabHandler
+                  />
+                  {!editingPaused && (
+                    <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+                  )}
+                  <LinkPlugin />
+                  {!editingPaused && (
+                    <SlashMenuPlugin requestMedia={requestMedia} />
+                  )}
+                  {!editingPaused && <FloatingFormatToolbarPlugin />}
+                  {!editingPaused && <FloatingCardActionToolbarPlugin />}
+                  {!editingPaused && <BlockHandleGutterPlugin />}
+                  {showWordCount && <WordCountPlugin />}
+                  {!editingPaused && enableAi && (
+                    <InlineAIPlugin
+                      disabled={!enableAi}
+                      onGenerate={onAiGenerate}
+                    />
+                  )}
+                  <EditorEditablePlugin paused={editingPaused} />
+                  <InitialStatePlugin
+                    document={parsedDoc}
+                    replacementId={replacementId}
+                    metadataRevision={metadataRevision}
+                    syncRoot={!collaboration}
+                    hasLocalEdits={hasLocalEdits}
+                    onApplied={onApplied}
+                    onError={onError}
+                  />
+                  <OnChangePlugin
+                    onChange={(editorState, _editor, tags) => {
+                      const rootJson = JSON.stringify(
+                        editorState.toJSON().root,
+                      );
+                      if (tags.has(EXTERNAL_SYNC_TAG)) {
+                        lastEditorRoot.current = rootJson;
+                        return;
+                      }
+                      if (migrationError) {
+                        dirty.current = true;
+                        return;
+                      }
+                      if (rootJson === lastEditorRoot.current) return;
+                      try {
+                        const rootNode = editorState.toJSON().root;
+                        const studioDoc = serializeStudioDocument(
+                          rootNode,
+                          resourceLimits,
+                          acceptedDocument.current,
+                        );
+                        const stats = extractDocStats(studioDoc);
+                        logForensicEvent("AFTER_SERIALIZE", {
+                          childCount: stats.childCount,
+                          wordCount: stats.wordCount,
+                          hash: stats.hash,
+                        });
+                        lastEditorRoot.current = rootJson;
+                        dirty.current = true;
+                        setSnapshotError(null);
+                        onChange?.(studioDoc);
+                      } catch (error) {
+                        const recoverable =
+                          error instanceof Error
+                            ? error
+                            : new Error(String(error));
+                        dirty.current = true;
+                        setSnapshotError(recoverable);
+                        onError?.(recoverable);
+                      }
                     }}
                   />
-                }
-                placeholder={
-                  <div
-                    className="vibress-studio-placeholder select-none"
-                    style={{
-                      position: "absolute",
-                      top: "0",
-                      insetInline: "0",
-                      maxWidth: "740px",
-                      marginInline: "auto",
-                      color: "var(--muted-foreground)",
-                      opacity: 0.55,
-                      pointerEvents: "none",
-                      fontSize: "1.125rem",
-                      lineHeight: "1.8",
-                    }}
-                  >
-                    {placeholder}
-                  </div>
-                }
-                ErrorBoundary={LexicalErrorBoundary}
-              />
-              {collaboration ? (
-                <CollaborationPlugin
-                  id={collaboration.id}
-                  providerFactory={collaboration.providerFactory}
-                  shouldBootstrap={true}
-                  username={collaboration.user.name}
-                  cursorColor={collaboration.cursorColor || collaboration.user.color}
-                  initialEditorState={initialEditorState}
-                />
-              ) : (
-                <HistoryPlugin />
-              )}
-              <ListPlugin />
-              <CheckListPlugin />
-              <TablePlugin hasCellMerge hasCellBackgroundColor hasTabHandler />
-              <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
-              <LinkPlugin />
-              <SlashMenuPlugin requestMedia={requestMedia} />
-              <FloatingFormatToolbarPlugin />
-              <FloatingCardActionToolbarPlugin />
-              {!readOnly && <BlockHandleGutterPlugin />}
-              {showWordCount && <WordCountPlugin />}
-              {!readOnly && enableAi && (
-                <InlineAIPlugin
-                  disabled={!enableAi}
-                  onGenerate={onAiGenerate}
-                />
-              )}
-              {!collaboration && <InitialStatePlugin document={parsedDoc} />}
-              {onChange && (
-                <OnChangePlugin
-                  onChange={(editorState) => {
-                    try {
-                      const rootNode = editorState.toJSON().root;
-                      const studioDoc = serializeStudioDocument(rootNode, resourceLimits);
-                      const stats = extractDocStats(studioDoc);
-                      logForensicEvent("AFTER_SERIALIZE", {
-                        childCount: stats.childCount,
-                        wordCount: stats.wordCount,
-                        hash: stats.hash,
-                      });
-                      setSnapshotError(null);
-                      onChange(studioDoc);
-                    } catch (error) {
-                      const recoverable = error instanceof Error ? error : new Error(String(error));
-                      setSnapshotError(recoverable);
-                      onError?.(recoverable);
-                    }
-                  }}
-                />
-              )}
-
-            </div>
-          </LexicalComposer>
-        </div>
+                </div>
+              </LexicalComposer>
+            </fieldset>
+          </div>
         </StudioMediaContext.Provider>
       </StudioUploadContext.Provider>
     </StudioErrorBoundary>

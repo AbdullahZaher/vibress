@@ -88,7 +88,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr } = useAdminLocale();
+  const { tr, locale } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -178,7 +178,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
   const autosaveGenerationsRef = useRef(new EditorialAutosaveGenerations());
   const autosaveConflictRef = useRef(false);
+  const restoreInFlightRef = useRef(false);
   const createdPostRef = useRef<{ id: string; version: number } | null>(null);
+  const activePostIdRef = useRef(postId);
+  const documentEpochRef = useRef(0);
+  const documentMountedRef = useRef(true);
+  if (activePostIdRef.current !== postId) {
+    activePostIdRef.current = postId;
+    documentEpochRef.current += 1;
+  }
+  const beginDocumentRequest = useCallback((requestedId: string | undefined) => {
+    const epoch = documentEpochRef.current;
+    return () => documentMountedRef.current && activePostIdRef.current === requestedId &&
+      documentEpochRef.current === epoch;
+  }, []);
   const latestDocRef = useRef(studioDoc);
   const latestTitleRef = useRef(title);
   const latestSlugRef = useRef(slug);
@@ -208,6 +221,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => { latestVersionRef.current = version; }, [version]);
 
   useEffect(() => {
+    documentMountedRef.current = true;
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedChangesRef.current) return;
       event.preventDefault();
@@ -215,6 +229,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     };
     window.addEventListener("beforeunload", warnIfUnsaved);
     return () => {
+      documentMountedRef.current = false;
+      documentEpochRef.current += 1;
       window.removeEventListener("beforeunload", warnIfUnsaved);
       if (autosaveTimerRef.current) {
         clearTimeout(autosaveTimerRef.current);
@@ -366,13 +382,34 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!postId) return;
+    let canceled = false;
+    restoreInFlightRef.current = false;
+    const ownsDocument = beginDocumentRequest(postId);
+    const isCurrent = () => !canceled && ownsDocument();
+    autosaveGenerationsRef.current.reset();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    hasUnsavedChangesRef.current = false;
+    createdPostRef.current = null;
+    autosaveConflictRef.current = false;
+    setAutosaveState("idle"); setSaving(false); setErrorMsg(null);
+    setUnsupportedSource(null); setUnsupportedMessage(null);
+    if (!postId) {
+      setTitle(""); setSlug(""); setExcerpt(""); setMetaTitle(""); setMetaDescription(""); setCanonicalUrl("");
+      setStudioDoc(createEmptyStudioDocument()); setVersion(1); latestVersionRef.current = 1;
+      setStatus("draft"); setSelectedTagIds([]); setFeatured(false);
+      setFeatureImage(null); setFeatureImageAlt(""); setFeatureImageCaption("");
+      setScheduledAtStr(""); setRevisions([]); setLoading(false);
+      return () => { canceled = true; };
+    }
     const fetchPost = async () => {
       setLoading(true);
       try {
         const res = await apiRequest<{ post: AdminPostDetail }>(
           `/posts/${postId}`,
         );
+        if (!isCurrent()) return;
         const p = res.post;
         setTitle(p.title || "");
         setSlug(p.slug || "");
@@ -419,6 +456,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           }
         }
       } catch (err) {
+        if (!isCurrent()) return;
         if (
           err instanceof ApiError &&
           err.path &&
@@ -432,7 +470,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           );
         }
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     };
 
@@ -441,17 +479,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         const res = await apiRequest<{ revisions: Revision[] }>(
           `/posts/${postId}/revisions`,
         );
-        setRevisions(res.revisions || []);
+        if (isCurrent()) setRevisions(res.revisions || []);
       } catch (err) {
-        console.error("Failed to load revisions", err);
+        if (isCurrent()) console.error("Failed to load revisions", err);
       }
     };
 
     fetchPost();
     fetchRevisions();
-  }, [postId]);
+    return () => { canceled = true; };
+  }, [postId, beginDocumentRequest]);
 
   const performAutosave = useCallback(async () => {
+    const isCurrent = beginDocumentRequest(postId);
+    if (!isCurrent() || restoreInFlightRef.current) return;
     const savePostId = postId ?? createdPostRef.current?.id;
     if (!savePostId || !hasUnsavedChangesRef.current || autosaveConflictRef.current) return;
 
@@ -514,6 +555,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         },
       );
 
+      if (!isCurrent()) return;
+
       // Persist feature-image changes made during the first-create POST.
       // This separate endpoint does not increment the content version.
       // Do not navigate until it acknowledges the same captured generation.
@@ -528,6 +571,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           signal: controller.signal,
         });
       }
+
+      if (!isCurrent()) return;
 
       // Ignore superseded or obsolete responses; never regress the server revision.
       const acknowledgement = autosaveGenerationsRef.current.acknowledge(saveTicket);
@@ -562,6 +607,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setAutosaveState("idle");
       }
     } catch (err: unknown) {
+      if (!isCurrent()) return;
       if ((err as Error)?.name === "AbortError" ||
           !autosaveGenerationsRef.current.acknowledge(saveTicket).latestRequest) {
         return;
@@ -585,7 +631,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         abortControllerRef.current = null;
       }
     }
-  }, [postId, onNavigate]);
+  }, [postId, onNavigate, beginDocumentRequest]);
 
   const triggerAutosaveDebounced = useCallback(() => {
     autosaveGenerationsRef.current.markEdited();
@@ -722,6 +768,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isCurrent = beginDocumentRequest(postId);
+    if (!isCurrent() || restoreInFlightRef.current) return;
     if (autosaveConflictRef.current) return;
     setSaving(true);
     setErrorMsg(null);
@@ -760,6 +808,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             body: JSON.stringify(payload),
           },
         );
+        if (!isCurrent()) return;
         if (!postId && createdPostRef.current?.id === savePostId) {
           if (res.post.version >= latestVersionRef.current) {
             latestVersionRef.current = res.post.version;
@@ -770,6 +819,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             body: JSON.stringify(featureSnapshot),
           });
         }
+        if (!isCurrent()) return;
         const acknowledgment = autosaveGenerationsRef.current.acknowledge(saveTicket);
         if (acknowledgment.latestRequest && res.post.version >= latestVersionRef.current) {
           setVersion(res.post.version);
@@ -800,6 +850,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             authorIds: [currentUserId],
           }),
         });
+        if (!isCurrent()) return;
         // A POST can acknowledge snapshot A after the author has typed B.
         const createdId = res.post.id;
         if (!createdId || !Number.isSafeInteger(res.post.version)) {
@@ -820,6 +871,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         }
       }
     } catch (err) {
+      if (!isCurrent()) return;
       if (
         err instanceof ApiError &&
         err.path &&
@@ -831,34 +883,39 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setErrorMsg(err instanceof Error ? err.message : "Save failed");
       }
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   };
 
   const handlePublish = async () => {
+    const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish) return;
     try {
       setSaving(true);
       await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
-      setStatus("published");
+      if (isCurrent()) setStatus("published");
     } catch (err) {
+      if (!isCurrent()) return;
       setErrorMsg(err instanceof Error ? err.message : "Publish failed");
     } finally {
-      setSaving(false);
+      if (isCurrent()) setSaving(false);
     }
   };
 
   const handleUnpublish = async () => {
+    const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish) return;
     try {
       await apiRequest(`/posts/${postId}/unpublish`, { method: "POST" });
-      setStatus("draft");
+      if (isCurrent()) setStatus("draft");
     } catch (err) {
+      if (!isCurrent()) return;
       setErrorMsg(err instanceof Error ? err.message : "Unpublish failed");
     }
   };
 
   const handleSchedule = async () => {
+    const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish || !scheduledAtStr) return;
     try {
       const scheduledAt = new Date(scheduledAtStr).toISOString();
@@ -866,17 +923,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         method: "POST",
         body: JSON.stringify({ scheduledAt }),
       });
-      setStatus("scheduled");
+      if (isCurrent()) setStatus("scheduled");
     } catch (err) {
+      if (!isCurrent()) return;
       setErrorMsg(err instanceof Error ? err.message : "Schedule failed");
     }
   };
 
   const handleRestoreRevision = async (revisionId: string) => {
-    if (!postId) return;
+    const isCurrent = beginDocumentRequest(postId);
+    if (!postId || restoreInFlightRef.current) return;
     if (!confirm("Restore this revision? Unsaved changes will be overwritten."))
       return;
     autosaveGenerationsRef.current.reset();
+    const restoreGeneration = autosaveGenerationsRef.current.currentGeneration;
+    restoreInFlightRef.current = true;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     abortControllerRef.current?.abort();
     try {
@@ -886,7 +947,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           method: "POST",
         },
       );
+      if (!isCurrent()) return;
       const p = res.post;
+      // Confirmation authorizes the draft at click time only. A later edit
+      // belongs to the author and must survive the asynchronous restore.
+      if (autosaveGenerationsRef.current.currentGeneration !== restoreGeneration) {
+        setVersion(p.version);
+        latestVersionRef.current = p.version;
+        hasUnsavedChangesRef.current = true;
+        setAutosaveState("idle");
+        setErrorMsg("Revision restored on the server; your newer draft has been kept and is waiting to save.");
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2000);
+        return;
+      }
       setTitle(p.title || "");
       setStudioDoc(migrateDocument(p.content || p.contentJson));
       setVersion(p.version);
@@ -897,18 +971,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setAutosaveState("saved");
       alert("Revision restored successfully");
     } catch (err) {
+      if (!isCurrent()) return;
       setErrorMsg(
         err instanceof Error ? err.message : "Restore revision failed",
       );
+      if (hasUnsavedChangesRef.current) {
+        if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2000);
+      }
+    } finally {
+      if (isCurrent()) restoreInFlightRef.current = false;
     }
   };
 
   const handleWorkflowTransition = async (newStatus: string) => {
+    const isCurrent = beginDocumentRequest(postId);
     if (postId) {
       try {
         await transitionPostWorkflow(postId, newStatus);
-        setStatus(newStatus);
+        if (isCurrent()) setStatus(newStatus);
       } catch (err) {
+        if (!isCurrent()) return;
         setErrorMsg(
           err instanceof Error
             ? err.message
@@ -1102,6 +1185,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           <VibressStudio
             key={`${postId || "new"}-${restoreKey}`}
             value={studioDoc}
+            metadataRevision={version}
+            recoveryLocale={locale}
+            revisionId={version}
+            replacementId={`${postId || "new"}-${restoreKey}`}
             onChange={handleDocChange}
             placeholder={tr("Begin writing your post...")}
             requestMedia={handleRequestMedia}

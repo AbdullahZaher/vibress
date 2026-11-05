@@ -48,10 +48,12 @@ vi.mock("@vibress/studio-react", () => ({
 }));
 
 vi.mock("../editor/PostSettingsSidebar", () => ({
-  PostSettingsSidebar: ({ setExcerpt, setSelectedTagIds }: {
+  PostSettingsSidebar: ({ setExcerpt, setSelectedTagIds, handleRestoreRevision }: {
     setExcerpt: (value: string) => void;
     setSelectedTagIds: (ids: string[]) => void;
+    handleRestoreRevision: (id: string) => Promise<void>;
   }) => <div>
+    <button data-testid="restore-revision" onClick={() => { void handleRestoreRevision("revision-1"); }}>Restore</button>
     <button data-testid="change-excerpt" onClick={() => setExcerpt("New excerpt")}>Excerpt edit</button>
     <button data-testid="change-tags" onClick={() => setSelectedTagIds(["tag-1"])}>Tag edit</button>
   </div>,
@@ -124,6 +126,7 @@ describe("PostEditor network-acknowledgement integrity", () => {
     await act(async () => { root.unmount(); });
     element.remove();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   async function click(testid: string) {
@@ -188,6 +191,66 @@ describe("PostEditor network-acknowledgement integrity", () => {
       await Promise.resolve();
     });
     expect(element.textContent).toContain("Draft - Saved");
+  });
+
+  it("keeps edits made while an authorized revision restore is in flight", async () => {
+    const restoration = deferred<{ post: typeof initial }>();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.spyOn(window, "alert").mockImplementation(() => {});
+    const previous = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/revisions/revision-1/restore") return restoration.promise;
+      return previous(url, options);
+    });
+    await click("restore-revision");
+    await click("edit-b");
+    await act(async () => { vi.advanceTimersByTime(2200); });
+    expect(saves).toHaveLength(0);
+    await act(async () => { restoration.resolve({ post: { ...initial, title: "Restored title", version: 6 } }); });
+    expect(element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Post Title"]')?.value).toBe("Initial");
+    expect(element.textContent).toContain("newer draft has been kept");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(saves).toHaveLength(1);
+    expect(saves[0]?.body.expectedVersion).toBe(6);
+    expect(JSON.stringify(saves[0]?.body.content)).toContain("Draft B");
+  });
+
+  it("does not let an old post response change the active post revision", async () => {
+    await click("edit-a");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(saves).toHaveLength(1);
+    const post2 = { ...initial, id: "post-2", title: "Second", version: 3 };
+    const secondSaves: Array<{ expectedVersion: number; content: unknown }> = [];
+    const previous = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-2" && options?.method === "PUT") {
+        secondSaves.push(JSON.parse(String(options.body)));
+        return Promise.resolve({ post: { ...post2, version: 4 } });
+      }
+      if (url === "/posts/post-2") return Promise.resolve({ post: post2 });
+      return previous(url, options);
+    });
+    await act(async () => { root.render(<PostEditor postId="post-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await click("edit-b");
+    await act(async () => { saves[0]!.pending.resolve({ post: { ...initial, version: 9 } }); });
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(secondSaves).toHaveLength(1);
+    expect(secondSaves[0]?.expectedVersion).toBe(3);
+    expect(JSON.stringify(secondSaves[0]?.content)).toContain("Draft B");
+  });
+
+  it("ignores an obsolete document load after a newer post has loaded", async () => {
+    const oldLoad = deferred<{ post: typeof initial }>();
+    const previous = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-2") return oldLoad.promise;
+      if (url === "/posts/post-3") return Promise.resolve({ post: { ...initial, id: "post-3", title: "Newest post", version: 3 } });
+      return previous(url, options);
+    });
+    await act(async () => { root.render(<PostEditor postId="post-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await act(async () => { root.render(<PostEditor postId="post-3" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await act(async () => { oldLoad.resolve({ post: { ...initial, id: "post-2", title: "Obsolete post" } }); });
+    expect(element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Post Title"]')?.value).toBe("Newest post");
   });
 
   it("scenario F: sidebar metadata-only changes schedule an immutable snapshot", async () => {

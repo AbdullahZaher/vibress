@@ -22,7 +22,9 @@ export interface StudioDocument {
   version: number;
   editor?: {
     lexicalVersion?: string;
+    [key: string]: unknown;
   };
+  [key: string]: unknown;
   root: {
     type: "root";
     children: unknown[];
@@ -36,7 +38,7 @@ export const StudioDocumentSchema = z.object({
   editor: z
     .object({
       lexicalVersion: z.string().optional(),
-    })
+    }).passthrough()
     .optional(),
   root: z
     .object({
@@ -44,7 +46,7 @@ export const StudioDocumentSchema = z.object({
       children: z.array(z.unknown()),
     })
     .passthrough(),
-});
+}).passthrough();
 
 export function validateStudioDocument(doc: unknown): StudioDocument {
   if (!doc || typeof doc !== "object") {
