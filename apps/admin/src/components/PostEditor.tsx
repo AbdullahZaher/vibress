@@ -173,6 +173,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const hasUnsavedChangesRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const autosaveGenerationsRef = useRef(new EditorialAutosaveGenerations());
+  const autosaveConflictRef = useRef(false);
   const latestDocRef = useRef(studioDoc);
   const latestTitleRef = useRef(title);
   const latestSlugRef = useRef(slug);
@@ -373,6 +374,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         latestFeaturedRef.current = p.featured ?? false;
         setVersion(p.version || 1);
         latestVersionRef.current = p.version || 1;
+        autosaveConflictRef.current = false;
         if (p.featureImage !== undefined) {
           setFeatureImage(p.featureImage || null);
         }
@@ -428,7 +430,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   }, [postId]);
 
   const performAutosave = useCallback(async () => {
-    if (!postId || !hasUnsavedChangesRef.current) return;
+    if (!postId || !hasUnsavedChangesRef.current || autosaveConflictRef.current) return;
 
     const currentDoc = latestDocRef.current;
     const currentVersion = latestVersionRef.current;
@@ -522,6 +524,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         err instanceof ApiError &&
         (err.statusCode === 409 || err.message.includes("Version conflict"))
       ) {
+        autosaveConflictRef.current = true;
         setAutosaveState("conflict");
         setErrorMsg(
           "Autosave conflict: Post was modified elsewhere. Please refresh.",
@@ -540,6 +543,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     autosaveGenerationsRef.current.markEdited();
     hasUnsavedChangesRef.current = true;
     setAutosaveState((state) => state === "conflict" ? state : "idle");
+    if (autosaveConflictRef.current) return;
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }
@@ -663,6 +667,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (autosaveConflictRef.current) return;
     setSaving(true);
     setErrorMsg(null);
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
@@ -795,6 +800,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       latestVersionRef.current = p.version;
       setRestoreKey((k) => k + 1);
       hasUnsavedChangesRef.current = false;
+      autosaveConflictRef.current = false;
       setAutosaveState("saved");
       alert("Revision restored successfully");
     } catch (err) {
