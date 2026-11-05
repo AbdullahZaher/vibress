@@ -58,9 +58,17 @@ vi.mock("../editor/PostSettingsSidebar", () => ({
 }));
 vi.mock("../editor/EditorialCollaborationPanel", () => ({ EditorialCollaborationPanel: () => null }));
 vi.mock("../editor/RevisionDiffModal", () => ({ RevisionDiffModal: () => null }));
-vi.mock("../editor/PostFeatureImageControl", () => ({ PostFeatureImageControl: () => null }));
+vi.mock("../editor/PostFeatureImageControl", () => ({
+  PostFeatureImageControl: ({ onOpenMediaPicker }: { onOpenMediaPicker: () => void }) =>
+    <button data-testid="open-feature-picker" onClick={onOpenMediaPicker}>Choose feature</button>,
+}));
 vi.mock("../editor/UnsplashModal", () => ({ UnsplashModal: () => null }));
-vi.mock("../MediaPicker", () => ({ MediaPicker: () => null }));
+vi.mock("../MediaPicker", () => ({
+  MediaPicker: ({ onSelectAsset }: { onSelectAsset: (asset: Record<string, unknown>) => void }) =>
+    <button data-testid="select-feature" onClick={() => onSelectAsset({
+      id: "feature-B", url: "/media/feature-B.jpg", displayName: "New cover",
+    })}>Select media</button>,
+}));
 vi.mock("../../lib/api/collaboration", () => ({ transitionPostWorkflow: vi.fn() }));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -247,6 +255,58 @@ describe("PostEditor network-acknowledgement integrity", () => {
       await Promise.resolve();
     });
     expect(navigate).toHaveBeenCalledWith("/admin/posts/post-created");
+  });
+
+  it("first-create feature image race: PATCHes the new cover before navigating", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const created = deferred<{ post: typeof initial }>();
+    const updated = deferred<{ post: typeof initial }>();
+    const featureSaved = deferred<Record<string, unknown>>();
+    const navigate = vi.fn();
+    let patchBody: Record<string, unknown> | null = null;
+    let postCalls = 0;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts" && options?.method === "POST") {
+        postCalls++;
+        return created.promise;
+      }
+      if (url === "/posts/new-post" && options?.method === "PUT") return updated.promise;
+      if (url === "/posts/new-post/feature-image" && options?.method === "PATCH") {
+        patchBody = JSON.parse(String(options.body)) as Record<string, unknown>;
+        return featureSaved.promise;
+      }
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor currentUserId="author" canPublish={false} onNavigate={navigate} />);
+      await Promise.resolve();
+    });
+    await click("edit-a");
+    const save = Array.from(element.querySelectorAll("button"))
+      .find((button) => button.textContent?.trim() === "Save Draft");
+    await act(async () => { save?.click(); });
+    await click("open-feature-picker");
+    await click("select-feature");
+    await act(async () => {
+      created.resolve({ post: { ...initial, id: "new-post", version: 1 } });
+      await Promise.resolve();
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    await act(async () => {
+      updated.resolve({ post: { ...initial, id: "new-post", version: 2 } });
+      await Promise.resolve();
+    });
+    expect(patchBody).toMatchObject({ featureImageId: "feature-B", featureImageAlt: "New cover" });
+    expect(navigate).not.toHaveBeenCalled();
+    await act(async () => {
+      featureSaved.resolve({ post: { ...initial, id: "new-post", version: 2 } });
+      await Promise.resolve();
+    });
+    expect(postCalls).toBe(1);
+    expect(navigate).toHaveBeenCalledWith("/admin/posts/new-post");
   });
 
   it("first-create retry: failed post-create update never duplicates the created post", async () => {
