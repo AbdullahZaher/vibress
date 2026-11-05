@@ -1016,18 +1016,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         featured={featured}
         setFeatured={handleFeaturedChange}
         slug={slug}
-        setSlug={setSlug}
+        setSlug={(next) => { setSlug(next); triggerAutosaveDebounced(); }}
         excerpt={excerpt}
-        setExcerpt={setExcerpt}
+        setExcerpt={(next) => { setExcerpt(next); triggerAutosaveDebounced(); }}
         metaTitle={metaTitle}
-        setMetaTitle={setMetaTitle}
+        setMetaTitle={(next) => { setMetaTitle(next); triggerAutosaveDebounced(); }}
         metaDescription={metaDescription}
-        setMetaDescription={setMetaDescription}
+        setMetaDescription={(next) => { setMetaDescription(next); triggerAutosaveDebounced(); }}
         canonicalUrl={canonicalUrl}
-        setCanonicalUrl={setCanonicalUrl}
+        setCanonicalUrl={(next) => { setCanonicalUrl(next); triggerAutosaveDebounced(); }}
         allTags={allTags}
         selectedTagIds={selectedTagIds}
-        setSelectedTagIds={setSelectedTagIds}
+        setSelectedTagIds={(next) => { setSelectedTagIds(next); triggerAutosaveDebounced(); }}
         scheduledAtStr={scheduledAtStr}
         setScheduledAtStr={setScheduledAtStr}
         handleSchedule={handleSchedule}
