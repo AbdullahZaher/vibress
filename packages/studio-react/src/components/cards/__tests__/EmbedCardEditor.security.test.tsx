@@ -31,12 +31,13 @@ function preview(url: string, html?: string) {
 }
 
 describe("EmbedCardEditor security boundary", () => {
-  it("sanitizes persisted embed HTML before assigning innerHTML", () => {
+  it("never previews legacy embed HTML that is not publishable", () => {
     const html = preview(
       "https://www.youtube.com/watch?v=abc123",
       '<img src="x.png" onerror="alert(1)"><svg onload="alert(2)"></svg><script>alert(3)</script>',
     );
-    expect(html).toContain("<img");
+    expect(html).toContain("Legacy embed HTML is not published");
+    expect(html).not.toContain("<img");
     expect(html).not.toMatch(/onerror|onload|<script|<svg/i);
   });
 

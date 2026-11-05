@@ -156,6 +156,26 @@ export type EmbedProviderKind = "youtube" | "vimeo";
  * Validate a URL against the embed provider allowlist and return the
  * canonical iframe URL, or null when the URL is not an approved provider.
  */
+export type StudioEmbedDestination =
+  | { kind: "iframe"; url: string }
+  | { kind: "external-link"; url: string }
+  | { kind: "invalid" };
+
+/** Exactly the same safe destination contract for preview and publication. */
+export function resolveStudioEmbedDestination(value: unknown): StudioEmbedDestination {
+  if (typeof value !== "string" || !value.trim()) return { kind: "invalid" };
+  const url = value.trim();
+  if (/[\u0000-\u001f\u007f\\]/.test(url)) return { kind: "invalid" };
+  let parsed: URL;
+  try { parsed = new URL(url); }
+  catch { return { kind: "invalid" }; }
+  if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      !parsed.hostname || parsed.username || parsed.password) return { kind: "invalid" };
+  const provider = getEmbedProvider(parsed.href);
+  if (provider) return { kind: "iframe", url: provider.embedUrl };
+  return { kind: "external-link", url: parsed.href };
+}
+
 export function getEmbedProvider(
   url: string,
 ): { kind: EmbedProviderKind; embedUrl: string } | null {

@@ -55,6 +55,26 @@ describe("renderStudioDocumentToHtml — all Studio cards", () => {
     expect(html).not.toContain('aria-hidden="true"');
   });
 
+  it("publishes embed previews consistently for approved, external and blocked URL destinations", () => {
+    const approved = renderStudioDocumentToHtml(doc([
+      card("embed", { url: "https://vimeo.com/123456", embedType: "video",
+        html: '<iframe src="https://evil.example/widget"></iframe>', caption: "مقطع" }),
+    ]));
+    expect(approved).toContain('src="https://player.vimeo.com/video/123456"');
+    expect(approved).not.toContain("evil.example");
+    const external = renderStudioDocumentToHtml(doc([
+      card("embed", { url: "https://example.org/article", embedType: "video", html: "<script>x</script>" }),
+    ]));
+    expect(external).toContain('href="https://example.org/article"');
+    expect(external).not.toContain("<iframe");
+    const invalid = renderStudioDocumentToHtml(doc([
+      card("embed", { url: "javascript:alert(1)", embedType: "video" }),
+    ]));
+    expect(invalid).toContain("Unsupported or unsafe embed URL.");
+    expect(invalid).not.toContain('href="javascript:');
+    expect(invalid).not.toContain("<iframe");
+  });
+
   it("renders text/heading/list/link/code", () => {
     const html = renderStudioDocumentToHtml(
       doc([

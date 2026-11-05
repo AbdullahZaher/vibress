@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useMemo,
+  useState,
   Component,
   ErrorInfo,
   ReactNode,
@@ -29,7 +30,10 @@ import { WordCountPlugin } from "./plugins/WordCountPlugin";
 import { STUDIO_CORE_NODES } from "@vibress/studio-nodes";
 import { StudioCardNode } from "@vibress/studio-cards";
 import { ReactStudioCardNode } from "./nodes/ReactStudioCardNode";
-import { StudioDocument, migrateDocument } from "@vibress/studio-core";
+import {
+  StudioDocument, migrateDocument, createEmptyStudioDocument,
+  StudioMigrationError, type DocumentResourceLimits,
+} from "@vibress/studio-core";
 import { serializeStudioDocument } from "@vibress/studio-serializer";
 import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
 import { StudioUploadContext, StudioUploadApi } from "./upload-context";
@@ -38,6 +42,8 @@ import { CollaborationConfig } from "./collaboration/types";
 
 export interface VibressStudioProps {
   value?: unknown;
+  /** Shared inbound/outgoing resource admission (5 MiB / 50k AST / depth 64 by default). */
+  resourceLimits?: DocumentResourceLimits | undefined;
   onChange?: ((doc: StudioDocument) => void) | undefined;
   readOnly?: boolean | undefined;
   enableAi?: boolean | undefined;
@@ -155,6 +161,7 @@ function InitialStatePlugin({ document }: { document: StudioDocument }) {
 
 export function VibressStudio({
   value,
+  resourceLimits,
   onChange,
   readOnly = false,
   enableAi = false,
@@ -168,8 +175,49 @@ export function VibressStudio({
   showWordCount = true,
   className = "",
 }: VibressStudioProps) {
-  const parsedDoc = useMemo(() => migrateDocument(value), [value]);
-  const initialDocRef = useRef<StudioDocument>(parsedDoc);
+  const [snapshotError, setSnapshotError] = useState<Error | null>(null);
+  const { parsedDoc, migrationError } = useMemo(() => {
+    try {
+      const document = migrateDocument(value, resourceLimits);
+      // Lexical cannot round-trip forward unknown nodes it has not registered;
+      // never emit a smaller onChange snapshot from a partially loaded tree.
+      const allowed = new Set([
+        "root", "paragraph", "text", "linebreak", "tab", "heading", "quote",
+        "list", "listitem", "link", "autolink", "code", "code-highlight",
+        "table", "tablerow", "tablecell", "studio-card", "react-studio-card",
+      ]);
+      const inspect = (node: unknown): string | null => {
+        if (!node || typeof node !== "object" || Array.isArray(node)) return "invalid node";
+        const entry = node as { type?: unknown; children?: unknown };
+        if (typeof entry.type !== "string" || !allowed.has(entry.type)) return String(entry.type);
+        if (entry.children !== undefined) {
+          if (!Array.isArray(entry.children)) return "invalid children";
+          for (const child of entry.children) {
+            const unknown = inspect(child);
+            if (unknown) return unknown;
+          }
+        }
+        return null;
+      };
+      const unsupported = inspect(document.root);
+      if (unsupported) {
+        throw new StudioMigrationError(
+          `Unsupported editor node "${unsupported}" — original document preserved.`,
+          value, "UNSUPPORTED_DOCUMENT",
+        );
+      }
+      return { parsedDoc: document, migrationError: null as Error | null };
+    } catch (error) {
+      return { parsedDoc: null as StudioDocument | null,
+        migrationError: error instanceof Error ? error : new Error(String(error)) };
+    }
+  }, [value, resourceLimits]);
+
+  useEffect(() => {
+    if (migrationError) onError?.(migrationError);
+  }, [migrationError, onError]);
+
+  const initialDocRef = useRef<StudioDocument>(parsedDoc ?? createEmptyStudioDocument());
 
   const initialEditorState = useMemo<string | null>(() => {
     const initialDoc = initialDocRef.current;
@@ -252,6 +300,17 @@ export function VibressStudio({
     [readOnly, onError],
   );
 
+  if (migrationError || !parsedDoc) {
+    return (
+      <div role="alert" aria-live="assertive" className="vibress-studio-document-recovery">
+        <strong>Document recovery: editor did not overwrite your content.</strong>
+        <p>The persisted document cannot safely be edited or saved in this version.
+          The host must retain the original document for export or migration.</p>
+        <code>{migrationError?.message}</code>
+      </div>
+    );
+  }
+
   return (
     <StudioErrorBoundary onError={onError}>
       <StudioUploadContext.Provider value={{ uploadMedia }}>
@@ -259,6 +318,12 @@ export function VibressStudio({
           value={{ uploadMedia, requestMedia, allowUnsplash }}
         >
           <div className={`vibress-studio-editor ${className}`}>
+            {snapshotError && (
+              <div role="alert" aria-live="polite">
+                <strong>Draft not saved:</strong> {snapshotError.message}
+                {" "}Your current edits remain in the editor. Reduce content size and retry.
+              </div>
+            )}
             <LexicalComposer initialConfig={initialConfig}>
             <div
               className="vibress-studio-canvas"
@@ -331,15 +396,22 @@ export function VibressStudio({
               {onChange && (
                 <OnChangePlugin
                   onChange={(editorState) => {
-                    const rootNode = editorState.toJSON().root;
-                    const studioDoc = serializeStudioDocument(rootNode);
-                    const stats = extractDocStats(studioDoc);
-                    logForensicEvent("AFTER_SERIALIZE", {
-                      childCount: stats.childCount,
-                      wordCount: stats.wordCount,
-                      hash: stats.hash,
-                    });
-                    onChange(studioDoc);
+                    try {
+                      const rootNode = editorState.toJSON().root;
+                      const studioDoc = serializeStudioDocument(rootNode, resourceLimits);
+                      const stats = extractDocStats(studioDoc);
+                      logForensicEvent("AFTER_SERIALIZE", {
+                        childCount: stats.childCount,
+                        wordCount: stats.wordCount,
+                        hash: stats.hash,
+                      });
+                      setSnapshotError(null);
+                      onChange(studioDoc);
+                    } catch (error) {
+                      const recoverable = error instanceof Error ? error : new Error(String(error));
+                      setSnapshotError(recoverable);
+                      onError?.(recoverable);
+                    }
                   }}
                 />
               )}

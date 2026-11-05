@@ -2,14 +2,25 @@ import {
   StudioDocument,
   createEmptyStudioDocument,
   createDefaultStudioDocument,
+  checkDocumentResourceLimits,
+  getDocumentUtf8ByteLength,
+  resolveDocumentResourceLimits,
+  StudioMigrationError,
+  type DocumentResourceLimits,
 } from "@vibress/studio-core";
 import { sanitizeHtml } from "@vibress/studio-utils";
 
-export function htmlToStudioDocument(htmlInput: string): StudioDocument {
+export function htmlToStudioDocument(htmlInput: string, limits?: DocumentResourceLimits): StudioDocument {
   if (!htmlInput || typeof htmlInput !== "string") {
     return createEmptyStudioDocument();
   }
 
+  // Guard input before sanitation/parsing; enforce expanded AST output again below.
+  const policy = resolveDocumentResourceLimits(limits);
+  if (htmlInput.length > policy.maxSizeBytes ||
+      getDocumentUtf8ByteLength(htmlInput) > policy.maxSizeBytes) {
+    throw new StudioMigrationError("HTML source exceeds maximum size.", htmlInput, "RESOURCE_LIMIT_EXCEEDED");
+  }
   const cleanHtml = sanitizeHtml(htmlInput.trim());
   if (!cleanHtml) {
     return createEmptyStudioDocument();
@@ -89,10 +100,12 @@ export function htmlToStudioDocument(htmlInput: string): StudioDocument {
   if (children.length === 0) {
     // Strip tags and create default
     const plainText = cleanHtml.replace(/<[^>]+>/g, "").trim();
-    return createDefaultStudioDocument(plainText);
+    const legacy = createDefaultStudioDocument(plainText);
+    checkDocumentResourceLimits(legacy, limits);
+    return legacy;
   }
 
-  return {
+  const doc: StudioDocument = {
     schema: "vibress-studio",
     version: 1,
     editor: { lexicalVersion: "0.13.1" },
@@ -105,4 +118,6 @@ export function htmlToStudioDocument(htmlInput: string): StudioDocument {
       version: 1,
     },
   };
+  checkDocumentResourceLimits(doc, limits);
+  return doc;
 }

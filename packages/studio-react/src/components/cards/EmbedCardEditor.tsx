@@ -3,7 +3,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { useLexicalNodeSelection } from "@lexical/react/useLexicalNodeSelection";
 import { NodeKey, $getNodeByKey } from "lexical";
 import { EmbedCardData, StudioCardNode } from "@vibress/studio-cards";
-import { getEmbedProvider, sanitizeStudioHtml } from "@vibress/studio-utils";
+import { resolveStudioEmbedDestination } from "@vibress/studio-utils";
 
 import { NestedCaptionEditor } from "./NestedCaptionEditor";
 import { UrlPlaceholder } from "../ui/UrlPlaceholder";
@@ -25,9 +25,9 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
   const onUrlSubmit = (url: string) => {
     editor.update(() => {
       const node = $getNodeByKey(nodeKey);
-      if (node instanceof StudioCardNode) {
+      if (node instanceof StudioCardNode && node.isAttached()) {
         node.setCardData({
-          ...cardData,
+          ...node.getCardData(),
           url,
         });
       }
@@ -38,9 +38,9 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
     (data: { url: string; caption: string }) => {
       editor.update(() => {
         const node = $getNodeByKey(nodeKey);
-        if (node instanceof StudioCardNode) {
+        if (node instanceof StudioCardNode && node.isAttached()) {
           node.setCardData({
-            ...cardData,
+            ...node.getCardData(),
             url: data.url,
             caption: data.caption,
             captionHtml: data.caption,
@@ -48,7 +48,7 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         }
       });
     },
-    [editor, nodeKey, cardData],
+    [editor, nodeKey],
   );
 
   const handleDelete = useCallback(() => {
@@ -64,16 +64,16 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
     (captionJSON: Record<string, unknown>, captionHtml: string) => {
       editor.update(() => {
         const node = $getNodeByKey(nodeKey);
-        if (node instanceof StudioCardNode) {
+        if (node instanceof StudioCardNode && node.isAttached()) {
           node.setCardData({
-            ...cardData,
+            ...node.getCardData(),
             caption: captionJSON,
             captionHtml,
           });
         }
       });
     },
-    [editor, nodeKey, cardData],
+    [editor, nodeKey],
   );
 
   if (!isPopulated) {
@@ -93,10 +93,8 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
   }
 
   // Preview only approved providers, matching the public Studio renderer.
-  const provider = getEmbedProvider(cardData.url);
-  const externalUrl = /^https?:\/\//i.test(cardData.url.trim())
-    ? cardData.url.trim()
-    : null;
+  const destination = resolveStudioEmbedDestination(cardData.url);
+  const hasLegacyHtml = typeof cardData.html === "string" && cardData.html.trim().length > 0;
 
   const captionStr =
     typeof cardData.caption === "string" ? cardData.caption : "";
@@ -133,15 +131,10 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
         className="relative w-full overflow-hidden bg-muted/60 dark:bg-white/[0.04] rounded-xl border border-border/80 dark:border-white/10 shadow-sm"
         style={{ paddingTop: "56.25%" /* 16:9 Aspect Ratio */ }}
       >
-        {cardData.html ? (
-          <div
-            className="absolute top-0 left-0 w-full h-full"
-            dangerouslySetInnerHTML={{ __html: sanitizeStudioHtml(cardData.html) }}
-          />
-        ) : provider ? (
+        {destination.kind === "iframe" ? (
           <iframe
             className="absolute top-0 left-0 w-full h-full"
-            src={provider.embedUrl}
+            src={destination.url}
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
@@ -150,22 +143,29 @@ export function EmbedCardEditor({ nodeKey, cardData }: Props) {
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center p-4 text-center">
-            {externalUrl ? (
+            {destination.kind === "external-link" ? (
               <a
-                href={externalUrl}
+                href={destination.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="break-all"
                 dir="auto"
               >
-                {externalUrl}
+                {destination.url}
               </a>
             ) : (
-              <span className="break-all" dir="auto">{cardData.url}</span>
+              <span className="break-all" dir="auto">
+                Unsupported or unsafe embed URL: {cardData.url}
+              </span>
             )}
           </div>
         )}
       </div>
+      {hasLegacyHtml && (
+        <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
+          Legacy embed HTML is not published. Only approved URL embeds or safe links appear in the published article.
+        </p>
+      )}
       <NestedCaptionEditor
         initialCaptionJSON={
           typeof cardData.caption === "object" ? cardData.caption : undefined
