@@ -19,6 +19,13 @@ This policy is **adopted as the target contract**, not yet implemented or certif
 - [Liquid theme developer guide](themes/developer-guide.md) · [Templating reference](themes/templating.md) · [Public site API](10-api/themes-api.md).
 - Default, Minimal and Molten render the social icons in their footers. Custom themes choose where to place them.
 
+## Vibress Studio 9+ delivery and host release gates
+
+- [Full cross-repository Studio 9+ roadmap (English)](https://github.com/AbdullahZaher/vibress-studio/blob/main/docs/roadmaps/world-class-editor-9-plus-plan-2026-11-06.md) — proposed execution phases, engineering/product scorecard and G0–G9 acceptance criteria.
+- [Host-specific Studio 9+ acceptance plan](09-studio/editor-9-plus-host-acceptance.md) — coordinated Yjs restore, crash/offline recovery, publish parity, package and staging rollback responsibilities.
+
+Both are **proposed plans**, not release certification. Use evidence on the exact candidate SHAs and authorized approvals before claiming 9+ or deploying.
+
 ## Core principles
 
 1. **Modular monolith first**

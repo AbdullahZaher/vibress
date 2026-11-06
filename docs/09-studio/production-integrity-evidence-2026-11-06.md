@@ -1,5 +1,7 @@
 # Studio host integrity evidence — 2026-11-06
 
+> **Historical evidence snapshot:** Host PR #130 was subsequently merged. This report intentionally preserves the original test and merge-state claims as they were recorded. For future acceptance, see the [proposed Host Studio 9+ Plan](editor-9-plus-host-acceptance.md); refresh current CI, Yjs/restore, offline and staging gates on the exact release candidate.
+
 Implementation source: `cb0be3f03460cc57143e43db093c523e27b4cf0d`.
 Delivery: [PR #130](https://github.com/AbdullahZaher/vibress/pull/130),
 `codex/studio-host-integrity`, based on `c641ed063f79ceb109988ec19692338a319c8b96`.
