@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { buildApp } from "../../apps/api/src/main";
-import { closeDbPool } from "@vibress/database";
+import { getDbPool, closeDbPool } from "@vibress/database";
 import { closeRedisClient } from "@vibress/cache";
 import {
   createDefaultStudioDocument,
@@ -10,6 +10,10 @@ import {
 } from "@vibress/studio-core";
 import { serializeStudioDocument } from "@vibress/studio-serializer";
 import { EditorialAutosaveGenerations } from "../../apps/admin/src/lib/editorial-autosave-generations";
+
+import { hashPassword } from "@vibress/security";
+import { DrizzleUserRepository, UsersService } from "@vibress/users";
+import { DrizzleRoleRepository, RolesService } from "@vibress/roles";
 
 interface SavedRecord {
   id: string;
@@ -35,12 +39,31 @@ describe("real host HTTP and PostgreSQL Studio persistence", () => {
   let authorId: string;
   beforeAll(async () => {
     await app.ready();
+    // A private synthetic account avoids coupling to seeded-owner password or
+    // throttle changes made by earlier suites in the full CI run.
+    const publication = await getDbPool().query<{ id: string }>(
+      "SELECT id FROM publications WHERE slug = 'default' LIMIT 1",
+    );
+    expect(publication.rows[0]).toBeDefined();
+    const email = `studio-persistence-${randomUUID()}@vibress.local`;
+    const password = `StudioPersistence-${randomUUID()}!`;
+    const user = await new UsersService(new DrizzleUserRepository()).createUser({
+      email, passwordHash: await hashPassword(password), name: "Studio persistence QA",
+      role: "owner", publicationId: publication.rows[0]!.id,
+    });
+    const roles = new RolesService(new DrizzleRoleRepository());
+    const ownerRole = await roles.findByKey("owner");
+    expect(ownerRole).not.toBeNull();
+    await roles.assignRoleToUser(user.id, ownerRole!.id);
+    await getDbPool().query(
+      "INSERT INTO publication_memberships (id, publication_id, user_id, role, created_at) VALUES ($1, $2, $3, 'owner', NOW()) ON CONFLICT DO NOTHING",
+      [randomUUID(), publication.rows[0]!.id, user.id],
+    );
     const login = await app.inject({
       method: "POST",
       url: "/api/admin/v1/auth/login",
       payload: {
-        email: "owner@example.com",
-        password: "OwnerPass123!",
+        email, password,
       },
     });
     expect(login.statusCode).toBe(200);

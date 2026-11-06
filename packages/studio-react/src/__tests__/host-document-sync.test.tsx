@@ -93,6 +93,25 @@ async function mount() {
   };
 }
 describe("actual host document synchronization", () => {
+  it.each(["paragraph", "text", "root"])("recovers unknown %s node fields before Lexical can discard them", async (target) => {
+    const v = await mount();
+    await v.edit("Author draft survives");
+    const original = documentOf();
+    const paragraph = { type: "paragraph", version: 1, children: [
+      { type: "text", version: 1, text: "Future content", ...(target === "text" ? { futureAnnotation: { text: "Keep annotation" } } : {}) },
+    ], ...(target === "paragraph" ? { futureAnnotation: { text: "Keep annotation" } } : {}) };
+    const incoming = { ...original, root: { ...original.root, children: [paragraph],
+      ...(target === "root" ? { futureAnnotation: { text: "Keep annotation" } } : {}) } };
+    const count = v.onChange.mock.calls.length;
+    await v.render(incoming, { replacementId: "explicit-restore" });
+    expect(v.editor.isEditable()).toBe(false);
+    expect(v.text()).toBe("Author draft survives");
+    expect(v.onChange).toHaveBeenCalledTimes(count);
+    expect(v.onError.mock.calls.at(-1)?.[0]).toMatchObject({ code: "UNSUPPORTED_DOCUMENT", rawDocument: incoming });
+    await v.render(original, { replacementId: "explicit-restore" });
+    expect(v.editor.isEditable()).toBe(true);
+    expect(v.text()).toContain("Original مسودة");
+  });
   it("never replaces a short newer draft with an autosave echo", async () => {
     const v = await mount();
     await v.edit("Draft A");

@@ -11,10 +11,11 @@ import {
 } from "@vibress/studio-core";
 
 export function serializeStudioDocument(root: unknown, limits?: DocumentResourceLimits, sourceDocument?: StudioDocument): StudioDocument {
+  // Reject source accessors before reading version or spreading metadata.
+  if (sourceDocument) { checkDocumentResourceLimits(sourceDocument, limits); validateStudioDocument(sourceDocument); }
   if (sourceDocument && sourceDocument.version !== CURRENT_STUDIO_VERSION) {
     throw new StudioMigrationError("A future document cannot be serialized as v1.", sourceDocument, "UNSUPPORTED_DOCUMENT");
   }
-  if (sourceDocument) { checkDocumentResourceLimits(sourceDocument, limits); validateStudioDocument(sourceDocument); }
   // Never normalize an unbounded or accessor-based object recursively.
   const source = root === null || root === undefined
     ? { type: "root", children: [] } : root;

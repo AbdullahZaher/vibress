@@ -11,7 +11,7 @@ export default defineConfig({
     include: [
       "packages/studio-core/src/__tests__/*.test.ts",
       "packages/studio-serializer/src/__tests__/*.test.ts",
-      "packages/studio-react/src/__tests__/{document-recovery,legacy-root-load,host-document-sync}.test.tsx",
+      "packages/studio-react/src/__tests__/{document-recovery,legacy-root-load,host-document-sync,collaborative-restore-boundary}.test.tsx",
       "apps/admin/src/components/__tests__/{editor-document-recovery,post-editor-autosave,page-editor-autosave}.test.tsx",
     ],
   },

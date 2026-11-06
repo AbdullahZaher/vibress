@@ -193,7 +193,31 @@ describe("PostEditor network-acknowledgement integrity", () => {
     expect(element.textContent).toContain("Draft - Saved");
   });
 
+  it("blocks default collaborative restoration before confirmation or server mutation", async () => {
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await click("edit-a");
+    await click("restore-revision");
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(vi.mocked(apiRequest).mock.calls.some(([url]) => url.includes("/restore"))).toBe(false);
+    expect(element.textContent).toContain("Revision restoration is unavailable while collaboration is enabled");
+    await act(async () => { vi.advanceTimersByTime(2000); });
+    expect(saves).toHaveLength(1);
+    expect(saves[0]?.body.expectedVersion).toBe(1);
+    expect(JSON.stringify(saves[0]?.body.content)).toContain("Draft A");
+  });
+
+  it("does not let a live mode-prop change bypass the collaborative restore gate", async () => {
+    await act(async () => { root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={false} enableCollaboration={false} onNavigate={vi.fn()} />); });
+    const confirmation = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await click("restore-revision");
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(vi.mocked(apiRequest).mock.calls.some(([url]) => url.includes("/restore"))).toBe(false);
+  });
+
   it("keeps edits made while an authorized revision restore is in flight", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    await act(async () => { root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={false} enableCollaboration={false} onNavigate={vi.fn()} />); });
     const restoration = deferred<{ post: typeof initial }>();
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "alert").mockImplementation(() => {});

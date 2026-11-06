@@ -35,7 +35,7 @@ import {
   StudioDocument,
   migrateDocument,
   createEmptyStudioDocument,
-  StudioMigrationError,
+  assertStudioDocumentEditable,
   type DocumentResourceLimits,
 } from "@vibress/studio-core";
 import { serializeStudioDocument } from "@vibress/studio-serializer";
@@ -259,51 +259,9 @@ export function VibressStudio({
   const { parsedDoc, migrationError } = useMemo(() => {
     try {
       const document = migrateDocument(value, resourceLimits);
-      // Lexical cannot round-trip forward unknown nodes it has not registered;
-      // never emit a smaller onChange snapshot from a partially loaded tree.
-      const allowed = new Set([
-        "root",
-        "paragraph",
-        "text",
-        "linebreak",
-        "tab",
-        "heading",
-        "quote",
-        "list",
-        "listitem",
-        "link",
-        "autolink",
-        "code",
-        "code-highlight",
-        "table",
-        "tablerow",
-        "tablecell",
-        "studio-card",
-        "react-studio-card",
-      ]);
-      const inspect = (node: unknown): string | null => {
-        if (!node || typeof node !== "object" || Array.isArray(node))
-          return "invalid node";
-        const entry = node as { type?: unknown; children?: unknown };
-        if (typeof entry.type !== "string" || !allowed.has(entry.type))
-          return String(entry.type);
-        if (entry.children !== undefined) {
-          if (!Array.isArray(entry.children)) return "invalid children";
-          for (const child of entry.children) {
-            const unknown = inspect(child);
-            if (unknown) return unknown;
-          }
-        }
-        return null;
-      };
-      const unsupported = inspect(document.root);
-      if (unsupported) {
-        throw new StudioMigrationError(
-          `Unsupported editor node "${unsupported}" — original document preserved.`,
-          value,
-          "UNSUPPORTED_DOCUMENT",
-        );
-      }
+      // Persisted envelopes stay permissive. Editing must reject registered
+      // nodes/fields that this exact host runtime would silently discard.
+      assertStudioDocumentEditable(document, value);
       return { parsedDoc: document, migrationError: null as Error | null };
     } catch (error) {
       return {

@@ -126,8 +126,17 @@ without losing fields, but `migrateDocument` refuses to edit it with a typed
 `UNSUPPORTED_DOCUMENT` containing the exact original input. This intentional
 recovery-only contract differs from standalone persisted migration admission.
 
-Post requests carry a document epoch, so delayed loads/saves cannot update
-another active document, including an A → B → A route sequence. Revision restore
+Post and page requests carry a document epoch, so delayed loads/saves cannot update
+another active document, including an A → B → A route sequence. Default collaborative revision restore is explicitly disabled with a visible
+English/Arabic explanation: a database restore and React remount cannot reset a
+nonempty Yjs room. `enableCollaboration` remains true by default and is frozen at
+PostEditor mount; a live prop change cannot bypass that gate. A host-owned
+non-collaborative session may explicitly choose false at mount. That choice is
+not a coordinated reset of existing remote sessions or persistent CRDT state.
+Restoration through the API/other clients and a safe coordinated Yjs protocol
+remain release blockers.
+
+For a genuinely non-collaborative session, revision restore
 confirmation authorizes the draft at click time. While restore is pending,
 autosave/explicit saves wait; later local edits are kept and scheduled against
 the acknowledged restored version. No empty-root heuristic or word-count
@@ -156,3 +165,12 @@ exercise authenticated post/page APIs, ordered snapshots, HTTP 409, exact reload
 legacy roots and separate record identities. The existing fourteen collaboration
 cases exercise real WebSocket/Yjs/Redis behavior. Neither suite is a full browser
 publishing acceptance study or proof of physical-device accessibility.
+
+
+The host now applies a separate strict editable-node contract for its registered
+0.13 node shapes before Lexical parses input. Unknown node fields/versions and
+invalid structure remain accepted by permissive persisted validation, but enter
+exact-input recovery rather than losing fields on the next save. This includes
+unknown root, paragraph and text annotations. Envelope/editor extension data is
+opaque and is never normalized as an AST. This does not establish full renderer,
+card-specific nested editor or collaborative-client parity.

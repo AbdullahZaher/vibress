@@ -65,6 +65,9 @@ interface PostEditorProps {
   postId?: string | undefined;
   currentUserId: string;
   canPublish: boolean;
+  /** Select only when mounting a host-owned non-collaborative editing session.
+   * Default stays collaborative; this is not a live-session restore bypass. */
+  enableCollaboration?: boolean | undefined;
   onNavigate: (path: string) => void;
 }
 
@@ -86,6 +89,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   postId,
   currentUserId,
   canPublish,
+  enableCollaboration = true,
   onNavigate,
 }) => {
   const { tr, locale } = useAdminLocale();
@@ -145,8 +149,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
 
+  const collaborationEnabled = useRef(enableCollaboration).current;
   const collabConfig = useMemo<CollaborationConfig | undefined>(() => {
-    if (!postId || typeof window === "undefined") return undefined;
+    if (!collaborationEnabled || !postId || typeof window === "undefined") return undefined;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/api/admin/v1/posts/${postId}/collaboration/ws`;
@@ -171,7 +176,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         });
       },
     };
-  }, [postId]);
+  }, [postId, collaborationEnabled]);
+
+  const restoreDisabledReason = collabConfig
+    ? (locale?.startsWith("ar")
+      ? "لا يمكن استعادة المراجعات أثناء تفعيل التحرير التعاوني. لم تتغير مسودتك."
+      : "Revision restoration is unavailable while collaboration is enabled. Your current draft is unchanged.")
+    : undefined;
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -933,6 +944,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handleRestoreRevision = async (revisionId: string) => {
     const isCurrent = beginDocumentRequest(postId);
     if (!postId || restoreInFlightRef.current) return;
+    if (restoreDisabledReason) {
+      setErrorMsg(restoreDisabledReason);
+      return;
+    }
     if (!confirm("Restore this revision? Unsaved changes will be overwritten."))
       return;
     autosaveGenerationsRef.current.reset();
@@ -1228,6 +1243,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         postId={postId || ""}
         revisions={revisions}
         handleRestoreRevision={handleRestoreRevision}
+        restoreDisabledReason={restoreDisabledReason}
         onNavigate={navigateSafely}
         status={status}
         onStatusChange={handleWorkflowTransition}
@@ -1251,6 +1267,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         currentTitle={title}
         currentContent={studioDoc as unknown as Record<string, unknown>}
         onRestore={handleRestoreRevision}
+        restoreDisabledReason={restoreDisabledReason}
       />
 
       {/* Media Picker Modal Host */}

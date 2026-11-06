@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { inspectEditableStudioNode } from "./editable-node-schemas";
+export * from "./editable-node-schemas";
 import {
   checkDocumentResourceLimits,
   StudioMigrationError,
@@ -179,6 +181,36 @@ export function createDefaultStudioDocument(text = ""): StudioDocument {
   };
 }
 
+/** Additional admission boundary for the pinned editor. Persistence and
+ * rendering can retain future data that this editor cannot safely rewrite. */
+export function assertStudioDocumentEditable(document: StudioDocument, rawDocument: unknown = document): void {
+  if (document.version !== CURRENT_STUDIO_VERSION) {
+    throw new StudioMigrationError(
+      `Cannot edit Studio document version ${document.version} with a version ${CURRENT_STUDIO_VERSION} editor.`,
+      rawDocument, 'UNSUPPORTED_DOCUMENT'
+    );
+  }
+  const pending: Array<{ node: unknown; path: string; parent?: string }> = [{ node: document.root, path: 'root' }];
+  while (pending.length) {
+    const current = pending.pop();
+    if (!current) break;
+    const issue = inspectEditableStudioNode(current.node);
+    if (issue) throw new StudioMigrationError(`${issue.message} at ${current.path}.`, rawDocument, issue.code);
+    const entry = z.object({ type: z.string(), children: z.array(z.unknown()).optional() }).safeParse(current.node);
+    if (!entry.success) throw new StudioMigrationError('Invalid node structure.', rawDocument, 'INVALID_DOCUMENT');
+    const type = entry.data.type;
+    const invalidParent = (type === 'root' && current.parent !== undefined) ||
+      (current.parent === 'root' && ['root', 'text', 'code-highlight', 'tab', 'linebreak', 'link', 'autolink', 'listitem', 'tablerow', 'tablecell'].includes(type)) ||
+      (current.parent === 'table' && type !== 'tablerow') ||
+      (current.parent === 'tablerow' && type !== 'tablecell') ||
+      (current.parent === 'list' && type !== 'listitem');
+    if (invalidParent) throw new StudioMigrationError(`Invalid ${type} placement at ${current.path}.`, rawDocument, 'INVALID_DOCUMENT');
+    entry.data.children?.forEach((node, index) => {
+      pending.push({ node, path: `${current.path}.children[${index}]`, parent: type });
+    });
+  }
+}
+
 /** Historical content used root: {} or root: { children: [...] }. Restore only
  * unambiguous structural fields; an explicit type or other incomplete payload
  * must still fail validation with its original content available for recovery. */
@@ -246,7 +278,7 @@ export function migrateDocument(rawDoc: unknown, limits?: DocumentResourceLimits
     if (!obj.root) {
       throw new StudioMigrationError("Studio document is missing its root.", rawDoc, "INVALID_DOCUMENT");
     }
-    const normalized = normalizeStudioDocument({ ...obj, root: migrateLegacyRoot(obj.root) });
+    const normalized = { ...obj, root: normalizeStudioDocument(migrateLegacyRoot(obj.root)) };
     return validateMigratedDocument(normalized, rawDoc, limits);
   }
 

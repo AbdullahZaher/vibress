@@ -114,6 +114,40 @@ describe("PageEditor host autosave generations (real component and mocked HTTP)"
     expect(element.textContent).toContain("Draft - Saved");
   });
 
+  it("ignores an obsolete page load after a newer page is active", async () => {
+    const obsolete = deferred<{ page: typeof initial }>();
+    const previous = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/pages/page-2") return obsolete.promise;
+      if (url === "/pages/page-3") return Promise.resolve({ page: { ...initial, id: "page-3", title: "Newest page", version: 3 } });
+      return previous(url, options);
+    });
+    await act(async () => { root.render(<PageEditor pageId="page-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await act(async () => { root.render(<PageEditor pageId="page-3" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await act(async () => { obsolete.resolve({ page: { ...initial, id: "page-2", title: "Obsolete page" } }); });
+    expect(element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Page Title"]')?.value).toBe("Newest page");
+  });
+
+  it("invalidates a save across A to B to A and keeps the newest revision", async () => {
+    await edit("page-a");
+    await act(async () => { vi.advanceTimersByTime(1200); });
+    expect(requests).toHaveLength(1);
+    const previous = vi.mocked(apiRequest).getMockImplementation()!;
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/pages/page-2") return Promise.resolve({ page: { ...initial, id: "page-2", title: "Second page", version: 2 } });
+      if (url === "/pages/page-1" && !options?.method) return Promise.resolve({ page: { ...initial, version: 3 } });
+      return previous(url, options);
+    });
+    await act(async () => { root.render(<PageEditor pageId="page-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await act(async () => { root.render(<PageEditor pageId="page-1" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />); });
+    await edit("page-b");
+    await act(async () => { requests[0]!.response.resolve({ page: { version: 9 } }); });
+    await act(async () => { vi.advanceTimersByTime(1200); });
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.payload.expectedVersion).toBe(3);
+    expect(JSON.stringify(requests[1]?.payload.content)).toContain("Page B");
+  });
+
   it("keeps sidebar metadata-only changes in autosave payload", async () => {
     await edit("page-excerpt");
     await act(async () => { vi.advanceTimersByTime(1200); });

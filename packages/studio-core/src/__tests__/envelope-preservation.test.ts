@@ -36,3 +36,14 @@ describe("persisted envelope compatibility", () => {
     }
   });
 });
+
+
+it("does not normalize opaque envelope/editor values as Lexical nodes", () => {
+  const value = {
+    ...createDefaultStudioDocument("Keep text"),
+    publicationMetadata: { type: "react-studio-card", custom: "opaque" },
+    editor: { extension: { type: "react-studio-card", custom: "opaque editor" } },
+  };
+  expect(migrateDocument(value)).toEqual(value);
+  expect(migrateDocument(JSON.stringify(value))).toEqual(value);
+});
