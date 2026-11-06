@@ -24,6 +24,14 @@ interface AdminLocaleContext {
 }
 
 const translations: Record<string, string> = {
+  "Finish saving the latest article and cover changes before publishing.": "أكمل حفظ أحدث تغييرات المقال وصورة الغلاف قبل النشر.",
+  "Feature image was not saved. Your selection is still visible locally.": "لم تُحفظ الصورة البارزة. ما زال اختيارك ظاهرًا محليًا.",
+  "Retry cover save": "إعادة محاولة حفظ صورة الغلاف",
+  "Saving feature image...": "جارٍ حفظ الصورة البارزة...",
+  "Feature image save failed": "فشل حفظ الصورة البارزة",
+  "Retry to keep your latest cover.": "أعد المحاولة للحفاظ على أحدث صورة غلاف.",
+  "This post has unsaved changes. Leave without saving?": "يحتوي هذا المقال على تغييرات غير محفوظة. هل تريد المغادرة دون حفظ؟",
+  "Network error": "خطأ في الشبكة",
   "Loading analytics": "جارٍ تحميل التحليلات",
   "Paid membership share": "نسبة العضويات المدفوعة",
   "Current paid members as a share of current members.": "نسبة الأعضاء المدفوعين إلى إجمالي الأعضاء الحاليين.",

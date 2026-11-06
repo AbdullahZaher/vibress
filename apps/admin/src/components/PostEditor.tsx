@@ -772,12 +772,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           }
           featureImageSaveFailedRef.current = false;
           setFeatureImageSaveFailed(false);
-          setErrorMsg((current) => current?.startsWith("Feature image save failed:") ? null : current);
+          setErrorMsg((current) => current?.startsWith(`${tr("Feature image save failed")}:`) ? null : current);
         } catch (err) {
           if (!isCurrentDocument() || generation !== featureImageEditRef.current) return;
           featureImageSaveFailedRef.current = true;
           setFeatureImageSaveFailed(true);
-          setErrorMsg(`Feature image save failed: ${err instanceof Error ? err.message : "Network error"}. Retry to keep your latest cover.`);
+          setErrorMsg(`${tr("Feature image save failed")}: ${err instanceof Error ? err.message : tr("Network error")}. ${tr("Retry to keep your latest cover.")}`);
         } finally {
           if (isCurrentDocument() && generation === featureImageEditRef.current) {
             featureImagePendingRef.current = false;
@@ -790,7 +790,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       const next = featureImageWritesRef.current.tail.then(write, write);
       featureImageWritesRef.current.tail = next;
     },
-    [postId, beginDocumentRequest],
+    [postId, beginDocumentRequest, tr],
   );
 
   const handleSelectFeatureImageFromLibrary = (asset: ApiMediaAsset) => {
@@ -1082,7 +1082,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   const navigateSafely = (path: string) => {
     if ((hasUnsavedChangesRef.current || featureImagePendingRef.current || featureImageSaveFailedRef.current) &&
-        !window.confirm("This post has unsaved changes. Leave without saving?")) return;
+        !window.confirm(tr("This post has unsaved changes. Leave without saving?"))) return;
     onNavigate(path);
   };
 
@@ -1239,7 +1239,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               <div role={featureImageSaveFailed ? "alert" : "status"} className="mb-2 text-sm">
                 {featureImageSaveFailed ? (
                   <>
-                    <span>Feature image was not saved. Your selection is still visible locally.</span>
+                    <span>{tr("Feature image was not saved. Your selection is still visible locally.")}</span>
                     <button
                       type="button"
                       className="ms-2 underline"
@@ -1250,10 +1250,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
                         latestFeatureImageCaptionRef.current,
                       )}
                     >
-                      Retry cover save
+                      {tr("Retry cover save")}
                     </button>
                   </>
-                ) : "Saving feature image..."}
+                ) : tr("Saving feature image...")}
               </div>
             )}
             <PostFeatureImageControl
