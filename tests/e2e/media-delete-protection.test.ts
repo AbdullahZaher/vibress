@@ -149,7 +149,7 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     );
     await editorArea.click();
     await page.keyboard.type(" /");
-    await page.locator('li:has-text("Gallery")').click();
+    await page.locator('[role="option"]:has-text("Gallery"), li:has-text("Gallery")').first().click();
 
     // Wait for the MediaPicker modal to open, then for its image grid to populate
     await page.waitForSelector('h3:has-text("Select Media Asset")', {
