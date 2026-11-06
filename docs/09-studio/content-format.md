@@ -174,3 +174,10 @@ exact-input recovery rather than losing fields on the next save. This includes
 unknown root, paragraph and text annotations. Envelope/editor extension data is
 opaque and is never normalized as an AST. This does not establish full renderer,
 card-specific nested editor or collaborative-client parity.
+
+Nonzero numeric element alignment is retained in persisted data but rejected for
+editing: the pinned Lexical setter requires string alignments and would silently
+clear it. Numeric zero remains a historical unaligned default. Known string
+alignments remain supported. Legacy card normalization visits document/AST child
+positions only; opaque cardData and extension metadata are never interpreted as
+nodes, including on repeated canonical reloads.

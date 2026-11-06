@@ -4,10 +4,12 @@ import { z } from 'zod';
 // persisted envelope. Unknown fields remain valid persisted JSON but must not
 // enter an editor that would discard them on its next exportJSON().
 const version = z.literal(1).optional();
+// Numeric zero is a historical unaligned default. Nonzero numeric alignment
+// is persisted losslessly but cannot enter the string-based Lexical setter.
 const element = {
   children: z.array(z.unknown()),
   direction: z.enum(['ltr', 'rtl']).nullable().optional(),
-  format: z.union([z.enum(['', 'left', 'right', 'center', 'justify', 'start', 'end']), z.number().int().min(0).max(6)]).optional(),
+  format: z.union([z.enum(['', 'left', 'right', 'center', 'justify', 'start', 'end']), z.literal(0)]).optional(),
   indent: z.number().int().nonnegative().optional(),
   version,
 };
