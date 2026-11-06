@@ -399,7 +399,7 @@ export const PostsList: React.FC<PostsListProps> = ({
       <AdminPageHeader
         title={tr("Posts")}
         actions={canCreate ? (
-          <Button onClick={() => onNavigate("/admin/posts/new")} className="min-h-11 gap-2">
+          <Button onClick={() => onNavigate("/admin/posts/new")} data-testid="create-post-button" aria-label={tr("New Post")} className="min-h-11 gap-2">
             <Plus className="size-4" aria-hidden="true" />{tr("New Post")}
           </Button>
         ) : undefined}

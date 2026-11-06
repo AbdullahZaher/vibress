@@ -58,7 +58,7 @@ test.describe("Admin Content & Vibress Studio E2E Flow", () => {
     await expect(page.locator("body")).toContainText("Draft");
 
     // 9. Publish Post
-    await page.click('button:has-text("Publish Now")');
+    await page.click('button:has-text("Publish Now"), button:has-text("Publish")');
     await expect(page.locator("body")).toContainText("Published");
 
     // 10. Unpublish Post

@@ -35,7 +35,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
     );
     await editorArea.click();
     await page.keyboard.type(" /");
-    await page.click('li:has-text("Image")');
+    await page.locator('[role="option"]:has-text("Image"), li:has-text("Image")').first().click();
 
     // Verify card node is added to editor
     await expect(page.locator(".vibress-studio-editor")).toBeVisible();

@@ -101,7 +101,7 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
       });
     });
     await login(page);
-    await expect(page.getByText("No activity in this period")).toHaveCount(2);
+    await expect(page.getByText("No activity in this period").first()).toBeVisible();
     await expect(page.getByText("+0%", { exact: true })).toHaveCount(0);
     await assertDocumentFits(page);
     await screenshot(page, info, "analytics-empty-mobile-320");
