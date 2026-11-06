@@ -38,6 +38,18 @@ function convertLegacyNode(input: unknown): unknown {
       throw new Error("Unsupported historical text metadata");
     }
   } else {
+    const supportedTypes = [
+      "paragraph",
+      "heading",
+      "blockquote",
+      "bulletList",
+      "orderedList",
+      "listItem",
+      "codeBlock",
+    ];
+    if (!supportedTypes.includes(String(node.type))) {
+      throw new Error(`Unsupported historical publication node: ${String(node.type)}`);
+    }
     if ("text" in node || "marks" in node) {
       throw new Error("Unsupported historical node fields");
     }

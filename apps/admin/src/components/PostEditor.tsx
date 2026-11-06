@@ -955,15 +955,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePublish = async () => {
     const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish) return;
-    // Publishing is not safe until both the article and latest cover are acknowledged.
-    if (hasUnsavedChangesRef.current || featureImagePendingRef.current ||
-        featureImageSaveFailedRef.current || autosaveState === "saving" ||
-        autosaveState === "failed" || autosaveState === "conflict") {
+    if (featureImageSaveFailedRef.current || autosaveConflictRef.current) {
       setErrorMsg(tr("Finish saving the latest article and cover changes before publishing."));
       return;
     }
     try {
       setSaving(true);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+      if (hasUnsavedChangesRef.current) {
+        await performAutosave();
+      }
+      if (featureImagePendingRef.current) {
+        await featureImageWritesRef.current.tail;
+      }
+      if (!isCurrent()) return;
+      if (featureImageSaveFailedRef.current || autosaveConflictRef.current || hasUnsavedChangesRef.current) {
+        setErrorMsg(tr("Finish saving the latest article and cover changes before publishing."));
+        return;
+      }
       await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
       if (isCurrent()) setStatus("published");
     } catch (err) {
