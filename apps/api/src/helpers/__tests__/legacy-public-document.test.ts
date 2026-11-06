@@ -49,6 +49,27 @@ describe("read-only historical public content compatibility", () => {
     expect(html).toContain("&lt;b&gt;not markup&lt;/b&gt;");
   });
 
+  it("renders an exact empty historical translation body without mutating the stored JSON", () => {
+    const raw: Record<string, unknown> = {};
+    const projected = toRenderablePublicDocument(raw);
+    expect(renderStudioDocumentToHtml(projected)).toBeDefined();
+    expect(renderPublicContentPlainText(raw)).toBe("");
+    expect(raw).toEqual({});
+  });
+
+  it("rejects unknown legacy metadata rather than silently stripping it", () => {
+    const root = { type: "doc", content: [], custom: { future: true } };
+    const paragraph = { type: "doc", content: [{ type: "paragraph", attrs: { custom: true } }] };
+    const text = { type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "x", marks: [{ type: "bold", attrs: { future: true } }] },
+    ] }] };
+    for (const source of [root, paragraph, text]) {
+      const bytes = JSON.stringify(source);
+      expect(() => toRenderablePublicDocument(source)).toThrow("Unsupported historical");
+      expect(JSON.stringify(source)).toBe(bytes);
+    }
+  });
+
   it("does not coerce unsupported legacy structures or foreign non-doc formats", () => {
     const unsupported = { type: "doc", content: [{ type: "iframe", attrs: { src: "https://x.test" } }] };
     expect(() => toRenderablePublicDocument(unsupported)).toThrow("Unsupported historical publication node");

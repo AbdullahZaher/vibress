@@ -51,7 +51,7 @@ export async function resolveDocumentMedia(
   // studio-card, so media resolution only ever needs to understand the
   // canonical representation (no permanent dual branches).
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
-  const canonical = normalizeStudioDocument(doc) as Record<string, unknown>;
+  const canonical = normalizeStudioDocument(toRenderablePublicDocument(doc)) as Record<string, unknown>;
   const root = canonical.root as
     { type?: string; children?: unknown[] } | undefined;
   if (!root || !Array.isArray(root.children)) {

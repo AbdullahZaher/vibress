@@ -619,3 +619,21 @@ html[dir="rtl"] .studio-word-count-dock {
   }
 }
 
+
+/* Recovery stays readable in either host UI locale without changing document bidi. */
+.vibress-studio-document-recovery {
+  padding: 16px;
+  border: 1px solid var(--vb-studio-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--vb-studio-surface, #fff);
+  color: var(--vb-studio-foreground, #0f172a);
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.vibress-studio-document-recovery[lang="ar"] { letter-spacing: normal; }
+.vibress-studio-document-recovery summary { min-height: 44px; cursor: pointer; }
+.vibress-studio-document-recovery summary:focus-visible {
+  outline: 2px solid var(--vb-studio-ring, #3b82f6);
+  outline-offset: 2px;
+}
+.vibress-studio-document-recovery code { display: block; white-space: pre-wrap; }

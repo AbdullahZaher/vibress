@@ -18,6 +18,7 @@ interface RevisionDiffModalProps {
   currentTitle: string;
   currentContent: Record<string, unknown>;
   onRestore: (revisionId: string) => void;
+  restoreDisabledReason?: string | undefined;
 }
 
 function extractTextFromDocument(doc: Record<string, unknown> | null | undefined): string {
@@ -48,6 +49,7 @@ export const RevisionDiffModal: React.FC<RevisionDiffModalProps> = ({
   currentTitle,
   currentContent,
   onRestore,
+  restoreDisabledReason,
 }) => {
   const [selectedRevId, setSelectedRevId] = useState<string>(
     revisions[0]?.id || "",
@@ -66,6 +68,7 @@ export const RevisionDiffModal: React.FC<RevisionDiffModalProps> = ({
       className="max-w-4xl"
     >
       <div className="flex flex-col gap-4">
+        {restoreDisabledReason && <p role="status" className="text-sm text-muted-foreground">{restoreDisabledReason}</p>}
         {/* Revision Selector Bar */}
         <div className="flex items-center gap-2 py-1 overflow-x-auto border-b">
           {revisions.map((rev) => (
@@ -131,9 +134,12 @@ export const RevisionDiffModal: React.FC<RevisionDiffModalProps> = ({
               variant="default"
               size="sm"
               onClick={() => {
+                if (restoreDisabledReason) return;
                 onRestore(selectedRev.id);
                 onClose();
               }}
+              disabled={Boolean(restoreDisabledReason)}
+              title={restoreDisabledReason}
               className="gap-1.5 text-xs font-semibold"
             >
               <RotateCcw className="h-3.5 w-3.5" />

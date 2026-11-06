@@ -4,10 +4,14 @@
  * Unsupported nodes/marks fail closed so no partial rich content is presented as
  * a complete conversion. Studio's final HTML sanitizer still owns XSS safety.
  */
-import { checkDocumentResourceLimits } from "@vibress/studio-core";
+import { checkDocumentResourceLimits, createEmptyStudioDocument } from "@vibress/studio-core";
 import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
 
 type JsonRecord = Record<string, unknown>;
+
+function hasOnlyKeys(value: JsonRecord, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
 
 function record(value: unknown): JsonRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -25,6 +29,25 @@ function legacyChildren(node: JsonRecord): unknown[] {
 function convertLegacyNode(input: unknown): unknown {
   const node = record(input);
   const attrs = node.attrs === undefined || node.attrs === null ? {} : record(node.attrs);
+  // Unknown historic metadata must not be lost by a public-only projection.
+  if (!hasOnlyKeys(node, ["type", "content", "attrs", "text", "marks"])) {
+    throw new Error("Unsupported historical publication node metadata");
+  }
+  if (node.type === "text") {
+    if (!hasOnlyKeys(node, ["type", "text", "marks"]) || Object.keys(attrs).length) {
+      throw new Error("Unsupported historical text metadata");
+    }
+  } else {
+    if ("text" in node || "marks" in node) {
+      throw new Error("Unsupported historical node fields");
+    }
+    const allowedAttrs = node.type === "heading" ? ["level"]
+      : node.type === "orderedList" ? ["start"]
+      : node.type === "codeBlock" ? ["language"] : [];
+    if (!hasOnlyKeys(attrs, allowedAttrs)) {
+      throw new Error("Unsupported historical publication attributes");
+    }
+  }
 
   if (node.type === "text") {
     if (typeof node.text !== "string") throw new Error("Invalid historical text");
@@ -34,6 +57,9 @@ function convertLegacyNode(input: unknown): unknown {
     if (!Array.isArray(marks)) throw new Error("Invalid historical text marks");
     for (const rawMark of marks) {
       const mark = record(rawMark);
+      if (!hasOnlyKeys(mark, mark.type === "link" ? ["type", "attrs"] : ["type"])) {
+        throw new Error("Unsupported historical text mark metadata");
+      }
       switch (mark.type) {
         case "bold": format |= 1; break;
         case "italic": format |= 2; break;
@@ -42,7 +68,7 @@ function convertLegacyNode(input: unknown): unknown {
         case "code": format |= 16; break;
         case "link": {
           const markAttrs = record(mark.attrs);
-          if (typeof markAttrs.href !== "string") throw new Error("Invalid historical link");
+          if (typeof markAttrs.href !== "string" || !hasOnlyKeys(markAttrs, ["href"])) throw new Error("Invalid historical link");
           link = markAttrs.href;
           break;
         }
@@ -87,12 +113,17 @@ function convertLegacyNode(input: unknown): unknown {
 }
 
 export function toRenderablePublicDocument(input: unknown): unknown {
+  // Exact empty historical published JSON is a blank public-only projection;
+  // never change persisted or editable document content.
+  if (input && typeof input === "object" && !Array.isArray(input) &&
+      Object.keys(input as JsonRecord).length === 0) return createEmptyStudioDocument();
   if (!input || typeof input !== "object" || Array.isArray(input) ||
       (input as JsonRecord).type !== "doc") return input;
   // This path is exclusively for the historical TipTap 'doc' discriminator.
   // Validate original and result budgets; never coerce arbitrary foreign schemas.
   checkDocumentResourceLimits(input);
   const legacy = record(input);
+  if (!hasOnlyKeys(legacy, ["type", "content"])) throw new Error("Unsupported historical root metadata");
   if (!Array.isArray(legacy.content)) throw new Error("Invalid historical document content");
   const result = {
     schema: "vibress-studio" as const,

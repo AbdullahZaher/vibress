@@ -37,7 +37,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   canPublish,
   onNavigate,
 }) => {
-  const { tr } = useAdminLocale();
+  const { tr, locale } = useAdminLocale();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -88,11 +88,22 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   const conflictRef = useRef(false);
   const createdPageRef = useRef<{ id: string; version: number } | null>(null);
   const activePageIdRef = useRef(pageId);
-  activePageIdRef.current = pageId;
+  const documentEpochRef = useRef(0);
+  const documentMountedRef = useRef(true);
+  if (activePageIdRef.current !== pageId) {
+    activePageIdRef.current = pageId;
+    documentEpochRef.current += 1;
+  }
+  const beginDocumentRequest = useCallback((requestedId: string | undefined) => {
+    const epoch = documentEpochRef.current;
+    return () => documentMountedRef.current && activePageIdRef.current === requestedId &&
+      documentEpochRef.current === epoch;
+  }, []);
   const latestMetadataRef = useRef({ title, slug, excerpt, metaTitle, metaDescription, canonicalUrl });
   latestMetadataRef.current = { title, slug, excerpt, metaTitle, metaDescription, canonicalUrl };
 
   useEffect(() => {
+    documentMountedRef.current = true;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!pendingLocalEditsRef.current) return;
       event.preventDefault();
@@ -100,6 +111,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
+      documentMountedRef.current = false;
       window.removeEventListener("beforeunload", onBeforeUnload);
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
@@ -232,6 +244,18 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   };
 
   useEffect(() => {
+    let canceled = false;
+    const ownsDocument = beginDocumentRequest(pageId);
+    const isCurrent = () => !canceled && ownsDocument();
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    editGenerationsRef.current.reset();
+    pendingLocalEditsRef.current = false;
+    saveInFlightRef.current = false;
+    saveQueuedRef.current = false;
+    conflictRef.current = false;
+    createdPageRef.current = null;
+    setAutosaveState("idle"); setSaving(false); setErrorMsg(null);
+    setUnsupportedSource(null); setUnsupportedMessage(null);
     if (pageId) {
       setLoading(true);
       apiRequest<{
@@ -249,6 +273,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
         };
       }>(`/pages/${pageId}`)
         .then((res) => {
+          if (!isCurrent()) return;
           const p = res.page;
           setTitle(p.title);
           setSlug(p.slug);
@@ -274,15 +299,22 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           latestVersionRef.current = p.version;
           conflictRef.current = false;
         })
-        .catch((err: { message?: string }) =>
-          setErrorMsg(err.message || "Failed to load page"),
-        )
-        .finally(() => setLoading(false));
+        .catch((err: { message?: string }) => {
+          if (isCurrent()) setErrorMsg(err.message || "Failed to load page");
+        })
+        .finally(() => { if (isCurrent()) setLoading(false); });
+    } else {
+      setTitle(""); setSlug(""); setExcerpt(""); setMetaTitle(""); setMetaDescription(""); setCanonicalUrl("");
+      setStudioDoc(createEmptyStudioDocument()); setVersion(1); latestVersionRef.current = 1;
+      setStatus("draft"); setLoading(false);
     }
-  }, [pageId]);
+    return () => { canceled = true; };
+  }, [pageId, beginDocumentRequest]);
 
   const savePage = useCallback(
     async (isAutosave = false) => {
+      const isCurrent = beginDocumentRequest(pageId);
+      if (!isCurrent()) return;
       const fields = latestMetadataRef.current;
       if (isAutosave && !(pageId || createdPageRef.current)) return;
       if (conflictRef.current) return;
@@ -297,7 +329,6 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       const submittedDoc = latestStudioDocRef.current;
       const metadataSnapshot = { ...fields };
       const submittedPageId = pageId ?? createdPageRef.current?.id;
-      const originatingPageId = pageId;
       const payload = {
         title: metadataSnapshot.title || "Untitled Page",
         slug: metadataSnapshot.slug || undefined,
@@ -321,7 +352,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             `/pages/${submittedPageId}`,
             { method: "PUT", body: JSON.stringify(payload) },
           );
-          if (activePageIdRef.current !== originatingPageId) return;
+          if (!isCurrent()) return;
           const acknowledgement = editGenerationsRef.current.acknowledge(ticket);
           if (!acknowledgement.latestRequest || res.page.version < latestVersionRef.current) return;
           latestVersionRef.current = res.page.version;
@@ -345,7 +376,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             method: "POST",
             body: JSON.stringify(payload),
           });
-          if (activePageIdRef.current !== originatingPageId) return;
+          if (!isCurrent()) return;
           if (!res.page.id || !Number.isSafeInteger(res.page.version)) {
             throw new Error("The server did not return a recoverable page ID and revision.");
           }
@@ -363,7 +394,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           }
         }
       } catch (err: unknown) {
-        if (activePageIdRef.current !== originatingPageId) return;
+        if (!isCurrent()) return;
         saveQueuedRef.current = false; // Failures require explicit retry, not an infinite loop.
         const errorObj = err as { code?: string; message?: string };
         pendingLocalEditsRef.current = true;
@@ -376,18 +407,20 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           setErrorMsg(errorObj.message || "Save failed. Your draft remains in the editor.");
         }
       } finally {
-        saveInFlightRef.current = false;
-        setSaving(false);
-        if (activePageIdRef.current === originatingPageId && !conflictRef.current &&
-            pendingLocalEditsRef.current && saveQueuedRef.current &&
-            (submittedPageId || createdPageRef.current?.id)) {
-          saveQueuedRef.current = false;
-          if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-          autosaveTimerRef.current = setTimeout(() => { void savePageRef.current(true); }, 1200);
+        if (isCurrent()) {
+          saveInFlightRef.current = false;
+          setSaving(false);
+          if (!conflictRef.current &&
+              pendingLocalEditsRef.current && saveQueuedRef.current &&
+              (submittedPageId || createdPageRef.current?.id)) {
+            saveQueuedRef.current = false;
+            if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+            autosaveTimerRef.current = setTimeout(() => { void savePageRef.current(true); }, 1200);
+          }
         }
       }
     },
-    [pageId, currentUserId, onNavigate],
+    [pageId, currentUserId, onNavigate, beginDocumentRequest],
   );
 
   savePageRef.current = savePage;
@@ -420,6 +453,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
   };
 
   const handlePublishToggle = async () => {
+    const isCurrent = beginDocumentRequest(pageId);
     if (!pageId || !canPublish) return;
     try {
       const endpoint =
@@ -429,9 +463,12 @@ export const PageEditor: React.FC<PageEditorProps> = ({
       const res = await apiRequest<{
         page: { status: string; version: number };
       }>(endpoint, { method: "POST" });
+      if (!isCurrent()) return;
       setStatus(res.page.status);
       setVersion(res.page.version);
+      latestVersionRef.current = res.page.version;
     } catch (err: unknown) {
+      if (!isCurrent()) return;
       const errorObj = err as { message?: string };
       setErrorMsg(errorObj.message || "Publish toggle failed");
     }
@@ -585,6 +622,10 @@ export const PageEditor: React.FC<PageEditorProps> = ({
             // Keep Lexical mounted across autosave and publish version bumps.
             key={pageId || "new"}
             value={studioDoc}
+            metadataRevision={version}
+            recoveryLocale={locale}
+            revisionId={version}
+            replacementId={pageId || "new"}
             onChange={handleStudioChange}
             placeholder={tr("Begin writing your page...")}
             requestMedia={handleRequestMedia}

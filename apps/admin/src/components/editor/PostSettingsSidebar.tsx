@@ -55,6 +55,7 @@ interface PostSettingsSidebarProps {
   postId?: string | undefined;
   revisions: Revision[];
   handleRestoreRevision: (id: string) => void;
+  restoreDisabledReason?: string | undefined;
   onNavigate?: ((path: string) => void) | undefined;
   status?: string | undefined;
   onStatusChange?: ((newStatus: string) => void) | undefined;
@@ -90,6 +91,7 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
   postId,
   revisions,
   handleRestoreRevision,
+  restoreDisabledReason,
   onNavigate,
   status,
   onStatusChange,
@@ -400,10 +402,13 @@ export const PostSettingsSidebar: React.FC<PostSettingsSidebarProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => handleRestoreRevision(rev.id)}
+                      disabled={Boolean(restoreDisabledReason)}
+                      title={restoreDisabledReason}
                       className="h-7 text-xs gap-1 w-full justify-center bg-background border"
                     >
                       <RotateCcw className="h-3 w-3" /> {tr("Restore Version")}
                     </Button>
+                    {restoreDisabledReason && <p className="text-xs text-muted-foreground">{restoreDisabledReason}</p>}
                   </div>
                 ))}
               </div>
