@@ -158,7 +158,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}/api/admin/v1/posts/${postId}/collaboration/ws`;
     return {
-      id: postId,
+      id: `${postId}-k${restoreKey}`,
       user: {
         id: currentUserIdRef.current || "staff",
         name: "Staff Editor",
@@ -167,7 +167,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       providerFactory: (id: string, yjsDocMap: Map<string, YDoc>) => {
         const doc = yjsDocMap.get(id) || new YDoc();
         yjsDocMap.set(id, doc);
-        return new WebSocketCollaborationProvider(doc, {
+        const provider = new WebSocketCollaborationProvider(doc, {
           url: wsUrl,
           docId: id,
           user: {
@@ -176,15 +176,23 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             color: "#3b82f6",
           },
         });
+        provider.on("restore", (payload: any) => {
+          if (payload && payload.content) {
+            setStudioDoc(migrateDocument(payload.content));
+            if (payload.title) setTitle(payload.title);
+            documentEpochRef.current += 1;
+      setRestoreKey((k) => k + 1);
+            hasUnsavedChangesRef.current = false;
+            setAutosaveState("saved");
+          }
+        });
+        return provider;
       },
     };
-  }, [postId, collaborationEnabled]);
+  }, [postId, collaborationEnabled, restoreKey]);
 
-  const restoreDisabledReason = collabConfig
-    ? (locale?.startsWith("ar")
-      ? "لا يمكن استعادة المراجعات أثناء تفعيل التحرير التعاوني. لم تتغير مسودتك."
-      : "Revision restoration is unavailable while collaboration is enabled. Your current draft is unchanged.")
-    : undefined;
+  // Coordinated Yjs restoration is enabled; server resets room and syncs active peers via epochs.
+  const restoreDisabledReason: string | undefined = undefined;
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -1053,6 +1061,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setStudioDoc(migrateDocument(p.content || p.contentJson));
       setVersion(p.version);
       latestVersionRef.current = p.version;
+      documentEpochRef.current += 1;
       setRestoreKey((k) => k + 1);
       hasUnsavedChangesRef.current = false;
       autosaveConflictRef.current = false;
