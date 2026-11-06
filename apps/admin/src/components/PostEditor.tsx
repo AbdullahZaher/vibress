@@ -219,8 +219,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const latestFeatureImageCaptionRef = useRef(featureImageCaption);
   // Serialize feature-image PATCHes per post; request completion order must not
   // determine the server's final cover image.
-  const featureImageWritesRef = useRef<{ postId: string | undefined; tail: Promise<void> }>({
-    postId, tail: Promise.resolve(),
+  const featureImageWritesRef = useRef<{ epoch: number; tail: Promise<void> }>({
+    epoch: documentEpochRef.current, tail: Promise.resolve(),
   });
   const featureImageEditRef = useRef(0);
   const featureImagePendingRef = useRef(false);
@@ -746,9 +746,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         featureImageAlt: latestFeatureImageAltRef.current || null,
         featureImageCaption: latestFeatureImageCaptionRef.current || null,
       };
-      if (featureImageWritesRef.current.postId !== postId) {
-        // Do not let a hung request for post A hold up post B.
-        featureImageWritesRef.current = { postId, tail: Promise.resolve() };
+      if (featureImageWritesRef.current.epoch !== documentEpochRef.current) {
+        // Isolate A → B → A document sessions, even when the same post ID
+        // returns while an older request is still pending.
+        featureImageWritesRef.current = {
+          epoch: documentEpochRef.current, tail: Promise.resolve(),
+        };
       }
       featureImagePendingRef.current = true;
       setFeatureImageSaving(true);
