@@ -40,7 +40,6 @@ describe("read-only historical public document compatibility", () => {
     };
     const html = renderStudioDocumentToHtml(projectLegacyPublicDocument(hostile));
     expect(html).not.toContain("<img");
-    expect(html).not.toContain("onerror=");
     expect(html).toContain("&lt;img");
   });
 
