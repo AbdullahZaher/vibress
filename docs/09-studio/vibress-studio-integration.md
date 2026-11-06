@@ -1,5 +1,7 @@
 # Vibress Studio Integration Architecture
 
+> **2026-11-06 release-planning update:** Read the [Studio 9+ Host Acceptance Plan](editor-9-plus-host-acceptance.md) before changing persistence, collaboration, or revision restoration. The examples below describe architecture and historical behavior; they do not certify current releases. A database-only revision restore is **not safe for retained Yjs rooms** and must remain gated until a coordinated DB/CRDT protocol passes acceptance.
+
 ## System Boundaries
 
 - **Vibress Core**: Owns database persistence (`posts`, `pages`, `revisions` tables), optimistic concurrency (`version`), access authorization, scheduled publishing, and revision restoration.
