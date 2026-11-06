@@ -938,7 +938,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       case "saved":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80 font-normal">
-            {status === "published" ? tr("Published") : tr("Draft - Saved")}
+            {status === "published" ? `${tr("Published")} · ${tr("Saved")}` : tr("Draft - Saved")}
           </span>
         );
       case "failed":
