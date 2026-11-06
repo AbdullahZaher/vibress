@@ -470,14 +470,14 @@ describe("PostEditor network-acknowledgement integrity", () => {
     // persist over B even if its React response is ignored.
     expect(payloads).toEqual([{ featureImageId: null, featureImageAlt: "Alt A" }]);
     await act(async () => {
-      first.resolve({ post: { ...initial, featureImage: { id: "old-cover" } as never } });
+      first.resolve({ post: Object.assign({}, initial, { featureImage: { id: "old-cover" } }) });
       await Promise.resolve();
     });
     expect(payloads).toHaveLength(2);
     expect(payloads[1]).toMatchObject({ featureImageAlt: "Alt B" });
     expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("no-cover");
     await act(async () => {
-      second.resolve({ post: { ...initial, featureImage: { id: "new-cover" } as never } });
+      second.resolve({ post: Object.assign({}, initial, { featureImage: { id: "new-cover" } }) });
       await Promise.resolve();
     });
     expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("new-cover");
