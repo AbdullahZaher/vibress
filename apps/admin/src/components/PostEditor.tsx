@@ -757,7 +757,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       setFeatureImageSaving(true);
 
       const write = async () => {
-        if (!isCurrentDocument()) return;
+        // Coalesce older unsent cover snapshots while preserving server-side order.
+        if (!isCurrentDocument() || generation !== featureImageEditRef.current) return;
         try {
           const res = await apiRequest<{ post: AdminPostDetail }>(
             `/posts/${postId}/feature-image`,

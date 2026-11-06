@@ -69,6 +69,7 @@ vi.mock("../editor/PostFeatureImageControl", () => ({
     <button data-testid="open-feature-picker" onClick={onOpenMediaPicker}>Choose feature</button>
     <button data-testid="feature-alt-a" onClick={() => onUpdateAltAndCaption("Alt A", "")}>Alt A</button>
     <button data-testid="feature-alt-b" onClick={() => onUpdateAltAndCaption("Alt B", "")}>Alt B</button>
+    <button data-testid="feature-alt-c" onClick={() => onUpdateAltAndCaption("Alt C", "")}>Alt C</button>
     <span data-testid="cover-id">{featureImage?.id || "no-cover"}</span>
   </div>,
 }));
@@ -518,6 +519,7 @@ describe("PostEditor network-acknowledgement integrity", () => {
     await click("retry-feature-image-save");
     expect(patchPayloads).toHaveLength(2);
     expect(patchPayloads[1]).toMatchObject({ featureImageAlt: "Alt B" });
+    expect(patchPayloads[1]).toEqual(patchPayloads[0]);
     expect(element.textContent).not.toContain("Feature image was not saved");
   });
 
@@ -560,6 +562,70 @@ describe("PostEditor network-acknowledgement integrity", () => {
       await Promise.resolve();
     });
     expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("fresh");
+  });
+
+  it("coalesces intermediate cover updates while an older request is pending", async () => {
+    const first = deferred<{ post: typeof initial }>();
+    const second = deferred<{ post: typeof initial }>();
+    const patches: Array<{ featureImageAlt: string }> = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") {
+        const snapshot = JSON.parse(String(options.body)) as { featureImageAlt: string };
+        patches.push(snapshot);
+        return patches.length === 1 ? first.promise : second.promise;
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await click("feature-alt-a");
+    expect(patches.map(({ featureImageAlt }) => featureImageAlt)).toEqual(["Alt A"]);
+    await click("feature-alt-b");
+    await click("feature-alt-c");
+    expect(patches).toHaveLength(1);
+    await act(async () => {
+      first.resolve({ post: initial });
+      await Promise.resolve();
+    });
+    expect(patches.map(({ featureImageAlt }) => featureImageAlt)).toEqual(["Alt A", "Alt C"]);
+    await act(async () => {
+      second.resolve({ post: initial });
+      await Promise.resolve();
+    });
+    expect(element.textContent).not.toContain("Feature image was not saved");
+  });
+
+  it("prevents publication before the latest feature image is acknowledged", async () => {
+    const pending = deferred<{ post: typeof initial }>();
+    const publishes: string[] = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") return pending.promise;
+      if (url === "/posts/post-1/publish" && options?.method === "POST") {
+        publishes.push(url);
+        return Promise.resolve({});
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={true} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await click("feature-alt-a");
+    const publish = Array.from(element.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Publish",
+    );
+    expect(publish).toBeDefined();
+    await act(async () => { publish?.click(); });
+    expect(publishes).toHaveLength(0);
+    expect(element.textContent).toContain("Finish saving the latest article and cover changes");
+    await act(async () => {
+      pending.resolve({ post: initial });
+      await Promise.resolve();
+    });
   });
 
   it("distinguishes publication status from acknowledged saving on a published post", async () => {
