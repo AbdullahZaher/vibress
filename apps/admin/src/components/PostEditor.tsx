@@ -40,6 +40,12 @@ import { PostFeatureImageControl } from "./editor/PostFeatureImageControl";
 import { UnsplashModal } from "./editor/UnsplashModal";
 import type { UnsplashSelectResponse } from "../lib/api/unsplash";
 
+type FeatureImagePatch = {
+  featureImageId: string | null;
+  featureImageAlt: string | null;
+  featureImageCaption: string | null;
+};
+
 interface AdminPostDetail {
   id: string;
   title: string;
@@ -121,6 +127,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [featureImageCaption, setFeatureImageCaption] = useState("");
   const [showFeatureImagePicker, setShowFeatureImagePicker] = useState(false);
   const [showUnsplashModal, setShowUnsplashModal] = useState(false);
+  const [featureImageSaveState, setFeatureImageSaveState] = useState<"idle" | "saving" | "failed">("idle");
+  const [featureImageSaveError, setFeatureImageSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAiStatus()
@@ -191,6 +199,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const autosaveConflictRef = useRef(false);
   const restoreInFlightRef = useRef(false);
   const createdPostRef = useRef<{ id: string; version: number } | null>(null);
+  // Cover-image PATCHes are serialized independently of document autosave.
+  // An old response must never put an obsolete cover back in the editor.
+  const featureImagePatchRef = useRef<{ inFlight: boolean; pending: FeatureImagePatch | null }>({
+    inFlight: false, pending: null,
+  });
   const activePostIdRef = useRef(postId);
   const documentEpochRef = useRef(0);
   const documentMountedRef = useRef(true);
@@ -234,7 +247,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => {
     documentMountedRef.current = true;
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
-      if (!hasUnsavedChangesRef.current) return;
+      if (!hasUnsavedChangesRef.current &&
+          !featureImagePatchRef.current.inFlight &&
+          !featureImagePatchRef.current.pending) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -405,6 +420,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     createdPostRef.current = null;
     autosaveConflictRef.current = false;
     setAutosaveState("idle"); setSaving(false); setErrorMsg(null);
+    featureImagePatchRef.current = { inFlight: false, pending: null };
+    setFeatureImageSaveState("idle");
+    setFeatureImageSaveError(null);
     setUnsupportedSource(null); setUnsupportedMessage(null);
     if (!postId) {
       setTitle(""); setSlug(""); setExcerpt(""); setMetaTitle(""); setMetaDescription(""); setCanonicalUrl("");
@@ -693,12 +711,48 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   };
 
 
+  const flushFeatureImageUpdates = useCallback(async (targetPostId: string) => {
+    const queue = featureImagePatchRef.current;
+    if (queue.inFlight || !queue.pending) return;
+    const ownsDocument = beginDocumentRequest(targetPostId);
+    queue.inFlight = true;
+    try {
+      while (ownsDocument() && featureImagePatchRef.current === queue && queue.pending) {
+        const submitted = queue.pending;
+        queue.pending = null;
+        setFeatureImageSaveState("saving");
+        setFeatureImageSaveError(null);
+        try {
+          // One PATCH at a time: the server cannot apply an old selection
+          // after a newer one, even if its responses arrive out of order.
+          await apiRequest(`/posts/${targetPostId}/feature-image`, {
+            method: "PATCH",
+            body: JSON.stringify(submitted),
+          });
+        } catch (error) {
+          if (!ownsDocument() || featureImagePatchRef.current !== queue) return;
+          if (queue.pending) {
+            // An even newer user selection exists. Attempt only that snapshot.
+            continue;
+          }
+          // Keep the exact failed snapshot available for explicit retry.
+          queue.pending = submitted;
+          setFeatureImageSaveState("failed");
+          setFeatureImageSaveError(error instanceof Error ? error.message : "Cover save failed.");
+          return;
+        }
+      }
+      if (ownsDocument() && featureImagePatchRef.current === queue) {
+        setFeatureImageSaveState("idle");
+        setFeatureImageSaveError(null);
+      }
+    } finally {
+      queue.inFlight = false;
+    }
+  }, [beginDocumentRequest]);
+
   const handleUpdateFeatureImage = useCallback(
-    async (
-      asset: ApiMediaAsset | null,
-      alt?: string | null,
-      caption?: string | null,
-    ) => {
+    (asset: ApiMediaAsset | null, alt?: string | null, caption?: string | null) => {
       setFeatureImage(asset);
       latestFeatureImageRef.current = asset;
       if (alt !== undefined) {
@@ -711,31 +765,22 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       }
 
       if (!postId) {
+        // The first-create save handles the cover with the captured edit generation.
         autosaveGenerationsRef.current.markEdited();
         hasUnsavedChangesRef.current = true;
         return;
       }
 
-      try {
-        const res = await apiRequest<{ post: AdminPostDetail }>(
-          `/posts/${postId}/feature-image`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              featureImageId: asset ? asset.id : null,
-              featureImageAlt: alt !== undefined ? (alt || null) : (featureImageAlt || null),
-              featureImageCaption: caption !== undefined ? (caption || null) : (featureImageCaption || null),
-            }),
-          },
-        );
-        if (res.post.featureImage !== undefined) {
-          setFeatureImage(res.post.featureImage);
-        }
-      } catch (err) {
-        console.error("Failed to patch feature image", err);
-      }
+      featureImagePatchRef.current.pending = {
+        featureImageId: latestFeatureImageRef.current?.id ?? null,
+        featureImageAlt: latestFeatureImageAltRef.current || null,
+        featureImageCaption: latestFeatureImageCaptionRef.current || null,
+      };
+      setFeatureImageSaveState("saving");
+      setFeatureImageSaveError(null);
+      void flushFeatureImageUpdates(postId);
     },
-    [postId, featureImageAlt, featureImageCaption],
+    [postId, flushFeatureImageUpdates],
   );
 
   const handleSelectFeatureImageFromLibrary = (asset: ApiMediaAsset) => {
@@ -901,6 +946,11 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePublish = async () => {
     const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish) return;
+    if (hasUnsavedChangesRef.current || featureImagePatchRef.current.inFlight ||
+        featureImagePatchRef.current.pending) {
+      setErrorMsg("Finish saving the latest article and cover changes before publishing.");
+      return;
+    }
     try {
       setSaving(true);
       await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
@@ -1019,13 +1069,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   };
 
   const navigateSafely = (path: string) => {
-    if (hasUnsavedChangesRef.current &&
-        !window.confirm("This post has unsaved changes. Leave without saving?")) return;
+    if ((hasUnsavedChangesRef.current || featureImagePatchRef.current.inFlight ||
+         featureImagePatchRef.current.pending) &&
+        !window.confirm("This post has changes that may not be saved. Leave anyway?")) return;
     onNavigate(path);
   };
 
   const renderAutosaveStatus = () => {
     if (!postId) return null;
+    if (featureImageSaveState === "saving") {
+      return <span role="status" className="text-xs text-muted-foreground">{tr("Saving cover image...")}</span>;
+    }
+    if (featureImageSaveState === "failed") {
+      return <span role="status" className="text-xs text-destructive">{tr("Cover image not saved")}</span>;
+    }
     switch (autosaveState) {
       case "saving":
         return (
@@ -1109,7 +1166,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               variant="ghost"
               size="sm"
               onClick={handlePublish}
-              disabled={autosaveState === "conflict"}
+              disabled={autosaveState === "conflict" || featureImageSaveState !== "idle"}
               loading={saving}
               loadingLabel={tr("Publishing...")}
               className="h-8 px-3 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition"
@@ -1169,6 +1226,15 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           {errorMsg && (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
+            </div>
+          )}
+          {featureImageSaveState === "failed" && (
+            <div role="alert" className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center justify-between gap-3">
+              <span>Cover image changes are not saved. {featureImageSaveError}</span>
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => { if (postId) void flushFeatureImageUpdates(postId); }}>
+                Retry cover save
+              </Button>
             </div>
           )}
 
