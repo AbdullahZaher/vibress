@@ -69,7 +69,7 @@ export class IndexedDbDraftStore {
         const req = store.put(fullRecord);
         req.onsuccess = () => resolve();
         req.onerror = () => reject(req.error);
-      } catch (err) {
+      } catch {
         this.memoryFallback.set(key, fullRecord);
         resolve();
       }
