@@ -955,6 +955,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const handlePublish = async () => {
     const isCurrent = beginDocumentRequest(postId);
     if (!postId || !canPublish) return;
+    // Publishing is not safe until both the article and latest cover are acknowledged.
+    if (hasUnsavedChangesRef.current || featureImagePendingRef.current ||
+        featureImageSaveFailedRef.current || autosaveState === "saving" ||
+        autosaveState === "failed" || autosaveState === "conflict") {
+      setErrorMsg(tr("Finish saving the latest article and cover changes before publishing."));
+      return;
+    }
     try {
       setSaving(true);
       await apiRequest(`/posts/${postId}/publish`, { method: "POST" });
@@ -1090,7 +1097,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       case "saved":
         return (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80 font-normal">
-            {status === "published" ? tr("Published") : tr("Draft - Saved")}
+            {status === "published" ? `${tr("Published")} · ${tr("Saved")}` : tr("Draft - Saved")}
           </span>
         );
       case "failed":

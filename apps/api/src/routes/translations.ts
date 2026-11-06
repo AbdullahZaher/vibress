@@ -8,7 +8,7 @@ import {
   getAiGatewayService,
   searchService,
 } from "../services";
-import { renderStudioDocumentToPlainText } from "@vibress/studio-renderer";
+import { renderPublicContentPlainText } from "../helpers/legacy-public-document";
 import {
   requireStaffSession,
   requirePermission,
@@ -622,8 +622,8 @@ export async function translationRoutes(fastify: FastifyInstance) {
           }
 
           if (isSourcePublic) {
-            const plainText = renderStudioDocumentToPlainText(
-              updated.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+            const plainText = renderPublicContentPlainText(
+              updated.content,
             ).slice(0, 2000);
             await searchService.indexDocument({
               entityType: updated.contentType as "post" | "page",
@@ -933,8 +933,8 @@ export async function translationRoutes(fastify: FastifyInstance) {
             isSourcePublic = !!page && page.status === "published" && page.visibility === "public";
           }
           if (isSourcePublic) {
-            const plainText = renderStudioDocumentToPlainText(
-              tr.content as unknown as Parameters<typeof renderStudioDocumentToPlainText>[0],
+            const plainText = renderPublicContentPlainText(
+              tr.content,
             ).slice(0, 2000);
             await searchService.indexDocument({
               entityType: tr.contentType as "post" | "page",

@@ -1,72 +1,79 @@
 import { describe, expect, it } from "vitest";
-import {
-  extractTableOfContentsFromDocument,
-  renderStudioDocumentToHtml,
-  renderStudioDocumentToPlainText,
-} from "@vibress/studio-renderer";
-import { StudioMigrationError } from "@vibress/studio-core";
-import { projectLegacyPublicDocument } from "../legacy-public-document";
-import { deriveExcerpt, resolveDocumentMedia } from "../public-content-helpers";
+import { extractTableOfContentsFromDocument, renderStudioDocumentToHtml } from "@vibress/studio-renderer";
+import { renderPublicContentPlainText, toRenderablePublicDocument } from "../legacy-public-document";
 
-describe("read-only historical public document compatibility", () => {
-  const legacy = {
-    type: "doc",
-    content: [
-      { type: "paragraph", content: [{ type: "text", text: "Bienvenue sur Vibress" }] },
-      { type: "paragraph", content: [{ type: "text", text: "مرحباً بكم في فايبرس" }] },
-    ],
-  };
-
-  it("renders historical French/Arabic paragraphs without modifying the stored JSON", async () => {
-    const original = JSON.stringify(legacy);
-    const projected = projectLegacyPublicDocument(legacy);
-    expect(projected).toMatchObject({ schema: "vibress-studio", version: 1 });
-    expect(renderStudioDocumentToHtml(projected)).toContain("Bienvenue sur Vibress");
-    expect(renderStudioDocumentToHtml(projected)).toContain("مرحباً بكم في فايبرس");
-    expect(renderStudioDocumentToPlainText(projected)).toContain("Bienvenue sur Vibress");
-    expect(extractTableOfContentsFromDocument(projected)).toEqual([]);
-    expect(deriveExcerpt(null, legacy)).toContain("مرحباً");
-    const resolved = await resolveDocumentMedia(legacy, {} as Parameters<typeof resolveDocumentMedia>[1]);
-    expect(renderStudioDocumentToHtml(resolved)).toContain("Bienvenue sur Vibress");
-    expect(JSON.stringify(legacy)).toBe(original);
+describe("read-only historical public content compatibility", () => {
+  it("renders legacy multilingual paragraphs, without changing their stored structure", () => {
+    const original = { type: "doc", content: [
+      { type: "paragraph", content: [{ type: "text", text: "مرحبا English" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Contenu en français" }] },
+    ] };
+    const bytes = JSON.stringify(original);
+    const renderable = toRenderablePublicDocument(original);
+    expect(JSON.stringify(original)).toBe(bytes);
+    const html = renderStudioDocumentToHtml(renderable);
+    expect(html).toContain("<p>مرحبا English</p>");
+    expect(html).toContain("<p>Contenu en français</p>");
+    expect(renderPublicContentPlainText(original)).toContain("مرحبا English");
+    expect(extractTableOfContentsFromDocument(renderable)).toEqual([]);
   });
 
-  it("escapes untrusted historical text and never treats text as executable HTML", () => {
-    const hostile = {
-      type: "doc",
-      content: [{ type: "paragraph", content: [
-        { type: "text", text: '<img src=x onerror="alert(1)">' },
-      ] }],
-    };
-    const html = renderStudioDocumentToHtml(projectLegacyPublicDocument(hostile));
-    expect(html).not.toContain("<img");
-    expect(html).toContain("&lt;img");
+  it("retains headings, lists, emphasis and safe links in a public-only projection", () => {
+    const legacy = { type: "doc", content: [
+      { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "عنوان English" }] },
+      { type: "bulletList", content: [{ type: "listItem", content: [
+        { type: "paragraph", content: [
+          { type: "text", text: "Strong", marks: [{ type: "bold" }] },
+          { type: "text", text: " link", marks: [{ type: "link", attrs: { href: "https://example.com" } }] },
+        ] },
+      ] }] },
+    ] };
+    const doc = toRenderablePublicDocument(legacy);
+    const html = renderStudioDocumentToHtml(doc);
+    expect(html).toContain("عنوان English");
+    expect(html).toContain("<strong>Strong</strong>");
+    expect(html).toContain("https://example.com");
+    expect(extractTableOfContentsFromDocument(doc)).toEqual([
+      { text: "عنوان English", level: 2, id: "عنوان-english" },
+    ]);
   });
 
-  it.each([
-    { type: "doc", content: [{ type: "image", attrs: { src: "/asset" } }] },
-    { type: "doc", content: [{ type: "paragraph", content: [
-      { type: "text", text: "Bold", marks: [{ type: "bold" }] },
-    ] }] },
-    { type: "doc", content: [{ type: "paragraph", attrs: { custom: true } }] },
-    { type: "doc", content: "not an array" },
-  ])("rejects unsupported legacy structures without dropping their contents", (source) => {
-    try {
-      projectLegacyPublicDocument(source);
-      expect.unreachable("Unsupported legacy content must not be projected");
-    } catch (err) {
-      expect(err).toBeInstanceOf(StudioMigrationError);
-      if (err instanceof StudioMigrationError) {
-        expect(err.rawDocument).toBe(source);
-        expect(err.code).toBe("UNSUPPORTED_DOCUMENT");
-      }
+  it("does not turn dangerous link schemes into executable HTML", () => {
+    const legacy = { type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "<b>not markup</b>", marks: [
+        { type: "link", attrs: { href: "javascript:alert(1)" } },
+      ] },
+    ] }] };
+    const html = renderStudioDocumentToHtml(toRenderablePublicDocument(legacy));
+    expect(html).not.toContain("javascript:");
+    expect(html).toContain("&lt;b&gt;not markup&lt;/b&gt;");
+  });
+
+  it("renders an exact empty historical translation body without mutating the stored JSON", () => {
+    const raw: Record<string, unknown> = {};
+    const projected = toRenderablePublicDocument(raw);
+    expect(renderStudioDocumentToHtml(projected)).toBeDefined();
+    expect(renderPublicContentPlainText(raw)).toBe("");
+    expect(raw).toEqual({});
+  });
+
+  it("rejects unknown legacy metadata rather than silently stripping it", () => {
+    const root = { type: "doc", content: [], custom: { future: true } };
+    const paragraph = { type: "doc", content: [{ type: "paragraph", attrs: { custom: true } }] };
+    const text = { type: "doc", content: [{ type: "paragraph", content: [
+      { type: "text", text: "x", marks: [{ type: "bold", attrs: { future: true } }] },
+    ] }] };
+    for (const source of [root, paragraph, text]) {
+      const bytes = JSON.stringify(source);
+      expect(() => toRenderablePublicDocument(source)).toThrow("Unsupported historical");
+      expect(JSON.stringify(source)).toBe(bytes);
     }
   });
 
-  it("does not reinterpret unknown formats or canonical Studio inputs", () => {
-    const unsupported = { type: "future-format", content: [] };
-    expect(projectLegacyPublicDocument(unsupported)).toBe(unsupported);
-    const studio = { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } };
-    expect(projectLegacyPublicDocument(studio)).toBe(studio);
+  it("does not coerce unsupported legacy structures or foreign non-doc formats", () => {
+    const unsupported = { type: "doc", content: [{ type: "iframe", attrs: { src: "https://x.test" } }] };
+    expect(() => toRenderablePublicDocument(unsupported)).toThrow("Unsupported historical publication node");
+    const foreign = { schema: "something-else", type: "custom", content: [] };
+    expect(toRenderablePublicDocument(foreign)).toBe(foreign);
   });
 });

@@ -114,8 +114,10 @@ async function publish(page: Page) {
   await editor.click({ position: { x: 100, y: 8 } });
   await page.keyboard.press("Control+End");
   await page.waitForTimeout(300);
-  await page.locator('button:has-text("Publish Now")').click({ timeout: 8000 });
-  await page.waitForTimeout(3000);
+  // Use the actual accessible action label instead of a stale CSS text selector.
+  // The status must reflect the server-acknowledged publication, not just a click.
+  await page.getByRole("button", { name: "Publish", exact: true }).click({ timeout: 8000 });
+  await expect(page.locator("header")).toContainText("Published", { timeout: 15000 });
 }
 
 async function openEditorFor(

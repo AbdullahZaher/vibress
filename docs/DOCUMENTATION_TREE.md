@@ -61,6 +61,10 @@ vibress-documentation/
 ├── 08-plugins/
 │   ├── plugin-platform-consumer-inventory-g0-01.md
 │   ├── plugin-platform-delivery-plan-v2.md
+│   ├── plugin-platform-g0-04-scope-approval.md
+│   ├── plugin-platform-g0-05-capacity-ownership.md
+│   ├── plugin-platform-g0-06-schedule-raid.md
+│   ├── plugin-platform-g0-09-executive-decision.md
 │   ├── plugin-platform-milestone-reconciliation-g0-02.md
 │   ├── plugin-platform-r1-operational-gap-g0-07.md
 │   ├── plugin-sdk.md

@@ -9,7 +9,7 @@ import {
   extractTableOfContentsFromDocument,
 } from "@vibress/studio-renderer";
 import { normalizeStudioDocument } from "@vibress/studio-core";
-import { projectLegacyPublicDocument } from "./legacy-public-document";
+import { toRenderablePublicDocument } from "./legacy-public-document";
 import { slugify } from "@vibress/utils";
 import {
   PublicAuthorDto,
@@ -51,10 +51,7 @@ export async function resolveDocumentMedia(
   // studio-card, so media resolution only ever needs to understand the
   // canonical representation (no permanent dual branches).
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
-  // The read-only projection supports historical plain Tiptap paragraphs
-  // without changing persisted JSON or silently dropping unsupported nodes.
-  const projected = projectLegacyPublicDocument(doc) as Record<string, unknown>;
-  const canonical = normalizeStudioDocument(projected) as Record<string, unknown>;
+  const canonical = normalizeStudioDocument(toRenderablePublicDocument(doc)) as Record<string, unknown>;
   const root = canonical.root as
     { type?: string; children?: unknown[] } | undefined;
   if (!root || !Array.isArray(root.children)) {
@@ -178,7 +175,7 @@ export function deriveExcerpt(
   }
 
   try {
-    const plainText = renderStudioDocumentToPlainText(projectLegacyPublicDocument(docInput));
+    const plainText = renderStudioDocumentToPlainText(toRenderablePublicDocument(docInput));
     const cleaned = plainText.replace(/\s+/g, " ").trim();
     if (cleaned.length <= 250) {
       return cleaned;
@@ -317,7 +314,7 @@ export async function buildPublicPostSummaryDto(
 
 export function calculateReadingTime(docInput: unknown): number {
   try {
-    const text = renderStudioDocumentToPlainText(docInput);
+    const text = renderStudioDocumentToPlainText(toRenderablePublicDocument(docInput));
     const words = text.trim().split(/\s+/).filter(Boolean).length;
     return Math.max(1, Math.ceil(words / 200));
   } catch {
@@ -342,16 +339,24 @@ export async function buildPublicPostDetailDto(
     localeContext,
   );
   const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
+  // Read-only publication compatibility: never rewrite the persisted DTO.
+  // Older TipTap JSON may be rendered through a strictly allowlisted projection.
+  let renderable: unknown = resolvedDoc;
+  try { renderable = toRenderablePublicDocument(resolvedDoc); } catch {
+    // Unsupported historical blocks remain available in raw content for recovery.
+  }
 
   let html: string;
   try {
-    html = renderStudioDocumentToHtml(resolvedDoc);
+    html = renderStudioDocumentToHtml(renderable);
   } catch {
     html = "<p>Content rendering unavailable.</p>";
   }
 
-  const toc = extractTableOfContentsFromDocument(resolvedDoc);
-  const readingTimeMins = calculateReadingTime(resolvedDoc);
+  // TOC extraction must not turn a published historical document into HTTP 500.
+  let toc: ReturnType<typeof extractTableOfContentsFromDocument>;
+  try { toc = extractTableOfContentsFromDocument(renderable); } catch { toc = []; }
+  const readingTimeMins = calculateReadingTime(renderable);
 
   return {
     ...summary,
@@ -369,6 +374,10 @@ export async function buildPublicPageDetailDto(
 ): Promise<PublicPageDetailDto> {
   const resolvedDoc = await resolveDocumentMedia(page.content, mediaService);
   const featureImage = extractFeatureImage(resolvedDoc);
+  let renderable: unknown = resolvedDoc;
+  try { renderable = toRenderablePublicDocument(resolvedDoc); } catch {
+    // Keep the original content for recovery; never change stored bytes.
+  }
   const siteUrl = getSiteUrl();
 
   const excerpt = deriveExcerpt(page.excerpt, page.content);
@@ -385,12 +394,13 @@ export async function buildPublicPageDetailDto(
 
   let html: string;
   try {
-    html = renderStudioDocumentToHtml(resolvedDoc);
+    html = renderStudioDocumentToHtml(renderable);
   } catch {
     html = "<p>Content rendering unavailable.</p>";
   }
 
-  const toc = extractTableOfContentsFromDocument(resolvedDoc);
+  let toc: ReturnType<typeof extractTableOfContentsFromDocument>;
+  try { toc = extractTableOfContentsFromDocument(renderable); } catch { toc = []; }
 
   return {
     id: page.id,

@@ -468,7 +468,7 @@ describe("PostEditor network-acknowledgement integrity", () => {
     await click("feature-alt-b");
     // B cannot hit the server before A settles: otherwise a delayed A might
     // persist over B even if its React response is ignored.
-    expect(payloads).toEqual([{ featureImageId: null, featureImageAlt: "Alt A" }]);
+    expect(payloads).toEqual([{ featureImageId: null, featureImageAlt: "Alt A", featureImageCaption: null }]);
     await act(async () => {
       first.resolve({ post: Object.assign({}, initial, { featureImage: { id: "old-cover" } }) });
       await Promise.resolve();
@@ -560,6 +560,33 @@ describe("PostEditor network-acknowledgement integrity", () => {
       await Promise.resolve();
     });
     expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("fresh");
+  });
+
+  it("distinguishes publication status from acknowledged saving on a published post", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const published = { ...initial, status: "published" };
+    const pending = deferred<{ post: typeof initial }>();
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1" && options?.method === "PUT") return pending.promise;
+      if (url === "/posts/post-1") return Promise.resolve({ post: published });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Published");
+    await click("edit-a");
+    await act(async () => { vi.advanceTimersByTime(2000); await Promise.resolve(); });
+    expect(element.textContent).not.toContain("Published · Saved");
+    await act(async () => {
+      pending.resolve({ post: { ...published, version: 2 } });
+      await pending.promise;
+    });
+    expect(element.textContent).toContain("Published · Saved");
   });
 
 });
