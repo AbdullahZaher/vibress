@@ -207,12 +207,15 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
     token?: string,
     publicationId?: string,
     origin = "http://localhost:7777",
+    epoch?: number,
+    onEarlyMessage?: (data: WebSocket.RawData) => void,
   ): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
       let url = `${wsBaseUrl}/posts/${postId}/collaboration/ws`;
       const params: string[] = [];
       if (token) params.push(`token=${encodeURIComponent(token)}`);
       if (publicationId) params.push(`publicationId=${encodeURIComponent(publicationId)}`);
+      if (epoch !== undefined) params.push(`epoch=${epoch}`);
       if (params.length > 0) url += `?${params.join("&")}`;
 
       const ws = new WebSocket(url, {
@@ -221,6 +224,10 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
           "x-publication-id": publicationId || "",
         },
       });
+
+      if (onEarlyMessage) {
+        ws.on("message", onEarlyMessage);
+      }
 
       const onOpen = () => {
         cleanup();
@@ -575,6 +582,143 @@ describe("Studio Production Collaboration & Multi-Tenant Isolation (Step E)", ()
 
       wsA.close();
       wsB.close();
+    });
+  });
+
+  // ============================================================
+  // 5. COORDINATED REVISION RESTORATION & EPOCH FENCING (PHASE 02)
+  // ============================================================
+  describe("Coordinated Revision Restoration & Epoch Fencing (Phase 02)", () => {
+    it("restoring revision increments epoch, resets in-memory room, and broadcasts restore frame to connected peers", async () => {
+      // 1. Get initial revisions of postAlpha
+      const revsRes = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/posts/${postAlphaId}/revisions`,
+        headers: {
+          authorization: `Bearer ${userAlphaToken}`,
+          cookie: `vibress_session=${userAlphaToken}`,
+          "x-publication-id": pubAlphaId,
+        },
+      });
+      expect(revsRes.statusCode).toBe(200);
+      const initialRevisions = revsRes.json().revisions;
+      expect(initialRevisions.length).toBeGreaterThan(0);
+      const targetRevision = initialRevisions[0];
+
+      // 2. Connect client A and client B
+      const wsA = await connectClient(postAlphaId, userAlphaToken, pubAlphaId);
+      const wsB = await connectClient(postAlphaId, userAlphaToken, pubAlphaId);
+
+      const restoreReceivedPromiseB = new Promise<{ type: string; epoch: number; content: unknown }>((resolve) => {
+        wsB.on("message", (data: WebSocket.RawData) => {
+          const str = data.toString();
+          if (str.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(str);
+              if (parsed.type === "restore") {
+                resolve(parsed);
+              }
+            } catch {
+              // Ignore non-json
+            }
+          }
+        });
+      });
+
+      // 3. Perform revision restore via REST API
+      const restoreRes = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/posts/${postAlphaId}/revisions/${targetRevision.id}/restore`,
+        headers: {
+          authorization: `Bearer ${userAlphaToken}`,
+          cookie: `vibress_session=${userAlphaToken}`,
+          "x-publication-id": pubAlphaId,
+          origin: "http://localhost:7777",
+        },
+      });
+
+      expect(restoreRes.statusCode).toBe(200);
+      const restoreBody = restoreRes.json();
+      expect(restoreBody.post).toBeDefined();
+      expect(restoreBody.epoch).toBeGreaterThanOrEqual(2);
+
+      // 4. Verify client B received the coordinated restore frame
+      const restoreEvent = await restoreReceivedPromiseB;
+      expect(restoreEvent.type).toBe("restore");
+      expect(restoreEvent.epoch).toBe(restoreBody.epoch);
+
+      wsA.close();
+      wsB.close();
+    });
+
+    it("rejects binary updates from stale clients on older epoch with close code 4409", async () => {
+      // Connect client with an explicitly obsolete epoch (epoch 1 when room is at epoch >= 2)
+      const wsStale = await connectClient(
+        postAlphaId,
+        userAlphaToken,
+        pubAlphaId,
+        "http://localhost:7777",
+        1,
+      );
+
+      const closePromise = new Promise<{ code: number; reason: string }>((resolve) => {
+        wsStale.on("close", (code, reason) => {
+          resolve({ code, reason: reason.toString() });
+        });
+      });
+
+      // Attempt to send a binary CRDT update with stale epoch
+      const dummyDoc = new Y.Doc();
+      dummyDoc.getText("t").insert(0, "Stale resurrected edit");
+      const staleUpdate = Y.encodeStateAsUpdate(dummyDoc);
+
+      wsStale.send(staleUpdate, { binary: true });
+
+      const closeResult = await closePromise;
+      expect(closeResult.code).toBe(4409);
+      expect(closeResult.reason).toContain("Conflict: Document was restored to revision");
+    });
+
+    it("new connecting clients receive latest epoch in sync-init and sync-done frames", async () => {
+      const messages: any[] = [];
+      let resolveDone: () => void;
+      const donePromise = new Promise<void>((r) => {
+        resolveDone = r;
+      });
+
+      const wsNew = await connectClient(
+        postAlphaId,
+        userAlphaToken,
+        pubAlphaId,
+        "http://localhost:7777",
+        undefined,
+        (data: WebSocket.RawData) => {
+          const str = data.toString();
+          if (str.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(str);
+              messages.push(parsed);
+              if (parsed.type === "sync-done") {
+                resolveDone();
+              }
+            } catch {
+              // Ignore
+            }
+          }
+        },
+      );
+
+      await donePromise;
+
+      const syncInit = messages.find((m) => m.type === "sync-init");
+      const syncDone = messages.find((m) => m.type === "sync-done");
+
+      expect(syncInit).toBeDefined();
+      expect(syncInit.epoch).toBeGreaterThanOrEqual(2);
+      expect(syncDone).toBeDefined();
+      expect(syncDone.epoch).toBeGreaterThanOrEqual(2);
+
+      wsNew.close();
     });
   });
 });

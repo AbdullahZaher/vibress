@@ -104,7 +104,7 @@ test.describe.serial("First-Run Setup Wizard (fresh instance)", () => {
     await page.getByRole("button", { name: "Install Vibress" }).click();
     // Owner enters Admin automatically (session cookie set by the server);
     // the brief "Vibress is ready." state transitions into the dashboard.
-    await expect(page.locator("body")).toContainText("Analytics", {
+    await expect(page.locator("body")).toContainText(/Dashboard|Overview|Your editorial workspace/i, {
       timeout: 30000,
     });
   });

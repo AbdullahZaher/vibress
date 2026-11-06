@@ -12,9 +12,10 @@ test.describe("Content Modeler & Dynamic Collections E2E Flow", () => {
     await page.waitForURL((url) => url.pathname === "/admin" || (url.pathname.startsWith("/admin") && !url.pathname.includes("/login")));
 
     // 2. Navigate to Content Models
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Advanced", exact: true }).first().click();
-    await page.getByRole("button", { name: "Manage models", exact: true }).click();
+    await page.getByRole("button", { name: /Settings|الإعدادات/i }).click();
+    await page.waitForURL("**/admin/settings**");
+    await page.getByRole("button", { name: /Advanced|المتقدمة/i }).first().click();
+    await page.getByRole("button", { name: /Manage models|إدارة النماذج/i }).click();
     await page.waitForURL("**/admin/settings/advanced/content-models");
     await expect(page.getByRole("heading", { level: 1, name: "Content Models" })).toBeVisible();
 

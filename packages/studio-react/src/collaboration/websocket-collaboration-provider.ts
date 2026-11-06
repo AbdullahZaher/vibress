@@ -23,6 +23,7 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   private syncTimeout: ReturnType<typeof setTimeout> | null = null;
   private synced = false;
   private isDestroyed = false;
+  public currentEpoch = 1;
 
   constructor(doc: Y.Doc, options: WebSocketCollaborationOptions) {
     this.doc = doc;
@@ -129,12 +130,25 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
           try {
             const parsed = JSON.parse(event.data);
             if (parsed.type === "sync-done") {
+              if (parsed.epoch) {
+                this.currentEpoch = parsed.epoch;
+              }
               if (this.syncTimeout) {
                 clearTimeout(this.syncTimeout);
                 this.syncTimeout = null;
               }
               this.synced = true;
               this.emit("sync", [true]);
+            } else if (parsed.type === "sync-init" && parsed.epoch) {
+              this.currentEpoch = parsed.epoch;
+            } else if (parsed.type === "restore") {
+              if (parsed.epoch) {
+                this.currentEpoch = parsed.epoch;
+              }
+              if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: "ack-restore", epoch: parsed.epoch }));
+              }
+              this.emit("restore", [parsed]);
             } else if (parsed.type === "awareness" && parsed.clientId && parsed.state) {
               this.remoteStates.set(parsed.clientId, parsed.state);
               this.notifyAwarenessChange();

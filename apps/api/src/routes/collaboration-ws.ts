@@ -26,6 +26,7 @@ interface ValidatedWsContext {
   };
   publicationId: string;
   canEdit: boolean;
+  epoch: number;
 }
 
 declare module "fastify" {
@@ -37,7 +38,7 @@ declare module "fastify" {
 export async function collaborationWsRoutes(fastify: FastifyInstance) {
   fastify.get<{
     Params: { postId: string };
-    Querystring: { token?: string; publicationId?: string };
+    Querystring: { token?: string; publicationId?: string; epoch?: string };
   }>(
     "/posts/:postId/collaboration/ws",
     {
@@ -159,26 +160,41 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           });
         }
 
+        const persistedEpoch = await crdtPersistence.getEpoch(publicationId, postId);
+
         req.wsContext = {
           session,
           publicationId,
           canEdit,
+          epoch: persistedEpoch,
         };
       },
     },
     (socket: WebSocket, req: FastifyRequest) => {
       const { postId } = req.params as { postId: string };
       const ctx = req.wsContext!;
-      const { session, publicationId, canEdit } = ctx;
+      const { session, publicationId, canEdit, epoch: persistedEpoch } = ctx;
+      const query = (req.query as Record<string, string>) || {};
+      const parsedQueryEpoch = query.epoch ? parseInt(query.epoch, 10) : NaN;
 
-      // 6. Join room
-      const room = roomManager.getOrCreateRoom(publicationId, postId);
+      // 6. Join room with authoritative epoch resolution (synchronously, preserving WS listeners)
+      const room = roomManager.getOrCreateRoom(publicationId, postId, persistedEpoch);
+      if (room.epoch < persistedEpoch) {
+        room.epoch = persistedEpoch;
+      }
+
+      const clientEpoch =
+        !Number.isNaN(parsedQueryEpoch) && parsedQueryEpoch > 0
+          ? parsedQueryEpoch
+          : room.epoch;
+
       const peerId = crypto.randomUUID();
       const peer: CollaborationPeer = {
         id: peerId,
         userId: session.user.id,
         userName: session.user.name,
         socket,
+        epoch: clientEpoch,
       };
 
       const added = room.addPeer(peer);
@@ -209,7 +225,7 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Check for awareness control frame
+        // Check for JSON control frame (awareness, ack-restore, ack-epoch)
         if (
           isBinary === false ||
           (buf.length > 0 && (buf[0] === 0x7b /* '{' */ || buf[0] === 0x5b /* '[' */))
@@ -221,6 +237,12 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
               room.broadcastString(text, peerId);
               return;
             }
+            if (parsed && (parsed.type === "ack-restore" || parsed.type === "ack-epoch")) {
+              if (typeof parsed.epoch === "number" && parsed.epoch > 0) {
+                peer.epoch = parsed.epoch;
+              }
+              return;
+            }
           } catch {
             // Not a valid JSON control frame, treat as binary update below
           }
@@ -228,6 +250,16 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
 
         if (!canEdit) {
           // Read-only peers cannot broadcast document mutations
+          return;
+        }
+
+        // Fencing check: reject updates originating from a stale epoch
+        if (peer.epoch < room.epoch) {
+          socket.close(
+            4409,
+            "Conflict: Document was restored to revision. Client must sync to current epoch.",
+          );
+          room.removePeer(peerId);
           return;
         }
 
@@ -250,14 +282,18 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
         roomManager.removePeer(publicationId, postId, peerId);
       });
 
-      // 8. Initial catch-up synchronization
+      // 8. Initial catch-up synchronization with epoch awareness
+      if (socket.readyState === 1 /* OPEN */) {
+        socket.send(JSON.stringify({ type: "sync-init", epoch: room.epoch }));
+      }
+
       const inMemoryState = room.getCurrentStateUpdate();
       if (inMemoryState) {
         if (socket.readyState === 1 /* OPEN */) {
           socket.send(inMemoryState, { binary: true });
         }
         if (socket.readyState === 1 /* OPEN */) {
-          socket.send(JSON.stringify({ type: "sync-done" }));
+          socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
         }
       } else {
         crdtPersistence
@@ -274,13 +310,13 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
               }
             }
             if (socket.readyState === 1 /* OPEN */) {
-              socket.send(JSON.stringify({ type: "sync-done" }));
+              socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
             }
           })
           .catch((err) => {
             console.error(`[WS Room ${postId}] Catch-up sync failed:`, err);
             if (socket.readyState === 1 /* OPEN */) {
-              socket.send(JSON.stringify({ type: "sync-done" }));
+              socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
             }
           });
       }
