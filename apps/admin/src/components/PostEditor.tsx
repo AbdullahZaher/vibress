@@ -120,6 +120,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [featureImageAlt, setFeatureImageAlt] = useState("");
   const [featureImageCaption, setFeatureImageCaption] = useState("");
   const [showFeatureImagePicker, setShowFeatureImagePicker] = useState(false);
+  const [featureImageSaving, setFeatureImageSaving] = useState(false);
+  const [featureImageSaveFailed, setFeatureImageSaveFailed] = useState(false);
   const [showUnsplashModal, setShowUnsplashModal] = useState(false);
 
   useEffect(() => {
@@ -215,6 +217,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const latestFeatureImageRef = useRef(featureImage);
   const latestFeatureImageAltRef = useRef(featureImageAlt);
   const latestFeatureImageCaptionRef = useRef(featureImageCaption);
+  // Serialize feature-image PATCHes per post; request completion order must not
+  // determine the server's final cover image.
+  const featureImageWritesRef = useRef<{ postId: string | undefined; tail: Promise<void> }>({
+    postId, tail: Promise.resolve(),
+  });
+  const featureImageEditRef = useRef(0);
+  const featureImagePendingRef = useRef(false);
+  const featureImageSaveFailedRef = useRef(false);
   const latestVersionRef = useRef(version);
 
   useEffect(() => { latestDocRef.current = studioDoc; }, [studioDoc]);
@@ -234,7 +244,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => {
     documentMountedRef.current = true;
     const warnIfUnsaved = (event: BeforeUnloadEvent) => {
-      if (!hasUnsavedChangesRef.current) return;
+      if (!hasUnsavedChangesRef.current && !featureImagePendingRef.current && !featureImageSaveFailedRef.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -694,11 +704,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
 
   const handleUpdateFeatureImage = useCallback(
-    async (
+    (
       asset: ApiMediaAsset | null,
       alt?: string | null,
       caption?: string | null,
     ) => {
+      // Update the author's UI immediately, but never accept an older reply
+      // as proof that the latest selection was persisted.
       setFeatureImage(asset);
       latestFeatureImageRef.current = asset;
       if (alt !== undefined) {
@@ -710,32 +722,63 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         latestFeatureImageCaptionRef.current = caption || "";
       }
 
+      const generation = ++featureImageEditRef.current;
+      featureImageSaveFailedRef.current = false;
+      setFeatureImageSaveFailed(false);
+
       if (!postId) {
         autosaveGenerationsRef.current.markEdited();
         hasUnsavedChangesRef.current = true;
         return;
       }
 
-      try {
-        const res = await apiRequest<{ post: AdminPostDetail }>(
-          `/posts/${postId}/feature-image`,
-          {
-            method: "PATCH",
-            body: JSON.stringify({
-              featureImageId: asset ? asset.id : null,
-              featureImageAlt: alt !== undefined ? (alt || null) : (featureImageAlt || null),
-              featureImageCaption: caption !== undefined ? (caption || null) : (featureImageCaption || null),
-            }),
-          },
-        );
-        if (res.post.featureImage !== undefined) {
-          setFeatureImage(res.post.featureImage);
-        }
-      } catch (err) {
-        console.error("Failed to patch feature image", err);
+      const isCurrentDocument = beginDocumentRequest(postId);
+      const snapshot = {
+        featureImageId: latestFeatureImageRef.current?.id ?? null,
+        featureImageAlt: latestFeatureImageAltRef.current || null,
+        featureImageCaption: latestFeatureImageCaptionRef.current || null,
+      };
+      if (featureImageWritesRef.current.postId !== postId) {
+        // Do not let a hung request for post A hold up post B.
+        featureImageWritesRef.current = { postId, tail: Promise.resolve() };
       }
+      featureImagePendingRef.current = true;
+      setFeatureImageSaving(true);
+
+      const write = async () => {
+        if (!isCurrentDocument()) return;
+        try {
+          const res = await apiRequest<{ post: AdminPostDetail }>(
+            `/posts/${postId}/feature-image`,
+            { method: "PATCH", body: JSON.stringify(snapshot) },
+          );
+          if (!isCurrentDocument() || generation !== featureImageEditRef.current) return;
+          // Only the latest completed selection may update the visible cover.
+          if (res.post.featureImage !== undefined) {
+            setFeatureImage(res.post.featureImage);
+            latestFeatureImageRef.current = res.post.featureImage;
+          }
+          featureImageSaveFailedRef.current = false;
+          setFeatureImageSaveFailed(false);
+          setErrorMsg((current) => current?.startsWith("Feature image save failed:") ? null : current);
+        } catch (err) {
+          if (!isCurrentDocument() || generation !== featureImageEditRef.current) return;
+          featureImageSaveFailedRef.current = true;
+          setFeatureImageSaveFailed(true);
+          setErrorMsg(`Feature image save failed: ${err instanceof Error ? err.message : "Network error"}. Retry to keep your latest cover.`);
+        } finally {
+          if (isCurrentDocument() && generation === featureImageEditRef.current) {
+            featureImagePendingRef.current = false;
+            setFeatureImageSaving(false);
+          }
+        }
+      };
+      // Sequential writes are essential: ignoring stale responses alone cannot
+      // prevent an older PATCH from arriving at the server after the latest one.
+      const next = featureImageWritesRef.current.tail.then(write, write);
+      featureImageWritesRef.current.tail = next;
     },
-    [postId, featureImageAlt, featureImageCaption],
+    [postId, beginDocumentRequest],
   );
 
   const handleSelectFeatureImageFromLibrary = (asset: ApiMediaAsset) => {
@@ -1019,7 +1062,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   };
 
   const navigateSafely = (path: string) => {
-    if (hasUnsavedChangesRef.current &&
+    if ((hasUnsavedChangesRef.current || featureImagePendingRef.current || featureImageSaveFailedRef.current) &&
         !window.confirm("This post has unsaved changes. Leave without saving?")) return;
     onNavigate(path);
   };
@@ -1173,6 +1216,27 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           )}
 
           <div>
+            {(featureImageSaving || featureImageSaveFailed) && (
+              <div role={featureImageSaveFailed ? "alert" : "status"} className="mb-2 text-sm">
+                {featureImageSaveFailed ? (
+                  <>
+                    <span>Feature image was not saved. Your selection is still visible locally.</span>
+                    <button
+                      type="button"
+                      className="ms-2 underline"
+                      data-testid="retry-feature-image-save"
+                      onClick={() => handleUpdateFeatureImage(
+                        latestFeatureImageRef.current,
+                        latestFeatureImageAltRef.current,
+                        latestFeatureImageCaptionRef.current,
+                      )}
+                    >
+                      Retry cover save
+                    </button>
+                  </>
+                ) : "Saving feature image..."}
+              </div>
+            )}
             <PostFeatureImageControl
               featureImage={featureImage}
               featureImageAlt={featureImageAlt}
