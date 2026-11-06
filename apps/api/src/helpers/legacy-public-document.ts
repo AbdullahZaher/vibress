@@ -59,7 +59,7 @@ function convertLegacyNode(input: unknown): unknown {
       return { type: "paragraph", version: 1, children };
     case "heading": {
       const level = attrs.level ?? 2;
-      if (!Number.isInteger(level) || (level as number) < 1 || (level as number) > 6) {
+      if (typeof level !== "number" || !Number.isInteger(level) || level < 1 || level > 6) {
         throw new Error("Unsupported historical heading level");
       }
       return { type: "heading", version: 1, tag: `h${level}`, children };
@@ -70,7 +70,7 @@ function convertLegacyNode(input: unknown): unknown {
       return { type: "list", version: 1, listType: "bullet", children };
     case "orderedList": {
       const start = attrs.start ?? 1;
-      if (!Number.isSafeInteger(start) || (start as number) < 1) {
+      if (typeof start !== "number" || !Number.isSafeInteger(start) || start < 1) {
         throw new Error("Invalid historical ordered list start");
       }
       return { type: "list", version: 1, listType: "number", start, children };
