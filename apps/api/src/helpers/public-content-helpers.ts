@@ -9,6 +9,7 @@ import {
   extractTableOfContentsFromDocument,
 } from "@vibress/studio-renderer";
 import { normalizeStudioDocument } from "@vibress/studio-core";
+import { projectLegacyPublicDocument } from "./legacy-public-document";
 import { slugify } from "@vibress/utils";
 import {
   PublicAuthorDto,
@@ -50,7 +51,10 @@ export async function resolveDocumentMedia(
   // studio-card, so media resolution only ever needs to understand the
   // canonical representation (no permanent dual branches).
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
-  const canonical = normalizeStudioDocument(doc) as Record<string, unknown>;
+  // The read-only projection supports historical plain Tiptap paragraphs
+  // without changing persisted JSON or silently dropping unsupported nodes.
+  const projected = projectLegacyPublicDocument(doc) as Record<string, unknown>;
+  const canonical = normalizeStudioDocument(projected) as Record<string, unknown>;
   const root = canonical.root as
     { type?: string; children?: unknown[] } | undefined;
   if (!root || !Array.isArray(root.children)) {
@@ -174,7 +178,7 @@ export function deriveExcerpt(
   }
 
   try {
-    const plainText = renderStudioDocumentToPlainText(docInput);
+    const plainText = renderStudioDocumentToPlainText(projectLegacyPublicDocument(docInput));
     const cleaned = plainText.replace(/\s+/g, " ").trim();
     if (cleaned.length <= 250) {
       return cleaned;
