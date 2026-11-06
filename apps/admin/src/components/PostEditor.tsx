@@ -239,6 +239,14 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   useEffect(() => { latestFeatureImageRef.current = featureImage; }, [featureImage]);
   useEffect(() => { latestFeatureImageAltRef.current = featureImageAlt; }, [featureImageAlt]);
   useEffect(() => { latestFeatureImageCaptionRef.current = featureImageCaption; }, [featureImageCaption]);
+  useEffect(() => {
+    // A still-pending PATCH belongs to the previous document epoch. Never
+    // inherit its busy/error state when this mounted editor switches posts.
+    featureImagePendingRef.current = false;
+    featureImageSaveFailedRef.current = false;
+    setFeatureImageSaving(false);
+    setFeatureImageSaveFailed(false);
+  }, [postId]);
   useEffect(() => { latestVersionRef.current = version; }, [version]);
 
   useEffect(() => {
