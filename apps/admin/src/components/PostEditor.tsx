@@ -30,8 +30,14 @@ import {
   ChevronLeft,
   PanelRight,
   AlertCircle,
+  AlertTriangle,
+  Download,
   Clock,
 } from "lucide-react";
+import {
+  indexedDbDraftStore,
+  type OfflineDraftRecord,
+} from "../lib/recovery/indexed-db-draft-store";
 import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
 import { RevisionDiffModal } from "./editor/RevisionDiffModal";
@@ -114,6 +120,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [showCollabPanel, setShowCollabPanel] = useState(false);
   const [showDiffModal, setShowDiffModal] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [availableRecoveryDraft, setAvailableRecoveryDraft] =
+    useState<OfflineDraftRecord | null>(null);
 
   // Feature Image state (strictly decoupled from Lexical AST / Yjs / restoreKey)
   const [featureImage, setFeatureImage] = useState<ApiMediaAsset | null>(null);
@@ -484,6 +492,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           setStudioDoc(migrated);
           setUnsupportedSource(null);
           setUnsupportedMessage(null);
+
+          // Check if a newer unsaved recovery draft exists on device
+          void indexedDbDraftStore
+            .getDraft("default", currentUserIdRef.current || "staff", postId)
+            .then((draft) => {
+              if (
+                !canceled &&
+                draft &&
+                (draft.title !== p.title ||
+                  JSON.stringify(draft.content) !== JSON.stringify(source))
+              ) {
+                setAvailableRecoveryDraft(draft);
+              }
+            })
+            .catch(() => {});
         } catch (error) {
           if (error instanceof StudioMigrationError) {
             setUnsupportedSource(source);
@@ -526,6 +549,59 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     fetchRevisions();
     return () => { canceled = true; };
   }, [postId, beginDocumentRequest]);
+
+  useEffect(() => {
+    if (!postId) {
+      void indexedDbDraftStore
+        .getDraft("default", currentUserIdRef.current || "staff", "new")
+        .then((draft) => {
+          if (draft && (draft.title || draft.content)) {
+            setAvailableRecoveryDraft(draft);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [postId]);
+
+  const handleApplyRecoveryDraft = () => {
+    if (!availableRecoveryDraft) return;
+    if (availableRecoveryDraft.title) {
+      setTitle(availableRecoveryDraft.title);
+      latestTitleRef.current = availableRecoveryDraft.title;
+    }
+    if (availableRecoveryDraft.content) {
+      const migrated = migrateDocument(availableRecoveryDraft.content);
+      setStudioDoc(migrated);
+      latestDocRef.current = migrated;
+    }
+    setRestoreKey((k) => k + 1);
+    setAvailableRecoveryDraft(null);
+    hasUnsavedChangesRef.current = true;
+    setAutosaveState("idle");
+    triggerAutosaveDebounced();
+  };
+
+  const handleDiscardRecoveryDraft = async () => {
+    if (!availableRecoveryDraft) return;
+    await indexedDbDraftStore.deleteDraft(
+      availableRecoveryDraft.publicationId,
+      availableRecoveryDraft.userId,
+      availableRecoveryDraft.postId,
+    );
+    setAvailableRecoveryDraft(null);
+  };
+
+  const handleExportRecoveryDraft = () => {
+    if (!availableRecoveryDraft) return;
+    const jsonStr = JSON.stringify(availableRecoveryDraft, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibress-recovery-${availableRecoveryDraft.postId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const performAutosave = useCallback(async () => {
     const isCurrent = beginDocumentRequest(postId);
@@ -633,6 +709,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       if (acknowledgement.latestEdit) {
         hasUnsavedChangesRef.current = false;
         setAutosaveState("saved");
+        void indexedDbDraftStore.deleteDraft(
+          "default",
+          currentUserIdRef.current || "staff",
+          savePostId,
+        );
+        if (!postId) {
+          void indexedDbDraftStore.deleteDraft(
+            "default",
+            currentUserIdRef.current || "staff",
+            "new",
+          );
+        }
         if (!postId && createdPostRef.current?.id === savePostId) {
           createdPostRef.current = null;
           onNavigate(`/admin/posts/${savePostId}`);
@@ -673,6 +761,16 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const triggerAutosaveDebounced = useCallback(() => {
     autosaveGenerationsRef.current.markEdited();
     hasUnsavedChangesRef.current = true;
+    void indexedDbDraftStore.saveDraft({
+      publicationId: "default",
+      userId: currentUserIdRef.current || "staff",
+      postId: postId || "new",
+      epoch: documentEpochRef.current,
+      baseVersion: latestVersionRef.current,
+      content: latestDocRef.current,
+      title: latestTitleRef.current,
+      updatedAt: Date.now(),
+    });
     setAutosaveState((state) => state === "conflict" ? state : "idle");
     if (autosaveConflictRef.current) return;
     if (autosaveTimerRef.current) {
@@ -681,7 +779,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     autosaveTimerRef.current = setTimeout(() => {
       performAutosave();
     }, 2000);
-  }, [performAutosave]);
+  }, [performAutosave, postId]);
 
   const generateSlug = (text: string) => {
     return text
@@ -1263,6 +1361,57 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           {errorMsg && (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
+            </div>
+          )}
+
+          {availableRecoveryDraft && (
+            <div
+              role="alert"
+              aria-live="polite"
+              data-testid="offline-recovery-banner"
+              className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm text-foreground"
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="size-5 text-amber-500 shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold text-amber-600 dark:text-amber-400">
+                    {locale?.startsWith("ar") ? "مسودة استرداد محلية متوفرة" : "Local recovery draft available"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {locale?.startsWith("ar")
+                      ? `تم العثور على مسودة غير متزامنة محفوظة على هذا الجهاز (${new Date(availableRecoveryDraft.updatedAt).toLocaleTimeString()})`
+                      : `Unsynced draft found on this device (${new Date(availableRecoveryDraft.updatedAt).toLocaleTimeString()})`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleApplyRecoveryDraft}
+                  className="h-8 text-xs font-semibold"
+                >
+                  {locale?.startsWith("ar") ? "استرداد المسودة" : "Recover draft"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDiscardRecoveryDraft}
+                  className="h-8 text-xs"
+                >
+                  {locale?.startsWith("ar") ? "تجاهل والاحتفاظ بالخادم" : "Keep server version"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExportRecoveryDraft}
+                  className="h-8 text-xs text-muted-foreground gap-1"
+                  title={locale?.startsWith("ar") ? "تصدير مسودة الاسترداد" : "Export recovery JSON"}
+                >
+                  <Download className="size-3.5" aria-hidden="true" />
+                  {locale?.startsWith("ar") ? "تصدير" : "Export"}
+                </Button>
+              </div>
             </div>
           )}
 
