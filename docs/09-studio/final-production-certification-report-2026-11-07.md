@@ -39,8 +39,8 @@ In accordance with non-negotiable engineering principles and non-compensatory re
   *CI Run ID:* [`42313317583`](https://github.com/AbdullahZaher/vibress-studio/actions/runs/42313317583)
 - **Host CMS Ecosystem:** [`Vibress CMS`](file:///Users/abdullahzaher/vibress)  
   *Branch:* `feat/offline-draft-recovery` (PR `#140`, incorporating rebased fixes from PR `#138` and `#139`)  
-  *HEAD Commit:* [`9869f8d106fd8a65f0cc8940a28e2f61777f62c9`](https://github.com/AbdullahZaher/vibress/commit/9869f8d106fd8a65f0cc8940a28e2f61777f62c9)  
-  *CI Run ID:* [`42313399120`](https://github.com/AbdullahZaher/vibress/actions/runs/42313399120)
+  *HEAD Commit:* [`6ebd692119cdac9a334faebd2b3737853c880864`](https://github.com/AbdullahZaher/vibress/commit/6ebd692119cdac9a334faebd2b3737853c880864)  
+  *CI Run ID:* [`42315326407`](https://github.com/AbdullahZaher/vibress/actions/runs/42315326407)
 
 ### PR Dependency Integration Sequence
 ```mermaid
@@ -394,7 +394,7 @@ Configure Datadog / Prometheus alerts on the following key metrics:
 
 ### Evidence Artifact Hashes
 - **Studio Repository Commit:** `f7ace9d71c7e97caeb28ce19ee0b2b8a07c39757`
-- **Host Repository Commit:** `9869f8d106fd8a65f0cc8940a28e2f61777f62c9`
+- **Host Repository Commit:** `6ebd692119cdac9a334faebd2b3737853c880864`
 - **Host Contract Verification:** `node scripts/verify-host-compatibility.mjs` -> `PASS`
 - **Laboratory Benchmark Output:** `phase07-results.json` (`2026-11-06T23:37:18.721Z`)
 - **Database Backup Digest:** `vibress_backup_20261106_233800.sql.gz.sha256`
