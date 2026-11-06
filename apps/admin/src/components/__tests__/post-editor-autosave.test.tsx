@@ -589,4 +589,41 @@ describe("PostEditor network-acknowledgement integrity", () => {
     expect(element.textContent).toContain("Published · Saved");
   });
 
+  it("flushes pending unsaved changes before publishing and marks the post published", async () => {
+    await act(async () => { root.unmount(); });
+    root = createRoot(element);
+    const draft = { ...initial, status: "draft" };
+    const calls: string[] = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      calls.push(`${options?.method || "GET"} ${url}`);
+      if (url === "/posts/post-1" && options?.method === "PUT") {
+        return Promise.resolve({ post: { ...draft, version: 2 } });
+      }
+      if (url === "/posts/post-1/publish" && options?.method === "POST") {
+        return Promise.resolve({ post: { ...draft, status: "published", version: 3 } });
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: draft });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await act(async () => {
+      root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={true} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Publish");
+    await click("edit-a");
+    // Click publish while debounce timer is still pending
+    const publishBtn = Array.from(element.querySelectorAll("button"))
+      .find((b) => b.textContent?.trim() === "Publish");
+    expect(publishBtn).toBeDefined();
+    await act(async () => {
+      publishBtn?.click();
+      await Promise.resolve();
+    });
+    expect(calls).toContain("PUT /posts/post-1");
+    expect(calls).toContain("POST /posts/post-1/publish");
+    expect(element.textContent).toContain("Published");
+  });
+
 });
