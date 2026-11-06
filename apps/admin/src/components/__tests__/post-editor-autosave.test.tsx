@@ -521,4 +521,45 @@ describe("PostEditor network-acknowledgement integrity", () => {
     expect(element.textContent).not.toContain("Feature image was not saved");
   });
 
+
+  it("does not let a hung A cover PATCH block a later A-B-A document session", async () => {
+    const stale = deferred<{ post: typeof initial }>();
+    const fresh = deferred<{ post: typeof initial }>();
+    const writes: string[] = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") {
+        const payload = JSON.parse(String(options.body)) as { featureImageAlt: string };
+        writes.push(payload.featureImageAlt);
+        return writes.length === 1 ? stale.promise : fresh.promise;
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-2") return Promise.resolve({ post: { ...initial, id: "post-2" } });
+      if (url.endsWith("/revisions")) return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await click("feature-alt-a");
+    expect(writes).toEqual(["Alt A"]);
+    await act(async () => {
+      root.render(<PostEditor postId="post-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await click("feature-alt-b");
+    // A new document epoch must not wait for a hung request from the old epoch.
+    expect(writes).toEqual(["Alt A", "Alt B"]);
+    await act(async () => {
+      fresh.resolve({ post: Object.assign({}, initial, { featureImage: { id: "fresh" } }) });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      stale.resolve({ post: Object.assign({}, initial, { featureImage: { id: "stale" } }) });
+      await Promise.resolve();
+    });
+    expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("fresh");
+  });
+
 });
