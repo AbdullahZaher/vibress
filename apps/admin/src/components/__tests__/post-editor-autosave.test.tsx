@@ -61,8 +61,16 @@ vi.mock("../editor/PostSettingsSidebar", () => ({
 vi.mock("../editor/EditorialCollaborationPanel", () => ({ EditorialCollaborationPanel: () => null }));
 vi.mock("../editor/RevisionDiffModal", () => ({ RevisionDiffModal: () => null }));
 vi.mock("../editor/PostFeatureImageControl", () => ({
-  PostFeatureImageControl: ({ onOpenMediaPicker }: { onOpenMediaPicker: () => void }) =>
-    <button data-testid="open-feature-picker" onClick={onOpenMediaPicker}>Choose feature</button>,
+  PostFeatureImageControl: ({ onOpenMediaPicker, onUpdateAltAndCaption, featureImage }: {
+    onOpenMediaPicker: () => void;
+    onUpdateAltAndCaption: (alt: string, caption: string) => void;
+    featureImage: { id: string } | null;
+  }) => <div>
+    <button data-testid="open-feature-picker" onClick={onOpenMediaPicker}>Choose feature</button>
+    <button data-testid="feature-alt-a" onClick={() => onUpdateAltAndCaption("Alt A", "")}>Alt A</button>
+    <button data-testid="feature-alt-b" onClick={() => onUpdateAltAndCaption("Alt B", "")}>Alt B</button>
+    <span data-testid="cover-id">{featureImage?.id || "no-cover"}</span>
+  </div>,
 }));
 vi.mock("../editor/UnsplashModal", () => ({ UnsplashModal: () => null }));
 vi.mock("../MediaPicker", () => ({
@@ -439,6 +447,119 @@ describe("PostEditor network-acknowledgement integrity", () => {
     expect(postCalls).toBe(1);
     expect(updateCalls).toBe(2);
     expect(navigate).toHaveBeenCalledWith("/admin/posts/post-created");
+  });
+
+
+  it("serializes feature-image PATCH requests so a late response cannot restore an old cover", async () => {
+    const first = deferred<{ post: typeof initial }>();
+    const second = deferred<{ post: typeof initial }>();
+    const payloads: Array<{ featureImageId: string | null; featureImageAlt: string }> = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") {
+        payloads.push(JSON.parse(String(options.body)));
+        return payloads.length === 1 ? first.promise : second.promise;
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await click("feature-alt-a");
+    await click("feature-alt-b");
+    // B cannot hit the server before A settles: otherwise a delayed A might
+    // persist over B even if its React response is ignored.
+    expect(payloads).toEqual([{ featureImageId: null, featureImageAlt: "Alt A" }]);
+    await act(async () => {
+      first.resolve({ post: Object.assign({}, initial, { featureImage: { id: "old-cover" } }) });
+      await Promise.resolve();
+    });
+    expect(payloads).toHaveLength(2);
+    expect(payloads[1]).toMatchObject({ featureImageAlt: "Alt B" });
+    expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("no-cover");
+    await act(async () => {
+      second.resolve({ post: Object.assign({}, initial, { featureImage: { id: "new-cover" } }) });
+      await Promise.resolve();
+    });
+    expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("new-cover");
+    expect(element.textContent).not.toContain("Feature image was not saved");
+  });
+
+  it("shows a failed cover PATCH, protects navigation, and retries the latest snapshot", async () => {
+    const pending = deferred<{ post: typeof initial }>();
+    const patchPayloads: Array<{ featureImageAlt: string }> = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") {
+        patchPayloads.push(JSON.parse(String(options.body)));
+        return patchPayloads.length === 1
+          ? pending.promise
+          : Promise.resolve({ post: { ...initial, featureImage: null } });
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-1/revisions") return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await click("feature-alt-b");
+    expect(element.textContent).toContain("Saving feature image");
+    await act(async () => {
+      pending.reject(new Error("Offline"));
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Feature image was not saved");
+    expect(element.textContent).toContain("Offline");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const back = Array.from(element.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Back"),
+    );
+    if (back) {
+      await act(async () => { back.click(); });
+      expect(confirm).toHaveBeenCalled();
+    }
+    await click("retry-feature-image-save");
+    expect(patchPayloads).toHaveLength(2);
+    expect(patchPayloads[1]).toMatchObject({ featureImageAlt: "Alt B" });
+    expect(element.textContent).not.toContain("Feature image was not saved");
+  });
+
+
+  it("does not let a hung A cover PATCH block a later A-B-A document session", async () => {
+    const stale = deferred<{ post: typeof initial }>();
+    const fresh = deferred<{ post: typeof initial }>();
+    const writes: string[] = [];
+    vi.mocked(apiRequest).mockImplementation((url, options) => {
+      if (url === "/posts/post-1/feature-image" && options?.method === "PATCH") {
+        const payload = JSON.parse(String(options.body)) as { featureImageAlt: string };
+        writes.push(payload.featureImageAlt);
+        return writes.length === 1 ? stale.promise : fresh.promise;
+      }
+      if (url === "/posts/post-1") return Promise.resolve({ post: initial });
+      if (url === "/posts/post-2") return Promise.resolve({ post: { ...initial, id: "post-2" } });
+      if (url.endsWith("/revisions")) return Promise.resolve({ revisions: [] });
+      if (url === "/tags") return Promise.resolve({ tags: [] });
+      return Promise.resolve({});
+    });
+    await click("feature-alt-a");
+    expect(writes).toEqual(["Alt A"]);
+    await act(async () => {
+      root.render(<PostEditor postId="post-2" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      root.render(<PostEditor postId="post-1" currentUserId="author" canPublish={false} onNavigate={vi.fn()} />);
+      await Promise.resolve();
+    });
+    await click("feature-alt-b");
+    // A new document epoch must not wait for a hung request from the old epoch.
+    expect(writes).toEqual(["Alt A", "Alt B"]);
+    await act(async () => {
+      fresh.resolve({ post: Object.assign({}, initial, { featureImage: { id: "fresh" } }) });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      stale.resolve({ post: Object.assign({}, initial, { featureImage: { id: "stale" } }) });
+      await Promise.resolve();
+    });
+    expect(element.querySelector('[data-testid="cover-id"]')?.textContent).toBe("fresh");
   });
 
 });
