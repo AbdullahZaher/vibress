@@ -171,12 +171,15 @@ async function resetTargetPostWithMedia() {
     .where(eq(posts.id, TARGET_POST_ID));
 
   const redis = getRedisClient();
-  const redisUpdatesKey = buildPublicationCacheKey(
-    PUBLICATION_ID,
-    "crdt:updates",
-    TARGET_POST_ID,
-  );
-  await redis.del(redisUpdatesKey);
+  const keysToDelete = [
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:updates", TARGET_POST_ID),
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:snapshot", TARGET_POST_ID),
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:epoch", TARGET_POST_ID),
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:generation", TARGET_POST_ID),
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:revoked_clients", TARGET_POST_ID),
+    buildPublicationCacheKey(PUBLICATION_ID, "crdt:restore_state", TARGET_POST_ID),
+  ];
+  await redis.del(...keysToDelete);
 }
 
 async function loginUser(
@@ -718,6 +721,7 @@ test.describe("Vibress Studio — Unified Media Floating Toolbar Suite", () => {
     page,
   }) => {
     test.setTimeout(60000);
+    await resetTargetPostWithMedia();
 
     await loginUser(page);
     await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
@@ -778,6 +782,7 @@ test.describe("Vibress Studio — Unified Media Floating Toolbar Suite", () => {
     page,
   }) => {
     test.setTimeout(60000);
+    await resetTargetPostWithMedia();
 
     const db = getDb();
     const [beforePost] = await db

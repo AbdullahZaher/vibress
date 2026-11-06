@@ -432,6 +432,7 @@ export function VibressStudio({
                     contentEditable={
                       <ContentEditable
                         className="vibress-studio-content focus:outline-none"
+                        aria-label="Editor content"
                         style={{
                           outline: "none",
                           minHeight: "40vh",

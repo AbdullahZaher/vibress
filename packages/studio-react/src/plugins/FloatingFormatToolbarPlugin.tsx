@@ -12,7 +12,6 @@ import {
   Strikethrough,
   Code,
   Link,
-  Sparkles,
   ChevronDown,
   Palette,
   Heading1,
@@ -80,10 +79,12 @@ function setFloatingElemPosition(
 }
 
 export function FloatingFormatToolbarPlugin({
-  anchorElem = document.body,
+  anchorElem,
 }: {
   anchorElem?: HTMLElement;
 }) {
+  const resolvedAnchor =
+    anchorElem ?? (typeof document !== "undefined" ? document.body : null);
   const [editor] = useLexicalComposerContext();
   const [isTextSelected, setIsTextSelected] = useState(false);
   const [isBold, setIsBold] = useState(false);
@@ -101,17 +102,23 @@ export function FloatingFormatToolbarPlugin({
   const toolbarRef = useRef<HTMLDivElement>(null);
 
   const updatePopup = useCallback(() => {
+    // Focus moving into the toolbar's own controls (e.g. the link editor input) fires
+    // `selectionchange`; that must not collapse the toolbar (P1-7).
+    const active = typeof document !== "undefined" ? document.activeElement : null;
+    if (toolbarRef.current && active && toolbarRef.current.contains(active)) {
+      return;
+    }
     editor.getEditorState().read(() => {
       const selection = $getSelection();
       const nativeSelection = window.getSelection();
       const rootElement = editor.getRootElement();
 
       if (
-        nativeSelection !== null &&
-        (!$isRangeSelection(selection) ||
-          rootElement === null ||
-          !rootElement.contains(nativeSelection.anchorNode) ||
-          nativeSelection.isCollapsed)
+        nativeSelection === null ||
+        !$isRangeSelection(selection) ||
+        rootElement === null ||
+        !rootElement.contains(nativeSelection.anchorNode) ||
+        nativeSelection.isCollapsed
       ) {
         setIsTextSelected(false);
         setIsLinkEditorOpen(false);
@@ -166,7 +173,7 @@ export function FloatingFormatToolbarPlugin({
         }
       }
     }
-  }, [isTextSelected, anchorElem, editor, updatePopup]);
+  }, [isTextSelected, resolvedAnchor, editor, updatePopup]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -182,12 +189,13 @@ export function FloatingFormatToolbarPlugin({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isLinkEditorOpen, openDropdown]);
 
-  if (!isTextSelected) {
+  if (!isTextSelected || !resolvedAnchor) {
     return null;
   }
 
   const handleTurnInto = (type: TurnIntoType) => {
     turnSelectedBlockInto(editor, type);
+    editor.focus();
     setOpenDropdown(null);
   };
 
@@ -243,43 +251,7 @@ export function FloatingFormatToolbarPlugin({
         />
       ) : (
         <>
-          {/* Ask AI button */}
-      <button
-        type="button"
-        title="Ask AI"
-        onClick={() => {
-          alert(
-            'Select "Ask AI" from slash command or press Space on a new line.',
-          );
-        }}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-          background: "linear-gradient(135deg, #9333ea 0%, #4f46e5 100%)",
-          color: "#fff",
-          border: "none",
-          padding: "4px 8px",
-          borderRadius: "4px",
-          cursor: "pointer",
-          fontSize: "12px",
-          fontWeight: 600,
-        }}
-      >
-        <Sparkles size={13} />
-        <span>Ask AI</span>
-      </button>
-
-      <div
-        style={{
-          width: "1px",
-          height: "18px",
-          backgroundColor: "var(--border)",
-          margin: "0 2px",
-        }}
-      />
-
-      {/* Turn into selector */}
+          {/* Turn into selector */}
       <div style={{ position: "relative" }}>
         <button
           type="button"
@@ -529,7 +501,7 @@ export function FloatingFormatToolbarPlugin({
         </>
       )}
     </div>,
-    anchorElem,
+    resolvedAnchor,
   );
 }
 

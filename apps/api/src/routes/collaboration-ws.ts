@@ -1,21 +1,26 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { WebSocket } from "ws";
 import crypto from "node:crypto";
-import * as Y from "yjs";
 import {
   authService,
   workspaceService,
   postsService,
+  authorsService,
 } from "../services";
-import { hasPermission } from "@vibress/security";
+import { hasPermission, hasResourcePermission } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { COOKIE_NAME, safeExtractOrigin } from "../middleware/auth";
 import {
   roomManager,
   MAX_CRDT_UPDATE_BYTES,
+  MAX_AWARENESS_FRAME_BYTES,
   CollaborationPeer,
 } from "../collaboration/room-manager";
-import { crdtPersistence } from "../collaboration/crdt-persistence";
+import {
+  crdtPersistence,
+  CrdtPersistenceError,
+  ReconciledCrdtState,
+} from "../collaboration/crdt-persistence";
 import { crdtRateLimiter } from "../collaboration/crdt-rate-limiter";
 
 interface ValidatedWsContext {
@@ -26,7 +31,7 @@ interface ValidatedWsContext {
   };
   publicationId: string;
   canEdit: boolean;
-  epoch: number;
+  reconciled: ReconciledCrdtState;
 }
 
 declare module "fastify" {
@@ -38,16 +43,33 @@ declare module "fastify" {
 export async function collaborationWsRoutes(fastify: FastifyInstance) {
   fastify.get<{
     Params: { postId: string };
-    Querystring: { token?: string; publicationId?: string; epoch?: string };
+    Querystring: {
+      token?: string;
+      publicationId?: string;
+      epoch?: string;
+      generationId?: string;
+    };
   }>(
     "/posts/:postId/collaboration/ws",
     {
       websocket: true,
       preValidation: async (req: FastifyRequest, reply: FastifyReply) => {
-        // 1. Validate Origin header
+        const query = (req.query as Record<string, string>) || {};
+
+        // 1. Validate Origin header (fail closed for cookie-authenticated browser sessions)
         const origin = safeExtractOrigin(req);
         const allowedOrigins = getConfig().cors.staffAllowedOrigins;
-        if ((req.headers.referer && !origin) || (origin && !allowedOrigins.includes(origin))) {
+        const usesCookieOnlyAuth = Boolean(
+          req.cookies &&
+            req.cookies[COOKIE_NAME] &&
+            !req.headers.authorization?.startsWith("Bearer ") &&
+            !query.token,
+        );
+        if (
+          (req.headers.referer && !origin) ||
+          (origin && !allowedOrigins.includes(origin)) ||
+          (usesCookieOnlyAuth && (!origin || !allowedOrigins.includes(origin)))
+        ) {
           return reply.status(403).send({
             errors: [
               {
@@ -60,7 +82,6 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
         }
 
         // 2. Extract and validate session token
-        const query = (req.query as Record<string, string>) || {};
         let token: string | null = null;
         if (req.cookies && req.cookies[COOKIE_NAME]) {
           token = req.cookies[COOKIE_NAME] as string;
@@ -95,19 +116,18 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // 3. Verify permissions (posts.read or posts.edit)
+        // 3. Verify coarse staff permissions (posts.read or posts.edit)
         const canRead = hasPermission(
           session.permissions,
           "posts.read",
           session.roles,
         );
-        const canEdit = hasPermission(
+        const coarseCanEdit = hasPermission(
           session.permissions,
           "posts.edit",
           session.roles,
         );
-
-        if (!canRead && !canEdit) {
+        if (!canRead && !coarseCanEdit) {
           return reply.status(403).send({
             errors: [
               {
@@ -119,9 +139,9 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           });
         }
 
-        // 4. Authoritatively resolve publication context
+        // 4. Resolve and verify publication scope
         const requestedPubId =
-          (req.headers["x-publication-id"] as string) ||
+          (req.headers["x-publication-id"] as string | undefined) ||
           query.publicationId ||
           undefined;
 
@@ -138,14 +158,15 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
             errors: [
               {
                 code: "PUBLICATION_ACCESS_DENIED",
-                message: "Forbidden: User does not belong to requested publication",
+                message:
+                  "Forbidden: User does not belong to requested publication",
                 requestId: req.id,
               },
             ],
           });
         }
 
-        // 5. Verify post existence and publication ownership
+        // 5. Verify post existence, publication ownership, and resource-level edit authorization
         const { postId } = req.params as { postId: string };
         const post = await postsService.findById(postId, publicationId);
         if (!post) {
@@ -160,41 +181,130 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           });
         }
 
-        const persistedEpoch = await crdtPersistence.getEpoch(publicationId, postId);
+        let canEdit = false;
+        if (coarseCanEdit) {
+          const postAuthors = await authorsService.getPostAuthors(post.id);
+          const postAuthorIds = (postAuthors || [])
+            .map((a: { id?: string; authorId?: string }) => a?.id || a?.authorId)
+            .filter((v): v is string => Boolean(v));
+          canEdit = hasResourcePermission("posts.edit", {
+            actorId: session.user.id,
+            resourceOwnerId: post.primaryAuthorId,
+            resourceAuthorIds: postAuthorIds,
+            userRoles: session.roles,
+            userPermissions: session.permissions,
+            publicationId,
+            resourcePublicationId: post.publicationId,
+          });
+        }
+
+        if (!canRead && !canEdit) {
+          return reply.status(403).send({
+            errors: [
+              {
+                code: "PERMISSION_DENIED",
+                message:
+                  "Forbidden: You do not have permission to access this post",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
+
+        // 6. Reconcile durable CRDT state with PostgreSQL (recovers any crashed/interrupted restore)
+        let reconciled: ReconciledCrdtState;
+        try {
+          reconciled = await crdtPersistence.reconcileWithDatabase(
+            publicationId,
+            postId,
+            { version: post.version, content: post.content },
+            {
+              skipIfRestoreLocked: roomManager.isRestoreLocked(
+                publicationId,
+                postId,
+              ),
+            },
+          );
+        } catch (err) {
+          if (err instanceof CrdtPersistenceError) {
+            return reply.status(503).send({
+              errors: [
+                {
+                  code: err.code,
+                  message: err.message,
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          throw err;
+        }
 
         req.wsContext = {
           session,
           publicationId,
           canEdit,
-          epoch: persistedEpoch,
+          reconciled,
         };
       },
     },
     (socket: WebSocket, req: FastifyRequest) => {
       const { postId } = req.params as { postId: string };
       const ctx = req.wsContext!;
-      const { session, publicationId, canEdit, epoch: persistedEpoch } = ctx;
+      const { session, publicationId, canEdit, reconciled } = ctx;
       const query = (req.query as Record<string, string>) || {};
-      const parsedQueryEpoch = query.epoch ? parseInt(query.epoch, 10) : NaN;
 
-      // 6. Join room with authoritative epoch resolution (synchronously, preserving WS listeners)
-      const room = roomManager.getOrCreateRoom(publicationId, postId, persistedEpoch);
-      if (room.epoch < persistedEpoch) {
-        room.epoch = persistedEpoch;
-      }
+      // Join & hydrate room synchronously with authoritative server generation
+      const room = roomManager.getOrCreateRoom(
+        publicationId,
+        postId,
+        reconciled.epoch,
+        reconciled.generationId,
+      );
+      room.hydrateFromDurableState({
+        epoch: reconciled.epoch,
+        generationId: reconciled.generationId,
+        revokedClientIds: reconciled.revokedClientIds,
+        snapshot: reconciled.snapshot,
+        updates: reconciled.updates,
+        restoredContent: reconciled.restoreState?.restoredContent,
+        restoreStatus: reconciled.restoreState?.status,
+      });
 
-      const clientEpoch =
-        !Number.isNaN(parsedQueryEpoch) && parsedQueryEpoch > 0
-          ? parsedQueryEpoch
-          : room.epoch;
+      const hasEpochQuery =
+        query.epoch !== undefined && query.epoch !== "";
+      const parsedQueryEpoch = hasEpochQuery ? Number(query.epoch) : NaN;
+      const hasGenerationQuery =
+        query.generationId !== undefined && query.generationId !== "";
+
+      const epochMismatch =
+        hasEpochQuery &&
+        (!Number.isInteger(parsedQueryEpoch) ||
+          parsedQueryEpoch <= 0 ||
+          parsedQueryEpoch !== room.epoch);
+      const generationMismatch =
+        hasGenerationQuery && query.generationId !== room.generationId;
+      const isStaleConnection = epochMismatch || generationMismatch;
 
       const peerId = crypto.randomUUID();
+      const challengeNonce = crypto.randomUUID();
       const peer: CollaborationPeer = {
         id: peerId,
         userId: session.user.id,
         userName: session.user.name,
         socket,
-        epoch: clientEpoch,
+        epoch: isStaleConnection
+          ? Number.isInteger(parsedQueryEpoch) && parsedQueryEpoch > 0
+            ? parsedQueryEpoch
+            : 0
+          : room.epoch,
+        generationId: isStaleConnection
+          ? query.generationId || "stale"
+          : room.generationId,
+        challengeNonce,
+        fenced: isStaleConnection,
+        handshakeComplete: false,
+        canEdit,
       };
 
       const added = room.addPeer(peer);
@@ -203,7 +313,7 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
         return;
       }
 
-      // 7. Synchronously register message listeners right upon connection
+      // Synchronously register message listeners upon connection
       socket.on("message", async (data: unknown, isBinary?: boolean) => {
         let buf: Buffer;
         if (Buffer.isBuffer(data)) {
@@ -222,30 +332,88 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
 
         if (buf.length > MAX_CRDT_UPDATE_BYTES) {
           socket.close(4413, "Payload Too Large: CRDT update exceeds 64 KB");
+          room.removePeer(peerId);
           return;
         }
 
-        // Check for JSON control frame (awareness, ack-restore, ack-epoch)
-        if (
-          isBinary === false ||
-          (buf.length > 0 && (buf[0] === 0x7b /* '{' */ || buf[0] === 0x5b /* '[' */))
-        ) {
+        // Handle JSON text control frames strictly when frame is text (isBinary === false)
+        if (isBinary === false) {
+          if (buf.length > MAX_AWARENESS_FRAME_BYTES) {
+            socket.close(4413, "Payload Too Large: Control frame exceeds 4 KB");
+            room.removePeer(peerId);
+            return;
+          }
           try {
             const text = buf.toString("utf8");
             const parsed = JSON.parse(text);
             if (parsed && parsed.type === "awareness") {
-              room.broadcastString(text, peerId);
+              if (
+                !peer.fenced &&
+                !room.restorationBarrierActive &&
+                !room.requiresRecovery &&
+                peer.epoch === room.epoch &&
+                peer.generationId === room.generationId
+              ) {
+                if (
+                  typeof parsed.clientId === "number" &&
+                  Number.isFinite(parsed.clientId) &&
+                  !room.revokedClientIds.has(parsed.clientId)
+                ) {
+                  peer.clientId = parsed.clientId;
+                }
+                room.broadcastString(text, peerId);
+              }
               return;
             }
-            if (parsed && (parsed.type === "ack-restore" || parsed.type === "ack-epoch")) {
-              if (typeof parsed.epoch === "number" && parsed.epoch > 0) {
-                peer.epoch = parsed.epoch;
+
+            if (
+              parsed &&
+              (parsed.type === "ack-restore" || parsed.type === "ack-epoch")
+            ) {
+              // SECURITY INVARIANT (CR-02): Client-supplied epoch acknowledgments NEVER
+              // promote peer.epoch, clear fencing, or grant write access to a new generation.
+              return;
+            }
+
+            if (parsed && parsed.type === "ack-sync") {
+              const validClient =
+                parsed.clientId === undefined ||
+                (typeof parsed.clientId === "number" &&
+                  Number.isFinite(parsed.clientId) &&
+                  !room.revokedClientIds.has(parsed.clientId));
+
+              if (
+                !peer.fenced &&
+                !room.restorationBarrierActive &&
+                !room.requiresRecovery &&
+                parsed.epoch === room.epoch &&
+                typeof parsed.generationId === "string" &&
+                parsed.generationId === room.generationId &&
+                typeof parsed.challengeNonce === "string" &&
+                parsed.challengeNonce === peer.challengeNonce &&
+                validClient
+              ) {
+                if (typeof parsed.clientId === "number") {
+                  peer.clientId = parsed.clientId;
+                }
+                peer.handshakeComplete = true;
+              } else {
+                peer.fenced = true;
+                peer.handshakeComplete = false;
+                socket.close(
+                  4409,
+                  "Conflict: Document was restored to revision. Invalid generation handshake.",
+                );
+                room.removePeer(peerId);
               }
               return;
             }
           } catch {
-            // Not a valid JSON control frame, treat as binary update below
+            socket.close(4400, "Bad Request: Invalid control frame JSON");
+            room.removePeer(peerId);
+            return;
           }
+          return;
         }
 
         if (!canEdit) {
@@ -253,73 +421,86 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Fencing check: reject updates originating from a stale epoch
-        if (peer.epoch < room.epoch) {
-          socket.close(
-            4409,
-            "Conflict: Document was restored to revision. Client must sync to current epoch.",
-          );
+        const updateBytes = new Uint8Array(buf);
+        const validation = room.validateIncomingUpdate(peer, updateBytes);
+        if (!validation.allowed) {
+          socket.close(validation.closeCode, validation.reason);
           room.removePeer(peerId);
           return;
         }
 
-        const rateLimitKey = `${session.user.id}:${peerId}`;
+        const rateLimitKey = `${publicationId}:${postId}:${session.user.id}`;
         if (!crdtRateLimiter.isAllowed(rateLimitKey)) {
           // Throttled
           return;
         }
 
-        const updateBytes = new Uint8Array(buf);
         await room.recordUpdate(updateBytes);
         room.broadcastBinary(updateBytes, peerId);
       });
 
+      const cleanupSocket = () => {
+        if (peer.clientId !== undefined) {
+          room.broadcastString(
+            JSON.stringify({
+              type: "awareness",
+              clientId: peer.clientId,
+              state: null,
+            }),
+            peerId,
+          );
+        }
+        roomManager.removePeer(publicationId, postId, peerId);
+      };
+
+      socket.on("close", cleanupSocket);
+      socket.on("error", cleanupSocket);
+
+      // Defer initial catch-up synchronization briefly so the HTTP 101 WebSocket
+      // Upgrade flushes over TCP and client `open` listeners attach `message` handlers cleanly.
+      const catchUpTimer = setTimeout(() => {
+        if (socket.readyState !== 1 /* OPEN */) return;
+
+        socket.send(
+          JSON.stringify({
+            type: "sync-init",
+            epoch: room.epoch,
+            generationId: room.generationId,
+            canEdit: peer.canEdit,
+            ...(room.restoredContent
+              ? { restoredContent: room.restoredContent }
+              : {}),
+          }),
+        );
+
+        if (!peer.fenced) {
+          const inMemoryState = room.getCurrentStateUpdate();
+          if (inMemoryState && socket.readyState === 1 /* OPEN */) {
+            socket.send(inMemoryState, { binary: true });
+          }
+        }
+
+        if (socket.readyState === 1 /* OPEN */) {
+          const svBase64 = Buffer.from(room.getStateVector()).toString("base64");
+          socket.send(
+            JSON.stringify({
+              type: "sync-done",
+              epoch: room.epoch,
+              generationId: room.generationId,
+              challengeNonce: peer.challengeNonce,
+              stateVector: svBase64,
+            }),
+          );
+        }
+      }, 15);
+      catchUpTimer.unref?.();
+
       socket.on("close", () => {
-        roomManager.removePeer(publicationId, postId, peerId);
+        clearTimeout(catchUpTimer);
       });
-
       socket.on("error", () => {
-        roomManager.removePeer(publicationId, postId, peerId);
+        clearTimeout(catchUpTimer);
       });
-
-      // 8. Initial catch-up synchronization with epoch awareness
-      if (socket.readyState === 1 /* OPEN */) {
-        socket.send(JSON.stringify({ type: "sync-init", epoch: room.epoch }));
-      }
-
-      const inMemoryState = room.getCurrentStateUpdate();
-      if (inMemoryState) {
-        if (socket.readyState === 1 /* OPEN */) {
-          socket.send(inMemoryState, { binary: true });
-        }
-        if (socket.readyState === 1 /* OPEN */) {
-          socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
-        }
-      } else {
-        crdtPersistence
-          .getUpdates(publicationId, postId)
-          .then((updates) => {
-            for (const update of updates) {
-              if (socket.readyState === 1 /* OPEN */) {
-                socket.send(update, { binary: true });
-              }
-              try {
-                Y.applyUpdate(room.ydoc, update);
-              } catch (applyErr) {
-                console.warn(`[WS Room ${postId}] Failed to apply catch-up update to in-memory ydoc:`, applyErr);
-              }
-            }
-            if (socket.readyState === 1 /* OPEN */) {
-              socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
-            }
-          })
-          .catch((err) => {
-            console.error(`[WS Room ${postId}] Catch-up sync failed:`, err);
-            if (socket.readyState === 1 /* OPEN */) {
-              socket.send(JSON.stringify({ type: "sync-done", epoch: room.epoch }));
-            }
-          });
-      }
     },
   );
 }
