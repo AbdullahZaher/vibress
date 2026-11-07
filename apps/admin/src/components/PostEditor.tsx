@@ -1153,7 +1153,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     triggerAutosaveDebounced();
   };
 
-  const handleDocChange = (doc: StudioDocument) => {
+  const handleDocChange = (
+    doc: StudioDocument,
+    origin: "local" | "remote" = "local",
+  ) => {
     if (pendingRecoverDraftRef.current) {
       return;
     }
@@ -1165,6 +1168,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     });
     setStudioDoc(doc);
     latestDocRef.current = doc;
+    // Replayed Yjs changes already belong to the collaborating author.
+    // Keep the current snapshot fresh, but avoid redundant competing HTTP PUTs.
+    if (origin === "remote") return;
     triggerAutosaveDebounced();
   };
 

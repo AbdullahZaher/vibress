@@ -8,6 +8,7 @@ import {
   ErrorInfo,
   ReactNode,
 } from "react";
+import { COLLABORATION_TAG } from "lexical";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -58,7 +59,8 @@ export interface VibressStudioProps {
   metadataRevision?: number | undefined;
   /** UI locale for recovery messages; independent of document direction. */
   recoveryLocale?: "en" | "ar" | undefined;
-  onChange?: ((doc: StudioDocument) => void) | undefined;
+  /** Second argument indicates remote CRDT updates. Existing listeners remain compatible. */
+  onChange?: ((doc: StudioDocument, origin?: "local" | "remote") => void) | undefined;
   readOnly?: boolean | undefined;
   enableAi?: boolean | undefined;
   onAiGenerate?: ((prompt: string) => Promise<string>) | undefined;
@@ -539,7 +541,12 @@ export function VibressStudio({
                         lastEditorRoot.current = rootJson;
                         dirty.current = true;
                         setSnapshotError(null);
-                        onChange?.(studioDoc);
+                        // Remote Yjs playback updates host state without scheduling
+                        // competing HTTP autosaves from every connected peer.
+                        onChange?.(
+                          studioDoc,
+                          collaboration && tags.has(COLLABORATION_TAG) ? "remote" : "local",
+                        );
                       } catch (error) {
                         const recoverable =
                           error instanceof Error
