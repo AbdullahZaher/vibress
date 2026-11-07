@@ -150,7 +150,8 @@ test("mixed-direction article retains structured content across three host edit 
   await expect(list.locator(":scope > li")).toHaveCount(2);
   await expect(list.locator(":scope > li").first().locator("ul")).toContainText("Nested");
   await expect(article.locator("table")).toContainText("خلية 123");
-  await expect(article.getByRole("columnheader", { name: "خلية 123" })).toHaveCSS("background-color", "rgb(229, 241, 255)");
+  const headerCell = article.locator("table th").filter({ hasText: "خلية 123" });
+  await expect(headerCell).toHaveCSS("background-color", "rgb(229, 241, 255)");
   await expect(article.locator("figcaption")).toContainText("صورة 123");
   await expect(article).toContainText(checkpoint);
 });
