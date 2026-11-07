@@ -8,7 +8,6 @@ import {
   ErrorInfo,
   ReactNode,
 } from "react";
-import { COLLABORATION_TAG } from "lexical";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
@@ -44,6 +43,11 @@ import { logForensicEvent, extractDocStats } from "@vibress/studio-utils";
 import { StudioUploadContext, StudioUploadApi } from "./upload-context";
 import { StudioMediaContext, StudioMediaRequest } from "./media-context";
 import { CollaborationConfig } from "./collaboration/types";
+
+// @lexical/yjs 0.13.1 uses this update tag for remote collaboration.
+// lexical 0.13.1 does not export the newer COLLABORATION_TAG constant.
+// Keep this local until all Lexical packages are upgraded together.
+const LEGACY_COLLABORATION_TAG = "collaboration";
 
 export interface VibressStudioProps {
   value?: unknown;
@@ -545,7 +549,7 @@ export function VibressStudio({
                         // competing HTTP autosaves from every connected peer.
                         onChange?.(
                           studioDoc,
-                          collaboration && tags.has(COLLABORATION_TAG) ? "remote" : "local",
+                          collaboration && tags.has(LEGACY_COLLABORATION_TAG) ? "remote" : "local",
                         );
                       } catch (error) {
                         const recoverable =
