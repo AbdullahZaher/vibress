@@ -41,8 +41,8 @@ In accordance with non-negotiable engineering principles and non-compensatory re
   *CI Run ID:* [`42313317583`](https://github.com/AbdullahZaher/vibress-studio/actions/runs/42313317583)
 - **Host CMS Ecosystem:** [`Vibress CMS`](file:///Users/abdullahzaher/vibress)  
   *Branch:* `feat/offline-draft-recovery` (PR `#140`, incorporating rebased fixes from PR `#138` and `#139`)  
-  *Previously verified remediation commit:* [`e3ca4287619aca042df184e2b3f71c014a24235c`](https://github.com/AbdullahZaher/vibress/commit/e3ca4287619aca042df184e2b3f71c014a24235c)  
-  *CI review baseline:* [`42361449997`](https://github.com/AbdullahZaher/vibress/actions/runs/42361449997) (passed on `82f943d`; re-run after changes)
+  *Verified remediation commit:* [`4845570b4977e58baedf83469c5b2cb090688b98`](https://github.com/AbdullahZaher/vibress/commit/4845570b4977e58baedf83469c5b2cb090688b98)  
+  *CI Run ID:* [`42391139495`](https://github.com/AbdullahZaher/vibress/actions/runs/42391139495) (`PASS` — all jobs: build, e2e, container-scan)
 
 ### PR Dependency Integration Sequence
 ```mermaid
@@ -441,8 +441,8 @@ Configure Datadog / Prometheus alerts on the following key metrics:
 ### Evidence Artifact Hashes
 - **Studio Repository Commit:** `f7ace9d8957d2a490aed8e67f2f42d25c57a574f`
 - **Host Repository Commit (Base):** `6ebd692119cdac9a334faebd2b3737853c880864`
-- **Host Repository Commit (Remediation):** `751ff01f3ffe22048c869f1daf94dce607b1643f`
-- **Host CI Verification Run:** [`42373915136`](https://github.com/AbdullahZaher/vibress/actions/runs/42373915136) (`PASS`)
+- **Host Repository Commit (Remediation):** `4845570b4977e58baedf83469c5b2cb090688b98`
+- **Host CI Verification Run:** [`42391139495`](https://github.com/AbdullahZaher/vibress/actions/runs/42391139495) (`PASS` — all jobs: build, e2e, container-scan)
 - **Host Contract Verification:** `node scripts/verify-host-compatibility.mjs` -> `PASS`
 - **Laboratory Benchmark Output:** `phase07-results.json` (`2026-11-06T23:37:18.721Z`)
 - **Database Backup Digest:** `vibress_backup_20261106_233800.sql.gz.sha256`
