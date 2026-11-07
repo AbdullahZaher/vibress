@@ -52,7 +52,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer1 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: "http://localhost:7777",
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -99,7 +100,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer2 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: "http://localhost:7777",
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -152,7 +154,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer3 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: "http://localhost:7777",
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
