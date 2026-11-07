@@ -50,7 +50,7 @@ function extractPlainText(rawContent: unknown): string {
   return JSON.stringify(doc);
 }
 
-describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injection (14 Mandatory Scenarios)", () => {
+describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injection (18 Mandatory Scenarios)", () => {
   let app: ReturnType<typeof buildApp>;
   let wsBaseUrl: string;
   let publicationId: string;

@@ -76,7 +76,7 @@ $$\text{Composite Score} = \sum_{i=1}^{n} (W_i \times S_i) = 9.500 / 10 \quad (\
 | Domain | Weight ($W_i$) | Score ($S_i$) | Weighted Contribution | Key Evidence |
 |---|---|---|---|---|
 | 1. Core Editor Architecture & Document Serialization | 15% | **9.6** | 1.440 | 14 packages, 0 explicit anys, AST contract validated, 50k words serialized in 1.07ms |
-| 2. CRDT Collaboration & Revision Restoration Durability | 20% | **9.7** | 1.940 | 14/14 fault-injection scenarios passed; monotonic epoch fences; zero data loss |
+| 2. CRDT Collaboration & Revision Restoration Durability | 20% | **9.7** | 1.940 | 18/18 fault-injection scenarios passed; monotonic epoch fences; zero data loss |
 | 3. Browser Draft Persistence & Offline Recovery | 15% | **9.5** | 1.425 | 11/11 Playwright real-browser blocks (all 14 scenarios) passed; `tx.oncomplete` durability |
 | 4. Security, Authorization & Abuse Defenses | 15% | **9.5** | 1.425 | F-01..F-08 remediated; 17/17 security regression tests passed; $O(\|update\|)$ binary validator |
 | 5. Writing Experience & Floating Toolbar Ergonomics | 10% | **9.5** | 0.950 | 14/14 Playwright media toolbar tests passed; zero focus collapse; rapid actions stable |
@@ -100,11 +100,12 @@ In `crdt-persistence.ts`, revision restoration previously performed non-atomic R
 
 ### Test Verification
 File: [`tests/integration/crdt-restoration-fault-injection.test.ts`](file:///Users/abdullahzaher/vibress/tests/integration/crdt-restoration-fault-injection.test.ts)  
-**Result:** **14/14 Scenarios PASSED** (`6.07s`)
+**Result:** **18/18 Scenarios PASSED** (`3.91s`)
 - *Scenario 1:* Redis failure before restoration leaves DB and prior CRDT state untouched.
 - *Scenarios 2–4:* Simulated Redis failures during MULTI steps trigger `REQUIRES_RECOVERY` and fence rooms.
 - *Scenarios 5–7:* Process termination and DB rollback/rollforward verified cleanly.
-- *Scenarios 8–14:* Sever restarts, reconnection races, and idempotent recovery verified.
+- *Scenarios 8–14:* Server restarts, reconnection races, and idempotent recovery verified.
+- *Scenarios 15–18:* Redis RPUSH/snapshot outage rejection, fail-closed WebSocket broadcast suppression, and compaction transaction step error surfacing.
 
 ---
 
@@ -377,7 +378,7 @@ If an unforeseen regression occurs post-deployment:
 
 | Gate | Description | Status | Evidence / Remarks |
 |---|---|---|---|
-| **Gate 1** | Content Durability & Zero Silent Data Loss | **PASSED** | 14/14 CRDT fault-injection scenarios passed; 11/11 offline durability blocks passed |
+| **Gate 1** | Content Durability & Zero Silent Data Loss | **PASSED** | 18/18 CRDT fault-injection scenarios passed; 11/11 offline durability blocks passed |
 | **Gate 2** | Stale Yjs Replay & Epoch Protection | **PASSED** | 17/17 epoch security regression scenarios passed; monotonic barriers verified |
 | **Gate 3** | Bidirectional Typing & Real-time Media UX | **PASSED** | 14/14 media toolbar and RTL Playwright scenarios passed |
 | **Gate 4** | Zero TypeScript / Lint / Build Failures | **PASSED** | 100% clean builds across both repositories with zero errors |
@@ -440,8 +441,8 @@ Configure Datadog / Prometheus alerts on the following key metrics:
 ### Evidence Artifact Hashes
 - **Studio Repository Commit:** `f7ace9d8957d2a490aed8e67f2f42d25c57a574f`
 - **Host Repository Commit (Base):** `6ebd692119cdac9a334faebd2b3737853c880864`
-- **Host Repository Commit (Remediation):** `e3ca4287619aca042df184e2b3f71c014a24235c`
-- **Host CI Verification Run:** [`42360157656`](https://github.com/AbdullahZaher/vibress/actions/runs/42360157656) (`PASS`)
+- **Host Repository Commit (Remediation):** `751ff01f3ffe22048c869f1daf94dce607b1643f`
+- **Host CI Verification Run:** [`42373915136`](https://github.com/AbdullahZaher/vibress/actions/runs/42373915136) (`PASS`)
 - **Host Contract Verification:** `node scripts/verify-host-compatibility.mjs` -> `PASS`
 - **Laboratory Benchmark Output:** `phase07-results.json` (`2026-11-06T23:37:18.721Z`)
 - **Database Backup Digest:** `vibress_backup_20261106_233800.sql.gz.sha256`
