@@ -1203,6 +1203,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             </Button>
           )}
 
+          {postId && status === "published" && canPublish && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleUnpublish}
+              loading={saving}
+              className="h-8 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 transition"
+            >
+              {tr("Unpublish")}
+            </Button>
+          )}
+
           {/* Ghost Settings Panel Toggle (◫) */}
           <button
             type="button"
