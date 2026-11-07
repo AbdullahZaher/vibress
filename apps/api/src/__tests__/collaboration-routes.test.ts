@@ -5,6 +5,7 @@ import { getDb, posts, users, userRoles, roles, publicationMemberships } from "@
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
+import * as Y from "yjs";
 
 let testPostId: string;
 let ownerUserId: string;
@@ -92,6 +93,10 @@ async function loginStaff(app: FastifyInstance): Promise<string> {
 describe("Studio Collaboration API Routes", () => {
   let app: FastifyInstance;
   let cookieHeader: string;
+  const authHeaders = () => ({
+    cookie: cookieHeader,
+    origin: "http://localhost:7777",
+  });
 
   beforeAll(async () => {
     await ensureOwnerAndTestPost();
@@ -111,7 +116,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/comments`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: {
           body: "Please verify citation in paragraph 2.",
           blockId: "node-xyz-123",
@@ -130,7 +135,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "GET",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/comments`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
       });
 
       expect(res.statusCode).toBe(200);
@@ -143,7 +148,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/comments/${commentId}/resolve`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
       });
 
       expect(res.statusCode).toBe(200);
@@ -154,7 +159,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/comments/${commentId}/reopen`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
       });
 
       expect(res.statusCode).toBe(200);
@@ -169,7 +174,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/suggestions`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: {
           originalText: "The system is slow.",
           suggestedText: "The platform experiences elevated latency.",
@@ -188,7 +193,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/suggestions/${suggestionId}/accept`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
       });
 
       expect(res.statusCode).toBe(200);
@@ -201,7 +206,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "PUT",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/assignment`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: {
           assigneeId: ownerUserId,
           reviewStatus: "in_review",
@@ -219,7 +224,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/presence`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: {
           cursor: { x: 100, y: 250, blockId: "block-hero" },
         },
@@ -237,7 +242,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/workflow/transition`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: {
           targetStatus: "in_review",
         },
@@ -250,12 +255,14 @@ describe("Studio Collaboration API Routes", () => {
 
   describe("Durable CRDT Document State Exchange & Safety Hardening", () => {
     it("POST and GET /posts/:postId/collaboration/crdt syncs incremental updates", async () => {
-      const dummyUpdateBase64 = Buffer.from(new Uint8Array([1, 2, 3, 4])).toString("base64");
+      const testDoc = new Y.Doc();
+      testDoc.getText("content").insert(0, "Valid CRDT content");
+      const dummyUpdateBase64 = Buffer.from(Y.encodeStateAsUpdate(testDoc)).toString("base64");
 
       const postRes = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: { update: dummyUpdateBase64 },
       });
 
@@ -265,7 +272,7 @@ describe("Studio Collaboration API Routes", () => {
       const getRes = await app.inject({
         method: "GET",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
       });
 
       expect(getRes.statusCode).toBe(200);
@@ -280,7 +287,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: { update: oversizedBase64 },
       });
 
@@ -292,7 +299,7 @@ describe("Studio Collaboration API Routes", () => {
       const res = await app.inject({
         method: "POST",
         url: `/api/admin/v1/posts/${testPostId}/collaboration/crdt`,
-        headers: { cookie: cookieHeader },
+        headers: authHeaders(),
         payload: { update: "not-valid-base64!@#$%" },
       });
 
@@ -310,7 +317,7 @@ describe("Studio Collaboration API Routes", () => {
         const res = await app.inject({
           method: "POST",
           url: `/api/admin/v1/posts/${floodPostId}/collaboration/crdt`,
-          headers: { cookie: cookieHeader },
+          headers: authHeaders(),
           payload: { update: validPayload },
         });
         lastStatus = res.statusCode;

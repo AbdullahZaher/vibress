@@ -1,20 +1,61 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyRequest } from "fastify";
 import {
   CreatePostInputSchema,
   UpdatePostInputSchema,
   SchedulePostInputSchema,
   PatchPostFeatureImageInputSchema,
 } from "@vibress/api-contracts";
-import { postsService, authorsService, revisionsService, mediaService } from "../services";
+import {
+  postsService,
+  authorsService,
+  revisionsService,
+  mediaService,
+  editorialCollaborationService,
+} from "../services";
 import {
   requireStaffSession,
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
+import { hasResourcePermission } from "@vibress/security";
 import { PostDomainError, ListPostsFilter } from "@vibress/posts";
-import { crdtPersistence } from "../collaboration/crdt-persistence";
+import {
+  crdtPersistence,
+  CrdtPersistenceError,
+  createRestoredYjsSeedSnapshot,
+} from "../collaboration/crdt-persistence";
 import { roomManager } from "../collaboration/room-manager";
 import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
+
+async function verifyPostEditAccess(id: string, req: FastifyRequest) {
+  const existingPost = await postsService.findById(
+    id,
+    req.publicationContext?.publicationId,
+  );
+  if (!existingPost) {
+    throw new PostDomainError("POST_NOT_FOUND", "Post not found");
+  }
+  const postAuthors = await authorsService.getPostAuthors(existingPost.id);
+  const postAuthorIds = (postAuthors || [])
+    .map((a: { id?: string; authorId?: string }) => a?.id || a?.authorId)
+    .filter((v): v is string => Boolean(v));
+  const isAuthorized = hasResourcePermission("posts.edit", {
+    actorId: req.user!.id,
+    resourceOwnerId: existingPost.primaryAuthorId,
+    resourceAuthorIds: postAuthorIds,
+    userRoles: req.roles,
+    userPermissions: req.permissions,
+    publicationId: req.publicationContext?.publicationId,
+    resourcePublicationId: existingPost.publicationId,
+  });
+  if (!isAuthorized) {
+    throw new PostDomainError(
+      "FORBIDDEN",
+      "Forbidden: You do not have permission to modify another author's post",
+    );
+  }
+  return existingPost;
+}
 
 async function resolvePostFeatureImage(
   featureImageId: string | null,
@@ -213,29 +254,132 @@ export async function postRoutes(fastify: FastifyInstance) {
       const incomingChildren = (parseResult.data.content as any)?.root?.children?.length ?? -1;
       console.log(`[FORENSIC] API_RECEIVED postId=${id} expectedVersion=${parseResult.data.expectedVersion} incomingChildren=${incomingChildren}`);
 
+      let resolvedPubId =
+        req.publicationContext?.publicationId || "pub_default";
       try {
-        const post = await postsService.updatePost(
-          id,
-          parseResult.data,
-          {
-            userId: req.user!.id,
-            roles: req.roles,
-            permissions: req.permissions,
-            publicationId: req.publicationContext?.publicationId,
-          },
-        );
-        const persistedChildren = (post.content as any)?.root?.children?.length ?? -1;
-        console.log(`[FORENSIC] DB_PERSISTED postId=${id} newVersion=${post.version} persistedChildren=${persistedChildren}`);
+        const isRecoverDraft =
+          (req.query as Record<string, string> | undefined)?.recoverDraft === "1";
+        const existingPost = await verifyPostEditAccess(id, req);
+        resolvedPubId =
+          existingPost.publicationId ||
+          req.publicationContext?.publicationId ||
+          "pub_default";
 
-        // Authoritative REST update resets any stale/partial CRDT buffer in Redis
-        try {
-          await crdtPersistence.clear(
-            req.publicationContext?.publicationId || "pub_default",
+        let post;
+        if (isRecoverDraft) {
+          const coordinated = await roomManager.executeCoordinatedRestore({
+            publicationId: resolvedPubId,
+            postId: id,
+            revisionId: "offline-draft-recovery",
+            loadPreRestoreVersion: async () => {
+              const latest = await postsService.findById(id, resolvedPubId);
+              return latest?.version ?? existingPost.version;
+            },
+            executeDbRestore: () =>
+              postsService.updatePost(id, parseResult.data, {
+                userId: req.user!.id,
+                roles: req.roles,
+                permissions: req.permissions,
+                publicationId: req.publicationContext?.publicationId,
+              }),
+          });
+          post = coordinated.post;
+          editorialCollaborationService.clearYjsDocUpdates(id, resolvedPubId);
+        } else {
+          if (
+            roomManager.isRestoreLocked(resolvedPubId, id) ||
+            crdtPersistence.hasPendingRecovery(resolvedPubId, id)
+          ) {
+            return reply.status(409).send({
+              errors: [
+                {
+                  code: "CONTENT_CONFLICT",
+                  message:
+                    "Document revision restoration is currently in progress",
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          const activeRestoreState = await crdtPersistence.getRestorationState(
+            resolvedPubId,
             id,
           );
-        } catch {
-          // Non-blocking cache clear
+          if (
+            activeRestoreState?.status === "IN_PROGRESS" ||
+            activeRestoreState?.status === "REQUIRES_RECOVERY"
+          ) {
+            return reply.status(409).send({
+              errors: [
+                {
+                  code: "CONTENT_CONFLICT",
+                  message:
+                    "Document revision restoration requires reconciliation before saving",
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+
+          post = await postsService.updatePost(
+            id,
+            parseResult.data,
+            {
+              userId: req.user!.id,
+              roles: req.roles,
+              permissions: req.permissions,
+              publicationId: req.publicationContext?.publicationId,
+            },
+          );
+
+          // Preserve durable CRDT snapshot & parent structs for active collaborative rooms (P0-1)
+          try {
+            const activeRoom = roomManager.getRoom(resolvedPubId, id);
+            if (activeRoom && activeRoom.isHydrated()) {
+              const roomState = activeRoom.getCurrentStateUpdate();
+              if (roomState) {
+                await crdtPersistence.compact(resolvedPubId, id, roomState);
+              }
+            } else if (
+              (!activeRoom || activeRoom.peerCount === 0) &&
+              parseResult.data.content !== undefined
+            ) {
+              const [currentEpoch, existingUpdates, existingRevoked] =
+                await Promise.all([
+                  crdtPersistence.getEpoch(resolvedPubId, id),
+                  crdtPersistence.getUpdates(resolvedPubId, id),
+                  crdtPersistence.getRevokedClientIds(resolvedPubId, id),
+                ]);
+              if (currentEpoch >= 2 || existingUpdates.length > 0) {
+                const currentGen = await crdtPersistence.getOrInitGenerationId(
+                  resolvedPubId,
+                  id,
+                  currentEpoch,
+                );
+                const refreshedSnapshot = createRestoredYjsSeedSnapshot({
+                  epoch: currentEpoch,
+                  generationId: currentGen,
+                  canonicalDocument: post.content,
+                  restoredPostVersion: post.version,
+                  avoidClientIds: existingRevoked,
+                });
+                await crdtPersistence.compact(
+                  resolvedPubId,
+                  id,
+                  refreshedSnapshot,
+                );
+              }
+              editorialCollaborationService.clearYjsDocUpdates(
+                id,
+                resolvedPubId,
+              );
+            }
+          } catch {
+            // Non-blocking compaction after PostgreSQL commit on routine autosave
+          }
         }
+        const persistedChildren = (post.content as any)?.root?.children?.length ?? -1;
+        console.log(`[FORENSIC] DB_PERSISTED postId=${id} newVersion=${post.version} persistedChildren=${persistedChildren}`);
 
         const authors = await authorsService.getPostAuthors(post.id);
         const tagIds = await postsService.getPostTagIds(post.id);
@@ -248,6 +392,24 @@ export async function postRoutes(fastify: FastifyInstance) {
           post: { ...post, authors, tagIds, featureImage },
         });
       } catch (err: unknown) {
+        if (err instanceof CrdtPersistenceError) {
+          const requiresRecovery = crdtPersistence.hasPendingRecovery(
+            resolvedPubId,
+            id,
+          );
+          return reply.status(503).send({
+            errors: [
+              {
+                code: err.code,
+                message: err.message,
+                restorationStatus: requiresRecovery
+                  ? "REQUIRES_RECOVERY"
+                  : "FAILED",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
 
         if (err instanceof PostDomainError) {
           if (err.code === "FORBIDDEN") {
@@ -656,31 +818,59 @@ export async function postRoutes(fastify: FastifyInstance) {
         id: string;
         revisionId: string;
       };
+      let resolvedPubId = req.publicationContext?.publicationId || "pub_default";
       try {
-        const post = await postsService.restoreRevision(
-          id,
-          revisionId,
-          {
-            userId: req.user!.id,
-            roles: req.roles,
-            permissions: req.permissions,
-            publicationId: req.publicationContext?.publicationId,
-          },
-        );
+        const existingPost = await verifyPostEditAccess(id, req);
+        resolvedPubId =
+          existingPost.publicationId ||
+          req.publicationContext?.publicationId ||
+          "pub_default";
 
-        // Coordinated Yjs restoration: increment epoch, reset in-memory room, wipe obsolete Redis CRDT updates
-        const publicationId = post.publicationId || req.publicationContext?.publicationId || "pub_default";
-        const currentEpoch = await crdtPersistence.getEpoch(publicationId, id);
-        const nextEpoch = currentEpoch + 1;
-        await roomManager.resetRoomWithDocument(
-          publicationId,
-          id,
-          nextEpoch,
-          post.content,
-        );
+        const { post, epoch, generationId } =
+          await roomManager.executeCoordinatedRestore({
+            publicationId: resolvedPubId,
+            postId: id,
+            revisionId,
+            loadPreRestoreVersion: async () => {
+              const latest = await postsService.findById(id, resolvedPubId);
+              return latest?.version ?? existingPost.version;
+            },
+            executeDbRestore: () =>
+              postsService.restoreRevision(id, revisionId, {
+                userId: req.user!.id,
+                roles: req.roles,
+                permissions: req.permissions,
+                publicationId: req.publicationContext?.publicationId,
+              }),
+          });
 
-        return reply.status(200).send({ post, epoch: nextEpoch });
+        editorialCollaborationService.clearYjsDocUpdates(id, resolvedPubId);
+
+        return reply.status(200).send({
+          post,
+          epoch,
+          generationId,
+          restorationStatus: "COMMITTED",
+        });
       } catch (err: unknown) {
+        if (err instanceof CrdtPersistenceError) {
+          const requiresRecovery = crdtPersistence.hasPendingRecovery(
+            resolvedPubId,
+            id,
+          );
+          return reply.status(503).send({
+            errors: [
+              {
+                code: err.code,
+                message: err.message,
+                restorationStatus: requiresRecovery
+                  ? "REQUIRES_RECOVERY"
+                  : "FAILED",
+                requestId: req.id,
+              },
+            ],
+          });
+        }
         if (err instanceof PostDomainError) {
           if (err.code === "FORBIDDEN") {
             return reply.status(403).send({
@@ -710,6 +900,17 @@ export async function postRoutes(fastify: FastifyInstance) {
                 {
                   code: "REVISION_NOT_FOUND",
                   message: "Revision not found",
+                  requestId: req.id,
+                },
+              ],
+            });
+          }
+          if (err.code === "CONTENT_CONFLICT") {
+            return reply.status(409).send({
+              errors: [
+                {
+                  code: "CONTENT_CONFLICT",
+                  message: err.message,
                   requestId: req.id,
                 },
               ],

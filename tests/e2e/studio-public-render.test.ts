@@ -320,7 +320,8 @@ test.describe("Studio public rendering", () => {
 
     // Publish through the real UI.
     await page
-      .locator('button:has-text("Publish Now")')
+      .locator('button:has-text("Publish Now"), button:has-text("Publish")')
+      .first()
       .click({ timeout: 8000 });
     await page.waitForTimeout(3000);
 

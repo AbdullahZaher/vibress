@@ -44,6 +44,11 @@ import { StudioUploadContext, StudioUploadApi } from "./upload-context";
 import { StudioMediaContext, StudioMediaRequest } from "./media-context";
 import { CollaborationConfig } from "./collaboration/types";
 
+// @lexical/yjs 0.13.1 uses this update tag for remote collaboration.
+// lexical 0.13.1 does not export the newer COLLABORATION_TAG constant.
+// Keep this local until all Lexical packages are upgraded together.
+const LEGACY_COLLABORATION_TAG = "collaboration";
+
 export interface VibressStudioProps {
   value?: unknown;
   /** Shared inbound/outgoing resource admission (5 MiB / 50k AST / depth 64 by default). */
@@ -58,7 +63,8 @@ export interface VibressStudioProps {
   metadataRevision?: number | undefined;
   /** UI locale for recovery messages; independent of document direction. */
   recoveryLocale?: "en" | "ar" | undefined;
-  onChange?: ((doc: StudioDocument) => void) | undefined;
+  /** Second argument indicates remote CRDT updates. Existing listeners remain compatible. */
+  onChange?: ((doc: StudioDocument, origin?: "local" | "remote") => void) | undefined;
   readOnly?: boolean | undefined;
   enableAi?: boolean | undefined;
   onAiGenerate?: ((prompt: string) => Promise<string>) | undefined;
@@ -432,6 +438,7 @@ export function VibressStudio({
                     contentEditable={
                       <ContentEditable
                         className="vibress-studio-content focus:outline-none"
+                        aria-label="Editor content"
                         style={{
                           outline: "none",
                           minHeight: "40vh",
@@ -538,7 +545,12 @@ export function VibressStudio({
                         lastEditorRoot.current = rootJson;
                         dirty.current = true;
                         setSnapshotError(null);
-                        onChange?.(studioDoc);
+                        // Remote Yjs playback updates host state without scheduling
+                        // competing HTTP autosaves from every connected peer.
+                        onChange?.(
+                          studioDoc,
+                          collaboration && tags.has(LEGACY_COLLABORATION_TAG) ? "remote" : "local",
+                        );
                       } catch (error) {
                         const recoverable =
                           error instanceof Error

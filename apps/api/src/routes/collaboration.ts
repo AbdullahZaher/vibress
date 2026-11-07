@@ -1,11 +1,21 @@
-import { FastifyInstance, FastifyReply } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
+  validateOrigin,
 } from "../middleware/auth";
-import { editorialCollaborationService } from "../services";
-import { PostStatus } from "@vibress/posts";
-import { crdtPersistence } from "../collaboration/crdt-persistence";
+import {
+  editorialCollaborationService,
+  postsService,
+  authorsService,
+} from "../services";
+import { hasResourcePermission } from "@vibress/security";
+import { PostStatus, PostDomainError } from "@vibress/posts";
+import {
+  crdtPersistence,
+  CrdtPersistenceError,
+  validateYjsUpdateBinary,
+} from "../collaboration/crdt-persistence";
 import { roomManager } from "../collaboration/room-manager";
 
 const sendError = (
@@ -16,6 +26,53 @@ const sendError = (
   status = 400,
 ) => reply.status(status).send({ errors: [{ code, message, requestId }] });
 
+async function resolveScopedPost(
+  req: FastifyRequest<{ Params: { postId: string } }>,
+  reply: FastifyReply,
+  options?: { requireResourceEdit?: boolean },
+) {
+  const publicationId = req.publicationContext?.publicationId || "pub_default";
+  const post = await postsService.findById(req.params.postId, publicationId);
+  if (!post) {
+    sendError(
+      reply,
+      "POST_NOT_FOUND",
+      "Post not found in active publication",
+      req.id,
+      404,
+    );
+    return null;
+  }
+
+  if (options?.requireResourceEdit) {
+    const postAuthors = await authorsService.getPostAuthors(post.id);
+    const postAuthorIds = (postAuthors || [])
+      .map((a: { id?: string; authorId?: string }) => a?.id || a?.authorId)
+      .filter((v): v is string => Boolean(v));
+    const allowed = hasResourcePermission("posts.edit", {
+      actorId: req.user!.id,
+      resourceOwnerId: post.primaryAuthorId,
+      resourceAuthorIds: postAuthorIds,
+      userRoles: req.roles,
+      userPermissions: req.permissions,
+      publicationId,
+      resourcePublicationId: post.publicationId,
+    });
+    if (!allowed) {
+      sendError(
+        reply,
+        "FORBIDDEN",
+        "Forbidden: You do not have permission to modify another author's post",
+        req.id,
+        403,
+      );
+      return null;
+    }
+  }
+
+  return { post, publicationId };
+}
+
 export async function collaborationRoutes(fastify: FastifyInstance) {
   // 1. Comments
   fastify.get<{ Params: { postId: string } }>(
@@ -23,8 +80,10 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply);
+        if (!scoped) return;
         const comments = await editorialCollaborationService.listComments(
-          req.params.postId,
+          scoped.post.id,
         );
         return reply.send({ data: comments });
       },
@@ -35,8 +94,14 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     Params: { postId: string };
     Body: { body: string; blockId?: string };
   }>("/posts/:postId/collaboration/comments", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
+      const scoped = await resolveScopedPost(req, reply);
+      if (!scoped) return;
       const { body, blockId } = req.body || {};
       if (!body || !body.trim()) {
         return sendError(
@@ -48,7 +113,7 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
       }
 
       const comment = await editorialCollaborationService.addComment({
-        postId: req.params.postId,
+        postId: scoped.post.id,
         authorId: req.user!.id,
         body,
         blockId,
@@ -61,11 +126,20 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { postId: string; commentId: string } }>(
     "/posts/:postId/collaboration/comments/:commentId/resolve",
     {
-      preHandler: [requireStaffSession, requirePermission("posts.edit")],
+      preHandler: [
+        requireStaffSession,
+        requirePermission("posts.edit"),
+        validateOrigin,
+      ],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply, {
+          requireResourceEdit: true,
+        });
+        if (!scoped) return;
         await editorialCollaborationService.resolveComment(
           req.params.commentId,
           req.user!.id,
+          scoped.post.id,
         );
         return reply.send({ data: { resolved: true } });
       },
@@ -75,10 +149,19 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { postId: string; commentId: string } }>(
     "/posts/:postId/collaboration/comments/:commentId/reopen",
     {
-      preHandler: [requireStaffSession, requirePermission("posts.edit")],
+      preHandler: [
+        requireStaffSession,
+        requirePermission("posts.edit"),
+        validateOrigin,
+      ],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply, {
+          requireResourceEdit: true,
+        });
+        if (!scoped) return;
         await editorialCollaborationService.reopenComment(
           req.params.commentId,
+          scoped.post.id,
         );
         return reply.send({ data: { reopened: true } });
       },
@@ -91,10 +174,10 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply);
+        if (!scoped) return;
         const suggestions =
-          await editorialCollaborationService.listSuggestions(
-            req.params.postId,
-          );
+          await editorialCollaborationService.listSuggestions(scoped.post.id);
         return reply.send({ data: suggestions });
       },
     },
@@ -104,8 +187,14 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     Params: { postId: string };
     Body: { originalText: string; suggestedText: string; blockId?: string };
   }>("/posts/:postId/collaboration/suggestions", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
+      const scoped = await resolveScopedPost(req, reply);
+      if (!scoped) return;
       const { originalText, suggestedText, blockId } = req.body || {};
       if (!originalText || !suggestedText) {
         return sendError(
@@ -118,7 +207,7 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
 
       const suggestion =
         await editorialCollaborationService.createSuggestion({
-          postId: req.params.postId,
+          postId: scoped.post.id,
           authorId: req.user!.id,
           originalText,
           suggestedText,
@@ -132,12 +221,21 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { postId: string; suggestionId: string } }>(
     "/posts/:postId/collaboration/suggestions/:suggestionId/accept",
     {
-      preHandler: [requireStaffSession, requirePermission("posts.edit")],
+      preHandler: [
+        requireStaffSession,
+        requirePermission("posts.edit"),
+        validateOrigin,
+      ],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply, {
+          requireResourceEdit: true,
+        });
+        if (!scoped) return;
         await editorialCollaborationService.reviewSuggestion(
           req.params.suggestionId,
           req.user!.id,
           "accepted",
+          scoped.post.id,
         );
         return reply.send({ data: { accepted: true } });
       },
@@ -147,12 +245,21 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   fastify.post<{ Params: { postId: string; suggestionId: string } }>(
     "/posts/:postId/collaboration/suggestions/:suggestionId/reject",
     {
-      preHandler: [requireStaffSession, requirePermission("posts.edit")],
+      preHandler: [
+        requireStaffSession,
+        requirePermission("posts.edit"),
+        validateOrigin,
+      ],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply, {
+          requireResourceEdit: true,
+        });
+        if (!scoped) return;
         await editorialCollaborationService.reviewSuggestion(
           req.params.suggestionId,
           req.user!.id,
           "rejected",
+          scoped.post.id,
         );
         return reply.send({ data: { rejected: true } });
       },
@@ -165,8 +272,10 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply);
+        if (!scoped) return;
         const assignment = await editorialCollaborationService.getAssignment(
-          req.params.postId,
+          scoped.post.id,
         );
         return reply.send({ data: assignment });
       },
@@ -183,8 +292,16 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
       reviewStatus?: "pending" | "in_review" | "changes_requested" | "approved";
     };
   }>("/posts/:postId/collaboration/assignment", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
+      const scoped = await resolveScopedPost(req, reply, {
+        requireResourceEdit: true,
+      });
+      if (!scoped) return;
       const {
         assigneeId,
         reviewerIds,
@@ -194,7 +311,7 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
       } = req.body || {};
 
       const assignment = await editorialCollaborationService.updateAssignment({
-        postId: req.params.postId,
+        postId: scoped.post.id,
         assigneeId: assigneeId ?? null,
         reviewerIds: reviewerIds || [],
         dueDate: dueDate ? new Date(dueDate) : null,
@@ -212,8 +329,11 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
+        const scoped = await resolveScopedPost(req, reply);
+        if (!scoped) return;
         const activeUsers = editorialCollaborationService.getActivePresence(
-          req.params.postId,
+          scoped.post.id,
+          scoped.publicationId,
         );
         return reply.send({ data: activeUsers });
       },
@@ -224,16 +344,23 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     Params: { postId: string };
     Body: { cursor?: { x: number; y: number; blockId?: string } };
   }>("/posts/:postId/collaboration/presence", {
-    preHandler: [requireStaffSession, requirePermission("posts.read")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.read"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
+      const scoped = await resolveScopedPost(req, reply);
+      if (!scoped) return;
       const activeUsers =
         editorialCollaborationService.recordPresenceHeartbeat(
-          req.params.postId,
+          scoped.post.id,
           {
             userId: req.user!.id,
             name: req.user!.name || "Staff Member",
             cursor: req.body?.cursor,
           },
+          scoped.publicationId,
         );
       return reply.send({ data: activeUsers });
     },
@@ -244,8 +371,10 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     Params: { postId: string };
     Body: { targetStatus: PostStatus };
   }>("/posts/:postId/workflow/transition", {
-    preHandler: [requireStaffSession],
+    preHandler: [requireStaffSession, validateOrigin],
     handler: async (req, reply) => {
+      const scoped = await resolveScopedPost(req, reply);
+      if (!scoped) return;
       const { targetStatus } = req.body || {};
       if (!targetStatus) {
         return sendError(
@@ -257,14 +386,24 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
       }
 
       try {
+        const postAuthors = await authorsService.getPostAuthors(scoped.post.id);
+        const postAuthorIds = (postAuthors || [])
+          .map((a: { id?: string; authorId?: string }) => a?.id || a?.authorId)
+          .filter((v): v is string => Boolean(v));
         const res = await editorialCollaborationService.transitionWorkflow({
-          postId: req.params.postId,
+          postId: scoped.post.id,
+          publicationId: scoped.publicationId,
           targetStatus,
           actorId: req.user!.id,
+          actorRoles: req.roles,
           actorPermissions: req.permissions || [],
+          resourceAuthorIds: postAuthorIds,
         });
         return reply.send({ data: res });
       } catch (err) {
+        if (err instanceof PostDomainError && err.code === "VALIDATION_ERROR") {
+          return sendError(reply, "VALIDATION_ERROR", err.message, req.id, 400);
+        }
         return sendError(
           reply,
           "WORKFLOW_ERROR",
@@ -282,14 +421,33 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
   const crdtRateLimitMap = new Map<string, number[]>();
   const CRDT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
   const CRDT_MAX_UPDATES_PER_WINDOW = 60;
+  let crdtRateLimitOps = 0;
 
   function checkCrdtRateLimit(key: string): boolean {
     const now = Date.now();
     const windowStart = now - CRDT_RATE_LIMIT_WINDOW_MS;
-    const timestamps = (crdtRateLimitMap.get(key) || []).filter((t) => t > windowStart);
+    if (++crdtRateLimitOps >= 200) {
+      crdtRateLimitOps = 0;
+      for (const [k, ts] of crdtRateLimitMap.entries()) {
+        const active = ts.filter((t) => t > windowStart);
+        if (active.length === 0) {
+          crdtRateLimitMap.delete(k);
+        } else if (active.length !== ts.length) {
+          crdtRateLimitMap.set(k, active);
+        }
+      }
+    }
+
+    const timestamps = (crdtRateLimitMap.get(key) || []).filter(
+      (t) => t > windowStart,
+    );
 
     if (timestamps.length >= CRDT_MAX_UPDATES_PER_WINDOW) {
-      crdtRateLimitMap.set(key, timestamps);
+      if (timestamps.length === 0) {
+        crdtRateLimitMap.delete(key);
+      } else {
+        crdtRateLimitMap.set(key, timestamps);
+      }
       return false;
     }
 
@@ -303,32 +461,71 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
     {
       preHandler: [requireStaffSession, requirePermission("posts.read")],
       handler: async (req, reply) => {
-        const publicationId = req.publicationContext!.publicationId;
-        const persisted = await crdtPersistence.getUpdates(
-          publicationId,
-          req.params.postId,
-        );
+        const scoped = await resolveScopedPost(req, reply);
+        if (!scoped) return;
+        const { post, publicationId } = scoped;
+
+        let reconciled;
+        try {
+          reconciled = await crdtPersistence.reconcileWithDatabase(
+            publicationId,
+            post.id,
+            { version: post.version, content: post.content },
+            {
+              skipIfRestoreLocked: roomManager.isRestoreLocked(
+                publicationId,
+                post.id,
+              ),
+            },
+          );
+        } catch (err) {
+          if (err instanceof CrdtPersistenceError) {
+            return sendError(reply, err.code, err.message, req.id, 503);
+          }
+          throw err;
+        }
+
+        const persisted: Uint8Array[] = [];
+        if (reconciled.snapshot) {
+          persisted.push(reconciled.snapshot);
+        }
+        persisted.push(...reconciled.updates);
+
         let updates: Uint8Array[];
-        if (persisted.length > 0) {
+        if (persisted.length > 0 || reconciled.epoch >= 2) {
           updates = persisted;
         } else {
           updates = editorialCollaborationService.getYjsDocUpdates(
-            req.params.postId,
+            post.id,
+            publicationId,
           );
         }
-        const encodedUpdates = updates.map((u) => Buffer.from(u).toString("base64"));
-        return reply.send({ data: { updates: encodedUpdates } });
+        const encodedUpdates = updates.map((u) =>
+          Buffer.from(u).toString("base64"),
+        );
+        return reply.send({
+          data: {
+            updates: encodedUpdates,
+            epoch: reconciled.epoch,
+            generationId: reconciled.generationId,
+          },
+        });
       },
     },
   );
 
   fastify.post<{
     Params: { postId: string };
-    Body: { update: string };
+    Body: { update: string; epoch?: number; generationId?: string };
   }>("/posts/:postId/collaboration/crdt", {
-    preHandler: [requireStaffSession, requirePermission("posts.edit")],
+    preHandler: [
+      requireStaffSession,
+      requirePermission("posts.edit"),
+      validateOrigin,
+    ],
     handler: async (req, reply) => {
-      const { update } = req.body || {};
+      const { update, epoch: clientEpoch, generationId: clientGenerationId } =
+        req.body || {};
       if (!update || typeof update !== "string") {
         return sendError(
           reply,
@@ -358,7 +555,8 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
         );
       }
 
-      const rateLimitKey = `${req.user!.id}:${req.params.postId}`;
+      const publicationId = req.publicationContext!.publicationId;
+      const rateLimitKey = `${req.user!.id}:${publicationId}:${req.params.postId}`;
       if (!checkCrdtRateLimit(rateLimitKey)) {
         return sendError(
           reply,
@@ -391,26 +589,162 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
         );
       }
 
-      const updateBytes = new Uint8Array(updateBuffer);
-      editorialCollaborationService.applyYjsDocUpdate(
-        req.params.postId,
-        updateBytes,
-      );
+      const scoped = await resolveScopedPost(req, reply, {
+        requireResourceEdit: true,
+      });
+      if (!scoped) return;
+      const { post } = scoped;
 
-      const publicationId = req.publicationContext!.publicationId;
-      await crdtPersistence.saveUpdate(
-        publicationId,
-        req.params.postId,
-        updateBytes,
-      );
-
-      const room = roomManager.getRoom(publicationId, req.params.postId);
-      if (room) {
-        room.broadcastBinary(updateBytes);
+      const room = roomManager.getRoom(publicationId, post.id);
+      if (
+        roomManager.isRestoreLocked(publicationId, post.id) ||
+        crdtPersistence.hasPendingRecovery(publicationId, post.id) ||
+        room?.restorationBarrierActive ||
+        room?.requiresRecovery
+      ) {
+        return sendError(
+          reply,
+          "EPOCH_CONFLICT",
+          "Document revision restoration is in progress or requires recovery.",
+          req.id,
+          409,
+        );
       }
 
-      return reply.send({ data: { applied: true } });
+      let reconciled;
+      try {
+        reconciled = await crdtPersistence.reconcileWithDatabase(
+          publicationId,
+          post.id,
+          { version: post.version, content: post.content },
+          {
+            skipIfRestoreLocked: roomManager.isRestoreLocked(
+              publicationId,
+              post.id,
+            ),
+          },
+        );
+      } catch (err) {
+        if (err instanceof CrdtPersistenceError) {
+          return sendError(reply, err.code, err.message, req.id, 503);
+        }
+        throw err;
+      }
+
+      if (
+        reconciled.restoreState?.status === "IN_PROGRESS" ||
+        reconciled.restoreState?.status === "REQUIRES_RECOVERY"
+      ) {
+        return sendError(
+          reply,
+          "EPOCH_CONFLICT",
+          "Document revision restoration is in progress or requires recovery.",
+          req.id,
+          409,
+        );
+      }
+
+      const currentEpoch = room ? Math.max(room.epoch, reconciled.epoch) : reconciled.epoch;
+      const currentGenerationId =
+        room && room.epoch >= reconciled.epoch
+          ? room.generationId
+          : reconciled.generationId;
+
+      if (
+        currentEpoch >= 2 ||
+        clientEpoch !== undefined ||
+        clientGenerationId !== undefined
+      ) {
+        if (
+          clientEpoch !== currentEpoch ||
+          clientGenerationId !== currentGenerationId
+        ) {
+          return sendError(
+            reply,
+            "EPOCH_CONFLICT",
+            "CRDT update rejected: epoch or generationId does not match authoritative server generation.",
+            req.id,
+            409,
+          );
+        }
+      }
+
+      const updateBytes = new Uint8Array(updateBuffer);
+      const revokedSet = new Set<number>(reconciled.revokedClientIds);
+      if (room) {
+        for (const cid of room.revokedClientIds) {
+          revokedSet.add(cid);
+        }
+      }
+      const binaryCheck = validateYjsUpdateBinary(updateBytes, revokedSet);
+      if (!binaryCheck.valid) {
+        if (binaryCheck.code === "MALFORMED") {
+          return sendError(
+            reply,
+            "VALIDATION_ERROR",
+            binaryCheck.reason,
+            req.id,
+            400,
+          );
+        }
+        return sendError(
+          reply,
+          "EPOCH_CONFLICT",
+          binaryCheck.reason,
+          req.id,
+          409,
+        );
+      }
+
+      // Do not expose an accepted update through the in-memory service
+      // until the authoritative Redis write has completed successfully.
+      try {
+        if (room) {
+          room.hydrateFromDurableState({
+          epoch: reconciled.epoch,
+          generationId: reconciled.generationId,
+          revokedClientIds: reconciled.revokedClientIds,
+          snapshot: reconciled.snapshot,
+          updates: reconciled.updates,
+          restoredContent: reconciled.restoreState?.restoredContent,
+            restoreStatus: reconciled.restoreState?.status,
+          });
+          await room.recordUpdate(updateBytes, {
+            epoch: currentEpoch,
+            generationId: currentGenerationId,
+          });
+        } else {
+          await crdtPersistence.saveUpdate(publicationId, post.id, updateBytes);
+        }
+      } catch (err: unknown) {
+        if (err instanceof CrdtPersistenceError) {
+          return sendError(
+            reply,
+            err.code,
+            err.code === "CRDT_EPOCH_CONFLICT"
+              ? "Document generation changed; retry after reconnect."
+              : "Collaborative update was not persisted; retry when storage recovers.",
+            req.id,
+            err.code === "CRDT_EPOCH_CONFLICT" ? 409 : 503,
+          );
+        }
+        throw err;
+      }
+
+      editorialCollaborationService.applyYjsDocUpdate(
+        post.id,
+        updateBytes,
+        publicationId,
+      );
+      if (room) room.broadcastBinary(updateBytes);
+
+      return reply.send({
+        data: {
+          applied: true,
+          epoch: currentEpoch,
+          generationId: currentGenerationId,
+        },
+      });
     },
   });
 }
-

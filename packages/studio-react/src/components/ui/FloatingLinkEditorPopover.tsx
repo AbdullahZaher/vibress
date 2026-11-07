@@ -25,13 +25,24 @@ export function FloatingLinkEditorPopover({
   const normalizeUrl = (raw: string): string => {
     const trimmed = raw.trim();
     if (!trimmed) return '';
+    if (trimmed.startsWith('//')) {
+      return `https:${trimmed}`;
+    }
+    const lower = trimmed.toLowerCase();
     if (
-      trimmed.startsWith('http://') ||
-      trimmed.startsWith('https://') ||
-      trimmed.startsWith('mailto:') ||
-      trimmed.startsWith('tel:') ||
-      trimmed.startsWith('#') ||
-      trimmed.startsWith('/')
+      lower.startsWith('javascript:') ||
+      lower.startsWith('data:') ||
+      lower.startsWith('vbscript:')
+    ) {
+      return '';
+    }
+    if (
+      lower.startsWith('http://') ||
+      lower.startsWith('https://') ||
+      lower.startsWith('mailto:') ||
+      lower.startsWith('tel:') ||
+      lower.startsWith('#') ||
+      lower.startsWith('/')
     ) {
       return trimmed;
     }
