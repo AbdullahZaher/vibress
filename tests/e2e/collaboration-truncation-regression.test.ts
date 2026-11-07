@@ -207,9 +207,23 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     // User A edits first paragraph
     const userA_marker = `[EDIT_BY_USER_A_${Date.now()}]`;
     await pageA.bringToFront();
+    await editorAreaA.focus();
     const targetParagraphA = editorAreaA.locator("p").filter({ hasText: "For more than two decades" }).first();
     await targetParagraphA.scrollIntoViewIfNeeded();
-    await targetParagraphA.click();
+    await pageA.evaluate(() => {
+      const paragraphs = Array.from(document.querySelectorAll('div.vibress-studio-editor div[contenteditable="true"] p'));
+      const target = paragraphs.find((p) => p.textContent?.includes("For more than two decades"));
+      if (target) {
+        (target as HTMLElement).focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        const targetNode = target.firstChild || target;
+        range.setStart(targetNode, 0);
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    });
     await pageA.keyboard.insertText(userA_marker + " ");
     console.log("User A typed marker at paragraph 'For more than two decades'.");
     const userA_immediateText = await editorAreaA.innerText();
@@ -220,13 +234,28 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     // User B edits paragraph "Independent authors"
     const userB_marker = `[EDIT_BY_USER_B_${Date.now()}]`;
     await pageB.bringToFront();
+    await editorAreaB.focus();
     const targetParagraphB = editorAreaB.locator("p").filter({ hasText: "Independent authors" }).first();
     await targetParagraphB.scrollIntoViewIfNeeded();
-    await targetParagraphB.click();
+    await pageB.evaluate(() => {
+      const paragraphs = Array.from(document.querySelectorAll('div.vibress-studio-editor div[contenteditable="true"] p'));
+      const target = paragraphs.find((p) => p.textContent?.includes("Independent authors"));
+      if (target) {
+        (target as HTMLElement).focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        const targetNode = target.firstChild || target;
+        range.setStart(targetNode, 0);
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      }
+    });
     await pageB.keyboard.insertText(" " + userB_marker);
     console.log("User B typed marker at paragraph 'Independent authors'.");
     const userB_immediateText = await editorAreaB.innerText();
     console.log("User B editor text contains userB_marker?", userB_immediateText.includes(userB_marker));
+    await expect(editorAreaB).toContainText(userB_marker, { timeout: 10000 });
 
     // ============================================================
     // STEP 9: Verify Yjs synchronization
