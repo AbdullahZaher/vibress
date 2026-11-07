@@ -91,26 +91,12 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     console.log("Initial DOM word count in editor:", initialWords);
     expect(initialWords).toBeGreaterThan(1500);
 
-    // 3. Place cursor inside the first paragraph, create a clean empty line
-    const firstP = editorArea.locator("p").first();
-    await expect(firstP).toBeVisible({ timeout: 10000 });
-    await page.evaluate(() => {
-      const p = document.querySelector('div.vibress-studio-editor div[contenteditable="true"] p');
-      if (!p) throw new Error("No paragraph found");
-      (p as HTMLElement).focus();
-      const sel = window.getSelection();
-      const range = document.createRange();
-      const targetNode = p.firstChild || p;
-      range.setStart(targetNode, 0);
-      range.collapse(true);
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    });
-    console.log("Focused start of first paragraph");
-
+    // 3. Place cursor at the end of the article and create a new block.
+    // Avoid DOM-only selection mutations that Lexical may not observe.
+    await editorArea.click();
+    await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.press("Enter");
-    await page.keyboard.press("ArrowUp");
-    console.log("Created clean empty newline");
+    console.log("Created a new paragraph at the end of the article");
 
     // Type /image with realistic keystroke delay so Typeahead trigger fires
     await page.keyboard.type("/image", { delay: 60 });
