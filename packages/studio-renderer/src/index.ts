@@ -55,6 +55,29 @@ export function renderStudioDocumentToHtml(
   return sanitizeStudioHtml(raw, { preservePresentationStyles: true });
 }
 
+function mergeOrderedListItems(children: unknown[]): unknown[] {
+  const items: unknown[] = [];
+  let previous: { children: unknown[] } | undefined;
+  for (const child of children) {
+    // Lexical stores nested lists in a separate listitem wrapper. Attach it
+    // to its parent item so the browser does not count the wrapper as a step.
+    if (isListItem(child) && previous && child.children.length > 0 &&
+        child.children.every((node) => typeof node === "object" && node !== null &&
+          "type" in node && node.type === "list")) {
+      previous.children.push(...child.children);
+      continue;
+    }
+    previous = isListItem(child) ? { ...child, children: [...child.children] } : undefined;
+    items.push(previous ?? child);
+  }
+  return items;
+}
+
+function isListItem(node: unknown): node is { type: "listitem"; children: unknown[] } {
+  return typeof node === "object" && node !== null && "type" in node &&
+    node.type === "listitem" && "children" in node && Array.isArray(node.children);
+}
+
 function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingSlugAllocator): string {
   if (!node || typeof node !== "object") return "";
   const n = node as {
@@ -161,7 +184,9 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
       const start = listType === "ol" && Number.isSafeInteger(n.start) && n.start !== 1
         ? ` start="${n.start}"`
         : "";
-      return `<${listType}${start}${direction}>${renderChildren()}</${listType}>`;
+      const children = Array.isArray(n.children) ? n.children : [];
+      const items = listType === "ol" ? mergeOrderedListItems(children) : children;
+      return `<${listType}${start}${direction}>${items.map((item) => renderNodeToHtml(item, options, slugs)).join("")}</${listType}>`;
     }
 
     case "listitem": {

@@ -13,6 +13,18 @@ const studioDocument = (children: unknown[]) => ({
   schema: "vibress-studio", version: 1, root: element("root", children),
 });
 
+// Lexical 0.13 recalculates direction on structural table wrappers from
+// their cells. Paragraph direction inside each cell remains an invariant.
+function omitDerivedTableDirection(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(omitDerivedTableDirection);
+  if (!node || typeof node !== "object") return node;
+  const isTableWrapper = "type" in node &&
+    (node.type === "table" || node.type === "tablerow" || node.type === "tablecell");
+  return Object.fromEntries(Object.entries(node)
+    .filter(([key]) => key !== "direction" || !isTableWrapper)
+    .map(([key, value]) => [key, key === "root" || key === "children" ? omitDerivedTableDirection(value) : value]));
+}
+
 async function login(page: Page) {
   await page.goto(`${BASE}/admin/login`);
   await page.locator("#email").fill("owner@example.com");
@@ -32,7 +44,8 @@ async function createPost(page: Page, title: string, primaryAuthorId: string, co
   });
   expect(created.status()).toBe(201);
   const { post } = await created.json();
-  return { slug, id: post.id as string };
+  if (typeof post.id !== "string") throw new Error("Create post did not return an ID");
+  return { slug, id: post.id };
 }
 
 async function getContent(page: Page, id: string) {
@@ -120,7 +133,7 @@ test("mixed-direction article retains structured content across three host edit 
     const expected = studioDocument([...canonicalBlocks, element("paragraph", [textNode(checkpoint)], "ltr")]);
     // Lexical derives the root direction from the first strong block.
     expected.root.direction = "rtl";
-    expect(after).toMatchObject(expected);
+    expect(omitDerivedTableDirection(after)).toMatchObject(omitDerivedTableDirection(expected));
     await page.reload();
     await expect(editor.getByText(checkpoint, { exact: true })).toBeVisible();
   }
@@ -133,7 +146,9 @@ test("mixed-direction article retains structured content across three host edit 
   await expect(article.getByText("العربية English 123")).toBeVisible();
   await expect(article.locator("p[dir='rtl']").getByText("العربية English 123")).toHaveCSS("color", "rgb(18, 52, 86)");
   await expect(article.getByRole("link", { name: "مرجع 123" })).toHaveAttribute("href", "https://example.com/reference");
-  await expect(article.locator("ol[start='4'] ul")).toContainText("Nested");
+  const list = article.locator("ol[start='4']");
+  await expect(list.locator(":scope > li")).toHaveCount(2);
+  await expect(list.locator(":scope > li").first().locator("ul")).toContainText("Nested");
   await expect(article.locator("table")).toContainText("خلية 123");
   await expect(article.getByRole("columnheader", { name: "خلية 123" })).toHaveCSS("background-color", "rgb(229, 241, 255)");
   await expect(article.locator("figcaption")).toContainText("صورة 123");
