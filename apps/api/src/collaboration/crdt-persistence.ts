@@ -4,6 +4,7 @@ export class DurableCrdtPersistence {
   // In-memory fallback buffer in case Redis is disabled or temporarily offline
   private inMemoryUpdates = new Map<string, Uint8Array[]>();
   private inMemorySnapshots = new Map<string, Uint8Array>();
+  private inMemoryEpochs = new Map<string, number>();
 
   private getUpdatesKey(publicationId: string, postId: string): string {
     return buildPublicationCacheKey(publicationId, "crdt:updates", postId);
@@ -11,6 +12,75 @@ export class DurableCrdtPersistence {
 
   private getSnapshotKey(publicationId: string, postId: string): string {
     return buildPublicationCacheKey(publicationId, "crdt:snapshot", postId);
+  }
+
+  private getEpochKey(publicationId: string, postId: string): string {
+    return buildPublicationCacheKey(publicationId, "crdt:epoch", postId);
+  }
+
+  async getEpoch(publicationId: string, postId: string): Promise<number> {
+    try {
+      const redis = getRedisClient();
+      const key = this.getEpochKey(publicationId, postId);
+      const val = await redis.get(key);
+      if (val !== null && val !== undefined) {
+        const parsed = parseInt(val, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch {
+      // Memory fallback
+    }
+    const memoryKey = `${publicationId}:${postId}`;
+    return this.inMemoryEpochs.get(memoryKey) || 1;
+  }
+
+  async setEpoch(
+    publicationId: string,
+    postId: string,
+    epoch: number,
+  ): Promise<void> {
+    const memoryKey = `${publicationId}:${postId}`;
+    this.inMemoryEpochs.set(memoryKey, epoch);
+    try {
+      const redis = getRedisClient();
+      const key = this.getEpochKey(publicationId, postId);
+      await redis.set(key, epoch.toString());
+    } catch (err: unknown) {
+      console.warn(`[CRDT Persistence] Redis save epoch failed for post ${postId}:`, (err as Error).message);
+    }
+  }
+
+  async resetForRevisionRestore(
+    publicationId: string,
+    postId: string,
+    newEpoch: number,
+    snapshot?: Uint8Array,
+  ): Promise<void> {
+    const memoryKey = `${publicationId}:${postId}`;
+    this.inMemoryUpdates.set(memoryKey, []);
+    this.inMemoryEpochs.set(memoryKey, newEpoch);
+    if (snapshot) {
+      this.inMemorySnapshots.set(memoryKey, snapshot);
+    } else {
+      this.inMemorySnapshots.delete(memoryKey);
+    }
+
+    try {
+      const redis = getRedisClient();
+      const updatesKey = this.getUpdatesKey(publicationId, postId);
+      const snapshotKey = this.getSnapshotKey(publicationId, postId);
+      const epochKey = this.getEpochKey(publicationId, postId);
+      await redis.del(updatesKey);
+      if (snapshot) {
+        const b64 = Buffer.from(snapshot).toString("base64");
+        await redis.set(snapshotKey, b64);
+      } else {
+        await redis.del(snapshotKey);
+      }
+      await redis.set(epochKey, newEpoch.toString());
+    } catch (err: unknown) {
+      console.warn(`[CRDT Persistence] Redis resetForRevisionRestore failed for post ${postId}:`, (err as Error).message);
+    }
   }
 
   async saveUpdate(

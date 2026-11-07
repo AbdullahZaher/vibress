@@ -13,6 +13,7 @@ import {
 } from "../middleware/auth";
 import { PostDomainError, ListPostsFilter } from "@vibress/posts";
 import { crdtPersistence } from "../collaboration/crdt-persistence";
+import { roomManager } from "../collaboration/room-manager";
 import { DOCUMENT_CONTENT_BODY_LIMIT_BYTES } from "../constants/limits";
 
 async function resolvePostFeatureImage(
@@ -666,7 +667,19 @@ export async function postRoutes(fastify: FastifyInstance) {
             publicationId: req.publicationContext?.publicationId,
           },
         );
-        return reply.status(200).send({ post });
+
+        // Coordinated Yjs restoration: increment epoch, reset in-memory room, wipe obsolete Redis CRDT updates
+        const publicationId = post.publicationId || req.publicationContext?.publicationId || "pub_default";
+        const currentEpoch = await crdtPersistence.getEpoch(publicationId, id);
+        const nextEpoch = currentEpoch + 1;
+        await roomManager.resetRoomWithDocument(
+          publicationId,
+          id,
+          nextEpoch,
+          post.content,
+        );
+
+        return reply.status(200).send({ post, epoch: nextEpoch });
       } catch (err: unknown) {
         if (err instanceof PostDomainError) {
           if (err.code === "FORBIDDEN") {

@@ -10,19 +10,41 @@ export interface CollaborationPeer {
   userId: string;
   userName: string;
   socket: WebSocket;
+  epoch: number;
 }
 
 export class CollaborationRoom {
   public publicationId: string;
   public postId: string;
+  public epoch: number = 1;
   public peers = new Map<string, CollaborationPeer>();
   public ydoc: Y.Doc;
   private updateCountSinceCompact = 0;
 
-  constructor(publicationId: string, postId: string) {
+  constructor(publicationId: string, postId: string, epoch: number = 1) {
     this.publicationId = publicationId;
     this.postId = postId;
+    this.epoch = epoch;
     this.ydoc = new Y.Doc();
+  }
+
+  resetWithDocument(epoch: number, docContent: unknown): void {
+    this.epoch = epoch;
+    this.updateCountSinceCompact = 0;
+    try {
+      this.ydoc.destroy();
+    } catch {
+      // Ignore
+    }
+    this.ydoc = new Y.Doc();
+
+    // Broadcast restore control frame to all active peers
+    const message = JSON.stringify({
+      type: "restore",
+      epoch: this.epoch,
+      content: docContent,
+    });
+    this.broadcastString(message);
   }
 
   addPeer(peer: CollaborationPeer): boolean {
@@ -103,12 +125,30 @@ export class RoomManager {
     return `${publicationId}:${postId}`;
   }
 
-  getOrCreateRoom(publicationId: string, postId: string): CollaborationRoom {
+  getOrCreateRoom(publicationId: string, postId: string, epoch: number = 1): CollaborationRoom {
     const key = this.getRoomKey(publicationId, postId);
     let room = this.rooms.get(key);
     if (!room) {
-      room = new CollaborationRoom(publicationId, postId);
+      room = new CollaborationRoom(publicationId, postId, epoch);
       this.rooms.set(key, room);
+    }
+    return room;
+  }
+
+  async resetRoomWithDocument(
+    publicationId: string,
+    postId: string,
+    epoch: number,
+    docContent: unknown,
+  ): Promise<CollaborationRoom> {
+    await crdtPersistence.resetForRevisionRestore(publicationId, postId, epoch);
+    const key = this.getRoomKey(publicationId, postId);
+    let room = this.rooms.get(key);
+    if (!room) {
+      room = new CollaborationRoom(publicationId, postId, epoch);
+      this.rooms.set(key, room);
+    } else {
+      room.resetWithDocument(epoch, docContent);
     }
     return room;
   }
