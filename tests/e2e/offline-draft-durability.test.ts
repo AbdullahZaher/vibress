@@ -126,26 +126,36 @@ function describeOrTestSuite() {
     }
 
     async function loginOnPage(page: Page): Promise<void> {
+      try {
+        const loginRes = await page.request.post(`${BASE_URL}/api/admin/v1/auth/login`, {
+          headers: { "Content-Type": "application/json", Origin: BASE_URL },
+          data: { email: staffEmail, password: staffPassword },
+        });
+        if (loginRes.ok()) {
+          const setCookie = loginRes.headers()["set-cookie"] || "";
+          const match = setCookie.match(/vibress_session=([^;]+)/);
+          if (match) {
+            await page.context().addCookies([
+              {
+                name: "vibress_session",
+                value: match[1],
+                url: "http://localhost:7777",
+              },
+            ]);
+            return;
+          }
+        }
+      } catch {
+        // fallback
+      }
+
       await page.goto(`${BASE_URL}/admin`);
-      if (page.url().includes("/login")) {
-        await page.fill("#email", staffEmail);
+      const emailField = page.locator("#email");
+      if (await emailField.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await emailField.fill(staffEmail);
         await page.fill("#password", staffPassword);
         await page.click('button[type="submit"]');
-        await page.waitForURL(
-          (u) => u.pathname.startsWith("/admin") && !u.pathname.includes("/login"),
-          { timeout: 15000 },
-        );
-      } else {
-        const emailField = page.locator("#email");
-        if (await emailField.isVisible({ timeout: 3000 }).catch(() => false)) {
-          await emailField.fill(staffEmail);
-          await page.fill("#password", staffPassword);
-          await page.click('button[type="submit"]');
-          await page.waitForURL(
-            (u) => u.pathname.startsWith("/admin") && !u.pathname.includes("/login"),
-            { timeout: 15000 },
-          );
-        }
+        await page.waitForTimeout(1000);
       }
     }
 

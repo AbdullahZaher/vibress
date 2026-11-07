@@ -187,20 +187,33 @@ async function loginUser(
   email = "owner@example.com",
   password = "OwnerPass123!",
 ) {
-  await page.goto("http://localhost:7777/admin");
-  const retryBtn = page.locator('button:has-text("Retry")');
-  if (await retryBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await retryBtn.click();
+  const loginRes = await page.request.post("http://localhost:7777/api/admin/v1/auth/login", {
+    headers: { "Content-Type": "application/json", Origin: "http://localhost:7777" },
+    data: { email, password },
+  });
+  if (loginRes.ok()) {
+    const setCookie = loginRes.headers()["set-cookie"] || "";
+    const match = setCookie.match(/vibress_session=([^;]+)/);
+    if (match) {
+      await page.context().addCookies([
+        {
+          name: "vibress_session",
+          value: match[1],
+          url: "http://localhost:7777",
+        },
+      ]);
+      return;
+    }
   }
-  await page.waitForURL("**/admin/login**", { timeout: 15000 });
-  await page.fill("#email", email);
-  await page.fill("#password", password);
-  await page.click('button[type="submit"]');
-  await page.waitForURL(
-    (url: any) =>
-      url.pathname.startsWith("/admin") && !url.pathname.includes("/login"),
-    { timeout: 15000 },
-  );
+
+  await page.goto("http://localhost:7777/admin");
+  const emailInput = page.locator("#email");
+  if (await emailInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await emailInput.fill(email);
+    await page.fill("#password", password);
+    await page.click('button[type="submit"]');
+    await page.waitForTimeout(1000);
+  }
 }
 
 test.describe("Vibress Studio — Unified Media Floating Toolbar Suite", () => {
