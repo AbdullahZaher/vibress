@@ -696,27 +696,47 @@ export async function collaborationRoutes(fastify: FastifyInstance) {
         );
       }
 
-      editorialCollaborationService.applyYjsDocUpdate(
-        post.id,
-        updateBytes,
-        publicationId,
-      );
-
-      if (room) {
-        room.hydrateFromDurableState({
+      // Do not expose an accepted update through the in-memory service
+      // until the authoritative Redis write has completed successfully.
+      try {
+        if (room) {
+          room.hydrateFromDurableState({
           epoch: reconciled.epoch,
           generationId: reconciled.generationId,
           revokedClientIds: reconciled.revokedClientIds,
           snapshot: reconciled.snapshot,
           updates: reconciled.updates,
           restoredContent: reconciled.restoreState?.restoredContent,
-          restoreStatus: reconciled.restoreState?.status,
-        });
-        await room.recordUpdate(updateBytes);
-        room.broadcastBinary(updateBytes);
-      } else {
-        await crdtPersistence.saveUpdate(publicationId, post.id, updateBytes);
+            restoreStatus: reconciled.restoreState?.status,
+          });
+          await room.recordUpdate(updateBytes, {
+            epoch: currentEpoch,
+            generationId: currentGenerationId,
+          });
+        } else {
+          await crdtPersistence.saveUpdate(publicationId, post.id, updateBytes);
+        }
+      } catch (err: unknown) {
+        if (err instanceof CrdtPersistenceError) {
+          return sendError(
+            reply,
+            err.code,
+            err.code === "CRDT_EPOCH_CONFLICT"
+              ? "Document generation changed; retry after reconnect."
+              : "Collaborative update was not persisted; retry when storage recovers.",
+            req.id,
+            err.code === "CRDT_EPOCH_CONFLICT" ? 409 : 503,
+          );
+        }
+        throw err;
       }
+
+      editorialCollaborationService.applyYjsDocUpdate(
+        post.id,
+        updateBytes,
+        publicationId,
+      );
+      if (room) room.broadcastBinary(updateBytes);
 
       return reply.send({
         data: {

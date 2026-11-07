@@ -1045,29 +1045,31 @@ export class DurableCrdtPersistence {
     update: Uint8Array,
   ): Promise<void> {
     const memoryKey = this.getMemoryKey(publicationId, postId);
-    let memList = this.inMemoryUpdates.get(memoryKey);
-    if (!memList) {
-      memList = [];
-      this.inMemoryUpdates.set(memoryKey, memList);
-    }
-    memList.push(update);
-    if (memList.length > 100) {
-      memList.shift();
-    }
-    this.pruneBoundedInMemoryMaps();
-
+    // Never acknowledge a collaborative update stored only in process memory.
+    // A replica restart would permanently discard it.
     try {
       const redis = this.redisProvider();
-      const key = this.getUpdatesKey(publicationId, postId);
-      const base64 = Buffer.from(update).toString("base64");
-      await redis.rpush(key, base64);
-      this.warmKeys.add(memoryKey);
+      const storedLength = await redis.rpush(
+        this.getUpdatesKey(publicationId, postId),
+        Buffer.from(update).toString("base64"),
+      );
+      if (!Number.isInteger(storedLength) || storedLength < 1) {
+        throw new Error("Redis did not confirm the CRDT append");
+      }
     } catch (err: unknown) {
-      console.warn(
-        `[CRDT Persistence] Redis write failed for post ${postId}, using memory fallback:`,
-        (err as Error).message,
+      throw new CrdtPersistenceError(
+        "CRDT_REDIS_UNAVAILABLE",
+        `Could not persist collaborative update for post ${postId}`,
+        err,
       );
     }
+    // Update volatile mirrors only AFTER Redis acknowledges the write.
+    const memList = this.inMemoryUpdates.get(memoryKey) ?? [];
+    memList.push(update);
+    if (memList.length > 100) memList.shift();
+    this.inMemoryUpdates.set(memoryKey, memList);
+    this.warmKeys.add(memoryKey);
+    this.pruneBoundedInMemoryMaps();
   }
 
   private async getIncrementalUpdatesOnly(
@@ -1083,14 +1085,12 @@ export class DurableCrdtPersistence {
       }
       return [];
     } catch (err: unknown) {
-      console.warn(
-        `[CRDT Persistence] Redis read failed for post ${postId}, falling back to memory:`,
-        (err as Error).message,
+      throw new CrdtPersistenceError(
+        "CRDT_REDIS_UNAVAILABLE",
+        `Could not read authoritative collaborative updates for post ${postId}`,
+        err,
       );
     }
-
-    const memoryKey = this.getMemoryKey(publicationId, postId);
-    return this.inMemoryUpdates.get(memoryKey) || [];
   }
 
   async getUpdates(
@@ -1119,12 +1119,13 @@ export class DurableCrdtPersistence {
         return new Uint8Array(Buffer.from(b64, "base64"));
       }
       return null;
-    } catch {
-      // Fall back to memory
+    } catch (err: unknown) {
+      throw new CrdtPersistenceError(
+        "CRDT_REDIS_UNAVAILABLE",
+        `Could not read authoritative collaborative snapshot for post ${postId}`,
+        err,
+      );
     }
-
-    const memoryKey = this.getMemoryKey(publicationId, postId);
-    return this.inMemorySnapshots.get(memoryKey) || null;
   }
 
   async saveSnapshot(
@@ -1132,20 +1133,24 @@ export class DurableCrdtPersistence {
     postId: string,
     snapshot: Uint8Array,
   ): Promise<void> {
-    const memoryKey = this.getMemoryKey(publicationId, postId);
-    this.inMemorySnapshots.set(memoryKey, snapshot);
-
     try {
       const redis = this.redisProvider();
-      const key = this.getSnapshotKey(publicationId, postId);
-      const b64 = Buffer.from(snapshot).toString("base64");
-      await redis.set(key, b64);
+      const result = await redis.set(
+        this.getSnapshotKey(publicationId, postId),
+        Buffer.from(snapshot).toString("base64"),
+      );
+      if (result !== "OK") throw new Error("Redis did not confirm snapshot write");
     } catch (err: unknown) {
-      console.warn(
-        `[CRDT Persistence] Redis save snapshot failed for post ${postId}:`,
-        (err as Error).message,
+      throw new CrdtPersistenceError(
+        "CRDT_REDIS_UNAVAILABLE",
+        `Could not persist collaborative snapshot for post ${postId}`,
+        err,
       );
     }
+    const memoryKey = this.getMemoryKey(publicationId, postId);
+    this.inMemorySnapshots.set(memoryKey, snapshot);
+    this.warmKeys.add(memoryKey);
+    this.pruneBoundedInMemoryMaps();
   }
 
   async compact(
@@ -1162,13 +1167,25 @@ export class DurableCrdtPersistence {
       const multi = redis.multi();
       multi.set(snapshotKey, b64);
       multi.del(updatesKey);
-      await multi.exec();
+      const results = await multi.exec();
+      if (!results || results.length !== 2) {
+        throw new Error("Redis compaction transaction returned incomplete results");
+      }
+      for (const [index, [error]] of results.entries()) {
+        if (error) throw new Error(`Redis compaction step ${index} failed: ${error.message}`);
+      }
+      if (results[0]![1] !== "OK" || typeof results[1]![1] !== "number") {
+        throw new Error("Redis did not confirm compaction commands");
+      }
       this.inMemorySnapshots.set(memoryKey, mergedSnapshot);
       this.inMemoryUpdates.set(memoryKey, []);
+      this.warmKeys.add(memoryKey);
+      this.pruneBoundedInMemoryMaps();
     } catch (err: unknown) {
-      console.warn(
-        `[CRDT Persistence] Redis compact failed for post ${postId}:`,
-        (err as Error).message,
+      throw new CrdtPersistenceError(
+        "CRDT_COMPACTION_FAILED",
+        `Could not safely compact collaborative updates for post ${postId}`,
+        err,
       );
     }
   }

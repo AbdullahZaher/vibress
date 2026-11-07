@@ -435,7 +435,24 @@ export async function collaborationWsRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        await room.recordUpdate(updateBytes);
+        try {
+          await room.recordUpdate(updateBytes, {
+            epoch: peer.epoch,
+            generationId: peer.generationId,
+          });
+        } catch (err: unknown) {
+          const epochConflict =
+            err instanceof CrdtPersistenceError && err.code === "CRDT_EPOCH_CONFLICT";
+          req.log.error({ err, postId }, "Collaborative update rejected before broadcast");
+          socket.close(
+            epochConflict ? 4409 : 1013,
+            epochConflict
+              ? "Conflict: Document generation changed; reconnect."
+              : "Service Unavailable: Collaborative update not persisted.",
+          );
+          room.removePeer(peerId);
+          return;
+        }
         room.broadcastBinary(updateBytes, peerId);
       });
 

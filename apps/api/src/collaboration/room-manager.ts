@@ -2,6 +2,7 @@ import type { WebSocket } from "ws";
 import * as Y from "yjs";
 import {
   crdtPersistence,
+  CrdtPersistenceError,
   extractClientIdsFromDoc,
   extractClientIdsFromUpdate,
   validateYjsUpdateBinary,
@@ -42,6 +43,8 @@ export class CollaborationRoom {
   public restoredContent: unknown = null;
   private hydrated = false;
   private updateCountSinceCompact = 0;
+  /** Serialize persistence/compaction so concurrent socket and HTTP writes cannot race. */
+  private pendingWrite: Promise<void> = Promise.resolve();
 
   public isHydrated(): boolean {
     return this.hydrated;
@@ -368,16 +371,52 @@ export class CollaborationRoom {
     }
   }
 
-  async recordUpdate(update: Uint8Array): Promise<void> {
-    this.updateCountSinceCompact++;
-    Y.applyUpdate(this.ydoc, update);
-    await crdtPersistence.saveUpdate(this.publicationId, this.postId, update);
+  public async waitForPendingUpdates(): Promise<void> {
+    await this.pendingWrite;
+  }
 
-    if (this.updateCountSinceCompact >= 50) {
-      this.updateCountSinceCompact = 0;
-      const merged = Y.encodeStateAsUpdate(this.ydoc);
-      await crdtPersistence.compact(this.publicationId, this.postId, merged);
-    }
+  async recordUpdate(
+    update: Uint8Array,
+    expectedGeneration: { epoch: number; generationId: string } = {
+      epoch: this.epoch,
+      generationId: this.generationId,
+    },
+  ): Promise<void> {
+    const persistAndApply = async (): Promise<void> => {
+      const isCurrent = () =>
+        !this.restorationBarrierActive &&
+        !this.requiresRecovery &&
+        this.epoch === expectedGeneration.epoch &&
+        this.generationId === expectedGeneration.generationId;
+      if (!isCurrent()) {
+        throw new CrdtPersistenceError(
+          "CRDT_EPOCH_CONFLICT",
+          "Collaboration generation changed while queuing an update",
+        );
+      }
+      // Apply and broadcast only AFTER Redis accepts the update.
+      await crdtPersistence.saveUpdate(this.publicationId, this.postId, update);
+      if (!isCurrent()) {
+        // A restoration barrier can begin during a Redis round trip. The
+        // restoration waits for this queue before replacing the old log.
+        throw new CrdtPersistenceError(
+          "CRDT_EPOCH_CONFLICT",
+          "Collaboration generation changed while persisting an update",
+        );
+      }
+      Y.applyUpdate(this.ydoc, update);
+      this.updateCountSinceCompact++;
+      if (this.updateCountSinceCompact >= 50) {
+        const merged = Y.encodeStateAsUpdate(this.ydoc);
+        await crdtPersistence.compact(this.publicationId, this.postId, merged);
+        this.updateCountSinceCompact = 0;
+      }
+    };
+    const result = this.pendingWrite.then(persistAndApply);
+    // The queue stays usable after a rejected operation, but the caller sees
+    // the original error and must not acknowledge or broadcast the update.
+    this.pendingWrite = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   getCurrentStateUpdate(): Uint8Array | null {
@@ -478,6 +517,7 @@ export class RoomManager {
       : [];
 
     try {
+      await existingRoom?.waitForPendingUpdates();
       const committed = await crdtPersistence.resetForRevisionRestore(
         publicationId,
         postId,
@@ -549,6 +589,7 @@ export class RoomManager {
 
       let intent;
       try {
+        await existingRoom?.waitForPendingUpdates();
         intent = await crdtPersistence.beginRestoration(
           params.publicationId,
           params.postId,

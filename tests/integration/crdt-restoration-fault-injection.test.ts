@@ -288,6 +288,8 @@ describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injec
     failAllBeforeBegin?: boolean;
     failMultiStepIndex?: number;
     failMultiExecThrow?: boolean;
+    failRpush?: boolean;
+    failSnapshotSet?: boolean;
   }): RedisClientLike {
     const real = getRedisClient() as unknown as RedisClientLike;
     return {
@@ -298,6 +300,9 @@ describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injec
         return real.get(key);
       },
       async set(key: string, value: string) {
+        if (options.failSnapshotSet && key.includes("crdt:snapshot")) {
+          throw new Error("Simulated Redis snapshot write failure");
+        }
         if (options.failAllBeforeBegin) {
           throw new Error("Simulated Redis SET outage before beginRestoration");
         }
@@ -310,6 +315,9 @@ describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injec
         return real.del(...keys);
       },
       async rpush(key: string, ...values: string[]) {
+        if (options.failRpush) {
+          throw new Error("Simulated Redis RPUSH outage");
+        }
         return real.rpush(key, ...values);
       },
       async lrange(key: string, start: number, stop: number) {
@@ -1048,5 +1056,86 @@ describe("CR-01 — Guaranteed Yjs Revision Restoration Durability & Fault Injec
 
     rehydratedClient.ws.close();
     await freshApp.close();
+  });
+
+  // CRDT-15: Redis failure must never be acknowledged to HTTP writers.
+  it("15. HTTP returns 503 and preserves CRDT state when Redis RPUSH fails", async () => {
+    const { post } = await createPostWithTwoRevisions("S15");
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, "UNACKED_HTTP_WRITE_S15");
+    const binary = Y.encodeStateAsUpdate(doc);
+    const before = await crdtPersistence.getUpdates(publicationId, post.id);
+    crdtPersistence.setRedisProviderForTesting(() =>
+      createFaultyRedisProxy({ failRpush: true }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/admin/v1/posts/${post.id}/collaboration/crdt`,
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        cookie: `vibress_session=${sessionToken}`,
+        "x-publication-id": publicationId,
+        origin: "http://localhost:7777",
+      },
+      payload: { update: Buffer.from(binary).toString("base64") },
+    });
+    expect(response.statusCode).toBe(503);
+    expect((response.json() as { errors: Array<{ code: string }> }).errors[0]?.code)
+      .toBe("CRDT_REDIS_UNAVAILABLE");
+    crdtPersistence.resetRedisProvider();
+    crdtPersistence.resetInMemoryStateForTesting();
+    const after = await crdtPersistence.getUpdates(publicationId, post.id);
+    expect(after).toEqual(before);
+    doc.destroy();
+  });
+
+  it("16. WebSocket rejects and does not broadcast updates when Redis RPUSH fails", async () => {
+    const { post } = await createPostWithTwoRevisions("S16");
+    const writer = await connectSyncedClient(post.id);
+    const reader = await connectSyncedClient(post.id);
+    const baseline = reader.doc.getText("content").toString();
+    crdtPersistence.setRedisProviderForTesting(() =>
+      createFaultyRedisProxy({ failRpush: true }),
+    );
+    writer.doc.getText("content").insert(0, "UNACKED_WS_WRITE_S16");
+    writer.ws.send(Y.encodeStateAsUpdate(writer.doc), { binary: true });
+    expect(await writer.waitForClose()).toBe(1013);
+    expect(reader.doc.getText("content").toString()).toBe(baseline);
+    crdtPersistence.resetRedisProvider();
+    const updates = await crdtPersistence.getUpdates(publicationId, post.id);
+    expect(updates).toHaveLength(0);
+    reader.ws.close();
+    writer.doc.destroy();
+    reader.doc.destroy();
+  });
+
+  it("17. Snapshot failures never leave a false durable checkpoint", async () => {
+    const { post } = await createPostWithTwoRevisions("S17");
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, "UNACKED_SNAPSHOT_S17");
+    crdtPersistence.setRedisProviderForTesting(() =>
+      createFaultyRedisProxy({ failSnapshotSet: true }),
+    );
+    await expect(
+      crdtPersistence.saveSnapshot(publicationId, post.id, Y.encodeStateAsUpdate(doc)),
+    ).rejects.toMatchObject({ code: "CRDT_REDIS_UNAVAILABLE" });
+    crdtPersistence.resetRedisProvider();
+    crdtPersistence.resetInMemoryStateForTesting();
+    expect(await crdtPersistence.getSnapshot(publicationId, post.id)).toBeNull();
+    doc.destroy();
+  });
+
+  it("18. Compaction MULTI partial failure is surfaced instead of reporting success", async () => {
+    const { post } = await createPostWithTwoRevisions("S18");
+    const doc = new Y.Doc();
+    doc.getText("content").insert(0, "PENDING_COMPACTION_S18");
+    crdtPersistence.setRedisProviderForTesting(() =>
+      createFaultyRedisProxy({ failMultiStepIndex: 0 }),
+    );
+    await expect(
+      crdtPersistence.compact(publicationId, post.id, Y.encodeStateAsUpdate(doc)),
+    ).rejects.toMatchObject({ code: "CRDT_COMPACTION_FAILED" });
+    crdtPersistence.resetRedisProvider();
+    doc.destroy();
   });
 });
