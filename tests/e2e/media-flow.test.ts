@@ -24,7 +24,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
 
   test("Studio Post Editor Media Picker integration", async ({ page }) => {
     await page.getByRole("button", { name: "Posts", exact: true }).click();
-    await page.click('button:has-text("Create Post")');
+    await page.getByTestId("create-post-button").click();
     await expect(page).toHaveURL(/.*\/admin\/posts\/new/);
 
     await page.fill('textarea[aria-label="Post Title"]', "Media E2E Test Post");
@@ -34,7 +34,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
       'div.vibress-studio-editor div[contenteditable="true"]',
     );
     await editorArea.click();
-    await page.keyboard.type(" /");
+    await page.keyboard.type("/");
     await page.locator('[role="option"]:has-text("Image"), li:has-text("Image")').first().click();
 
     // Verify card node is added to editor
