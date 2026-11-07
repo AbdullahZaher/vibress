@@ -214,6 +214,8 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
     console.log("User A typed marker at paragraph 'For more than two decades'.");
     const userA_immediateText = await editorAreaA.innerText();
     console.log("User A editor text contains userA_marker?", userA_immediateText.includes(userA_marker));
+    // Require the complete local edit to commit before concurrent typing starts.
+    await expect(editorAreaA).toContainText(userA_marker, { timeout: 10000 });
 
     // User B edits paragraph "Independent authors"
     const userB_marker = `[EDIT_BY_USER_B_${Date.now()}]`;
@@ -264,6 +266,10 @@ test.describe("Multi-User Collaboration & Truncation Regression Suite", () => {
       const text = await reconnectedEditorB.innerText();
       return text.split(/\s+/).filter(Boolean).length;
     }, { timeout: 15000 }).toBeGreaterThanOrEqual(Math.floor(initialWordsA * 0.99));
+    // A full 2,000-word JSON snapshot can render before remote Yjs sync ends.
+    // Wait for exact author markers; still fail on any genuinely lost text.
+    await expect(reconnectedEditorB).toContainText(userA_marker, { timeout: 15000 });
+    await expect(reconnectedEditorB).toContainText(userB_marker, { timeout: 15000 });
     const textB_reconnect = await reconnectedEditorB.innerText();
     const wordsB_reconnect = textB_reconnect.split(/\s+/).filter(Boolean).length;
     console.log(`User B reconnected words: ${wordsB_reconnect}`);

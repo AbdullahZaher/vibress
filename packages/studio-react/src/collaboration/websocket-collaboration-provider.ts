@@ -1,7 +1,6 @@
 import * as Y from "yjs";
 import { CollaborationUser, CollaborationProvider } from "./types";
 
-
 export interface WebSocketCollaborationOptions {
   url: string;
   docId: string;
@@ -9,6 +8,7 @@ export interface WebSocketCollaborationOptions {
   authToken?: string | undefined;
   reconnectIntervalMs?: number | undefined;
   maxReconnectAttempts?: number | undefined;
+  autoConnect?: boolean | undefined;
 }
 
 export class WebSocketCollaborationProvider implements CollaborationProvider {
@@ -17,12 +17,39 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   private ws: WebSocket | null = null;
   private localState: Record<string, unknown> | null = null;
   private remoteStates = new Map<number, Record<string, unknown>>();
-  private awarenessListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  private awarenessListeners = new Map<
+    string,
+    Set<(...args: unknown[]) => void>
+  >();
   private reconnectAttempts = 0;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private syncTimeout: ReturnType<typeof setTimeout> | null = null;
   private synced = false;
   private isDestroyed = false;
+  private manualDisconnect = false;
+  private isFencedOut = false;
+  private handshakeAcked = false;
+  private boundEpoch: number | null = null;
+  private boundGenerationId: string | null = null;
+  public currentEpoch = 1;
+  public currentGenerationId: string | null = null;
+
+  private readonly handleDocUpdate = (
+    update: Uint8Array,
+    origin: unknown,
+  ): void => {
+    if (
+      origin !== this &&
+      !this.isDestroyed &&
+      !this.isFencedOut &&
+      this.synced &&
+      this.handshakeAcked &&
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN
+    ) {
+      this.ws.send(update);
+    }
+  };
 
   constructor(doc: Y.Doc, options: WebSocketCollaborationOptions) {
     this.doc = doc;
@@ -35,21 +62,24 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
       },
     };
 
-    // Listen for local doc updates to send to server
-    this.doc.on("update", (update: Uint8Array, origin: unknown) => {
-      if (origin !== this && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(update);
-      }
-    });
+    // Listen for local doc updates to send to server only after sync barrier completes
+    this.doc.on("update", this.handleDocUpdate);
 
-    this.connect();
+    // Note: Lexical's CollaborationPlugin invokes provider.connect() inside useEffect
+    // AFTER registering observeDeep and sync listeners. Only auto-connect in constructor
+    // if explicitly requested by standalone callers.
+    if (options.autoConnect === true) {
+      this.connect();
+    }
   }
 
   get awareness(): any {
     return {
       getLocalState: () => this.localState,
       getStates: () => {
-        const states = new Map<number, Record<string, unknown>>(this.remoteStates);
+        const states = new Map<number, Record<string, unknown>>(
+          this.remoteStates,
+        );
         if (this.localState) {
           states.set(this.doc.clientID, this.localState);
         }
@@ -69,6 +99,9 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
         this.broadcastAwareness();
       },
       setLocalStateField: (field: string, value: unknown) => {
+        if (field === "__proto__" || field === "constructor" || field === "prototype") {
+          return;
+        }
         this.localState = { ...(this.localState || {}), [field]: value };
         this.broadcastAwareness();
       },
@@ -94,7 +127,28 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   }
 
   public connect(): void {
-    if (this.isDestroyed || typeof WebSocket === "undefined") return;
+    if (
+      this.isDestroyed ||
+      this.isFencedOut ||
+      typeof WebSocket === "undefined"
+    ) {
+      return;
+    }
+
+    this.manualDisconnect = false;
+
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
 
     try {
       const url = new URL(this.options.url);
@@ -102,42 +156,152 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
       if (this.options.authToken) {
         url.searchParams.set("token", this.options.authToken);
       }
+      if (this.boundEpoch !== null) {
+        url.searchParams.set("epoch", String(this.boundEpoch));
+      }
+      if (this.boundGenerationId !== null) {
+        url.searchParams.set("generationId", this.boundGenerationId);
+      }
 
-      this.ws = new WebSocket(url.toString());
-      this.ws.binaryType = "arraybuffer";
+      const socket = new WebSocket(url.toString());
+      socket.binaryType = "arraybuffer";
+      this.ws = socket;
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
         this.reconnectAttempts = 0;
+        this.synced = false;
+        this.handshakeAcked = false;
         this.broadcastAwareness();
         this.emit("status", [{ status: "connected" }]);
-        // Fallback: If server does not send sync-done frame within 2 seconds, emit sync
         if (this.syncTimeout) clearTimeout(this.syncTimeout);
+        // UI-only sync indicator: never enables sending binary updates (handshakeAcked gates that).
         this.syncTimeout = setTimeout(() => {
-          if (!this.synced) {
+          if (this.ws === socket && !this.synced && !this.isFencedOut) {
             this.synced = true;
             this.emit("sync", [true]);
           }
-        }, 2000);
+        }, 2500);
       };
 
-      this.ws.onmessage = (event: MessageEvent) => {
+      socket.onmessage = (event: MessageEvent) => {
+        if (this.ws !== socket || this.isFencedOut) return;
+
         if (event.data instanceof ArrayBuffer) {
           const update = new Uint8Array(event.data);
-          console.log("[FORENSIC] WS_RECEIVED_BINARY byteLength=" + update.byteLength);
-          Y.applyUpdate(this.doc, update, this);
+          try {
+            Y.applyUpdate(this.doc, update, this);
+          } catch {
+            // Malformed remote frame must never crash the editor session
+          }
         } else if (typeof event.data === "string") {
           try {
             const parsed = JSON.parse(event.data);
-            if (parsed.type === "sync-done") {
+            if (parsed.type === "sync-init") {
+              const incomingEpoch =
+                typeof parsed.epoch === "number" ? parsed.epoch : 1;
+              const incomingGen =
+                typeof parsed.generationId === "string"
+                  ? parsed.generationId
+                  : null;
+
+              // If this Y.Doc was previously bound to an older generation, refuse to merge
+              // old Yjs items with the new generation and request a clean host re-mount!
+              if (
+                (this.boundEpoch !== null && incomingEpoch !== this.boundEpoch) ||
+                (this.boundGenerationId !== null &&
+                  incomingGen !== null &&
+                  incomingGen !== this.boundGenerationId)
+              ) {
+                this.isFencedOut = true;
+                this.synced = false;
+                this.emit("restore", [
+                  {
+                    type: "restore",
+                    epoch: incomingEpoch,
+                    generationId: incomingGen,
+                    content: parsed.restoredContent,
+                  },
+                ]);
+                this.disconnect();
+                return;
+              }
+              this.currentEpoch = incomingEpoch;
+              if (incomingGen) {
+                this.currentGenerationId = incomingGen;
+              }
+            } else if (parsed.type === "sync-done") {
+              if (typeof parsed.epoch === "number") {
+                this.currentEpoch = parsed.epoch;
+                this.boundEpoch = parsed.epoch;
+              }
+              if (typeof parsed.generationId === "string") {
+                this.currentGenerationId = parsed.generationId;
+                this.boundGenerationId = parsed.generationId;
+              }
               if (this.syncTimeout) {
                 clearTimeout(this.syncTimeout);
                 this.syncTimeout = null;
               }
+              // Complete server-enforced generation handshake BEFORE enabling local writes
+              if (
+                socket.readyState === WebSocket.OPEN &&
+                typeof parsed.generationId === "string" &&
+                typeof parsed.challengeNonce === "string"
+              ) {
+                socket.send(
+                  JSON.stringify({
+                    type: "ack-sync",
+                    epoch: this.currentEpoch,
+                    generationId: parsed.generationId,
+                    challengeNonce: parsed.challengeNonce,
+                    clientId: this.doc.clientID,
+                  }),
+                );
+                this.handshakeAcked = true;
+              }
               this.synced = true;
               this.emit("sync", [true]);
-            } else if (parsed.type === "awareness" && parsed.clientId && parsed.state) {
-              this.remoteStates.set(parsed.clientId, parsed.state);
-              this.notifyAwarenessChange();
+              // Flush only the delta the server lacks (server state vector) so reconnect flushes
+              // stay under the 64 KB frame cap for large documents.
+              if (
+                this.handshakeAcked &&
+                socket.readyState === WebSocket.OPEN &&
+                !this.isFencedOut
+              ) {
+                try {
+                  let serverSv: Uint8Array | undefined;
+                  if (typeof parsed.stateVector === "string") {
+                    const bin = atob(parsed.stateVector);
+                    serverSv = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) serverSv[i] = bin.charCodeAt(i);
+                  }
+                  const pendingLocal = serverSv
+                    ? Y.encodeStateAsUpdate(this.doc, serverSv)
+                    : Y.encodeStateAsUpdate(this.doc);
+                  if (pendingLocal.length > 2) {
+                    socket.send(pendingLocal);
+                  }
+                } catch {
+                  // Ignore encoding error
+                }
+              }
+            } else if (parsed.type === "restore") {
+              // Server invalidated this generation due to revision restore.
+              // Fence this provider permanently so old Y.Doc updates can never be sent,
+              // and notify host to mount a fresh Y.Doc on the new generation.
+              this.isFencedOut = true;
+              this.synced = false;
+              this.emit("restore", [parsed]);
+              this.disconnect();
+            } else if (parsed.type === "awareness" && typeof parsed.clientId === "number") {
+              if (parsed.state === null) {
+                this.remoteStates.delete(parsed.clientId);
+                this.notifyAwarenessChange();
+              } else if (parsed.state && typeof parsed.state === "object") {
+                this.remoteStates.set(parsed.clientId, parsed.state);
+                this.notifyAwarenessChange();
+              }
             }
           } catch {
             // Ignore non-JSON control messages
@@ -145,7 +309,10 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
         }
       };
 
-      this.ws.onclose = () => {
+      socket.onclose = (event: CloseEvent) => {
+        if (this.ws === socket) {
+          this.ws = null;
+        }
         if (this.syncTimeout) {
           clearTimeout(this.syncTimeout);
           this.syncTimeout = null;
@@ -153,33 +320,53 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
         this.synced = false;
         this.emit("status", [{ status: "disconnected" }]);
         this.emit("sync", [false]);
-        this.scheduleReconnect();
+
+        if (event.code === 4409) {
+          this.isFencedOut = true;
+          this.emit("epoch-conflict", [{ code: event.code, reason: event.reason }]);
+          return;
+        }
+
+        if (!this.manualDisconnect && !this.isDestroyed && !this.isFencedOut) {
+          this.scheduleReconnect();
+        }
       };
 
-      this.ws.onerror = () => {
-        this.ws?.close();
+      socket.onerror = () => {
+        socket.close();
       };
-    } catch (err) {
-      this.scheduleReconnect();
+    } catch {
+      if (!this.manualDisconnect && !this.isDestroyed && !this.isFencedOut) {
+        this.scheduleReconnect();
+      }
     }
   }
 
   private scheduleReconnect(): void {
-    if (this.isDestroyed) return;
+    if (this.isDestroyed || this.manualDisconnect || this.isFencedOut) return;
     const maxAttempts = this.options.maxReconnectAttempts || 10;
     if (this.reconnectAttempts >= maxAttempts) return;
 
     const baseDelay = this.options.reconnectIntervalMs || 1000;
-    const delay = Math.min(baseDelay * Math.pow(1.5, this.reconnectAttempts), 30000);
+    const delay = Math.min(
+      baseDelay * Math.pow(1.5, this.reconnectAttempts),
+      30000,
+    );
     this.reconnectAttempts++;
 
     this.reconnectTimeout = setTimeout(() => {
+      this.reconnectTimeout = null;
       this.connect();
     }, delay);
   }
 
   private broadcastAwareness(): void {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.localState) {
+    if (
+      !this.isFencedOut &&
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.localState
+    ) {
       this.ws.send(
         JSON.stringify({
           type: "awareness",
@@ -199,6 +386,7 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
   }
 
   public disconnect(): void {
+    this.manualDisconnect = true;
     if (this.syncTimeout) {
       clearTimeout(this.syncTimeout);
       this.syncTimeout = null;
@@ -209,13 +397,23 @@ export class WebSocketCollaborationProvider implements CollaborationProvider {
       this.reconnectTimeout = null;
     }
     if (this.ws) {
-      this.ws.close();
+      const socket = this.ws;
       this.ws = null;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onclose = null;
+      socket.onerror = null;
+      try {
+        socket.close();
+      } catch {
+        // Ignore
+      }
     }
   }
 
   public destroy(): void {
     this.isDestroyed = true;
+    this.doc.off("update", this.handleDocUpdate);
     this.disconnect();
     this.remoteStates.clear();
     this.awarenessListeners.clear();

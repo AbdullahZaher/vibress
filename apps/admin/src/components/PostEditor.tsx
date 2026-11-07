@@ -9,6 +9,7 @@ import {
   uploadMediaApi,
   fetchAiStatus,
   generateAiCompletion,
+  getActivePublicationId,
 } from "../lib/api";
 import {
   VibressStudio,
@@ -30,8 +31,17 @@ import {
   ChevronLeft,
   PanelRight,
   AlertCircle,
+  AlertTriangle,
+  Download,
   Clock,
 } from "lucide-react";
+import { canApplyRemoteReplacement } from "../lib/recovery/remote-replacement-guard";
+import {
+  indexedDbDraftStore,
+  type DraftPersistenceStatus,
+  type OfflineDraftMetadata,
+  type OfflineDraftRecord,
+} from "../lib/recovery/indexed-db-draft-store";
 import { PostSettingsSidebar } from "./editor/PostSettingsSidebar";
 import { EditorialCollaborationPanel } from "./editor/EditorialCollaborationPanel";
 import { RevisionDiffModal } from "./editor/RevisionDiffModal";
@@ -42,6 +52,7 @@ import type { UnsplashSelectResponse } from "../lib/api/unsplash";
 
 interface AdminPostDetail {
   id: string;
+  publicationId?: string;
   title: string;
   slug: string;
   excerpt: string | null;
@@ -84,6 +95,7 @@ interface Revision {
 }
 
 type AutosaveState = "idle" | "saving" | "saved" | "failed" | "conflict";
+type LocalDurabilityUiState = "idle" | "pending" | DraftPersistenceStatus;
 
 export const PostEditor: React.FC<PostEditorProps> = ({
   postId,
@@ -114,6 +126,23 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const [showCollabPanel, setShowCollabPanel] = useState(false);
   const [showDiffModal, setShowDiffModal] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [availableRecoveryDraft, setAvailableRecoveryDraft] =
+    useState<OfflineDraftRecord | null>(null);
+  const [localDurabilityState, setLocalDurabilityState] =
+    useState<LocalDurabilityUiState>("idle");
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== "undefined" && typeof navigator.onLine === "boolean"
+      ? navigator.onLine
+      : true,
+  );
+  const [multiTabNotice, setMultiTabNotice] = useState<string | null>(null);
+  const trRef = useRef(tr);
+  trRef.current = tr;
+  const publicationIdRef = useRef<string>(getActivePublicationId() || "pub_default");
+  const localSaveSeqRef = useRef<number>(0);
+  const preserveUnsavedLocalWorkRef = useRef<() => Promise<boolean>>(
+    async () => false,
+  );
 
   // Feature Image state (strictly decoupled from Lexical AST / Yjs / restoreKey)
   const [featureImage, setFeatureImage] = useState<ApiMediaAsset | null>(null);
@@ -156,9 +185,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     if (!collaborationEnabled || !postId || typeof window === "undefined") return undefined;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/admin/v1/posts/${postId}/collaboration/ws`;
+    const wsUrl = `${protocol}//${host}/api/admin/v1/posts/${postId}/collaboration/ws?publicationId=${encodeURIComponent(publicationIdRef.current)}`;
     return {
-      id: postId,
+      id: `${postId}-k${restoreKey}`,
       user: {
         id: currentUserIdRef.current || "staff",
         name: "Staff Editor",
@@ -167,7 +196,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       providerFactory: (id: string, yjsDocMap: Map<string, YDoc>) => {
         const doc = yjsDocMap.get(id) || new YDoc();
         yjsDocMap.set(id, doc);
-        return new WebSocketCollaborationProvider(doc, {
+        const provider = new WebSocketCollaborationProvider(doc, {
           url: wsUrl,
           docId: id,
           user: {
@@ -176,15 +205,92 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             color: "#3b82f6",
           },
         });
+        // A remote restore must never destroy uncheckpointed author work.
+        const applyIncomingDocument = async (
+          loadRemote: () => Promise<{ content: unknown; title: string; version: number }>,
+        ): Promise<void> => {
+          const generationAtStart = autosaveGenerationsRef.current.currentGeneration;
+          const hadUnsavedChangesAtStart = hasUnsavedChangesRef.current;
+          const checkpointDurable = await preserveUnsavedLocalWorkRef.current();
+          const stillCurrent = () =>
+            documentMountedRef.current && activePostIdRef.current === postId;
+          const mayReplace = () => canApplyRemoteReplacement({
+            hadUnsavedChangesAtStart,
+            checkpointDurable,
+            generationAtStart,
+            generationNow: autosaveGenerationsRef.current.currentGeneration,
+            hasUnsavedChangesNow: hasUnsavedChangesRef.current,
+          });
+          const reportConflict = () => {
+            autosaveConflictRef.current = true;
+            setAutosaveState("conflict");
+            setErrorMsg(trRef.current(
+              "Remote changes were received, but local edits could not be saved safely. Keep this tab open and export or copy your draft before reloading.",
+            ));
+          };
+          if (!stillCurrent()) return;
+          if (!mayReplace()) {
+            reportConflict();
+            return;
+          }
+          try {
+            const remote = await loadRemote();
+            if (!stillCurrent()) return;
+            if (!mayReplace()) {
+              reportConflict();
+              return;
+            }
+            const migrated = migrateDocument(remote.content);
+            setStudioDoc(migrated);
+            latestDocRef.current = migrated;
+            setTitle(remote.title);
+            latestTitleRef.current = remote.title;
+            setVersion(remote.version);
+            latestVersionRef.current = remote.version;
+            documentEpochRef.current += 1;
+            setRestoreKey((k) => k + 1);
+            hasUnsavedChangesRef.current = false;
+            autosaveConflictRef.current = false;
+            setAutosaveState("saved");
+            // The old checkpoint remains available in the recovery banner.
+            setLocalDurabilityState(checkpointDurable ? "durable" : "idle");
+            setErrorMsg(null);
+          } catch {
+            if (stillCurrent()) reportConflict();
+          }
+        };
+        const loadPost = async () => {
+          const result = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`);
+          return {
+            content: result.post.content ?? result.post.contentJson,
+            title: result.post.title || "",
+            version: result.post.version || 1,
+          };
+        };
+        provider.on("restore", (payload: unknown) => {
+          void applyIncomingDocument(async () => {
+            if (payload && typeof payload === "object" && "content" in payload && payload.content) {
+              return {
+                content: payload.content,
+                title: "title" in payload && typeof payload.title === "string"
+                  ? payload.title : latestTitleRef.current,
+                version: "version" in payload && typeof payload.version === "number"
+                  ? payload.version : latestVersionRef.current,
+              };
+            }
+            return loadPost();
+          });
+        });
+        provider.on("epoch-conflict", () => {
+          void applyIncomingDocument(loadPost);
+        });
+        return provider;
       },
     };
-  }, [postId, collaborationEnabled]);
+  }, [postId, collaborationEnabled, restoreKey]);
 
-  const restoreDisabledReason = collabConfig
-    ? (locale?.startsWith("ar")
-      ? "لا يمكن استعادة المراجعات أثناء تفعيل التحرير التعاوني. لم تتغير مسودتك."
-      : "Revision restoration is unavailable while collaboration is enabled. Your current draft is unchanged.")
-    : undefined;
+  // Coordinated Yjs restoration is enabled; server resets room and syncs active peers via epochs.
+  const restoreDisabledReason: string | undefined = undefined;
 
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasUnsavedChangesRef = useRef(false);
@@ -192,6 +298,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
   const autosaveGenerationsRef = useRef(new EditorialAutosaveGenerations());
   const autosaveConflictRef = useRef(false);
   const restoreInFlightRef = useRef(false);
+  const pendingRecoverDraftRef = useRef(false);
   const createdPostRef = useRef<{ id: string; version: number } | null>(null);
   const activePostIdRef = useRef(postId);
   const documentEpochRef = useRef(0);
@@ -423,6 +530,9 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     createdPostRef.current = null;
     autosaveConflictRef.current = false;
     setAutosaveState("idle"); setSaving(false); setErrorMsg(null);
+    setLocalDurabilityState("idle");
+    setMultiTabNotice(null);
+    setAvailableRecoveryDraft(null);
     setUnsupportedSource(null); setUnsupportedMessage(null);
     if (!postId) {
       setTitle(""); setSlug(""); setExcerpt(""); setMetaTitle(""); setMetaDescription(""); setCanonicalUrl("");
@@ -440,12 +550,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         );
         if (!isCurrent()) return;
         const p = res.post;
+        const resolvedPubId = p.publicationId || "pub_default";
+        publicationIdRef.current = resolvedPubId;
         setTitle(p.title || "");
+        latestTitleRef.current = p.title || "";
         setSlug(p.slug || "");
+        latestSlugRef.current = p.slug || "";
         setExcerpt(p.excerpt || "");
+        latestExcerptRef.current = p.excerpt || "";
         setMetaTitle(p.metaTitle || "");
+        latestMetaTitleRef.current = p.metaTitle || "";
         setMetaDescription(p.metaDescription || "");
+        latestMetaDescriptionRef.current = p.metaDescription || "";
         setCanonicalUrl(p.canonicalUrl || "");
+        latestCanonicalUrlRef.current = p.canonicalUrl || "";
         setStatus(p.status || "draft");
         setFeatured(p.featured ?? false);
         latestFeaturedRef.current = p.featured ?? false;
@@ -467,15 +585,48 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         }
 
         if (p.tags) {
-          setSelectedTagIds(p.tags.map((t: Tag) => t.id));
+          const tagIds = p.tags.map((t: Tag) => t.id);
+          setSelectedTagIds(tagIds);
+          latestTagIdsRef.current = tagIds;
         }
 
         const source = p.content ?? p.contentJson;
         try {
           const migrated = migrateDocument(source);
           setStudioDoc(migrated);
+          latestDocRef.current = migrated;
           setUnsupportedSource(null);
           setUnsupportedMessage(null);
+
+          // Check if a newer unsaved recovery draft exists on device (check resolved publicationId and legacy "default")
+          const userKey = currentUserIdRef.current || "staff";
+          void (async () => {
+            try {
+              let draft = await indexedDbDraftStore.getDraft(
+                resolvedPubId,
+                userKey,
+                postId,
+              );
+              if (!draft && resolvedPubId !== "default") {
+                draft = await indexedDbDraftStore.getDraft(
+                  "default",
+                  userKey,
+                  postId,
+                );
+              }
+              if (
+                !canceled &&
+                isCurrent() &&
+                draft &&
+                (draft.title !== p.title ||
+                  JSON.stringify(draft.content) !== JSON.stringify(migrated))
+              ) {
+                setAvailableRecoveryDraft(draft);
+              }
+            } catch {
+              // Ignore recovery read error
+            }
+          })();
         } catch (error) {
           if (error instanceof StudioMigrationError) {
             setUnsupportedSource(source);
@@ -519,11 +670,168 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     return () => { canceled = true; };
   }, [postId, beginDocumentRequest]);
 
+  useEffect(() => {
+    if (!postId) {
+      const userKey = currentUserIdRef.current || "staff";
+      void (async () => {
+        try {
+          // Brand-new drafts are only recoverable within the active publication (no cross-publication fallback)
+          const draft = await indexedDbDraftStore.getDraft(
+            publicationIdRef.current,
+            userKey,
+            "new",
+          );
+          if (draft && (draft.title || draft.content)) {
+            setAvailableRecoveryDraft(draft);
+          }
+        } catch {
+          // Ignore
+        }
+      })();
+    }
+  }, [postId]);
+
+  const clearPersistedDraftsForPost = useCallback(
+    (targetPostId: string, syncedSnapshotStartedAt: number = Date.now()) => {
+      const userKey = currentUserIdRef.current || "staff";
+      const pubKey = publicationIdRef.current;
+      // Conditional delete: never destroys a checkpoint written by a sibling tab (P0-4).
+      void indexedDbDraftStore.deleteDraftIfSynced(
+        pubKey,
+        userKey,
+        targetPostId,
+        syncedSnapshotStartedAt,
+      );
+      if (pubKey !== "default") {
+        void indexedDbDraftStore.deleteDraftIfSynced(
+          "default",
+          userKey,
+          targetPostId,
+          syncedSnapshotStartedAt,
+        );
+      }
+    },
+    [],
+  );
+
+  const buildDraftMetadata = useCallback(
+    (): OfflineDraftMetadata => ({
+      slug: latestSlugRef.current || undefined,
+      excerpt: latestExcerptRef.current || undefined,
+      metaTitle: latestMetaTitleRef.current || undefined,
+      metaDescription: latestMetaDescriptionRef.current || undefined,
+      canonicalUrl: latestCanonicalUrlRef.current || undefined,
+      tagIds: latestTagIdsRef.current,
+      featured: latestFeaturedRef.current,
+    }),
+    [],
+  );
+
+  const preserveUnsavedLocalWork = useCallback(async (): Promise<boolean> => {
+    if (!hasUnsavedChangesRef.current) return false;
+    try {
+      const res = await indexedDbDraftStore.saveDraft({
+        publicationId: publicationIdRef.current,
+        userId: currentUserIdRef.current || "staff",
+        postId: activePostIdRef.current || createdPostRef.current?.id || "new",
+        epoch: documentEpochRef.current,
+        baseVersion: latestVersionRef.current,
+        content: latestDocRef.current,
+        title: latestTitleRef.current,
+        updatedAt: Date.now(),
+        metadata: buildDraftMetadata(),
+      });
+      setAvailableRecoveryDraft(res.record);
+      setLocalDurabilityState(res.status);
+      return res.durable;
+    } catch {
+      setLocalDurabilityState("failed");
+      return false;
+    }
+  }, [buildDraftMetadata]);
+  preserveUnsavedLocalWorkRef.current = preserveUnsavedLocalWork;
+
+  const handleApplyRecoveryDraft = () => {
+    if (!availableRecoveryDraft) return;
+    const meta = availableRecoveryDraft.metadata;
+    if (meta) {
+      if (meta.slug !== undefined) { setSlug(meta.slug); latestSlugRef.current = meta.slug; }
+      if (meta.excerpt !== undefined) { setExcerpt(meta.excerpt); latestExcerptRef.current = meta.excerpt; }
+      if (meta.metaTitle !== undefined) { setMetaTitle(meta.metaTitle); latestMetaTitleRef.current = meta.metaTitle; }
+      if (meta.metaDescription !== undefined) { setMetaDescription(meta.metaDescription); latestMetaDescriptionRef.current = meta.metaDescription; }
+      if (meta.canonicalUrl !== undefined) { setCanonicalUrl(meta.canonicalUrl); latestCanonicalUrlRef.current = meta.canonicalUrl; }
+      if (meta.tagIds !== undefined) { setSelectedTagIds(meta.tagIds); latestTagIdsRef.current = meta.tagIds; }
+      if (meta.featured !== undefined) { setFeatured(meta.featured); latestFeaturedRef.current = meta.featured; }
+    }
+    setLocalDurabilityState(
+      availableRecoveryDraft.durability === "durable" ? "durable" : "memory-only",
+    );
+    if (availableRecoveryDraft.title !== undefined) {
+      setTitle(availableRecoveryDraft.title);
+      latestTitleRef.current = availableRecoveryDraft.title;
+    }
+    if (availableRecoveryDraft.content) {
+      const migrated = migrateDocument(availableRecoveryDraft.content);
+      setStudioDoc(migrated);
+      latestDocRef.current = migrated;
+    }
+    autosaveConflictRef.current = false;
+    pendingRecoverDraftRef.current = true;
+    setAvailableRecoveryDraft(null);
+    hasUnsavedChangesRef.current = true;
+    setAutosaveState("idle");
+
+    if (
+      postId &&
+      (typeof navigator === "undefined" || navigator.onLine !== false)
+    ) {
+      autosaveGenerationsRef.current.markEdited();
+      void performAutosave();
+    } else {
+      pendingRecoverDraftRef.current = false;
+      setRestoreKey((k) => k + 1);
+      triggerAutosaveDebounced();
+    }
+  };
+
+  const handleDiscardRecoveryDraft = async () => {
+    if (!availableRecoveryDraft) return;
+    await indexedDbDraftStore.deleteDraft(
+      availableRecoveryDraft.publicationId,
+      availableRecoveryDraft.userId,
+      availableRecoveryDraft.postId,
+    );
+    if (availableRecoveryDraft.publicationId !== "default") {
+      await indexedDbDraftStore.deleteDraft(
+        "default",
+        availableRecoveryDraft.userId,
+        availableRecoveryDraft.postId,
+      );
+    }
+    setAvailableRecoveryDraft(null);
+  };
+
+  const handleExportRecoveryDraft = () => {
+    if (!availableRecoveryDraft) return;
+    const jsonStr = JSON.stringify(availableRecoveryDraft, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibress-recovery-${availableRecoveryDraft.postId}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const performAutosave = useCallback(async () => {
     const isCurrent = beginDocumentRequest(postId);
     if (!isCurrent() || restoreInFlightRef.current) return;
     const savePostId = postId ?? createdPostRef.current?.id;
     if (!savePostId || !hasUnsavedChangesRef.current || autosaveConflictRef.current) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setIsOnline(false);
+      return;
+    }
 
     const currentDoc = latestDocRef.current;
     const currentVersion = latestVersionRef.current;
@@ -575,14 +883,23 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         seq: currentSeq,
       });
 
+      const isRecoveringDraft = pendingRecoverDraftRef.current;
       const res = await apiRequest<{ post: AdminPostDetail }>(
-        `/posts/${savePostId}`,
+        `/posts/${savePostId}${isRecoveringDraft ? "?recoverDraft=1" : ""}`,
         {
           method: "PUT",
           body: JSON.stringify(payload),
           signal: controller.signal,
         },
       );
+      if (isRecoveringDraft) {
+        pendingRecoverDraftRef.current = false;
+        const migratedSaved = migrateDocument(res.post.content ?? res.post.contentJson);
+        setStudioDoc(migratedSaved);
+        latestDocRef.current = migratedSaved;
+        documentEpochRef.current += 1;
+        setRestoreKey((k) => k + 1);
+      }
 
       if (!isCurrent()) return;
 
@@ -622,9 +939,23 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
       setVersion(res.post.version);
       latestVersionRef.current = res.post.version;
+      const userKey = currentUserIdRef.current || "staff";
+      indexedDbDraftStore.notifyServerSynced({
+        publicationId: publicationIdRef.current,
+        userId: userKey,
+        postId: savePostId,
+        serverVersion: res.post.version,
+      });
       if (acknowledgement.latestEdit) {
         hasUnsavedChangesRef.current = false;
         setAutosaveState("saved");
+        setLocalDurabilityState("idle");
+        setMultiTabNotice(null);
+        setErrorMsg(null);
+        clearPersistedDraftsForPost(savePostId);
+        if (!postId) {
+          clearPersistedDraftsForPost("new");
+        }
         if (!postId && createdPostRef.current?.id === savePostId) {
           createdPostRef.current = null;
           onNavigate(`/admin/posts/${savePostId}`);
@@ -636,12 +967,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         setAutosaveState("idle");
       }
     } catch (err: unknown) {
+      if (pendingRecoverDraftRef.current) {
+        pendingRecoverDraftRef.current = false;
+        setRestoreKey((k) => k + 1);
+      }
       if (!isCurrent()) return;
       if ((err as Error)?.name === "AbortError" ||
           !autosaveGenerationsRef.current.acknowledge(saveTicket).latestRequest) {
         return;
       }
       hasUnsavedChangesRef.current = true;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        setIsOnline(false);
+        setAutosaveState("idle");
+        return;
+      }
       if (
         err instanceof ApiError &&
         (err.statusCode === 409 || err.message.includes("Version conflict"))
@@ -660,20 +1000,132 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         abortControllerRef.current = null;
       }
     }
-  }, [postId, onNavigate, beginDocumentRequest]);
+  }, [postId, onNavigate, beginDocumentRequest, clearPersistedDraftsForPost]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (
+        hasUnsavedChangesRef.current &&
+        !autosaveConflictRef.current &&
+        !restoreInFlightRef.current
+      ) {
+        if (autosaveTimerRef.current) {
+          clearTimeout(autosaveTimerRef.current);
+          autosaveTimerRef.current = null;
+        }
+        void performAutosave();
+        reconnectTimer = setTimeout(() => {
+          if (
+            documentMountedRef.current &&
+            hasUnsavedChangesRef.current &&
+            !autosaveConflictRef.current &&
+            !restoreInFlightRef.current
+          ) {
+            void performAutosave();
+          }
+        }, 1200);
+      }
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+        autosaveTimerRef.current = null;
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [performAutosave]);
+
+  useEffect(() => {
+    const activeTargetId = postId ?? createdPostRef.current?.id ?? "new";
+    return indexedDbDraftStore.subscribeToDraftEvents((msg) => {
+      if (!documentMountedRef.current) return;
+      if (
+        msg.publicationId !== publicationIdRef.current ||
+        msg.userId !== (currentUserIdRef.current || "staff")
+      ) {
+        return;
+      }
+      const currentTargetId = postId ?? createdPostRef.current?.id ?? "new";
+      if (msg.postId !== activeTargetId && msg.postId !== currentTargetId) return;
+
+      if (msg.type === "server-synced") {
+        if (msg.serverVersion > latestVersionRef.current) {
+          if (hasUnsavedChangesRef.current) {
+            autosaveConflictRef.current = true;
+            setAutosaveState("conflict");
+            // Re-persist this tab's in-memory work so "Reload Latest" can never lose it (P0-4).
+            void preserveUnsavedLocalWorkRef.current();
+            setErrorMsg(
+              "Autosave conflict: This post was updated in another browser tab. Your local draft is preserved.",
+            );
+          } else {
+            setVersion(msg.serverVersion);
+            latestVersionRef.current = msg.serverVersion;
+            setMultiTabNotice(
+              `Synced to v${msg.serverVersion} from another open tab.`,
+            );
+          }
+        }
+      } else if (msg.type === "draft-saved") {
+        setMultiTabNotice(
+          "Another open browser tab is actively editing a local draft of this post.",
+        );
+      }
+    });
+  }, [postId]);
 
   const triggerAutosaveDebounced = useCallback(() => {
     autosaveGenerationsRef.current.markEdited();
     hasUnsavedChangesRef.current = true;
+    const seq = ++localSaveSeqRef.current;
+    setLocalDurabilityState("pending");
+    void indexedDbDraftStore
+      .saveDraft({
+        publicationId: publicationIdRef.current,
+        userId: currentUserIdRef.current || "staff",
+        postId: postId || "new",
+        epoch: documentEpochRef.current,
+        baseVersion: latestVersionRef.current,
+        content: latestDocRef.current,
+        title: latestTitleRef.current,
+        updatedAt: Date.now(),
+        metadata: buildDraftMetadata(),
+      })
+      .then((res) => {
+        if (!documentMountedRef.current || seq !== localSaveSeqRef.current) return;
+        if (!hasUnsavedChangesRef.current) {
+          setLocalDurabilityState("idle");
+          return;
+        }
+        setLocalDurabilityState(res.status);
+      })
+      .catch(() => {
+        if (!documentMountedRef.current || seq !== localSaveSeqRef.current) return;
+        setLocalDurabilityState("failed");
+      });
     setAutosaveState((state) => state === "conflict" ? state : "idle");
     if (autosaveConflictRef.current) return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setIsOnline(false);
+      return;
+    }
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
     }
     autosaveTimerRef.current = setTimeout(() => {
-      performAutosave();
+      void performAutosave();
     }, 2000);
-  }, [performAutosave]);
+  }, [performAutosave, postId]);
 
   const generateSlug = (text: string) => {
     return text
@@ -685,10 +1137,12 @@ export const PostEditor: React.FC<PostEditorProps> = ({
 
   const handleTitleChange = (val: string) => {
     setTitle(val);
+    latestTitleRef.current = val;
     const generatedSlug = generateSlug(val);
     // Auto-generate slug if it's currently empty or matches the old title's slug
     if (!slug || slug === generateSlug(title)) {
       setSlug(generatedSlug);
+      latestSlugRef.current = generatedSlug;
     }
     triggerAutosaveDebounced();
   };
@@ -699,7 +1153,13 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     triggerAutosaveDebounced();
   };
 
-  const handleDocChange = (doc: StudioDocument) => {
+  const handleDocChange = (
+    doc: StudioDocument,
+    origin: "local" | "remote" = "local",
+  ) => {
+    if (pendingRecoverDraftRef.current) {
+      return;
+    }
     const stats = extractDocStats(doc);
     logForensicEvent("PARENT_STATE_UPDATE", {
       childCount: stats.childCount,
@@ -707,6 +1167,10 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       hash: stats.hash,
     });
     setStudioDoc(doc);
+    latestDocRef.current = doc;
+    // Replayed Yjs changes already belong to the collaborating author.
+    // Keep the current snapshot fresh, but avoid redundant competing HTTP PUTs.
+    if (origin === "remote") return;
     triggerAutosaveDebounced();
   };
 
@@ -889,9 +1353,21 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         if (acknowledgment.latestRequest && res.post.version >= latestVersionRef.current) {
           setVersion(res.post.version);
           latestVersionRef.current = res.post.version;
+          indexedDbDraftStore.notifyServerSynced({
+            publicationId: publicationIdRef.current,
+            userId: currentUserIdRef.current || "staff",
+            postId: savePostId,
+            serverVersion: res.post.version,
+          });
           if (acknowledgment.latestEdit) {
             setAutosaveState("saved");
+            setLocalDurabilityState("idle");
+            setMultiTabNotice(null);
             hasUnsavedChangesRef.current = false;
+            clearPersistedDraftsForPost(savePostId);
+            if (!postId) {
+              clearPersistedDraftsForPost("new");
+            }
             if (!postId && createdPostRef.current?.id === savePostId) {
               createdPostRef.current = null;
               onNavigate(`/admin/posts/${savePostId}`);
@@ -925,6 +1401,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         latestVersionRef.current = res.post.version;
         if (autosaveGenerationsRef.current.isCurrent(saveTicket)) {
           hasUnsavedChangesRef.current = false;
+          setLocalDurabilityState("idle");
+          clearPersistedDraftsForPost("new");
           createdPostRef.current = null;
           onNavigate(`/admin/posts/${createdId}`);
         } else {
@@ -1049,13 +1527,20 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         autosaveTimerRef.current = setTimeout(() => { void performAutosave(); }, 2000);
         return;
       }
+      const migratedRestored = migrateDocument(p.content || p.contentJson);
       setTitle(p.title || "");
-      setStudioDoc(migrateDocument(p.content || p.contentJson));
+      latestTitleRef.current = p.title || "";
+      setStudioDoc(migratedRestored);
+      latestDocRef.current = migratedRestored;
       setVersion(p.version);
       latestVersionRef.current = p.version;
+      documentEpochRef.current += 1;
       setRestoreKey((k) => k + 1);
       hasUnsavedChangesRef.current = false;
       autosaveConflictRef.current = false;
+      setLocalDurabilityState("idle");
+      setAvailableRecoveryDraft(null);
+      clearPersistedDraftsForPost(postId);
       setAutosaveState("saved");
       alert("Revision restored successfully");
     } catch (err) {
@@ -1097,40 +1582,170 @@ export const PostEditor: React.FC<PostEditorProps> = ({
     onNavigate(path);
   };
 
-  const renderAutosaveStatus = () => {
-    if (!postId) return null;
-    switch (autosaveState) {
-      case "saving":
+  const renderLocalDurabilityBadge = () => {
+    if (availableRecoveryDraft) {
+      return (
+        <span
+          data-testid="recovery-required-badge"
+          className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium"
+        >
+          <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+          {tr("Recovery required")}
+        </span>
+      );
+    }
+
+    if (!hasUnsavedChangesRef.current || autosaveState === "saved") {
+      return null;
+    }
+
+    switch (localDurabilityState) {
+      case "durable":
         return (
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3 animate-spin" /> {tr("Saving...")}
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode="durable"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+          >
+            {!isOnline
+              ? tr("Recoverable locally · Offline (pending sync)")
+              : tr("Recoverable locally · Pending sync")}
           </span>
         );
-      case "saved":
+      case "memory-only":
         return (
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode="memory-only"
+            role="status"
+            className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium"
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            {tr("Temporary memory-only protection")}
+          </span>
+        );
+      case "quota-exceeded":
+        return (
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode="quota-exceeded"
+            role="alert"
+            className="inline-flex items-center gap-1 text-xs text-destructive font-medium"
+          >
+            <AlertCircle className="h-3 w-3" aria-hidden="true" />
+            {tr("Persistence unavailable (quota exceeded)")}
+          </span>
+        );
+      case "unavailable":
+        return (
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode="unavailable"
+            role="alert"
+            className="inline-flex items-center gap-1 text-xs text-destructive font-medium"
+          >
+            <AlertCircle className="h-3 w-3" aria-hidden="true" />
+            {tr("Persistence unavailable")}
+          </span>
+        );
+      case "aborted":
+      case "failed":
+        return (
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode={localDurabilityState}
+            role="alert"
+            className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium"
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            {tr("Local save failed · Temporary memory-only protection")}
+          </span>
+        );
+      case "pending":
+      default:
+        return (
+          <span
+            data-testid="local-durability-status"
+            data-durability-mode="pending"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground/80"
+          >
+            {tr("Unsaved changes")}
+          </span>
+        );
+    }
+  };
+
+  const renderAutosaveStatus = () => {
+    if (!postId) {
+      return (
+        <span
+          data-testid="editor-save-status"
+          aria-live="polite"
+          className="inline-flex items-center gap-2"
+        >
+          <span className="text-xs text-muted-foreground/80 font-normal">
+            {tr("New")}
+          </span>
+          {renderLocalDurabilityBadge()}
+        </span>
+      );
+    }
+    let primaryBadge: React.ReactNode;
+    switch (autosaveState) {
+      case "saving":
+        primaryBadge = (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3 animate-spin" aria-hidden="true" /> {tr("Saving...")}
+          </span>
+        );
+        break;
+      case "saved":
+        primaryBadge = (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80 font-normal">
             {status === "published" ? `${tr("Published")} · ${tr("Saved")}` : tr("Draft - Saved")}
           </span>
         );
+        break;
       case "failed":
-        return (
-          <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
-            <AlertCircle className="h-3 w-3" /> {tr("Save failed")}
+        primaryBadge = (
+          <span className="inline-flex items-center gap-1.5 text-xs text-destructive font-medium">
+            <AlertCircle className="h-3 w-3" aria-hidden="true" /> {tr("Save failed")}
+            <button
+              type="button"
+              data-testid="retry-autosave-btn"
+              onClick={() => { void performAutosave(); }}
+              className="underline hover:opacity-80 focus:outline-none"
+            >
+              {tr("Retry")}
+            </button>
           </span>
         );
+        break;
       case "conflict":
-        return (
+        primaryBadge = (
           <span className="inline-flex items-center gap-1 text-xs text-destructive font-medium">
-            <AlertCircle className="h-3 w-3" /> {tr("Version conflict")}
+            <AlertCircle className="h-3 w-3" aria-hidden="true" /> {tr("Version conflict")}
           </span>
         );
+        break;
       default:
-        return (
+        primaryBadge = (
           <span className="text-xs text-muted-foreground/80 font-normal">
             {status === "published" ? tr("Published") : tr("Draft")}
           </span>
         );
+        break;
     }
+    return (
+      <span
+        data-testid="editor-save-status"
+        aria-live="polite"
+        className="inline-flex flex-wrap items-center gap-2"
+      >
+        {primaryBadge}
+        {renderLocalDurabilityBadge()}
+      </span>
+    );
   };
 
   if (!loading && unsupportedMessage) {
@@ -1168,11 +1783,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           <span className="text-muted-foreground/30 font-light select-none">|</span>
 
           {/* Status badge */}
-          {!postId ? (
-            <span className="text-xs text-muted-foreground/80 font-normal">{tr("New")}</span>
-          ) : (
-            renderAutosaveStatus()
-          )}
+          {renderAutosaveStatus()}
         </div>
 
         {/* Right: Actions & Settings Panel Toggle */}
@@ -1200,6 +1811,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({
               className="h-8 px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition"
             >
               {status === "published" ? tr("Update") : tr("Save Draft")}
+            </Button>
+          )}
+
+          {postId && status === "published" && canPublish && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleUnpublish}
+              loading={saving}
+              className="h-8 px-3 text-xs font-medium text-destructive hover:bg-destructive/10 transition"
+            >
+              {tr("Unpublish")}
             </Button>
           )}
 
@@ -1242,6 +1865,85 @@ export const PostEditor: React.FC<PostEditorProps> = ({
           {errorMsg && (
             <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
               {errorMsg}
+            </div>
+          )}
+
+          {multiTabNotice && (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="multi-tab-draft-notice"
+              className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-700 dark:text-blue-300 text-xs flex items-center justify-between gap-2"
+            >
+              <span>{multiTabNotice}</span>
+              <button
+                type="button"
+                onClick={() => setMultiTabNotice(null)}
+                className="underline shrink-0"
+              >
+                {tr("Dismiss")}
+              </button>
+            </div>
+          )}
+
+          {availableRecoveryDraft && (
+            <div
+              role="alert"
+              aria-live="polite"
+              data-testid="offline-recovery-banner"
+              className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-sm text-foreground"
+            >
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="size-5 text-amber-500 shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="font-semibold text-amber-600 dark:text-amber-400">
+                    {locale?.startsWith("ar") ? "مسودة استرداد محلية متوفرة" : "Local recovery draft available"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {locale?.startsWith("ar")
+                      ? `تم العثور على مسودة غير متزامنة محفوظة على هذا الجهاز (${new Date(availableRecoveryDraft.updatedAt).toLocaleTimeString()})`
+                      : `Unsynced draft found on this device (${new Date(availableRecoveryDraft.updatedAt).toLocaleTimeString()})`}
+                  </p>
+                  {postId && availableRecoveryDraft.baseVersion < version && (
+                    <p
+                      data-testid="recovery-version-conflict"
+                      className="mt-1 text-xs font-medium text-destructive"
+                    >
+                      {locale?.startsWith("ar")
+                        ? `تنبيه تعارض النسخ: نسخة الخادم الحالية (v${version}) أحدث من أساس هذه المسودة المحلية (v${availableRecoveryDraft.baseVersion}). راجع قبل الاسترداد أو قم بتصدير النسخة.`
+                        : `Version conflict warning: Server version (v${version}) is newer than this offline draft's base (v${availableRecoveryDraft.baseVersion}). Review carefully before recovering or export JSON.`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={handleApplyRecoveryDraft}
+                  className="h-8 text-xs font-semibold"
+                >
+                  {locale?.startsWith("ar") ? "استرداد المسودة" : "Recover draft"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDiscardRecoveryDraft}
+                  className="h-8 text-xs"
+                >
+                  {locale?.startsWith("ar") ? "تجاهل والاحتفاظ بالخادم" : "Keep server version"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExportRecoveryDraft}
+                  className="h-8 text-xs text-muted-foreground gap-1"
+                  title={locale?.startsWith("ar") ? "تصدير مسودة الاسترداد" : "Export recovery JSON"}
+                >
+                  <Download className="size-3.5" aria-hidden="true" />
+                  {locale?.startsWith("ar") ? "تصدير" : "Export"}
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1318,18 +2020,18 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         featured={featured}
         setFeatured={handleFeaturedChange}
         slug={slug}
-        setSlug={(next) => { setSlug(next); triggerAutosaveDebounced(); }}
+        setSlug={(next) => { setSlug(next); latestSlugRef.current = next; triggerAutosaveDebounced(); }}
         excerpt={excerpt}
-        setExcerpt={(next) => { setExcerpt(next); triggerAutosaveDebounced(); }}
+        setExcerpt={(next) => { setExcerpt(next); latestExcerptRef.current = next; triggerAutosaveDebounced(); }}
         metaTitle={metaTitle}
-        setMetaTitle={(next) => { setMetaTitle(next); triggerAutosaveDebounced(); }}
+        setMetaTitle={(next) => { setMetaTitle(next); latestMetaTitleRef.current = next; triggerAutosaveDebounced(); }}
         metaDescription={metaDescription}
-        setMetaDescription={(next) => { setMetaDescription(next); triggerAutosaveDebounced(); }}
+        setMetaDescription={(next) => { setMetaDescription(next); latestMetaDescriptionRef.current = next; triggerAutosaveDebounced(); }}
         canonicalUrl={canonicalUrl}
-        setCanonicalUrl={(next) => { setCanonicalUrl(next); triggerAutosaveDebounced(); }}
+        setCanonicalUrl={(next) => { setCanonicalUrl(next); latestCanonicalUrlRef.current = next; triggerAutosaveDebounced(); }}
         allTags={allTags}
         selectedTagIds={selectedTagIds}
-        setSelectedTagIds={(next) => { setSelectedTagIds(next); triggerAutosaveDebounced(); }}
+        setSelectedTagIds={(next) => { setSelectedTagIds(next); latestTagIdsRef.current = next; triggerAutosaveDebounced(); }}
         scheduledAtStr={scheduledAtStr}
         setScheduledAtStr={setScheduledAtStr}
         handleSchedule={handleSchedule}

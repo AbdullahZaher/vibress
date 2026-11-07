@@ -188,7 +188,7 @@ test.describe("Studio public rendering", () => {
     await login(page);
     await page.getByRole("button", { name: "Posts", exact: true }).click();
     await page.waitForTimeout(800);
-    await page.click('button:has-text("Create Post")');
+    await page.click('button:has-text("New Post"), button:has-text("Create Post")');
     await page.waitForTimeout(800);
     const title = `Studio Public Cards ${Date.now()}`;
     await page.locator('textarea[aria-label="Post Title"]').fill(title);
@@ -320,7 +320,8 @@ test.describe("Studio public rendering", () => {
 
     // Publish through the real UI.
     await page
-      .locator('button:has-text("Publish Now")')
+      .locator('button:has-text("Publish Now"), button:has-text("Publish")')
+      .first()
       .click({ timeout: 8000 });
     await page.waitForTimeout(3000);
 

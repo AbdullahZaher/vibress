@@ -14,6 +14,7 @@ vi.mock("../../lib/api", () => ({
   uploadMediaApi: vi.fn(),
   fetchAiStatus: vi.fn(async () => ({ enabled: false })),
   generateAiCompletion: vi.fn(),
+  getActivePublicationId: vi.fn(() => "pub_default"),
   ApiError: class ApiError extends Error {},
 }));
 vi.mock("@vibress/studio-react", () => ({

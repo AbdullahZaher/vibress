@@ -86,4 +86,74 @@ describe("STUDIO-01: TurnIntoHelper Atomic Node Conversion Suite", () => {
       turnNodeInto(editor, "non-existent-key-9999", "quote");
     }).not.toThrow();
   });
+
+  it("converts paragraph to bullet-list with valid ListNode -> ListItemNode hierarchy (P1-8)", () => {
+    const editor = setupTestEditor();
+    let pKey = "";
+
+    editor.update(
+      () => {
+        const root = $getRoot();
+        const p = $createParagraphNode();
+        p.append($createTextNode("List item content"));
+        root.append(p);
+        pKey = p.getKey();
+      },
+      { discrete: true },
+    );
+
+    turnNodeInto(editor, pKey, "bullet-list");
+
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const list = root.getFirstChild();
+      expect(list?.getType()).toBe("list");
+      expect((list as ListNode).getListType()).toBe("bullet");
+      const item = (list as ListNode).getFirstChild();
+      expect(item?.getType()).toBe("listitem");
+      expect(item?.getTextContent()).toBe("List item content");
+    });
+  });
+
+  it("switches list type in-place and unwraps list back to paragraph (P1-8)", () => {
+    const editor = setupTestEditor();
+    let pKey = "";
+
+    editor.update(
+      () => {
+        const root = $getRoot();
+        const p = $createParagraphNode();
+        p.append($createTextNode("Switchable content"));
+        root.append(p);
+        pKey = p.getKey();
+      },
+      { discrete: true },
+    );
+
+    turnNodeInto(editor, pKey, "bullet-list");
+    let itemKey = "";
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const list = root.getFirstChild() as ListNode;
+      itemKey = list.getFirstChild()!.getKey();
+    });
+
+    // Switch to number list in-place
+    turnNodeInto(editor, itemKey, "number-list");
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const list = root.getFirstChild() as ListNode;
+      expect(list.getType()).toBe("list");
+      expect(list.getListType()).toBe("number");
+    });
+
+    // Switch back to paragraph
+    turnNodeInto(editor, itemKey, "paragraph");
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const p = root.getFirstChild();
+      expect(p?.getType()).toBe("paragraph");
+      expect(p?.getTextContent()).toBe("Switchable content");
+    });
+  });
 });

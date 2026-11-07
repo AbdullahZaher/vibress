@@ -1,4 +1,4 @@
-export { ApiError, apiRequest, API_BASE } from "./client";
+export { ApiError, apiRequest, API_BASE, getActivePublicationId } from "./client";
 export type { ApiUser } from "./client";
 
 export * from "./media";

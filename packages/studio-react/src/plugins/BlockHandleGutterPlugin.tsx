@@ -148,6 +148,7 @@ export function BlockHandleGutterPlugin({
         paragraph.select();
       }
     });
+    editor.focus();
     setShowMenu(false);
   };
 
@@ -164,6 +165,7 @@ export function BlockHandleGutterPlugin({
         }
       }
     });
+    editor.focus();
     setShowMenu(false);
   };
 
@@ -180,6 +182,7 @@ export function BlockHandleGutterPlugin({
         }
       }
     });
+    editor.focus();
     setShowMenu(false);
   };
 
@@ -196,6 +199,7 @@ export function BlockHandleGutterPlugin({
         }
       }
     });
+    editor.focus();
     setShowMenu(false);
   };
 
@@ -206,6 +210,7 @@ export function BlockHandleGutterPlugin({
         node.remove();
       }
     });
+    editor.focus();
     setShowMenu(false);
     setHoveredNodeKey(null);
     setTargetRect(null);
@@ -215,6 +220,7 @@ export function BlockHandleGutterPlugin({
     if (hoveredNodeKey) {
       turnNodeInto(editor, hoveredNodeKey, type);
     }
+    editor.focus();
     setShowMenu(false);
     setActiveSubMenu(null);
   };

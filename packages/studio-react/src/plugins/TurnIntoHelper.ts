@@ -2,7 +2,10 @@ import {
   $getSelection,
   $isRangeSelection,
   $getNodeByKey,
+  $isElementNode,
+  $isRootOrShadowRoot,
   $createParagraphNode,
+  ElementNode,
   LexicalEditor,
 } from "lexical";
 import {
@@ -10,7 +13,14 @@ import {
   $createQuoteNode,
   HeadingTagType,
 } from "@lexical/rich-text";
-import { $createListNode } from "@lexical/list";
+import {
+  $createListNode,
+  $createListItemNode,
+  $isListNode,
+  $isListItemNode,
+  ListNode,
+  ListItemNode,
+} from "@lexical/list";
 import { $createCodeNode } from "@lexical/code";
 import { $setBlocksType } from "@lexical/selection";
 
@@ -28,6 +38,89 @@ export type TurnIntoType =
 function applyBlockType(type: TurnIntoType) {
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) {
+    return;
+  }
+
+  const isListType =
+    type === "bullet-list" || type === "number-list" || type === "check-list";
+  const targetListType =
+    type === "bullet-list"
+      ? "bullet"
+      : type === "number-list"
+      ? "number"
+      : "check";
+
+  const anchorNode = selection.anchor.getNode();
+  const currentListItem = $isListItemNode(anchorNode)
+    ? anchorNode
+    : $isListItemNode(anchorNode.getParent())
+    ? (anchorNode.getParent() as ListItemNode)
+    : null;
+  const currentList = currentListItem
+    ? (currentListItem.getParent() as ListNode)
+    : $isListNode(anchorNode)
+    ? anchorNode
+    : $isListNode(anchorNode.getParent())
+    ? (anchorNode.getParent() as ListNode)
+    : null;
+
+  if (isListType) {
+    if (currentList && $isListNode(currentList)) {
+      currentList.setListType(targetListType);
+      return;
+    }
+    const element = $isElementNode(anchorNode)
+      ? anchorNode
+      : anchorNode.getParent();
+    if (element && !$isRootOrShadowRoot(element)) {
+      const list = $createListNode(targetListType);
+      const listItem = $createListItemNode();
+      const children = element.getChildren();
+      for (const child of children) {
+        listItem.append(child);
+      }
+      list.append(listItem);
+      element.replace(list);
+      listItem.select();
+      return;
+    }
+    const list = $createListNode(targetListType);
+    const listItem = $createListItemNode();
+    list.append(listItem);
+    selection.insertNodes([list]);
+    listItem.select();
+    return;
+  }
+
+  if (currentListItem && currentList && $isListNode(currentList)) {
+    let targetNode: ElementNode;
+    switch (type) {
+      case "paragraph":
+        targetNode = $createParagraphNode();
+        break;
+      case "h1":
+      case "h2":
+      case "h3":
+        targetNode = $createHeadingNode(type as HeadingTagType);
+        break;
+      case "quote":
+        targetNode = $createQuoteNode();
+        break;
+      case "code":
+        targetNode = $createCodeNode();
+        break;
+      default:
+        targetNode = $createParagraphNode();
+    }
+    for (const child of currentListItem.getChildren()) {
+      targetNode.append(child);
+    }
+    if (currentList.getChildrenSize() <= 1) {
+      currentList.replace(targetNode);
+    } else {
+      currentListItem.replace(targetNode);
+    }
+    targetNode.select();
     return;
   }
 
@@ -49,18 +142,6 @@ function applyBlockType(type: TurnIntoType) {
     }
     case "code": {
       $setBlocksType(selection, () => $createCodeNode());
-      break;
-    }
-    case "bullet-list": {
-      $setBlocksType(selection, () => $createListNode("bullet"));
-      break;
-    }
-    case "number-list": {
-      $setBlocksType(selection, () => $createListNode("number"));
-      break;
-    }
-    case "check-list": {
-      $setBlocksType(selection, () => $createListNode("check"));
       break;
     }
   }
@@ -98,4 +179,3 @@ export function turnNodeInto(
     { discrete: true },
   );
 }
-

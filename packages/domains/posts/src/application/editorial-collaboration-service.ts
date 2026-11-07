@@ -6,9 +6,18 @@ import {
   users,
   posts,
 } from "@vibress/database";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { hasResourcePermission } from "@vibress/security";
 import { PostStatus, PostDomainError } from "../domain/post";
+
+const WORKFLOW_TARGET_STATUSES: ReadonlySet<string> = new Set([
+  "draft",
+  "in_review",
+  "scheduled",
+  "published",
+  "archived",
+]);
 
 export interface EditorialCommentDto {
   id: string;
@@ -57,20 +66,40 @@ export interface EditorPresenceUser {
 }
 
 export class EditorialCollaborationService {
-  // In-memory fallback presence tracker (scoped per post)
+  // In-memory fallback presence tracker (scoped per publication + post)
   private presenceMap: Map<string, Map<string, EditorPresenceUser>> = new Map();
-  // Persistent document CRDT updates buffer
+  // Persistent document CRDT updates buffer (scoped per publication + post)
   private docUpdatesMap: Map<string, Uint8Array[]> = new Map();
 
-  getYjsDocUpdates(postId: string): Uint8Array[] {
-    return this.docUpdatesMap.get(postId) || [];
+  private buildScopedKey(postId: string, publicationId = "pub_default"): string {
+    return `${publicationId}:${postId}`;
   }
 
-  applyYjsDocUpdate(postId: string, update: Uint8Array): void {
-    if (!this.docUpdatesMap.has(postId)) {
-      this.docUpdatesMap.set(postId, []);
+  getYjsDocUpdates(postId: string, publicationId = "pub_default"): Uint8Array[] {
+    return this.docUpdatesMap.get(this.buildScopedKey(postId, publicationId)) || [];
+  }
+
+  applyYjsDocUpdate(
+    postId: string,
+    update: Uint8Array,
+    publicationId = "pub_default",
+  ): void {
+    const key = this.buildScopedKey(postId, publicationId);
+    let list = this.docUpdatesMap.get(key);
+    if (!list) {
+      list = [];
+      this.docUpdatesMap.set(key, list);
     }
-    this.docUpdatesMap.get(postId)!.push(update);
+    list.push(update);
+    if (list.length > 100) {
+      list.shift();
+    }
+  }
+
+  clearYjsDocUpdates(postId: string, publicationId = "pub_default"): void {
+    this.docUpdatesMap.delete(this.buildScopedKey(postId, publicationId));
+    // Also clean legacy unscoped entry if present
+    this.docUpdatesMap.delete(postId);
   }
 
   async listComments(postId: string): Promise<EditorialCommentDto[]> {
@@ -147,6 +176,7 @@ export class EditorialCollaborationService {
   async resolveComment(
     commentId: string,
     resolvedById: string,
+    postId?: string,
   ): Promise<void> {
     const db = getDb();
     await db
@@ -157,10 +187,17 @@ export class EditorialCollaborationService {
         resolvedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(editorialComments.id, commentId));
+      .where(
+        postId
+          ? and(
+              eq(editorialComments.id, commentId),
+              eq(editorialComments.postId, postId),
+            )
+          : eq(editorialComments.id, commentId),
+      );
   }
 
-  async reopenComment(commentId: string): Promise<void> {
+  async reopenComment(commentId: string, postId?: string): Promise<void> {
     const db = getDb();
     await db
       .update(editorialComments)
@@ -170,7 +207,14 @@ export class EditorialCollaborationService {
         resolvedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(editorialComments.id, commentId));
+      .where(
+        postId
+          ? and(
+              eq(editorialComments.id, commentId),
+              eq(editorialComments.postId, postId),
+            )
+          : eq(editorialComments.id, commentId),
+      );
   }
 
   async listSuggestions(postId: string): Promise<EditorialSuggestionDto[]> {
@@ -252,6 +296,7 @@ export class EditorialCollaborationService {
     suggestionId: string,
     reviewedById: string,
     action: "accepted" | "rejected",
+    postId?: string,
   ): Promise<void> {
     const db = getDb();
     await db
@@ -261,7 +306,14 @@ export class EditorialCollaborationService {
         reviewedBy: reviewedById,
         reviewedAt: new Date(),
       })
-      .where(eq(editorialSuggestions.id, suggestionId));
+      .where(
+        postId
+          ? and(
+              eq(editorialSuggestions.id, suggestionId),
+              eq(editorialSuggestions.postId, postId),
+            )
+          : eq(editorialSuggestions.id, suggestionId),
+      );
   }
 
   async getAssignment(postId: string): Promise<EditorialAssignmentDto | null> {
@@ -360,11 +412,13 @@ export class EditorialCollaborationService {
       name: string;
       cursor?: { x: number; y: number; blockId?: string } | undefined;
     },
+    publicationId = "pub_default",
   ): EditorPresenceUser[] {
-    if (!this.presenceMap.has(postId)) {
-      this.presenceMap.set(postId, new Map());
+    const scopedKey = this.buildScopedKey(postId, publicationId);
+    if (!this.presenceMap.has(scopedKey)) {
+      this.presenceMap.set(scopedKey, new Map());
     }
-    const postPresences = this.presenceMap.get(postId)!;
+    const postPresences = this.presenceMap.get(scopedKey)!;
     postPresences.set(user.userId, {
       ...user,
       lastActive: Date.now(),
@@ -377,12 +431,19 @@ export class EditorialCollaborationService {
         postPresences.delete(uid);
       }
     }
+    if (postPresences.size === 0) {
+      this.presenceMap.delete(scopedKey);
+    }
 
     return Array.from(postPresences.values());
   }
 
-  getActivePresence(postId: string): EditorPresenceUser[] {
-    const postPresences = this.presenceMap.get(postId);
+  getActivePresence(
+    postId: string,
+    publicationId = "pub_default",
+  ): EditorPresenceUser[] {
+    const scopedKey = this.buildScopedKey(postId, publicationId);
+    const postPresences = this.presenceMap.get(scopedKey);
     if (!postPresences) return [];
     const now = Date.now();
     return Array.from(postPresences.values()).filter(
@@ -393,31 +454,55 @@ export class EditorialCollaborationService {
   // Extensible workflow state machine transition
   async transitionWorkflow(params: {
     postId: string;
+    publicationId?: string | undefined;
     targetStatus: PostStatus;
     actorId: string;
+    actorRoles?: string[] | undefined;
     actorPermissions: string[];
+    resourceAuthorIds?: string[] | undefined;
   }): Promise<{ status: PostStatus }> {
+    if (
+      typeof params.targetStatus !== "string" ||
+      !WORKFLOW_TARGET_STATUSES.has(params.targetStatus)
+    ) {
+      throw new PostDomainError(
+        "VALIDATION_ERROR",
+        `Invalid workflow targetStatus '${String(params.targetStatus)}'`,
+      );
+    }
+    const targetStatus = params.targetStatus;
+
     const db = getDb();
+    const whereClause = params.publicationId
+      ? and(
+          eq(posts.id, params.postId),
+          eq(posts.publicationId, params.publicationId),
+        )
+      : eq(posts.id, params.postId);
+
     const postRow = await db
       .select({
         id: posts.id,
         status: posts.status,
+        publicationId: posts.publicationId,
         primaryAuthorId: posts.primaryAuthorId,
       })
       .from(posts)
-      .where(eq(posts.id, params.postId))
+      .where(whereClause)
       .limit(1);
 
     if (!postRow[0]) {
       throw new PostDomainError("NOT_FOUND", `Post ${params.postId} not found`);
     }
 
-    const _currentStatus = postRow[0].status as PostStatus;
-    const targetStatus = params.targetStatus;
     const p = params.actorPermissions;
 
-    // RBAC validation on workflow transition
-    if (targetStatus === "published" || targetStatus === "scheduled" || targetStatus === "archived") {
+    // RBAC + resource ownership validation on workflow transition
+    if (
+      targetStatus === "published" ||
+      targetStatus === "scheduled" ||
+      targetStatus === "archived"
+    ) {
       if (!p.includes("posts.publish")) {
         throw new PostDomainError(
           "UNAUTHORIZED",
@@ -425,10 +510,19 @@ export class EditorialCollaborationService {
         );
       }
     } else {
-      if (!p.includes("posts.edit")) {
+      const canEditResource = hasResourcePermission("posts.edit", {
+        actorId: params.actorId,
+        resourceOwnerId: postRow[0].primaryAuthorId,
+        resourceAuthorIds: params.resourceAuthorIds,
+        userRoles: params.actorRoles,
+        userPermissions: p,
+        publicationId: params.publicationId,
+        resourcePublicationId: postRow[0].publicationId,
+      });
+      if (!canEditResource) {
         throw new PostDomainError(
           "UNAUTHORIZED",
-          `Permission 'posts.edit' required to transition post to '${targetStatus}'`,
+          `Permission 'posts.edit' on this post is required to transition to '${targetStatus}'`,
         );
       }
     }
@@ -441,7 +535,7 @@ export class EditorialCollaborationService {
         updatedAt: new Date(),
         publishedAt: targetStatus === "published" ? new Date() : undefined,
       })
-      .where(eq(posts.id, params.postId));
+      .where(whereClause);
 
     return { status: targetStatus };
   }

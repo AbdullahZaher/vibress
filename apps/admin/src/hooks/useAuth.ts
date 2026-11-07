@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, ApiUser } from "../lib/api";
+import { indexedDbDraftStore } from "../lib/recovery/indexed-db-draft-store";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -24,12 +25,19 @@ export function useAuth() {
     },
     onSuccess: (user) => {
       queryClient.setQueryData(["auth", "me"], user);
+      // Account-switch privacy guard: purge any residual local drafts belonging to another user ID
+      void indexedDbDraftStore.clearOtherUsersDrafts(user.id);
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("/auth/logout", { method: "POST" });
+      try {
+        await apiRequest("/auth/logout", { method: "POST" });
+      } finally {
+        // Shared-device privacy policy: purge local IndexedDB & volatile drafts on logout
+        await indexedDbDraftStore.clearAll();
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["auth", "me"], null);
