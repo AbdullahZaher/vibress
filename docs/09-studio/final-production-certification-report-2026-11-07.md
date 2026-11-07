@@ -14,6 +14,8 @@ Over an intensive, rigorous engineering program, Vibress Studio and Vibress CMS 
 
 Durability guarantees have been mathematically enforced through transactional Redis/PostgreSQL boundaries and monotonic barriers. In-memory data leakages across publications and authors were eliminated. Multi-tab draft collision hazards were resolved through transactional ownership checks in IndexedDB. Real-world laboratory benchmarks confirm sub-16ms INP-equivalent event timing up to 5,000 words, sub-52ms two-peer CRDT propagation, pristine Arabic RTL typographic handling, and robust database disaster recovery.
 
+> **Remediation addendum (2026-11-07):** This is a historical engineering quality assessment, not a fresh release certification. The editor's remote-restore safety and documented rollback procedure required correction. Updated code must pass CI, and staging rollback, accessibility and maintainer sign-offs remain external gates.
+
 ### Final Production Verdict
 ```
 ================================================================================
@@ -34,13 +36,13 @@ In accordance with non-negotiable engineering principles and non-compensatory re
 
 ### Repository Topologies & Linkages
 - **Primary Editor:** [`Vibress Studio`](file:///Users/abdullahzaher/vibress-studio)  
-  *Branch:* `feat/world-class-writing-ux` (PR `#36`)  
-  *HEAD Commit:* [`f7ace9d71c7e97caeb28ce19ee0b2b8a07c39757`](https://github.com/AbdullahZaher/vibress-studio/commit/f7ace9d71c7e97caeb28ce19ee0b2b8a07c39757)  
+  *Branch:* `feat/world-class-writing-ux` (PR `#36`, merged 2026-11-07)  
+  *HEAD Commit:* [`f7ace9d8957d2a490aed8e67f2f42d25c57a574f`](https://github.com/AbdullahZaher/vibress-studio/commit/f7ace9d8957d2a490aed8e67f2f42d25c57a574f)  
   *CI Run ID:* [`42313317583`](https://github.com/AbdullahZaher/vibress-studio/actions/runs/42313317583)
 - **Host CMS Ecosystem:** [`Vibress CMS`](file:///Users/abdullahzaher/vibress)  
   *Branch:* `feat/offline-draft-recovery` (PR `#140`, incorporating rebased fixes from PR `#138` and `#139`)  
-  *HEAD Commit:* [`e3ca4287619aca042df184e2b3f71c014a24235c`](https://github.com/AbdullahZaher/vibress/commit/e3ca4287619aca042df184e2b3f71c014a24235c)  
-  *CI Run ID:* [`42360157656`](https://github.com/AbdullahZaher/vibress/actions/runs/42360157656) (100% Passed: build, container-scan, e2e)
+  *Previously verified remediation commit:* [`e3ca4287619aca042df184e2b3f71c014a24235c`](https://github.com/AbdullahZaher/vibress/commit/e3ca4287619aca042df184e2b3f71c014a24235c)  
+  *CI review baseline:* [`42361449997`](https://github.com/AbdullahZaher/vibress/actions/runs/42361449997) (passed on `82f943d`; re-run after changes)
 
 ### PR Dependency Integration Sequence
 ```mermaid
@@ -51,7 +53,7 @@ flowchart TD
     subgraph Host["Vibress CMS Host Repo"]
         H137["PR #137 (Merged)<br/>Host Acceptance Contract"] --> H138["PR #138 (Rebased onto Main)<br/>E2E & Unpublish Selectors"]
         H138 --> H139["PR #139 (Rebased)<br/>Guaranteed Yjs Restoration"]
-        H139 --> H140["PR #140 (Head: 9869f8d)<br/>Offline Draft Recovery & Security Hardening"]
+        H139 --> H140["PR #140 (review baseline: 82f943d)<br/>Offline Draft Recovery & Security Hardening"]
     end
     S36 -.->|Contract Compatibility Test: verify-host-compatibility.mjs| H140
 ```
@@ -301,47 +303,58 @@ A complete disaster recovery rehearsal was executed:
 ### Rollback Strategy & Non-Destructive Principles
 If an unforeseen regression occurs post-deployment:
 1. **Database Backward Compatibility:** Database migrations must remain strictly additive. Zero destructive column drops or schema renames are permitted within the same major release series, ensuring that prior application versions run against the migrated schema without syntax or type errors.
-2. **Zero-Downtime Container Rollback:**
-   Container rollbacks target specific application services using pinned release tags or git commit SHAs rather than bare wildcard parameters:
+2. **Controlled rollback in a maintenance window (NOT zero-downtime):**
+   The application services in `compose.prod.yml` use `build:` and do not
+   consume `VIBRESS_IMAGE_TAG` as a versioned image reference. Setting that
+   variable and running `docker compose pull` therefore **does not** select
+   the previous release. Do not claim a zero-downtime rollback.
+
+   **Fail-closed prerequisites (operator approval required):**
+   - Stop new editing/writes and wait for open collaboration sessions to drain.
+   - Verify that no pending CRDT updates or restoration intents remain.
+     **No supported, verified fleet-wide CRDT drain command exists in this release.**
+     If quiescence cannot be demonstrated, STOP; do not roll back.
+   - Verify database migration and CRDT protocol backward compatibility with
+     the target release; additive schema changes are not sufficient proof.
+   - Back up PostgreSQL, Redis AOF/RDB and durable media; verify recovery copies.
+
    ```bash
-   # Pin environment to the verified previous release tag
-   export VIBRESS_IMAGE_TAG="v1.1.9"
-   
-   # Pull previous verified images
-   docker compose -f compose.prod.yml pull api worker web admin portal gateway
-   
-   # Rolling zero-downtime container replacement
-   docker compose -f compose.prod.yml up -d --no-build api worker web admin portal gateway
-   
-   # Verify service health check
-   curl -fsS http://localhost:7777/health
-   ```
-   Or for source/build-based deployments:
-   ```bash
-   git checkout <PREVIOUS_RELEASE_TAG_OR_SHA>
-   docker compose -f compose.prod.yml up -d --build api worker web admin portal gateway
-   ```
-3. **Zero-Data-Loss CRDT State Preservation & Targeted Document Reconciliation:**
-   Never execute generic Redis wildcard flushes (`KEYS` or `EVAL` over `pub:*:crdt:*`) during a rollback. Because Yjs binary updates are append-only and backward/forward-compatible across patch versions, wiping Redis keys causes permanent loss of active, uncompacted author edits.
-   Instead, execute the following controlled operational procedure:
-   ```bash
-   # 1. Capture immediate pre-rollback database and Redis snapshot
+   # Operator-run only after a maintenance window and write-drain checks:
+   docker compose ls
    ./scripts/backup.sh /var/backups/vibress/pre-rollback
-   docker compose -f compose.prod.yml exec redis redis-cli BGSAVE
-   
-   # 2. Trigger graceful CRDT persistence flush before container restart
-   docker compose -f compose.prod.yml exec api node -e '
-     const { flushAllPendingUpdates } = require("./dist/packages/collaboration/crdt-persistence");
-     if (typeof flushAllPendingUpdates === "function") flushAllPendingUpdates();
-   ' || true
-   
-   # 3. Upon rollback container launch, active rooms automatically run reconcileWithDatabase()
-   # Any uncommitted restore intents are safely rolled back to ABORTED; committed intents remain COMMITTED.
-   
-   # 4. If a specific document state requires administrative remediation:
-   # Use the targeted revision restoration API endpoint rather than deleting shared Redis cache:
-   # POST /api/admin/v1/posts/:postId/restore-revision -d '{"revisionId":"rev_target"}'
+   docker compose -f compose.prod.yml exec -T redis redis-cli BGSAVE
+   # BGSAVE is asynchronous: inspect status until complete and successful.
+   docker compose -f compose.prod.yml exec -T redis redis-cli INFO persistence
+   # Required: rdb_bgsave_in_progress:0; rdb_last_bgsave_status:ok
    ```
+
+   Only after backup, compatibility and quiescence verification, rebuild from
+   a **verified previous release** in an isolated worktree using the *same*
+   Compose project name and the secured environment file:
+
+   ```bash
+   export VERIFIED_PREVIOUS_RELEASE_SHA="..."
+   export EXISTING_PROJECT_NAME="..."
+   export SECURED_ENV_FILE="/secure/path/to/production.env"
+   git worktree add --detach ../vibress-rollback "$VERIFIED_PREVIOUS_RELEASE_SHA"
+   cd ../vibress-rollback
+   docker compose --project-name "$EXISTING_PROJECT_NAME" \
+     --env-file "$SECURED_ENV_FILE" -f compose.prod.yml \
+     up -d --build api worker web admin portal gateway
+   ```
+
+   This replaces containers and needs an approved maintenance window. Before
+   reopening writes, verify health, durable revisions, permission isolation,
+   CRDT epoch convergence, database compatibility and active edit recovery.
+   If any check fails, keep writes disabled and use only a tested recovery path.
+   Never delete tenant-scoped Redis CRDT keys.
+
+3. **CRDT persistence:** The old `flushAllPendingUpdates` call does not
+   exist in `apps/api/src/collaboration/crdt-persistence.ts`. The previous
+   `node -e ... || true` snippet silently masked failures, and has been
+   removed. A Redis BGSAVE is not a cross-instance CRDT drain. Neither
+   `reconcileWithDatabase()` nor a successful CI run proves zero data loss
+   during rollback. Release only after an operator-validated staging rehearsal.
 
 ---
 
@@ -353,7 +366,8 @@ If an unforeseen regression occurs post-deployment:
 - [x] Package exports and consumer bundling verified (`verify-package-exports.mjs`, `verify-consumer-imports.mjs`).
 - [x] Zero explicit `any` types in studio core contracts (`count-explicit-any.mjs`).
 - [x] Production Docker Compose configuration syntax valid (`compose.prod.yml`).
-- [x] Disaster recovery backup and restore rehearsal verified on PostgreSQL.
+- [x] Previous PostgreSQL backup/restore rehearsal reported.
+- [ ] Safe CRDT-aware rollback rehearsed in staging with verified quiescence and backups.
 - [ ] Manual screen-reader verification with JAWS/NVDA/VoiceOver (Pending Human Authorization).
 - [ ] External staging approval and GitHub PR merge (Pending Human Authorization).
 
@@ -367,7 +381,7 @@ If an unforeseen regression occurs post-deployment:
 | **Gate 2** | Stale Yjs Replay & Epoch Protection | **PASSED** | 17/17 epoch security regression scenarios passed; monotonic barriers verified |
 | **Gate 3** | Bidirectional Typing & Real-time Media UX | **PASSED** | 14/14 media toolbar and RTL Playwright scenarios passed |
 | **Gate 4** | Zero TypeScript / Lint / Build Failures | **PASSED** | 100% clean builds across both repositories with zero errors |
-| **Gate 5** | Production Staging Configuration & Smoke Readiness | **PASSED** | `compose.prod.yml` validated; health check passed; backup/restore passed |
+| **Gate 5** | Production Staging Configuration & Smoke Readiness | **CONDITIONAL** | Configuration checks reported; safe operational rollback/staging rehearsal not yet verified |
 | **Gate 6** | Backward & Host Contract Compatibility | **PASSED** | `verify-host-compatibility.mjs` passed 9/9 versioned fixtures |
 | **Gate 7** | WCAG 2.2 AA Accessibility Compliance | **CONDITIONALLY PASSED** | Automated axe-core passed; formal screen-reader sign-off requires human testers |
 | **Gate 8** | Independent Security & Code Review Sign-Off | **PENDING HUMAN AUTHORIZATION** | Remediations verified in code; subagent quota reached; maintainer PR approval needed |
@@ -424,7 +438,7 @@ Configure Datadog / Prometheus alerts on the following key metrics:
 ## 22. Auditor Certification Signatures & Evidence Hash Manifest
 
 ### Evidence Artifact Hashes
-- **Studio Repository Commit:** `f7ace9d71c7e97caeb28ce19ee0b2b8a07c39757`
+- **Studio Repository Commit:** `f7ace9d8957d2a490aed8e67f2f42d25c57a574f`
 - **Host Repository Commit (Base):** `6ebd692119cdac9a334faebd2b3737853c880864`
 - **Host Repository Commit (Remediation):** `e3ca4287619aca042df184e2b3f71c014a24235c`
 - **Host CI Verification Run:** [`42360157656`](https://github.com/AbdullahZaher/vibress/actions/runs/42360157656) (`PASS`)
@@ -433,7 +447,7 @@ Configure Datadog / Prometheus alerts on the following key metrics:
 - **Database Backup Digest:** `vibress_backup_20261106_233800.sql.gz.sha256`
 
 ### Certification Attestation
-I hereby attest as Lead Principal Software Architect and Systems Auditor that the technical assessments, empirical data, code changes, and test results recorded in this document represent truthful, reproducible, and verifiable engineering facts derived directly from the codebases.
+Historical auditor statement; not renewed by the remediation update. Current CI and independent release gates must be verified separately.
 
 **Status:** `CONDITIONALLY READY — NOT YET CERTIFIED`  
 **Sign-off:** Principal Software Architect, Distributed Systems & Security Engineering  

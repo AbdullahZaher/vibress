@@ -35,6 +35,7 @@ import {
   Download,
   Clock,
 } from "lucide-react";
+import { canApplyRemoteReplacement } from "../lib/recovery/remote-replacement-guard";
 import {
   indexedDbDraftStore,
   type DraftPersistenceStatus,
@@ -135,6 +136,8 @@ export const PostEditor: React.FC<PostEditorProps> = ({
       : true,
   );
   const [multiTabNotice, setMultiTabNotice] = useState<string | null>(null);
+  const trRef = useRef(tr);
+  trRef.current = tr;
   const publicationIdRef = useRef<string>(getActivePublicationId() || "pub_default");
   const localSaveSeqRef = useRef<number>(0);
   const preserveUnsavedLocalWorkRef = useRef<() => Promise<boolean>>(
@@ -202,71 +205,84 @@ export const PostEditor: React.FC<PostEditorProps> = ({
             color: "#3b82f6",
           },
         });
-        provider.on("restore", (payload: any) => {
-          // Never silently overwrite unsynced local/offline edits (P1-5): persist them first and
-          // surface the recovery banner (Restore / Export / Discard).
-          void preserveUnsavedLocalWorkRef.current().then(() => {
-          if (payload && payload.content) {
-            const migrated = migrateDocument(payload.content);
+        // A remote restore must never destroy uncheckpointed author work.
+        const applyIncomingDocument = async (
+          loadRemote: () => Promise<{ content: unknown; title: string; version: number }>,
+        ): Promise<void> => {
+          const generationAtStart = autosaveGenerationsRef.current.currentGeneration;
+          const hadUnsavedChangesAtStart = hasUnsavedChangesRef.current;
+          const checkpointDurable = await preserveUnsavedLocalWorkRef.current();
+          const stillCurrent = () =>
+            documentMountedRef.current && activePostIdRef.current === postId;
+          const mayReplace = () => canApplyRemoteReplacement({
+            hadUnsavedChangesAtStart,
+            checkpointDurable,
+            generationAtStart,
+            generationNow: autosaveGenerationsRef.current.currentGeneration,
+            hasUnsavedChangesNow: hasUnsavedChangesRef.current,
+          });
+          const reportConflict = () => {
+            autosaveConflictRef.current = true;
+            setAutosaveState("conflict");
+            setErrorMsg(trRef.current(
+              "Remote changes were received, but local edits could not be saved safely. Keep this tab open and export or copy your draft before reloading.",
+            ));
+          };
+          if (!stillCurrent()) return;
+          if (!mayReplace()) {
+            reportConflict();
+            return;
+          }
+          try {
+            const remote = await loadRemote();
+            if (!stillCurrent()) return;
+            if (!mayReplace()) {
+              reportConflict();
+              return;
+            }
+            const migrated = migrateDocument(remote.content);
             setStudioDoc(migrated);
             latestDocRef.current = migrated;
-            if (payload.title !== undefined) {
-              setTitle(payload.title);
-              latestTitleRef.current = payload.title;
-            }
-            if (typeof payload.version === "number") {
-              setVersion(payload.version);
-              latestVersionRef.current = payload.version;
-            }
+            setTitle(remote.title);
+            latestTitleRef.current = remote.title;
+            setVersion(remote.version);
+            latestVersionRef.current = remote.version;
             documentEpochRef.current += 1;
             setRestoreKey((k) => k + 1);
             hasUnsavedChangesRef.current = false;
             autosaveConflictRef.current = false;
-            setLocalDurabilityState("idle");
             setAutosaveState("saved");
-            return;
+            // The old checkpoint remains available in the recovery banner.
+            setLocalDurabilityState(checkpointDurable ? "durable" : "idle");
+            setErrorMsg(null);
+          } catch {
+            if (stillCurrent()) reportConflict();
           }
-          void apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`)
-            .then((res) => {
-              if (!documentMountedRef.current || activePostIdRef.current !== postId) return;
-              const p = res.post;
-              const migrated = migrateDocument(p.content ?? p.contentJson);
-              setStudioDoc(migrated);
-              latestDocRef.current = migrated;
-              setTitle(p.title || "");
-              latestTitleRef.current = p.title || "";
-              setVersion(p.version || 1);
-              latestVersionRef.current = p.version || 1;
-              documentEpochRef.current += 1;
-              setRestoreKey((k) => k + 1);
-              hasUnsavedChangesRef.current = false;
-              autosaveConflictRef.current = false;
-              setLocalDurabilityState("idle");
-              setAutosaveState("saved");
-            })
-            .catch(() => {});
+        };
+        const loadPost = async () => {
+          const result = await apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`);
+          return {
+            content: result.post.content ?? result.post.contentJson,
+            title: result.post.title || "",
+            version: result.post.version || 1,
+          };
+        };
+        provider.on("restore", (payload: unknown) => {
+          void applyIncomingDocument(async () => {
+            if (payload && typeof payload === "object" && "content" in payload && payload.content) {
+              return {
+                content: payload.content,
+                title: "title" in payload && typeof payload.title === "string"
+                  ? payload.title : latestTitleRef.current,
+                version: "version" in payload && typeof payload.version === "number"
+                  ? payload.version : latestVersionRef.current,
+              };
+            }
+            return loadPost();
           });
         });
         provider.on("epoch-conflict", () => {
-          void preserveUnsavedLocalWorkRef.current().then(() => apiRequest<{ post: AdminPostDetail }>(`/posts/${postId}`)
-            .then((res) => {
-              if (!documentMountedRef.current || activePostIdRef.current !== postId) return;
-              const p = res.post;
-              const migrated = migrateDocument(p.content ?? p.contentJson);
-              setStudioDoc(migrated);
-              latestDocRef.current = migrated;
-              setTitle(p.title || "");
-              latestTitleRef.current = p.title || "";
-              setVersion(p.version || 1);
-              latestVersionRef.current = p.version || 1;
-              documentEpochRef.current += 1;
-              setRestoreKey((k) => k + 1);
-              hasUnsavedChangesRef.current = false;
-              autosaveConflictRef.current = false;
-              setLocalDurabilityState("idle");
-              setAutosaveState("saved");
-            })
-            .catch(() => {}));
+          void applyIncomingDocument(loadPost);
         });
         return provider;
       },
