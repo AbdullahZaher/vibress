@@ -8,6 +8,14 @@ import {
 import { sanitizeHtml } from "../index";
 
 describe("sanitizeStudioHtml — allowlist sanitizer", () => {
+  it("allows only safe color declarations when rendering Studio presentation styles", () => {
+    const html = '<span style="color: #123456; position: fixed; background-color: rgb(4, 5, 6); color: url(https://example.com/x); --x: red; color: var(--x)">Text</span>';
+    expect(sanitizeStudioHtml(html)).toBe("<span>Text</span>");
+    expect(sanitizeStudioHtml(html, { preservePresentationStyles: true })).toBe(
+      '<span style="color: #123456; background-color: rgb(4, 5, 6)">Text</span>',
+    );
+  });
+
   it("blocks script tags entirely", () => {
     const out = sanitizeStudioHtml("<p>hi</p><script>alert(1)</script>");
     expect(out).not.toContain("<script");

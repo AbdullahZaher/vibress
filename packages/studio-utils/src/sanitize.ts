@@ -271,13 +271,21 @@ function isCommentNode(node: P5Node): boolean {
   return node.nodeName === "#comment";
 }
 
-/**
- * Returns a list of replacement nodes (0 = dropped, N = flattened safe text
- * from dropped wrappers). Dropped elements keep their inline text content so
- * readable content is never destroyed (e.g. <script>alert(1)</script> becomes
- * the inert text "alert(1)").
- */
-function sanitizeNode(node: P5Node): P5Node[] {
+function sanitizePresentationStyle(input: string): string {
+  const declarations: string[] = [];
+  for (const declaration of input.split(";")) {
+    const [property, value, extra] = declaration.toLowerCase().split(":").map((part) => part.trim());
+    if (extra !== undefined || !value) continue;
+    if ((property === "color" || property === "background-color") &&
+      /^(?:#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})|[a-z]{1,24}|rgba?\([\d.,% /]{1,64}\))$/.test(value)) {
+      declarations.push(`${property}: ${value}`);
+    }
+  }
+  return declarations.join("; ");
+}
+
+/** Disallowed wrappers keep their children as safe, inert content. */
+function sanitizeNode(node: P5Node, preservePresentationStyles: boolean): P5Node[] {
   if (isTextNode(node)) {
     return [node];
   }
@@ -289,7 +297,7 @@ function sanitizeNode(node: P5Node): P5Node[] {
   if (!STUDIO_ALLOWED_TAGS.has(tag)) {
     const out: P5Node[] = [];
     for (const child of node.childNodes || []) {
-      out.push(...sanitizeNode(child));
+      out.push(...sanitizeNode(child, preservePresentationStyles));
     }
     return out;
   }
@@ -297,7 +305,11 @@ function sanitizeNode(node: P5Node): P5Node[] {
   const attrs = (node.attrs || []).filter((attr) => {
     const name = attr.name.toLowerCase();
     if (name.startsWith("on")) return false; // event handlers
-    if (name === "style") return false; // no inline style injection
+    if (name === "style") {
+      if (!preservePresentationStyles) return false;
+      attr.value = sanitizePresentationStyle(attr.value);
+      return Boolean(attr.value);
+    }
     if (
       name.startsWith("data-") ||
       name === "srcdoc" ||
@@ -353,7 +365,7 @@ function sanitizeNode(node: P5Node): P5Node[] {
 
   const childNodes: P5Node[] = [];
   for (const child of node.childNodes || []) {
-    childNodes.push(...sanitizeNode(child));
+    childNodes.push(...sanitizeNode(child, preservePresentationStyles));
   }
 
   return [
@@ -368,13 +380,16 @@ function sanitizeNode(node: P5Node): P5Node[] {
 }
 
 /** Sanitize arbitrary HTML to the Studio allowlist. Safe content survives; every script/event/unsafe-URL vector is removed. */
-export function sanitizeStudioHtml(html: string): string {
+export function sanitizeStudioHtml(
+  html: string,
+  { preservePresentationStyles = false }: { preservePresentationStyles?: boolean } = {},
+): string {
   if (!html || typeof html !== "string") return "";
   try {
     const fragment = parseFragment(html) as unknown as P5Node;
     const childNodes: P5Node[] = [];
     for (const child of fragment.childNodes || []) {
-      childNodes.push(...sanitizeNode(child));
+      childNodes.push(...sanitizeNode(child, preservePresentationStyles));
     }
     const cleanFragment = {
       nodeName: "#document-fragment",

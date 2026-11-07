@@ -19,6 +19,7 @@ import {
 } from "@vibress/studio-react";
 import {
   StudioDocument,
+  assertStudioDocumentEditable,
   migrateDocument,
   StudioMigrationError,
   createEmptyStudioDocument,
@@ -593,6 +594,7 @@ export const PostEditor: React.FC<PostEditorProps> = ({
         const source = p.content ?? p.contentJson;
         try {
           const migrated = migrateDocument(source);
+          assertStudioDocumentEditable(migrated, source);
           setStudioDoc(migrated);
           latestDocRef.current = migrated;
           setUnsupportedSource(null);

@@ -15,7 +15,7 @@ import { DrizzleUserRepository, UsersService } from "@vibress/users";
 import { DrizzleRoleRepository, RolesService } from "@vibress/roles";
 import { createDefaultStudioDocument, migrateDocument } from "@vibress/studio-core";
 
-const BASE_URL = "http://localhost:7777";
+const BASE_URL = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
 
 interface CreatedPostInfo {
   id: string;
@@ -139,7 +139,7 @@ function describeOrTestSuite() {
               {
                 name: "vibress_session",
                 value: match[1],
-                url: "http://localhost:7777",
+                url: BASE_URL,
               },
             ]);
             return;

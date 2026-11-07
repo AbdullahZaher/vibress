@@ -1,9 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-// Real 1x1 JPEG payload used by the existing media storage integration suite.
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
+
+// Decodable 32 × 24 JPEG with a solid color for the visual reopen assertion.
 // This exercises the host's authenticated upload, durable storage and picker.
 const SAMPLE_JPEG = Buffer.from(
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwApw//9k=",
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAYACADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCYAVqHAAAAAAf/2Q==",
   "base64",
 );
 
@@ -28,7 +30,7 @@ function imageCards(root: unknown): Array<{ cardType: string; cardData: Record<s
 
 test.describe("Admin Media Library & Studio Media Integration E2E", () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto("http://localhost:7777/admin");
+    await page.goto(`${BASE}/admin/`);
     await page.waitForURL("**/admin/login**");
     await page.fill("#email", "owner@example.com");
     await page.fill("#password", "OwnerPass123!");
@@ -48,7 +50,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
     ).toBeVisible();
   });
 
-  test("Studio Post Editor Media Picker integration", async ({ page }) => {
+  test("Studio Post Editor Media Picker integration", async ({ page }, testInfo) => {
     await page.getByRole("button", { name: "Posts", exact: true }).click();
     await page.getByTestId("create-post-button").click();
     await expect(page).toHaveURL(/.*\/admin\/posts\/new/);
@@ -67,14 +69,35 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
     // durable asset reference. Merely seeing the editor is not sufficient.
     const picker = page.getByRole("dialog", { name: /Select Media Asset|اختيار/i });
     await expect(picker).toBeVisible();
+    const fileInput = picker.locator('input[type="file"]');
+    const failedUpload = page.waitForResponse(
+      (response) => response.url().endsWith("/api/admin/v1/media") &&
+        response.request().method() === "POST",
+    );
+    await fileInput.setInputFiles({
+      name: "invalid-image.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from("Invalid JPEG"),
+    });
+    expect((await failedUpload).status()).toBeGreaterThanOrEqual(400);
+    await expect(picker).toBeVisible();
+
     const filename = `beta-picker-${Date.now()}.jpg`;
-    await picker.locator('input[type="file"]').setInputFiles({
+    await fileInput.setInputFiles({
       name: filename,
       mimeType: "image/jpeg",
       buffer: SAMPLE_JPEG,
     });
     await expect(picker).toBeHidden();
-    await expect(page.locator(".vibress-studio-editor")).toBeVisible();
+    const card = page.locator(".vb-image-card");
+    const image = card.locator("img");
+    await expect(image).toBeVisible();
+    await card.hover();
+    await card.getByRole("button", { name: "Edit alt text and caption" }).click();
+    const caption = "صورة التحرير · Beta media 123";
+    await card.getByRole("textbox", { name: "Image editorial caption" }).fill(caption);
+    await card.getByRole("button", { name: "Done" }).click();
+    await expect(card.locator("figcaption")).toHaveText(caption);
 
     // An explicit author save must persist the same image card. Read through
     // the real authenticated API and compare again after browser reload.
@@ -94,7 +117,7 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
 
     const getSavedPost = async () => {
       const res = await page.request.get(
-        `http://localhost:7777/api/admin/v1/posts/${postId}`,
+        `${BASE}/api/admin/v1/posts/${postId}`,
       );
       expect(res.status()).toBe(200);
       const body = await res.json();
@@ -106,9 +129,25 @@ test.describe("Admin Media Library & Studio Media Integration E2E", () => {
     expect(typeof savedImage.assetId).toBe("string");
     expect(typeof savedImage.src).toBe("string");
     expect(savedImage.src).not.toMatch(/^blob:|^data:/i);
+    expect(savedImage.caption).toBe(caption);
 
     await page.reload();
     await expect(page.locator('textarea[aria-label="Post Title"]')).toBeVisible();
+    await expect(image).toBeVisible();
+    await expect(image).toHaveAttribute("src", String(savedImage.src));
+    await expect.poll(() => image.evaluate((img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(card.locator("figcaption")).toHaveText(caption);
+    await testInfo.attach("reopened-image-and-caption", {
+      body: await card.screenshot(),
+      contentType: "image/png",
+    });
+
+    await card.hover();
+    await card.getByRole("button", { name: "Change image from library" }).click();
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(picker).toBeHidden();
+    await expect(image).toHaveAttribute("src", String(savedImage.src));
     const reloadedCards = await getSavedPost();
     expect(reloadedCards).toEqual(savedCards);
   });

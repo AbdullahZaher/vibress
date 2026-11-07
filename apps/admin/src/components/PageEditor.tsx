@@ -13,6 +13,7 @@ import { VibressStudio } from "@vibress/studio-react";
 import {
   StudioDocument,
   migrateDocument,
+  assertStudioDocumentEditable,
   StudioMigrationError,
   createEmptyStudioDocument,
 } from "@vibress/studio-core";
@@ -283,6 +284,7 @@ export const PageEditor: React.FC<PageEditorProps> = ({
           setCanonicalUrl(p.canonicalUrl || "");
           try {
             const migrated = migrateDocument(p.content);
+            assertStudioDocumentEditable(migrated, p.content);
             setStudioDoc(migrated);
             setUnsupportedSource(null);
             setUnsupportedMessage(null);
