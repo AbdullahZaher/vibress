@@ -659,7 +659,9 @@ export const FIXTURE_STUDIO_CHILDREN: any[] = [
   },
 ];
 
-export async function seedFixturePost(): Promise<void> {
+export async function seedFixturePost(
+  { postId = TARGET_POST_ID, slug = FIXTURE_POST_SLUG }: { postId?: string; slug?: string } = {},
+): Promise<void> {
   const db = getDb();
   const now = new Date();
 
@@ -697,15 +699,15 @@ export async function seedFixturePost(): Promise<void> {
   const [existingPost] = await db
     .select()
     .from(posts)
-    .where(eq(posts.id, TARGET_POST_ID))
+    .where(eq(posts.id, postId))
     .limit(1);
 
   if (!existingPost) {
     await db.insert(posts).values({
-      id: TARGET_POST_ID,
+      id: postId,
       publicationId: PUBLICATION_ID,
       title: FIXTURE_POST_TITLE,
-      slug: FIXTURE_POST_SLUG,
+      slug,
       excerpt: FIXTURE_POST_EXCERPT,
       content: lexicalContent,
       contentVersion: 1,
@@ -727,7 +729,7 @@ export async function seedFixturePost(): Promise<void> {
       .insert(postAuthors)
       .values({
         publicationId: PUBLICATION_ID,
-        postId: TARGET_POST_ID,
+        postId,
         userId: author.id,
         sortOrder: 0,
         createdAt: now,
@@ -741,7 +743,7 @@ export async function seedFixturePost(): Promise<void> {
     .where(
       and(
         eq(revisions.resourceType, "post"),
-        eq(revisions.resourceId, TARGET_POST_ID),
+        eq(revisions.resourceId, postId),
         eq(revisions.revisionNumber, 1),
       ),
     )
@@ -751,10 +753,10 @@ export async function seedFixturePost(): Promise<void> {
     await db.insert(revisions).values({
       id: crypto.randomUUID(),
       resourceType: "post",
-      resourceId: TARGET_POST_ID,
+      resourceId: postId,
       revisionNumber: 1,
       title: FIXTURE_POST_TITLE,
-      slug: FIXTURE_POST_SLUG,
+      slug,
       excerpt: FIXTURE_POST_EXCERPT,
       content: lexicalContent,
       contentVersion: 1,

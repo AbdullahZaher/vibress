@@ -1,22 +1,16 @@
 import { test, expect } from "@playwright/test";
-import { getDb, posts, revisions, seedFixturePost } from "@vibress/database";
-import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
-import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { seedFixturePost } from "@vibress/database";
+import { SAMPLE_JPEG } from "./fixtures/decodable-jpeg";
 
-const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
 
 test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
   test("Reproduce and trace real image insertion flow on 2000+ word article", async ({ page }) => {
-    const db = getDb();
-    await db.delete(revisions).where(eq(revisions.resourceId, TARGET_POST_ID));
-    await db.delete(posts).where(eq(posts.id, TARGET_POST_ID));
-    await seedFixturePost();
-
-    try {
-      const redis = getRedisClient();
-      const redisUpdatesKey = buildPublicationCacheKey("pub_default", "crdt:updates", TARGET_POST_ID);
-      await redis.del(redisUpdatesKey);
-    } catch {}
+    // The full suite edits the shared seeded article and its Yjs room. Use
+    // a new post ID so this test starts with the authored fixture every time.
+    const targetPostId = randomUUID();
+    await seedFixturePost({ postId: targetPostId, slug: `studio-forensic-${targetPostId}` });
     const logs: string[] = [];
     page.on("console", (msg) => {
       const text = msg.text();
@@ -26,7 +20,7 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
       }
     });
     page.on("response", async (res) => {
-      if (res.url().includes("/posts/bb46491c")) {
+      if (res.url().includes(`/posts/${targetPostId}`)) {
         try {
           const body = await res.json();
           console.log("FETCH POST RESPONSE:", res.status(), body?.post ? {
@@ -43,7 +37,7 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
 
     // 1. Visit /admin while logged out
-    await page.goto("http://localhost:7777/admin");
+    await page.goto(`${BASE}/admin/`);
 
     // If retry button appears (transient API preflight error), click Retry
     const retryBtn = page.locator('button:has-text("Retry")');
@@ -64,8 +58,7 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
 
 
     // 2. Navigate to target post
-    const targetPostId = "bb46491c-dd25-492c-a035-89745ceffd6c";
-    await page.goto(`http://localhost:7777/admin/posts/${targetPostId}`);
+    await page.goto(`${BASE}/admin/posts/${targetPostId}`);
 
     // Wait for post to load
     await page.waitForSelector('textarea[aria-label="Post Title"]', { timeout: 10000 });
@@ -73,11 +66,10 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     console.log("Post Title Loaded:", title);
 
     // Wait for studio content to be populated
-    const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
+    const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]').first();
     await expect(editorArea).toBeVisible();
 
     // Check baseline word count in UI
-    const wordCountIndicator = page.locator('header, div').filter({ hasText: /words/i }).first();
     console.log("Header text:", await page.locator("header").last().innerText());
 
     // Evaluate content in DOM
@@ -93,8 +85,9 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
 
     // 3. Place cursor at the end of the article and create a new block.
     // Avoid DOM-only selection mutations that Lexical may not observe.
-    await editorArea.click();
-    await page.keyboard.press("ControlOrMeta+End");
+    const lastParagraph = editorArea.locator(":scope > p").last();
+    await lastParagraph.click();
+    await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     console.log("Created a new paragraph at the end of the article");
 
@@ -112,11 +105,18 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     await page.waitForSelector('h3:has-text("Select Media Asset")', { timeout: 8000 });
     console.log("MediaPicker modal opened!");
 
-    // Check if assets are available in picker
-    const assetItem = page.locator('[data-testid="media-picker-item"]').first();
-    await assetItem.waitFor({ state: "visible", timeout: 8000 });
-    console.log("MediaPicker item found, clicking...");
-    await assetItem.click();
+    const picker = page.getByRole("dialog", { name: "Select Media Asset" });
+    const upload = page.waitForResponse((response) =>
+      response.url().endsWith("/api/admin/v1/media") && response.request().method() === "POST",
+    );
+    await picker.locator('input[type="file"]').setInputFiles({
+      name: `studio-forensic-${targetPostId}.jpg`,
+      mimeType: "image/jpeg",
+      buffer: SAMPLE_JPEG,
+    });
+    const uploaded = await upload;
+    expect(uploaded.status()).toBe(201);
+    const { media } = await uploaded.json();
 
     // Wait for MediaPicker modal to close
     await page.waitForSelector('h3:has-text("Select Media Asset")', { state: "detached", timeout: 8000 });
@@ -168,7 +168,7 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
 
     // 6. Verify Persisted API Content
     console.log("Fetching persisted post directly from API...");
-    const apiRes = await page.request.get(`http://localhost:7777/api/admin/v1/posts/${targetPostId}`);
+    const apiRes = await page.request.get(`${BASE}/api/admin/v1/posts/${targetPostId}`);
     expect(apiRes.status()).toBe(200);
     const apiJson = await apiRes.json();
     const persistedChildren = apiJson.post?.content?.root?.children || [];
@@ -176,16 +176,17 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     expect(persistedChildren.length).toBeGreaterThanOrEqual(initialParagraphs);
 
     // Check card presence in persisted AST recursively
-    function searchForCard(node: any): boolean {
+    function searchForCard(node: unknown): boolean {
       if (!node || typeof node !== "object") return false;
       if (
-        node.type === "studio-card" ||
-        node.type === "react-studio-card" ||
-        node.cardType === "image"
+        "type" in node && (node.type === "studio-card" || node.type === "react-studio-card") &&
+        "cardType" in node && node.cardType === "image" &&
+        "cardData" in node && node.cardData && typeof node.cardData === "object" &&
+        "assetId" in node.cardData && node.cardData.assetId === media.id
       ) {
         return true;
       }
-      if (Array.isArray(node.children)) {
+      if ("children" in node && Array.isArray(node.children)) {
         return node.children.some(searchForCard);
       }
       return false;

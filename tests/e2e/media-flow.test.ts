@@ -1,13 +1,7 @@
 import { test, expect } from "@playwright/test";
+import { SAMPLE_JPEG } from "./fixtures/decodable-jpeg";
 
 const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
-
-// Decodable 32 × 24 JPEG with a solid color for the visual reopen assertion.
-// This exercises the host's authenticated upload, durable storage and picker.
-const SAMPLE_JPEG = Buffer.from(
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAAYACADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAb/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCYAVqHAAAAAAf/2Q==",
-  "base64",
-);
 
 function imageCards(root: unknown): Array<{ cardType: string; cardData: Record<string, unknown> }> {
   const found: Array<{ cardType: string; cardData: Record<string, unknown> }> = [];
