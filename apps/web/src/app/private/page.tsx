@@ -11,8 +11,11 @@ export function getSafeRedirectUrl(target: string | null | undefined, fallback =
     return fallback;
   }
   // Reject control chars, newlines, tabs
-  if (/[\u0000-\u001f\u007f-\u009f]/.test(trimmed)) {
-    return fallback;
+  for (let i = 0; i < trimmed.length; i++) {
+    const code = trimmed.charCodeAt(i);
+    if (code <= 31 || (code >= 127 && code <= 159)) {
+      return fallback;
+    }
   }
   try {
     const parsed = new URL(trimmed, "http://localhost");
