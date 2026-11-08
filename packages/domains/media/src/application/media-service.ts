@@ -155,6 +155,15 @@ export class MediaService {
     return asset;
   }
 
+  async canStreamLocalMedia(storageKey: string, publicationId: string): Promise<boolean> {
+    const asset = await this.mediaRepo.findByStorageKey(storageKey, undefined, { includeDeleted: true });
+    if (!asset) {
+      // Files that predate the media catalog belong to the original site.
+      return publicationId === "pub_default";
+    }
+    return asset.publicationId === publicationId && asset.storageProvider === "local" && !asset.deletedAt;
+  }
+
   async listMedia(
     filter?: ListMediaFilter,
   ): Promise<{ items: MediaAsset[]; total: number }> {

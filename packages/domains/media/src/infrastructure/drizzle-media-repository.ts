@@ -33,12 +33,14 @@ export class DrizzleMediaRepository implements MediaRepository {
     return this.mapToDomain(row);
   }
 
-  async findByStorageKey(storageKey: string, publicationId?: string): Promise<MediaAsset | null> {
+  async findByStorageKey(
+    storageKey: string,
+    publicationId?: string,
+    { includeDeleted = false }: { includeDeleted?: boolean } = {},
+  ): Promise<MediaAsset | null> {
     const db = getDb();
-    const conditions = [
-      eq(mediaAssets.storageKey, storageKey),
-      isNull(mediaAssets.deletedAt),
-    ];
+    const conditions = [eq(mediaAssets.storageKey, storageKey)];
+    if (!includeDeleted) conditions.push(isNull(mediaAssets.deletedAt));
     if (publicationId) {
       conditions.push(eq(mediaAssets.publicationId, publicationId));
     }
