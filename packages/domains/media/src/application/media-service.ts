@@ -22,8 +22,16 @@ import {
  */
 export function isSafeMediaAssetUrl(value: unknown): value is string {
   if (typeof value !== "string" || !value || value !== value.trim() ||
-      value.length > 8192 || /[\\\\\u0000-\u001f\u007f-\u009f]/.test(value)) {
+      value.length > 8192) {
     return false;
+  }
+  // Explicit code-point checks avoid accidentally accepting controls or
+  // backslashes, without a broad regex matching unsafe URL characters.
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 32 || (code >= 127 && code <= 159) || code === 92) {
+      return false;
+    }
   }
   if (value.startsWith("//")) return false;
   if (value.startsWith("/")) {
