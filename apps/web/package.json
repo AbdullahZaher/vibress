@@ -13,6 +13,7 @@
   "dependencies": {
     "@vibress/api-contracts": "workspace:*",
     "@vibress/i18n": "workspace:*",
+    "@vibress/studio-utils": "workspace:*",
     "@vibress/theme-core": "workspace:*",
     "@vibress/themes": "workspace:*",
     "@vibress/themes-registry": "workspace:*",

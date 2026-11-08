@@ -20,6 +20,11 @@ export function isSafeUrl(url: unknown): boolean {
     return false;
   }
 
+  // Disallow data: URLs except safe raster images (exclude SVG to prevent XSS)
+  if (trimmed.startsWith("data:")) {
+    return /^data:image\/(png|jpe?g|gif|webp|avif);base64,/i.test(url.trim());
+  }
+
   // Allow safe protocols or relative paths
   if (
     trimmed.startsWith("http://") ||
@@ -27,8 +32,7 @@ export function isSafeUrl(url: unknown): boolean {
     trimmed.startsWith("mailto:") ||
     trimmed.startsWith("tel:") ||
     trimmed.startsWith("/") ||
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("data:image/")
+    trimmed.startsWith("#")
   ) {
     return true;
   }

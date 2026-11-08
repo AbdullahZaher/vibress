@@ -14,6 +14,7 @@ import {
   NodeKey,
 } from "lexical";
 import { STUDIO_CARD_DEFINITIONS } from "@vibress/studio-cards";
+import { sanitizeStudioHtml } from "@vibress/studio-utils";
 import { ImageCardEditor } from "./cards/ImageCardEditor";
 import { VideoCardEditor } from "./cards/VideoCardEditor";
 import { GalleryCardEditor } from "./cards/GalleryCardEditor";
@@ -207,7 +208,7 @@ export function StudioCardComponent({
         borderRadius: "8px",
         transition: "outline 0.1s ease",
       }}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: sanitizeStudioHtml(html) }}
     />
   );
 }

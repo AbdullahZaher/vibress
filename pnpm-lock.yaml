@@ -433,6 +433,9 @@ importers:
       '@vibress/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@vibress/studio-utils':
+        specifier: workspace:*
+        version: link:../../packages/studio-utils
       '@vibress/theme-core':
         specifier: workspace:*
         version: link:../../packages/theme-core

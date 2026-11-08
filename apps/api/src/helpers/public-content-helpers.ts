@@ -38,6 +38,7 @@ export function getSiteUrl(): string {
 export async function resolveDocumentMedia(
   docInput: unknown,
   mediaService: MediaService,
+  publicationId?: string,
 ): Promise<Record<string, unknown>> {
   if (!docInput || typeof docInput !== "object") {
     return {
@@ -68,7 +69,10 @@ export async function resolveDocumentMedia(
       // Handle singular assetId (image, video, audio, file)
       if (typeof data.assetId === "string" && data.assetId.trim()) {
         try {
-          const asset = await mediaService.getMediaById(data.assetId.trim());
+          const asset = await mediaService.getMediaById(
+            data.assetId.trim(),
+            publicationId,
+          );
           if (asset) {
             data.src = await mediaService.getMediaUrl(asset);
             if (n.cardType === "image") {
@@ -92,7 +96,10 @@ export async function resolveDocumentMedia(
             typeof img.assetId === "string"
           ) {
             try {
-              const asset = await mediaService.getMediaById(img.assetId.trim());
+              const asset = await mediaService.getMediaById(
+                img.assetId.trim(),
+                publicationId,
+              );
               if (asset) {
                 img.src = await mediaService.getMediaUrl(asset);
                 if (asset.displayName && !img.alt) img.alt = asset.displayName;
@@ -222,7 +229,11 @@ export async function buildPublicPostSummaryDto(
   commentCount?: number,
   localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPostSummaryDto> {
-  const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    post.content,
+    mediaService,
+    post.publicationId,
+  );
   let featureImage: PublicMediaDto | null = null;
   if (post.featureImageId) {
     try {
@@ -338,7 +349,11 @@ export async function buildPublicPostDetailDto(
     commentCount,
     localeContext,
   );
-  const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    post.content,
+    mediaService,
+    post.publicationId,
+  );
   // Read-only publication compatibility: never rewrite the persisted DTO.
   // Older TipTap JSON may be rendered through a strictly allowlisted projection.
   let renderable: unknown = resolvedDoc;
@@ -372,7 +387,11 @@ export async function buildPublicPageDetailDto(
   mediaService: MediaService,
   localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPageDetailDto> {
-  const resolvedDoc = await resolveDocumentMedia(page.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    page.content,
+    mediaService,
+    page.publicationId,
+  );
   const featureImage = extractFeatureImage(resolvedDoc);
   let renderable: unknown = resolvedDoc;
   try { renderable = toRenderablePublicDocument(resolvedDoc); } catch {

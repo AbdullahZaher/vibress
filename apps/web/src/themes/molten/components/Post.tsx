@@ -5,6 +5,7 @@ import React from "react";
 import { ThemePostProps } from "../../types";
 import { ThemeLayout } from "./Layout";
 import { CommentSection } from "../../../components/comments/CommentSection";
+import { sanitizeStudioHtml } from "@vibress/studio-utils";
 import { t } from "../../../lib/i18n";
 
 export async function Post(props: ThemePostProps) {
@@ -79,7 +80,17 @@ export async function Post(props: ThemePostProps) {
                 loading="eager"
               />
               {post.featureImage.caption && (
-                <figcaption dangerouslySetInnerHTML={{ __html: post.featureImage.caption }} />
+                <figcaption>
+                  {post.featureImage.caption.includes("<") ? (
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeStudioHtml(post.featureImage.caption),
+                      }}
+                    />
+                  ) : (
+                    post.featureImage.caption
+                  )}
+                </figcaption>
               )}
             </figure>
           )}

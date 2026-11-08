@@ -108,7 +108,12 @@ const SAFE_DATA_IMAGE_RE = /^data:image\/(png|jpe?g|gif|webp|avif);base64,/i;
  */
 export function isSafeProtocolUrl(url: string): boolean {
   if (typeof url !== "string") return false;
-  const trimmed = url.trim().toLowerCase();
+  const decoded = url.trim().replace(/&#x([0-9a-f]+);?/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&colon;?/gi, ':')
+    .replace(/&tab;?/gi, '')
+    .replace(/&newline;?/gi, '');
+  const trimmed = decoded.replace(/[\u0000-\u001f\u007f-\u009f\s]/g, '').toLowerCase();
   if (
     trimmed.startsWith("javascript:") ||
     trimmed.startsWith("vbscript:") ||
@@ -256,12 +261,44 @@ function isAllowedIframeSrc(src: string): boolean {
 
 type P5Node = {
   nodeName: string;
-  tagName?: string;
-  namespaceURI?: string;
-  attrs?: Array<{ name: string; value: string }>;
-  childNodes?: P5Node[];
-  value?: string;
+  tagName?: string | undefined;
+  namespaceURI?: string | undefined;
+  attrs?: Array<{ name: string; value: string }> | undefined;
+  childNodes?: P5Node[] | undefined;
+  value?: string | undefined;
+  parentNode?: P5Node | undefined;
 };
+
+const DISCARD_CONTAINER_TAGS = new Set([
+  "script",
+  "style",
+  "textarea",
+  "title",
+  "noscript",
+  "noembed",
+  "noframes",
+  "xmp",
+  "template",
+  "object",
+  "embed",
+  "applet",
+  "frame",
+  "frameset",
+]);
+
+const ALLOWED_REL_TOKENS = new Set([
+  "noopener",
+  "noreferrer",
+  "nofollow",
+  "ugc",
+  "sponsored",
+  "external",
+  "help",
+  "license",
+  "next",
+  "prev",
+  "tag",
+]);
 
 function isTextNode(node: P5Node): boolean {
   return node.nodeName === "#text";
@@ -284,20 +321,34 @@ function sanitizePresentationStyle(input: string): string {
   return declarations.join("; ");
 }
 
-/** Disallowed wrappers keep their children as safe, inert content. */
-function sanitizeNode(node: P5Node, preservePresentationStyles: boolean): P5Node[] {
-  if (isTextNode(node)) {
-    return [node];
-  }
+/** Disallowed wrappers keep their children as safe, inert content; discard containers are dropped entirely. */
+function sanitizeNode(
+  node: P5Node,
+  preservePresentationStyles: boolean,
+  parentNode?: P5Node,
+): P5Node[] {
   if (isCommentNode(node)) {
     return [];
   }
+  if (isTextNode(node)) {
+    return [
+      {
+        nodeName: "#text",
+        value: node.value || "",
+        parentNode: parentNode,
+      },
+    ];
+  }
 
   const tag = (node.tagName || "").toLowerCase();
+  if (DISCARD_CONTAINER_TAGS.has(tag)) {
+    return [];
+  }
+
   if (!STUDIO_ALLOWED_TAGS.has(tag)) {
     const out: P5Node[] = [];
     for (const child of node.childNodes || []) {
-      out.push(...sanitizeNode(child, preservePresentationStyles));
+      out.push(...sanitizeNode(child, preservePresentationStyles, parentNode));
     }
     return out;
   }
@@ -339,15 +390,65 @@ function sanitizeNode(node: P5Node, preservePresentationStyles: boolean): P5Node
 
   if (tag === "a") {
     const href = attrs.find((a) => a.name.toLowerCase() === "href");
-    if (!href || href.value.trim() === "") return [];
-    // Enforce safe external-link conventions.
-    const target = attrs.find((a) => a.name.toLowerCase() === "target");
-    if (
-      target &&
-      target.value === "_blank" &&
-      !attrs.some((a) => a.name.toLowerCase() === "rel")
-    ) {
-      attrs.push({ name: "rel", value: "noopener noreferrer" });
+    if (!href || href.value.trim() === "") {
+      return (node.childNodes || []).flatMap((c) =>
+        sanitizeNode(c, preservePresentationStyles, parentNode),
+      );
+    }
+
+    const targetIdx = attrs.findIndex((a) => a.name.toLowerCase() === "target");
+    let isBlank = false;
+    if (targetIdx !== -1) {
+      const targetAttr = attrs[targetIdx];
+      if (targetAttr) {
+        const rawTarget = targetAttr.value.trim().toLowerCase();
+        if (rawTarget === "_blank") {
+          isBlank = true;
+          targetAttr.value = "_blank";
+        } else if (
+          rawTarget === "_self" ||
+          rawTarget === "_parent" ||
+          rawTarget === "_top"
+        ) {
+          targetAttr.value = rawTarget;
+        } else {
+          attrs.splice(targetIdx, 1);
+        }
+      }
+    }
+
+    const relIdx = attrs.findIndex((a) => a.name.toLowerCase() === "rel");
+    const relAttr = relIdx !== -1 ? attrs[relIdx] : undefined;
+    if (isBlank) {
+      const existingRel = relAttr ? relAttr.value : "";
+      const tokens = new Set(
+        existingRel
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((t) => ALLOWED_REL_TOKENS.has(t)),
+      );
+      tokens.add("noopener");
+      tokens.add("noreferrer");
+      tokens.delete("opener");
+      const normalizedRel = Array.from(tokens).join(" ");
+      if (relAttr) {
+        relAttr.value = normalizedRel;
+      } else {
+        attrs.push({ name: "rel", value: normalizedRel });
+      }
+    } else if (relAttr) {
+      const tokens = new Set(
+        relAttr.value
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((t) => ALLOWED_REL_TOKENS.has(t)),
+      );
+      tokens.delete("opener");
+      if (tokens.size > 0) {
+        relAttr.value = Array.from(tokens).join(" ");
+      } else if (relIdx !== -1) {
+        attrs.splice(relIdx, 1);
+      }
     }
   }
 
@@ -363,20 +464,43 @@ function sanitizeNode(node: P5Node, preservePresentationStyles: boolean): P5Node
     return [];
   }
 
-  const childNodes: P5Node[] = [];
-  for (const child of node.childNodes || []) {
-    childNodes.push(...sanitizeNode(child, preservePresentationStyles));
+  const isLeafTag =
+    tag === "img" ||
+    tag === "hr" ||
+    tag === "input" ||
+    tag === "source" ||
+    tag === "iframe";
+  if (isLeafTag) {
+    return [
+      {
+        nodeName: tag,
+        tagName: tag,
+        namespaceURI: "http://www.w3.org/1999/xhtml",
+        attrs,
+        childNodes: [],
+        parentNode: parentNode,
+      },
+    ];
   }
 
-  return [
-    {
-      nodeName: node.nodeName,
-      tagName: tag,
-      namespaceURI: "http://www.w3.org/1999/xhtml",
-      attrs,
-      childNodes,
-    },
-  ];
+  const safeElement: P5Node = {
+    nodeName: tag,
+    tagName: tag,
+    namespaceURI: "http://www.w3.org/1999/xhtml",
+    attrs,
+    childNodes: [],
+    parentNode: parentNode,
+  };
+
+  const childNodes: P5Node[] = [];
+  for (const child of node.childNodes || []) {
+    childNodes.push(
+      ...sanitizeNode(child, preservePresentationStyles, safeElement),
+    );
+  }
+  safeElement.childNodes = childNodes;
+
+  return [safeElement];
 }
 
 /** Sanitize arbitrary HTML to the Studio allowlist. Safe content survives; every script/event/unsafe-URL vector is removed. */
@@ -387,14 +511,15 @@ export function sanitizeStudioHtml(
   if (!html || typeof html !== "string") return "";
   try {
     const fragment = parseFragment(html) as unknown as P5Node;
-    const childNodes: P5Node[] = [];
-    for (const child of fragment.childNodes || []) {
-      childNodes.push(...sanitizeNode(child, preservePresentationStyles));
-    }
-    const cleanFragment = {
+    const cleanFragment: P5Node = {
       nodeName: "#document-fragment",
-      childNodes,
-    } as unknown as P5Node;
+      childNodes: [],
+    };
+    for (const child of fragment.childNodes || []) {
+      cleanFragment.childNodes?.push(
+        ...sanitizeNode(child, preservePresentationStyles, cleanFragment),
+      );
+    }
     const out = serialize(cleanFragment as never);
     return out;
   } catch {
@@ -408,13 +533,13 @@ export function stripHtml(html: string): string {
   try {
     const fragment = parseFragment(html) as unknown as P5Node;
     const parts: string[] = [];
-    function walk(node: P5Node) {
+    const walk = (node: P5Node): void => {
       if (isTextNode(node)) {
         if (node.value) parts.push(node.value);
         return;
       }
       for (const child of node.childNodes || []) walk(child);
-    }
+    };
     for (const child of fragment.childNodes || []) walk(child);
     return parts.join(" ").replace(/\s+/g, " ").trim();
   } catch {

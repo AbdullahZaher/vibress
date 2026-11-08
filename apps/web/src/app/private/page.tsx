@@ -3,13 +3,33 @@
 import React, { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
+export function getSafeRedirectUrl(target: string | null | undefined, fallback = "/"): string {
+  if (!target || typeof target !== "string") return fallback;
+  const trimmed = target.trim();
+  // Must be a relative path starting with '/' and NOT protocol-relative ('//' or '/\')
+  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.startsWith("/\\")) {
+    return fallback;
+  }
+  // Reject control chars, newlines, tabs
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(trimmed)) {
+    return fallback;
+  }
+  try {
+    const parsed = new URL(trimmed, "http://localhost");
+    if (parsed.origin !== "http://localhost") return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return fallback;
+  }
+}
+
 function PrivateGateContent() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const searchParams = useSearchParams();
 
-  const returnTo = searchParams.get("r") || "/";
+  const returnTo = getSafeRedirectUrl(searchParams.get("r"));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -453,11 +453,18 @@ export async function GET(
       ? "public, max-age=3600, stale-while-revalidate=86400"
       : "no-cache, no-store, must-revalidate";
 
+    const responseHeaders: Record<string, string> = {
+      "Content-Type": mimeType,
+      "Cache-Control": cacheControl,
+      "X-Content-Type-Options": "nosniff",
+    };
+
+    if (mimeType.includes("svg")) {
+      responseHeaders["Content-Security-Policy"] = "sandbox; default-src 'none'";
+    }
+
     return new NextResponse(responseBody, {
-      headers: {
-        "Content-Type": mimeType,
-        "Cache-Control": cacheControl,
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error("Error reading theme asset:", error);
