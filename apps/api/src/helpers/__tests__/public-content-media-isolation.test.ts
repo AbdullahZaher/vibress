@@ -344,6 +344,7 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
         } },
         { type: "studio-card", cardType: "image", cardData: {
           src: "https://images.unsplash.com/photo-safe", alt: "External image",
+          href: "mailto:editor@example.com",
         } },
       ] },
     };
@@ -353,6 +354,7 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     expect(cards.slice(0, 4).map((c) => c.cardData)).toEqual([{}, {}, {}, {}]);
     expect(cards[4]?.cardData.src).toBe("/content/media/media/owned.jpg");
     expect(cards[5]?.cardData.src).toBe("https://images.unsplash.com/photo-safe");
+    expect(cards[5]?.cardData.href).toBe("mailto:editor@example.com");
     const json = JSON.stringify(resolved);
     for (const marker of ["FOREIGN ALT", "FOREIGN VIDEO CAPTION", "FOREIGN FILE NAME", "foreign.pdf"]) {
       expect(json).not.toContain(marker);
