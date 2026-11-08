@@ -257,3 +257,31 @@ test("stored HTML and Markdown cards, paste, links, captions and styles cannot e
   await expect(article.locator("[style*='javascript:' i]")).toHaveCount(0);
   expect(await page.evaluate(() => Reflect.get(window, "__betaStudioXss"))).toBeUndefined();
 });
+
+test("host block actions can move a paragraph without dragging", async ({ page }) => {
+  const ownerId = await login(page);
+  const { id } = await createPost(page, "Studio block movement", ownerId, studioDocument([
+    element("paragraph", [textNode("Move this first paragraph")], "ltr"),
+    element("paragraph", [textNode("Keep this second paragraph")], "ltr"),
+  ]));
+  await page.goto(`${BASE}/admin/posts/${id}`);
+  const editor = page.locator(".vibress-studio-editor [contenteditable='true']").first();
+  const paragraphs = editor.locator(":scope > p");
+  await paragraphs.first().hover();
+  const handle = page.getByRole("button", { name: "Drag to move, click for options" });
+  await expect(handle).toBeVisible();
+  await handle.focus();
+  await page.keyboard.press("Enter");
+  const moveDown = page.getByRole("button", { name: "Move down", exact: true });
+  await expect(moveDown).toBeVisible();
+  await moveDown.focus();
+
+  const saved = page.waitForResponse((res) =>
+    new URL(res.url()).pathname === `/api/admin/v1/posts/${id}` && res.request().method() === "PUT",
+  );
+  await page.keyboard.press("Enter");
+  await expect(paragraphs).toHaveText(["Keep this second paragraph", "Move this first paragraph"]);
+  expect((await saved).status()).toBe(200);
+  await page.reload();
+  await expect(paragraphs).toHaveText(["Keep this second paragraph", "Move this first paragraph"]);
+});
