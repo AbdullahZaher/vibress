@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import {
   isPublicExternalThemeAssetPath,
+  isAllowedBuiltInThemeScript,
   shouldAllowLegacyThemeFallback,
   type PublicationThemeScope,
 } from "../../../lib/theme-asset-scope";
@@ -125,7 +126,8 @@ function resolveThemeAssetPath(
 
   // Only presentation assets are public. Never serve theme.ts, Markdown,
   // private manifests, templates or executable scripts from source folders.
-  if (!isPublicExternalThemeAssetPath(relativePath)) return null;
+  if (!isPublicExternalThemeAssetPath(relativePath) &&
+      !isAllowedBuiltInThemeScript(themeId, version, relativePath)) return null;
 
   const publicationId = scope?.publicationId ?? null;
   if (
