@@ -174,9 +174,11 @@ export async function resolveDocumentMedia(
           // The rejected payload may contain previously published foreign metadata.
           n.cardData = {};
         }
-      } else if (typeof data.src === "string" && data.src &&
-          !await isAuthorizedEmbeddedMediaUrl(data.src)) {
-        // A bare local stream URL also needs publication ownership.
+      } else if (["image", "video", "audio", "file"].includes(String(n.cardType)) &&
+          (typeof data.src !== "string" || !data.src ||
+            !await isAuthorizedEmbeddedMediaUrl(data.src))) {
+        // A media card without an authorized source is not renderable, and
+        // its captions/titles must not survive in public JSON or excerpts.
         n.cardData = {};
       }
       if (n.cardData === data) await scrubOptionalMediaUrls(data);
@@ -188,20 +190,19 @@ export async function resolveDocumentMedia(
         const authorizedImages: unknown[] = [];
         for (const item of data.images) {
           if (!item || typeof item !== "object" || Array.isArray(item)) {
-            authorizedImages.push(item);
-            continue;
+            continue; // Malformed entries are not publication media.
           }
           const image = item as Record<string, unknown>;
           const allowed = hasAssetReference(image)
             ? await resolveScopedAsset(image, true)
-            : typeof image.src !== "string" || !image.src ||
+            : typeof image.src === "string" && Boolean(image.src) &&
               await isAuthorizedEmbeddedMediaUrl(image.src);
           if (allowed) {
             await scrubOptionalMediaUrls(image);
             authorizedImages.push(image);
           }
         }
-        if (data.images.length > 0 && authorizedImages.length === 0) {
+        if (authorizedImages.length === 0) {
           n.cardData = {}; // Do not publish a removed gallery's stale caption.
         } else {
           data.images = authorizedImages;
