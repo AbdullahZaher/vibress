@@ -359,6 +359,24 @@ function resolveThemeAssetPath(
   return null;
 }
 
+/** Single HTTP delivery boundary for user-provided theme asset bytes. */
+export function themeAssetResponseHeaders(
+  mimeType: string,
+  cacheControl: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": mimeType,
+    "Cache-Control": cacheControl,
+    "X-Content-Type-Options": "nosniff",
+  };
+  if (mimeType === "image/svg+xml") {
+    // An SVG can execute active XML if navigated to as a document.
+    headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+    headers["Content-Disposition"] = "attachment";
+  }
+  return headers;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
@@ -453,18 +471,7 @@ export async function GET(
       ? "public, max-age=3600, stale-while-revalidate=86400"
       : "no-cache, no-store, must-revalidate";
 
-    const responseHeaders: Record<string, string> = {
-      "Content-Type": mimeType,
-      "Cache-Control": cacheControl,
-      "X-Content-Type-Options": "nosniff",
-    };
-
-    if (mimeType === "image/svg+xml") {
-      // SVG is active XML when navigated to directly. Keep theme icon URLs
-      // addressable but require download and sandbox any browser navigation.
-      responseHeaders["Content-Security-Policy"] = "sandbox; default-src 'none'";
-      responseHeaders["Content-Disposition"] = "attachment";
-    }
+    const responseHeaders = themeAssetResponseHeaders(mimeType, cacheControl);
 
     return new NextResponse(responseBody, {
       headers: responseHeaders,
