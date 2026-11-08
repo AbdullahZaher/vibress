@@ -1,4 +1,4 @@
-import { MediaService } from "@vibress/media";
+import { MediaService, isSafeMediaAssetUrl } from "@vibress/media";
 import { Post } from "@vibress/posts";
 import { Page } from "@vibress/pages";
 import { Tag } from "@vibress/tags";
@@ -74,6 +74,48 @@ export async function resolveDocumentMedia(
     return data.assetId !== undefined && data.assetId !== null && data.assetId !== "";
   }
 
+  // Bare local URLs must be checked against the same publication ownership
+  // gate as the actual /content/media/* stream route. They have no assetId to
+  // authorize, and otherwise retain stale captions/alt text in public JSON.
+  function getLocalMediaStorageKey(url: string): string | null {
+    const pathOnly = url.split(/[?#]/, 1)[0] || "";
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(pathOnly);
+    } catch {
+      return ""; // Malformed escape sequences must not bypass a local path.
+    }
+    if (!decoded.startsWith("/content/media/")) return null;
+    const key = decoded.slice("/content/media/".length);
+    if (decoded !== pathOnly || url !== pathOnly || !key ||
+        key.includes("\\") || key.includes("\0") ||
+        key.split("/").some((segment) => !segment || segment === "." || segment === "..")) {
+      return "";
+    }
+    return key;
+  }
+
+  async function isAuthorizedEmbeddedMediaUrl(value: unknown): Promise<boolean> {
+    if (!isSafeMediaAssetUrl(value)) return false;
+    const localStorageKey = getLocalMediaStorageKey(value);
+    if (localStorageKey === null) return true; // e.g. legitimate HTTPS embeds
+    if (!localStorageKey) return false;
+    try {
+      return await mediaService.canStreamLocalMedia(localStorageKey, publicationId);
+    } catch {
+      return false;
+    }
+  }
+
+  async function scrubOptionalMediaUrls(data: Record<string, unknown>): Promise<void> {
+    for (const field of ["poster", "thumbnail", "href"]) {
+      if (data[field] !== undefined && data[field] !== "" &&
+          !await isAuthorizedEmbeddedMediaUrl(data[field])) {
+        delete data[field];
+      }
+    }
+  }
+
   async function resolveScopedAsset(
     data: Record<string, unknown>,
     populateImageDimensions: boolean,
@@ -111,12 +153,15 @@ export async function resolveDocumentMedia(
       if (hasAssetReference(data)) {
         const allowed = await resolveScopedAsset(data, n.cardType === "image");
         if (!allowed) {
-          // Removing the entire payload also removes foreign asset IDs,
-          // captions, poster URLs, file names and other stored metadata.
-          // CMS card schemas support empty payloads for non-rendering cards.
+          // The rejected payload may contain previously published foreign metadata.
           n.cardData = {};
         }
+      } else if (typeof data.src === "string" && data.src &&
+          !await isAuthorizedEmbeddedMediaUrl(data.src)) {
+        // A bare local stream URL also needs publication ownership.
+        n.cardData = {};
       }
+      if (n.cardData === data) await scrubOptionalMediaUrls(data);
 
       // A gallery may contain both authorized and foreign items. Keep only
       // authorized asset-backed items, plus supported external items without
@@ -129,11 +174,20 @@ export async function resolveDocumentMedia(
             continue;
           }
           const image = item as Record<string, unknown>;
-          if (!hasAssetReference(image) || await resolveScopedAsset(image, true)) {
+          const allowed = hasAssetReference(image)
+            ? await resolveScopedAsset(image, true)
+            : typeof image.src !== "string" || !image.src ||
+              await isAuthorizedEmbeddedMediaUrl(image.src);
+          if (allowed) {
+            await scrubOptionalMediaUrls(image);
             authorizedImages.push(image);
           }
         }
-        data.images = authorizedImages;
+        if (data.images.length > 0 && authorizedImages.length === 0) {
+          n.cardData = {}; // Do not publish a removed gallery's stale caption.
+        } else {
+          data.images = authorizedImages;
+        }
       }
     }
 
@@ -169,7 +223,7 @@ export function extractFeatureImage(
     if (n.type === "studio-card" && n.cardType === "image" && n.cardData) {
       const cardData = n.cardData as Record<string, unknown>;
       const src = cardData.src;
-      if (src && typeof src === "string") {
+      if (isSafeMediaAssetUrl(src)) {
         found = {
           id: (cardData.assetId as string) || "embedded-img",
           url: src,
@@ -263,22 +317,35 @@ export async function buildPublicPostSummaryDto(
   if (post.featureImageId) {
     try {
       const asset = await mediaService.getMediaById(post.featureImageId, post.publicationId);
-      if (asset) {
-        const unsplashHotlinkUrl = (asset.metadata as any)?.unsplash?.urls?.regular;
-        const url = unsplashHotlinkUrl || (await mediaService.getMediaUrl(asset));
-        const unsplashMeta = (asset.metadata as any)?.unsplash;
-        const defaultCaption = unsplashMeta?.photographerName
-          ? `Photo by [${unsplashMeta.photographerName}](${unsplashMeta.photographerUrl}) on [Unsplash](${unsplashMeta.photoUrl})`
-          : null;
-        featureImage = {
-          id: asset.id,
-          url,
-          alt: post.featureImageAlt || asset.displayName || post.title,
-          caption: post.featureImageCaption || defaultCaption,
-          assetType: "image",
-          width: asset.width ?? null,
-          height: asset.height ?? null,
-        };
+      if (asset && asset.publicationId === post.publicationId) {
+        const metadata = asset.metadata as Record<string, unknown> | null;
+        const unsplash = metadata?.unsplash;
+        const unsplashMeta = unsplash && typeof unsplash === "object"
+          ? unsplash as Record<string, unknown> : null;
+        const urls = unsplashMeta?.urls;
+        const unsplashUrls = urls && typeof urls === "object"
+          ? urls as Record<string, unknown> : null;
+        const candidate = unsplashUrls?.regular;
+        const url = isSafeMediaAssetUrl(candidate)
+          ? candidate : await mediaService.getMediaUrl(asset);
+        if (isSafeMediaAssetUrl(url)) {
+          const photographerName = unsplashMeta?.photographerName;
+          const photographerUrl = unsplashMeta?.photographerUrl;
+          const photoUrl = unsplashMeta?.photoUrl;
+          const defaultCaption = typeof photographerName === "string" &&
+            isSafeMediaAssetUrl(photographerUrl) && isSafeMediaAssetUrl(photoUrl)
+            ? `Photo by [${photographerName}](${photographerUrl}) on [Unsplash](${photoUrl})`
+            : null;
+          featureImage = {
+            id: asset.id,
+            url,
+            alt: post.featureImageAlt || asset.displayName || post.title,
+            caption: post.featureImageCaption || defaultCaption,
+            assetType: "image",
+            width: asset.width ?? null,
+            height: asset.height ?? null,
+          };
+        }
       }
     } catch {
       // Fallback to legacy extraction if asset not found
@@ -303,7 +370,7 @@ export async function buildPublicPostSummaryDto(
 
   const formattedTags = (tags || []).map(formatPublicTag);
 
-  const excerpt = deriveExcerpt(post.excerpt, post.content);
+  const excerpt = deriveExcerpt(post.excerpt, resolvedDoc);
   const postWithLocale = post as Post & { locale?: string };
   const postLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? postWithLocale.locale ?? "en";
   const postDirection = getDirection(postLocale);
@@ -424,7 +491,7 @@ export async function buildPublicPageDetailDto(
   }
   const siteUrl = getSiteUrl();
 
-  const excerpt = deriveExcerpt(page.excerpt, page.content);
+  const excerpt = deriveExcerpt(page.excerpt, resolvedDoc);
   const pageWithLocale = page as Page & { locale?: string };
   const pageLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? pageWithLocale.locale ?? "en";
   const pageDirection = getDirection(pageLocale);
