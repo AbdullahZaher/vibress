@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { resolveContainedThemeAsset } from "../theme-asset-files";
-import { isPublicExternalThemeAssetPath } from "../theme-asset-scope";
+import { isAllowedBuiltInThemeScript, isPublicExternalThemeAssetPath } from "../theme-asset-scope";
 
 const temporaryRoots: string[] = [];
 function makeRoot(): string {
@@ -24,6 +24,15 @@ describe("theme asset public file boundary", () => {
     }
     for (const name of ["README.md", "theme.ts", "theme.json", "components/Post.tsx", "main.min.js", "templates/page.liquid"]) {
       expect(isPublicExternalThemeAssetPath(name)).toBe(false);
+    }
+    expect(isAllowedBuiltInThemeScript("vibress-molten", "1.0.0", "main.min.js")).toBe(true);
+    for (const [id, version, file] of [
+      ["attacker", "1.0.0", "main.min.js"],
+      ["vibress-molten", "2.0.0", "main.min.js"],
+      ["vibress-molten", "1.0.0", "other.js"],
+      ["vibress-molten", "1.0.0", "../main.min.js"],
+    ]) {
+      expect(isAllowedBuiltInThemeScript(id, version, file)).toBe(false);
     }
   });
 
