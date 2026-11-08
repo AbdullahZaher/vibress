@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { themeAssetResponseHeaders } from "../route";
+import { themeAssetResponseHeaders } from "../../../../lib/theme-asset-headers";
 
 describe("theme asset security headers", () => {
   it("forces SVG downloads with restrictive sandbox CSP and nosniff", () => {
