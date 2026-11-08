@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSafeRedirectUrl } from "../page";
+import { getSafeRedirectUrl } from "../../../lib/safe-redirect";
 
 describe("getSafeRedirectUrl — private gate open redirect mitigation", () => {
   it("allows safe relative paths with query parameters and hashes", () => {
