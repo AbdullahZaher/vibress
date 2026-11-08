@@ -216,11 +216,12 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
   });
 
   it("rejects a foreign asset even if a media repository ignores the requested publication", async () => {
+    const getMediaUrl = vi.fn(async () => "https://foreign.example/file.jpg");
     const service = {
       getMediaById: vi.fn(async () => ({
         id: "foreign", publicationId: "pub_b", displayName: "SECRET",
       })),
-      getMediaUrl: vi.fn(async () => "https://foreign.example/file.jpg"),
+      getMediaUrl,
     } as unknown as MediaService;
     const projected = await resolveDocumentMedia({
       root: { type: "root", children: [{
@@ -230,7 +231,7 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
       }] },
     }, service, "pub_a");
     expect(JSON.stringify(projected)).not.toContain("foreign.example");
-    expect((service.getMediaUrl as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(getMediaUrl).not.toHaveBeenCalled();
   });
 
   it("fails closed if the scoped asset URL is unavailable, not only if lookup throws", async () => {
@@ -252,20 +253,18 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
   });
 
   it("requires publication scope rather than silently using unscoped media lookup", async () => {
-    const service = {
-      getMediaById: vi.fn(async () => {
-        throw new Error("should not be called");
-      }),
-    } as unknown as MediaService;
+    const getMediaById = vi.fn(async () => {
+      throw new Error("should not be called");
+    });
+    const service = { getMediaById } as unknown as MediaService;
     await expect(resolveDocumentMedia({ root: { type: "root", children: [] } }, service, ""))
       .rejects.toThrow("publication ID");
-    expect((service.getMediaById as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(getMediaById).not.toHaveBeenCalled();
   });
 
   it("continues supporting external image media without a catalog asset ID", async () => {
-    const service = {
-      getMediaById: vi.fn(async () => { throw new Error("not needed"); }),
-    } as unknown as MediaService;
+    const getMediaById = vi.fn(async () => { throw new Error("not needed"); });
+    const service = { getMediaById } as unknown as MediaService;
     const projected = await resolveDocumentMedia({
       root: { type: "root", children: [{
         type: "studio-card", cardType: "image", version: 1,
@@ -273,7 +272,7 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
       }] },
     }, service, "pub_a");
     expect(renderStudioDocumentToHtml(projected)).toContain("images.unsplash.com/photo-safe");
-    expect((service.getMediaById as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+    expect(getMediaById).not.toHaveBeenCalled();
   });
 
 });
