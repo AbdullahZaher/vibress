@@ -6,6 +6,7 @@ import {
   shouldAllowLegacyThemeFallback,
   type PublicationThemeScope,
 } from "../../../lib/theme-asset-scope";
+import { themeAssetResponseHeaders } from "../../../lib/theme-asset-headers";
 
 export const dynamic = "force-dynamic";
 
@@ -357,24 +358,6 @@ function resolveThemeAssetPath(
   }
 
   return null;
-}
-
-/** Single HTTP delivery boundary for user-provided theme asset bytes. */
-export function themeAssetResponseHeaders(
-  mimeType: string,
-  cacheControl: string,
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": mimeType,
-    "Cache-Control": cacheControl,
-    "X-Content-Type-Options": "nosniff",
-  };
-  if (mimeType === "image/svg+xml") {
-    // An SVG can execute active XML if navigated to as a document.
-    headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
-    headers["Content-Disposition"] = "attachment";
-  }
-  return headers;
 }
 
 export async function GET(
