@@ -408,6 +408,15 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
         src: "https://other-publication.example/content/media/media/foreign.jpg",
         alt: "CROSS PUBLICATION REFERENCE",
       } },
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "content/media/media/foreign.jpg", alt: "RELATIVE PRIVATE PATH",
+      } },
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "./content/media/media/foreign.jpg", alt: "DOTTED PRIVATE PATH",
+      } },
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "assets/allowed-photo.png", alt: "Allowed relative source",
+      } },
     ] } };
     const result = await resolveDocumentMedia(doc, service, "pub_a");
     const cards = (result.root as {children: Array<{cardData: Record<string, unknown>}>}).children;
@@ -416,7 +425,10 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     expect(cards[1]?.cardData.poster).toBeUndefined();
     expect(cards[2]?.cardData).toEqual({});
     expect(cards[3]?.cardData).toEqual({});
-    expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster|CROSS PUBLICATION/i);
+    expect(cards[4]?.cardData).toEqual({});
+    expect(cards[5]?.cardData).toEqual({});
+    expect(cards[6]?.cardData.src).toBe("assets/allowed-photo.png");
+    expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster|CROSS PUBLICATION|RELATIVE PRIVATE|DOTTED PRIVATE/i);
   });
 
   it("does not publish empty media captions or malformed gallery items as public metadata", async () => {
