@@ -104,11 +104,11 @@ const PUBLIC_CONTENT_PRIVATE_ACCESS_EXEMPT_PATHS = new Set([
 
 function getSitePrivacySecret(): string {
   const config = getConfig();
-  return (
-    config.secrets.encryptionKey ||
-    process.env.VIBRESS_ENCRYPTION_KEY ||
-    "vibress-site-privacy-secret"
-  );
+  const secret = config.secrets.encryptionKey || process.env.VIBRESS_ENCRYPTION_KEY;
+  if (config.isProduction && (!secret || secret.includes("change-me"))) {
+    throw new Error("VIBRESS_ENCRYPTION_KEY must be configured in production");
+  }
+  return secret || "vibress-site-privacy-secret";
 }
 
 function normalizePublicContentRoutePath(url: string): string {

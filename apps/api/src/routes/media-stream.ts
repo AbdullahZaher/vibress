@@ -110,13 +110,13 @@ function parseRangeHeader(
   return { start, end };
 }
 
-function getSitePrivacySecret(): string {
+export function getSitePrivacySecret(): string {
   const config = getConfig();
-  return (
-    config.secrets.encryptionKey ||
-    process.env.VIBRESS_ENCRYPTION_KEY ||
-    "vibress-site-privacy-secret"
-  );
+  const secret = config.secrets.encryptionKey || process.env.VIBRESS_ENCRYPTION_KEY;
+  if (config.isProduction && (!secret || secret.includes("change-me"))) {
+    throw new Error("VIBRESS_ENCRYPTION_KEY must be configured in production");
+  }
+  return secret || "vibress-site-privacy-secret";
 }
 
 async function requirePublicMediaAccess(
@@ -218,6 +218,29 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
     try {
       resolved = await fs.promises.realpath(resolved);
     } catch {
+      // Check if legacy media fallback is operationally disabled
+      if (process.env.VIBRESS_STORAGE_LEGACY_FALLBACK === "0") {
+        return reply.status(404).send();
+      }
+
+      // Check if migration to canonical storage has completed with verified marker
+      const migrationMarkerPath = path.join(canonicalMediaRoot, ".media-storage-migrated.json");
+      try {
+        if (fs.existsSync(migrationMarkerPath)) {
+          const markerRaw = await fs.promises.readFile(migrationMarkerPath, "utf8");
+          const marker = JSON.parse(markerRaw);
+          if (marker && marker.version === 1 && marker.status === "complete") {
+            request.log.debug(
+              { rawKey, canonicalPath: path.resolve(canonicalMediaRoot, rawKey) },
+              "Bypassing legacy media fallback: canonical media migration verified complete",
+            );
+            return reply.status(404).send();
+          }
+        }
+      } catch {
+        // If marker file is malformed or unreadable, fall through safely to legacy fallback
+      }
+
       // Transitional fallback check for legacy API storage directory
       const legacyMediaRoot = path.resolve(
         path.dirname(canonicalMediaRoot),
