@@ -402,6 +402,10 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
       { type: "studio-card", cardType: "image", cardData: {
         src: "javascript:alert(1)", alt: "UNSAFE URI",
       } },
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "https://other-publication.example/content/media/media/foreign.jpg",
+        alt: "CROSS PUBLICATION REFERENCE",
+      } },
     ] } };
     const result = await resolveDocumentMedia(doc, service, "pub_a");
     const cards = (result.root as {children: Array<{cardData: Record<string, unknown>}>}).children;
@@ -409,7 +413,8 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     expect(cards[1]?.cardData.src).toBe("https://cdn.example.com/allowed.mp4");
     expect(cards[1]?.cardData.poster).toBeUndefined();
     expect(cards[2]?.cardData).toEqual({});
-    expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster/i);
+    expect(cards[3]?.cardData).toEqual({});
+    expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster|CROSS PUBLICATION/i);
   });
 
 });
