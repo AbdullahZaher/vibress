@@ -459,8 +459,11 @@ export async function GET(
       "X-Content-Type-Options": "nosniff",
     };
 
-    if (mimeType.includes("svg")) {
+    if (mimeType === "image/svg+xml") {
+      // SVG is active XML when navigated to directly. Keep theme icon URLs
+      // addressable but require download and sandbox any browser navigation.
       responseHeaders["Content-Security-Policy"] = "sandbox; default-src 'none'";
+      responseHeaders["Content-Disposition"] = "attachment";
     }
 
     return new NextResponse(responseBody, {
