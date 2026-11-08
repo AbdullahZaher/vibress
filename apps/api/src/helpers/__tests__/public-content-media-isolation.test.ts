@@ -384,7 +384,7 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     expect((cards[0]?.cardData.images as unknown[])).toHaveLength(2);
     expect(cards[1]?.cardData).toEqual({});
     expect(JSON.stringify(result)).not.toContain("FOREIGN GALLERY CAPTION");
-    expect(JSON.stringify(result)).not.toContain("FOREIGN\\"");
+    expect(JSON.stringify(result)).not.toContain('"alt":"FOREIGN"');
   });
 
   it("rejects encoded local media paths, malformed input and unowned poster URLs", async () => {
