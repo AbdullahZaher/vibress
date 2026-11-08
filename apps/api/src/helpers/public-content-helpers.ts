@@ -95,7 +95,13 @@ export async function resolveDocumentMedia(
     } catch {
       return ""; // Malformed escape sequences must not bypass a local path.
     }
-    if (!decoded.startsWith("/content/media/")) return null;
+    if (!decoded.startsWith("/content/media/")) {
+      // Relative media stream paths can resolve to /content/media/ on a
+      // root-mounted published page. Never treat these as remote embeds.
+      const relative = decoded.replace(/^(?:\.\/)+/, "");
+      return relative.startsWith("content/media/") ||
+        relative.includes("/content/media/") ? "" : null;
+    }
     const key = decoded.slice("/content/media/".length);
     if (decoded !== pathOnly || url !== pathOnly || !key ||
         key.includes("\\") || key.includes("\0") ||
