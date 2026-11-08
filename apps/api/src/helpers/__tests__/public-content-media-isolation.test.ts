@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { extractFeatureImage, resolveDocumentMedia } from "../public-content-helpers";
+import { buildPublicPageDetailDto, buildPublicPostSummaryDto, extractFeatureImage, resolveDocumentMedia } from "../public-content-helpers";
+import type { Post } from "@vibress/posts";
+import type { Page } from "@vibress/pages";
 import { renderStudioDocumentToHtml } from "@vibress/studio-renderer";
 import type { MediaService } from "@vibress/media";
 
@@ -273,6 +275,141 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     }, service, "pub_a");
     expect(renderStudioDocumentToHtml(projected)).toContain("images.unsplash.com/photo-safe");
     expect(getMediaById).not.toHaveBeenCalled();
+  });
+
+  it("does not derive public post/page excerpts or SEO descriptions from a rejected card", async () => {
+    const getMediaById = vi.fn(async () => { throw new Error("foreign asset"); });
+    const service = { getMediaById } as unknown as MediaService;
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const document = {
+      schema: "vibress-studio", version: 1,
+      root: { type: "root", children: [
+        { type: "studio-card", cardType: "image", cardData: {
+          assetId: "pub_b-private", src: "/content/media/media/foreign.jpg",
+          caption: "FOREIGN CAPTION", captionHtml: "<strong>FOREIGN SECRET</strong>",
+        } },
+        { type: "paragraph", children: [{ type: "text", text: "PUBLIC ARTICLE BODY" }] },
+      ] },
+    };
+    const common = {
+      id: "post-1", publicationId: "pub_a", title: "Public title", slug: "public-title",
+      content: document, contentVersion: 1, excerpt: null, version: 1,
+      status: "published" as const, visibility: "public" as const,
+      primaryAuthorId: "author-1", createdBy: "author-1", updatedBy: "author-1",
+      publishedBy: "author-1", publishedAt: now, scheduledAt: null,
+      metaTitle: null, metaDescription: null, canonicalUrl: null,
+      createdAt: now, updatedAt: now, deletedAt: null,
+    };
+    const post: Post = {
+      ...common, featured: false, featureImageId: null, featureImageAlt: null,
+      featureImageCaption: null,
+    };
+    const page: Page = common;
+    const postDto = await buildPublicPostSummaryDto(post, [], [], service);
+    const pageDto = await buildPublicPageDetailDto(page, service);
+    for (const dto of [postDto, pageDto]) {
+      expect(dto.excerpt).toContain("PUBLIC ARTICLE BODY");
+      expect(dto.seo.description).toContain("PUBLIC ARTICLE BODY");
+      expect(dto.excerpt).not.toContain("FOREIGN");
+      expect(dto.seo.description).not.toContain("FOREIGN");
+    }
+    expect(JSON.stringify(pageDto.content)).not.toContain("FOREIGN SECRET");
+    expect(pageDto.html).not.toContain("FOREIGN SECRET");
+    expect(JSON.stringify(document)).toContain("FOREIGN SECRET");
+    expect(getMediaById).toHaveBeenCalledWith("pub_b-private", "pub_a");
+  });
+
+  it("requires ownership for bare local image, video, audio and file URLs while preserving external sources", async () => {
+    const canStreamLocalMedia = vi.fn(async (key: string, publicationId: string) =>
+      key === "media/owned.jpg" && publicationId === "pub_a");
+    const getMediaById = vi.fn(async () => { throw new Error("unexpected catalog lookup"); });
+    const service = { canStreamLocalMedia, getMediaById } as unknown as MediaService;
+    const doc = {
+      root: { type: "root", children: [
+        { type: "studio-card", cardType: "image", cardData: {
+          src: "/content/media/media/foreign.jpg", alt: "FOREIGN ALT",
+          caption: "FOREIGN IMAGE CAPTION", width: 900,
+        } },
+        { type: "studio-card", cardType: "video", cardData: {
+          src: "/content/media/media/foreign.mp4", caption: "FOREIGN VIDEO CAPTION",
+        } },
+        { type: "studio-card", cardType: "audio", cardData: {
+          src: "/content/media/media/foreign.mp3", caption: "FOREIGN AUDIO CAPTION",
+        } },
+        { type: "studio-card", cardType: "file", cardData: {
+          src: "/content/media/media/foreign.pdf", fileName: "FOREIGN FILE NAME",
+        } },
+        { type: "studio-card", cardType: "image", cardData: {
+          src: "/content/media/media/owned.jpg", alt: "Owned image",
+        } },
+        { type: "studio-card", cardType: "image", cardData: {
+          src: "https://images.unsplash.com/photo-safe", alt: "External image",
+        } },
+      ] },
+    };
+    const saved = JSON.stringify(doc);
+    const resolved = await resolveDocumentMedia(doc, service, "pub_a");
+    const cards = (resolved.root as {children: Array<{cardData: Record<string, unknown>}>}).children;
+    expect(cards.slice(0, 4).map((c) => c.cardData)).toEqual([{}, {}, {}, {}]);
+    expect(cards[4]?.cardData.src).toBe("/content/media/media/owned.jpg");
+    expect(cards[5]?.cardData.src).toBe("https://images.unsplash.com/photo-safe");
+    const json = JSON.stringify(resolved);
+    for (const marker of ["FOREIGN ALT", "FOREIGN VIDEO CAPTION", "FOREIGN FILE NAME", "foreign.pdf"]) {
+      expect(json).not.toContain(marker);
+    }
+    expect(JSON.stringify(doc)).toBe(saved);
+    expect(canStreamLocalMedia).toHaveBeenCalledWith("media/owned.jpg", "pub_a");
+    expect(getMediaById).not.toHaveBeenCalled();
+  });
+
+  it("removes unauthorized gallery items without asset IDs and stale gallery caption if all are rejected", async () => {
+    const canStreamLocalMedia = vi.fn(async (key: string) => key === "media/owned.jpg");
+    const service = { canStreamLocalMedia } as unknown as MediaService;
+    const doc = { root: { type: "root", children: [
+      { type: "studio-card", cardType: "gallery", cardData: {
+        caption: "Gallery owned by A",
+        images: [
+          { src: "/content/media/media/foreign.jpg", alt: "FOREIGN" },
+          { src: "/content/media/media/owned.jpg", alt: "Owned" },
+          { src: "https://images.unsplash.com/photo-safe", alt: "External" },
+        ],
+      } },
+      { type: "studio-card", cardType: "gallery", cardData: {
+        caption: "FOREIGN GALLERY CAPTION",
+        images: [{ src: "/content/media/media/foreign.png", alt: "SECRET" }],
+      } },
+    ] } };
+    const result = await resolveDocumentMedia(doc, service, "pub_a");
+    const cards = (result.root as {children: Array<{cardData: Record<string, unknown>}>}).children;
+    expect((cards[0]?.cardData.images as unknown[])).toHaveLength(2);
+    expect(cards[1]?.cardData).toEqual({});
+    expect(JSON.stringify(result)).not.toContain("FOREIGN GALLERY CAPTION");
+    expect(JSON.stringify(result)).not.toContain("FOREIGN\\"");
+  });
+
+  it("rejects encoded local media paths, malformed input and unowned poster URLs", async () => {
+    const canStreamLocalMedia = vi.fn(async () => false);
+    const service = { canStreamLocalMedia } as unknown as MediaService;
+    const doc = { root: { type: "root", children: [
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "/%63ontent/media/media/secret.jpg", alt: "SECRET",
+      } },
+      { type: "studio-card", cardType: "video", cardData: {
+        src: "https://cdn.example.com/allowed.mp4",
+        poster: "/content/media/media/secret-poster.jpg",
+        caption: "Allowed video",
+      } },
+      { type: "studio-card", cardType: "image", cardData: {
+        src: "javascript:alert(1)", alt: "UNSAFE URI",
+      } },
+    ] } };
+    const result = await resolveDocumentMedia(doc, service, "pub_a");
+    const cards = (result.root as {children: Array<{cardData: Record<string, unknown>}>}).children;
+    expect(cards[0]?.cardData).toEqual({});
+    expect(cards[1]?.cardData.src).toBe("https://cdn.example.com/allowed.mp4");
+    expect(cards[1]?.cardData.poster).toBeUndefined();
+    expect(cards[2]?.cardData).toEqual({});
+    expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster/i);
   });
 
 });
