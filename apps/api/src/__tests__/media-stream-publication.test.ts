@@ -18,6 +18,9 @@ describe("public local media publication ownership", () => {
   const storageKey = `${directory}/private.jpg`;
   const aliasKey = `${directory}/alias.jpg`;
   const assetId = randomUUID();
+  const svgAssetId = randomUUID();
+  const svgKey = `${directory}/private-icon.svg`;
+  const svgUrl = `/content/media/${svgKey}`;
   const assetUrl = `/content/media/${storageKey}`;
   const bytes = Buffer.from("Private publication asset");
   const password = "Temporary media fixture password";
@@ -29,6 +32,7 @@ describe("public local media publication ownership", () => {
     vi.stubEnv("STORAGE_LOCAL_ROOT", storageRoot);
     await mkdir(join(storageRoot, directory), { recursive: true });
     await writeFile(join(storageRoot, storageKey), bytes);
+    await writeFile(join(storageRoot, svgKey), '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>');
     await writeFile(join(storageRoot, "media/legacy.jpg"), "Legacy default site asset");
     await symlink(join(storageRoot, storageKey), join(storageRoot, aliasKey));
 
@@ -51,6 +55,12 @@ describe("public local media publication ownership", () => {
       id: assetId, publicationId: privateId, storageProvider: "local", storageKey,
       originalFilename: "private.jpg", displayName: "Private media fixture", mimeType: "image/jpeg",
       extension: "jpg", sizeBytes: bytes.length, checksum: suffix, assetType: "image",
+    });
+    await db.insert(mediaAssets).values({
+      id: svgAssetId, publicationId: privateId, storageProvider: "local", storageKey: svgKey,
+      originalFilename: "private-icon.svg", displayName: "Private SVG",
+      mimeType: "image/svg+xml", extension: "svg", sizeBytes: 64,
+      checksum: `svg-${suffix}`, assetType: "image",
     });
     app = buildApp();
     await app.ready();
@@ -112,4 +122,32 @@ describe("public local media publication ownership", () => {
     const unrelated = await server().inject({ url, headers: { host: publicHost } });
     expect(unrelated.statusCode).toBe(404);
   });
+  it("does not deliver SVG as executable inline content, including authenticated 206 ranges", async () => {
+    expect((await server().inject({ url: svgUrl, headers: { host: privateHost } })).statusCode).toBe(403);
+    expect((await server().inject({ url: svgUrl, headers: { host: publicHost } })).statusCode).toBe(404);
+
+    const verify = await server().inject({
+      method: "POST",
+      url: "/api/content/v1/verify-site-password",
+      headers: { host: privateHost },
+      payload: { password },
+    });
+    expect(verify.statusCode).toBe(200);
+    const cookie = verify.cookies.find(({ name }) => name === "vb_site_auth");
+    expect(cookie).toBeDefined();
+    if (!cookie) throw new Error("Missing private-site authentication cookie");
+    const headers = { host: privateHost, cookie: `${cookie.name}=${cookie.value}` };
+    for (const extraHeaders of [{}, { range: "bytes=0-15" }]) {
+      const res = await server().inject({
+        url: svgUrl, headers: { ...headers, ...extraHeaders },
+      });
+      expect([200, 206]).toContain(res.statusCode);
+      expect(res.headers["content-type"]).toMatch(/^image\/svg\+xml/);
+      expect(res.headers["content-disposition"]).toMatch(/^attachment;/);
+      expect(res.headers["content-security-policy"]).toBe("sandbox; default-src 'none'");
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["cache-control"]).toBe("private, no-store");
+    }
+  });
+
 });
