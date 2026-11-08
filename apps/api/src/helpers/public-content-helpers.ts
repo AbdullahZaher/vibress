@@ -35,11 +35,22 @@ export function getSiteUrl(): string {
   }
 }
 
+/**
+ * Build an authorized, read-only public projection. Never change persisted
+ * card data: a denied/deleted media reference must not expose stale fields
+ * previously stored in a document (including foreign src/alt/dimensions).
+ */
 export async function resolveDocumentMedia(
   docInput: unknown,
   mediaService: MediaService,
-  publicationId?: string,
+  publicationId: string,
 ): Promise<Record<string, unknown>> {
+  // The media repository accepts an optional scope for administrative callers.
+  // This public helper must never call it without a real publication context.
+  if (!publicationId || !publicationId.trim()) {
+    throw new Error("Public media resolution requires a publication ID");
+  }
+
   if (!docInput || typeof docInput !== "object") {
     return {
       schema: "vibress-studio",
@@ -48,9 +59,7 @@ export async function resolveDocumentMedia(
     };
   }
 
-  // Canonicalization first: legacy react-studio-card nodes become
-  // studio-card, so media resolution only ever needs to understand the
-  // canonical representation (no permanent dual branches).
+  // Clone before canonicalizing: this projection never changes stored content.
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
   const canonical = normalizeStudioDocument(toRenderablePublicDocument(doc)) as Record<string, unknown>;
   const root = canonical.root as
@@ -59,56 +68,72 @@ export async function resolveDocumentMedia(
     return canonical;
   }
 
+  // A missing assetId means an intentionally embedded external-media reference.
+  // Any nonempty assetId (including a malformed one) MUST be authorized.
+  function hasAssetReference(data: Record<string, unknown>): boolean {
+    return data.assetId !== undefined && data.assetId !== null && data.assetId !== "";
+  }
+
+  async function resolveScopedAsset(
+    data: Record<string, unknown>,
+    populateImageDimensions: boolean,
+  ): Promise<boolean> {
+    if (typeof data.assetId !== "string" || !data.assetId.trim()) {
+      return false;
+    }
+    try {
+      const asset = await mediaService.getMediaById(data.assetId.trim(), publicationId);
+      // Defense in depth even if an alternative media repository ignores scope.
+      if (!asset || asset.publicationId !== publicationId) return false;
+      const url = await mediaService.getMediaUrl(asset);
+      if (typeof url !== "string" || !url.trim()) return false;
+      data.src = url;
+      if (populateImageDimensions) {
+        if (asset.width) data.width = asset.width;
+        if (asset.height) data.height = asset.height;
+      }
+      if (asset.displayName && !data.alt) data.alt = asset.displayName;
+      return true;
+    } catch {
+      // A missing, deleted, foreign or unavailable asset always fails closed.
+      return false;
+    }
+  }
+
   async function processNode(node: unknown): Promise<void> {
     if (!node || typeof node !== "object") return;
     const n = node as Record<string, unknown>;
 
-    if (n.type === "studio-card" && n.cardData) {
+    if (n.type === "studio-card" && n.cardData &&
+        typeof n.cardData === "object" && !Array.isArray(n.cardData)) {
       const data = n.cardData as Record<string, unknown>;
 
-      // Handle singular assetId (image, video, audio, file)
-      if (typeof data.assetId === "string" && data.assetId.trim()) {
-        try {
-          const asset = await mediaService.getMediaById(
-            data.assetId.trim(),
-            publicationId,
-          );
-          if (asset) {
-            data.src = await mediaService.getMediaUrl(asset);
-            if (n.cardType === "image") {
-              if (asset.width) data.width = asset.width;
-              if (asset.height) data.height = asset.height;
-              if (asset.displayName && !data.alt) data.alt = asset.displayName;
-            }
-          }
-        } catch {
-          // Keep existing src or fallback silently
+      if (hasAssetReference(data)) {
+        const allowed = await resolveScopedAsset(data, n.cardType === "image");
+        if (!allowed) {
+          // Removing the entire payload also removes foreign asset IDs,
+          // captions, poster URLs, file names and other stored metadata.
+          // CMS card schemas support empty payloads for non-rendering cards.
+          n.cardData = {};
         }
       }
 
-      // Handle gallery assetIds / images array
-      if (Array.isArray(data.images)) {
-        for (const imgItem of data.images) {
-          const img = imgItem as Record<string, unknown> | null;
-          if (
-            img &&
-            typeof img === "object" &&
-            typeof img.assetId === "string"
-          ) {
-            try {
-              const asset = await mediaService.getMediaById(
-                img.assetId.trim(),
-                publicationId,
-              );
-              if (asset) {
-                img.src = await mediaService.getMediaUrl(asset);
-                if (asset.displayName && !img.alt) img.alt = asset.displayName;
-              }
-            } catch {
-              // Fallback
-            }
+      // A gallery may contain both authorized and foreign items. Keep only
+      // authorized asset-backed items, plus supported external items without
+      // asset IDs; do not erase legitimate neighbors or the gallery caption.
+      if (Array.isArray(data.images) && n.cardData === data) {
+        const authorizedImages: unknown[] = [];
+        for (const item of data.images) {
+          if (!item || typeof item !== "object" || Array.isArray(item)) {
+            authorizedImages.push(item);
+            continue;
+          }
+          const image = item as Record<string, unknown>;
+          if (!hasAssetReference(image) || await resolveScopedAsset(image, true)) {
+            authorizedImages.push(image);
           }
         }
+        data.images = authorizedImages;
       }
     }
 
