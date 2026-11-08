@@ -17,6 +17,7 @@ describe("public local media publication ownership", () => {
   const directory = `media/${suffix}`;
   const storageKey = `${directory}/private.jpg`;
   const aliasKey = `${directory}/alias.jpg`;
+  const lateLegacyKey = `${directory}/late-legacy.jpg`;
   const assetId = randomUUID();
   const svgAssetId = randomUUID();
   const svgKey = `${directory}/private-icon.svg`;
@@ -25,10 +26,14 @@ describe("public local media publication ownership", () => {
   const bytes = Buffer.from("Private publication asset");
   const password = "Temporary media fixture password";
   let app: ReturnType<typeof buildApp> | undefined;
+  let storageBase: string | undefined;
   let storageRoot: string | undefined;
+  let legacyRoot: string | undefined;
 
   beforeAll(async () => {
-    storageRoot = await mkdtemp(join(tmpdir(), "vibress-media-scope-"));
+    storageBase = await mkdtemp(join(tmpdir(), "vibress-media-scope-"));
+    storageRoot = join(storageBase, "canonical");
+    legacyRoot = join(storageBase, "apps", "api", "content", "media");
     vi.stubEnv("STORAGE_LOCAL_ROOT", storageRoot);
     await mkdir(join(storageRoot, directory), { recursive: true });
     await writeFile(join(storageRoot, storageKey), bytes);
@@ -57,6 +62,11 @@ describe("public local media publication ownership", () => {
       extension: "jpg", sizeBytes: bytes.length, checksum: suffix, assetType: "image",
     });
     await db.insert(mediaAssets).values({
+      id: randomUUID(), publicationId: publicId, storageProvider: "local", storageKey: lateLegacyKey,
+      originalFilename: "late-legacy.jpg", displayName: "Late legacy asset", mimeType: "image/jpeg",
+      extension: "jpg", sizeBytes: 18, checksum: `legacy-${suffix}`, assetType: "image",
+    });
+    await db.insert(mediaAssets).values({
       id: svgAssetId, publicationId: privateId, storageProvider: "local", storageKey: svgKey,
       originalFilename: "private-icon.svg", displayName: "Private SVG",
       mimeType: "image/svg+xml", extension: "svg", sizeBytes: 64,
@@ -69,7 +79,7 @@ describe("public local media publication ownership", () => {
   afterAll(async () => {
     await app?.close();
     await getDb().delete(publications).where(inArray(publications.id, [privateId, publicId]));
-    if (storageRoot) await rm(storageRoot, { recursive: true, force: true });
+    if (storageBase) await rm(storageBase, { recursive: true, force: true });
     vi.unstubAllEnvs();
   });
 
@@ -122,6 +132,36 @@ describe("public local media publication ownership", () => {
     const unrelated = await server().inject({ url, headers: { host: publicHost } });
     expect(unrelated.statusCode).toBe(404);
   });
+  it("serves an authorized late legacy asset even when an older completion marker exists", async () => {
+    if (!storageRoot || !legacyRoot) throw new Error("Storage fixtures are not initialized");
+    const lateBytes = Buffer.from("Late legacy media bytes");
+    await mkdir(join(legacyRoot, directory), { recursive: true });
+    await writeFile(join(legacyRoot, lateLegacyKey), lateBytes);
+    await writeFile(
+      join(storageRoot, ".media-storage-migrated.json"),
+      JSON.stringify({ version: 1, status: "complete", totalVerified: 448 }),
+    );
+
+    const url = `/content/media/${lateLegacyKey}`;
+    const allowed = await server().inject({ url, headers: { host: publicHost } });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.rawPayload).toEqual(lateBytes);
+    expect((await server().inject({ url, headers: { host: "localhost" } })).statusCode).toBe(404);
+
+    const previous = process.env.VIBRESS_STORAGE_LEGACY_FALLBACK;
+    process.env.VIBRESS_STORAGE_LEGACY_FALLBACK = "0";
+    try {
+      const explicitlyDisabled = await server().inject({ url, headers: { host: publicHost } });
+      expect(explicitlyDisabled.statusCode).toBe(404);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.VIBRESS_STORAGE_LEGACY_FALLBACK;
+      } else {
+        process.env.VIBRESS_STORAGE_LEGACY_FALLBACK = previous;
+      }
+    }
+  });
+
   it("does not deliver SVG as executable inline content, including authenticated 206 ranges", async () => {
     expect((await server().inject({ url: svgUrl, headers: { host: privateHost } })).statusCode).toBe(403);
     expect((await server().inject({ url: svgUrl, headers: { host: publicHost } })).statusCode).toBe(404);
