@@ -26,12 +26,13 @@ describe("theme asset public file boundary", () => {
       expect(isPublicExternalThemeAssetPath(name)).toBe(false);
     }
     expect(isAllowedBuiltInThemeScript("vibress-molten", "1.0.0", "main.min.js")).toBe(true);
-    for (const [id, version, file] of [
+    const forbiddenScripts: Array<[string, string, string]> = [
       ["attacker", "1.0.0", "main.min.js"],
       ["vibress-molten", "2.0.0", "main.min.js"],
       ["vibress-molten", "1.0.0", "other.js"],
       ["vibress-molten", "1.0.0", "../main.min.js"],
-    ]) {
+    ];
+    for (const [id, version, file] of forbiddenScripts) {
       expect(isAllowedBuiltInThemeScript(id, version, file)).toBe(false);
     }
   });
