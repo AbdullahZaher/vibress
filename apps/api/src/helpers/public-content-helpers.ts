@@ -78,6 +78,16 @@ export async function resolveDocumentMedia(
   // gate as the actual /content/media/* stream route. They have no assetId to
   // authorize, and otherwise retain stale captions/alt text in public JSON.
   function getLocalMediaStorageKey(url: string): string | null {
+    // An absolute URL pointing to a Vibress media stream must not turn a
+    // publication-scoped catalog URL into an unverified external reference.
+    // Without assetId we cannot know ownership of a different site's host.
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        return new URL(url).pathname.startsWith("/content/media/") ? "" : null;
+      } catch {
+        return "";
+      }
+    }
     const pathOnly = url.split(/[?#]/, 1)[0] || "";
     let decoded: string;
     try {
@@ -128,7 +138,7 @@ export async function resolveDocumentMedia(
       // Defense in depth even if an alternative media repository ignores scope.
       if (!asset || asset.publicationId !== publicationId) return false;
       const url = await mediaService.getMediaUrl(asset);
-      if (typeof url !== "string" || !url.trim()) return false;
+      if (!isSafeMediaAssetUrl(url)) return false;
       data.src = url;
       if (populateImageDimensions) {
         if (asset.width) data.width = asset.width;
