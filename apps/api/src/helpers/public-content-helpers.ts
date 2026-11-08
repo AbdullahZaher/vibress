@@ -118,11 +118,19 @@ export async function resolveDocumentMedia(
   }
 
   async function scrubOptionalMediaUrls(data: Record<string, unknown>): Promise<void> {
-    for (const field of ["poster", "thumbnail", "href"]) {
+    for (const field of ["poster", "thumbnail"]) {
       if (data[field] !== undefined && data[field] !== "" &&
           !await isAuthorizedEmbeddedMediaUrl(data[field])) {
         delete data[field];
       }
+    }
+    // An image link can legitimately be mailto:/tel: or an ordinary page
+    // route. Only media-stream links need the media ownership gate; the HTML
+    // renderer separately validates ordinary hyperlink protocols.
+    if (typeof data.href === "string" &&
+        data.href.includes("/content/media/") &&
+        !await isAuthorizedEmbeddedMediaUrl(data.href)) {
+      delete data.href;
     }
   }
 
