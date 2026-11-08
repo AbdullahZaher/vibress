@@ -11,7 +11,7 @@ import {
   RefreshCw,
   CheckCircle2,
 } from "lucide-react";
-import { Badge } from "../../ui/badge";
+import { useAdminLocale } from "../../../lib/admin-locale";
 import {
   createExportApi,
   createImportApi,
@@ -25,6 +25,7 @@ interface ImportExportCardProps {
 export const ImportExportCard: React.FC<ImportExportCardProps> = ({
   isHighlighted,
 }) => {
+  const { tr } = useAdminLocale();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -39,9 +40,10 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
     setStatusMessage(null);
     try {
       const res = await createExportApi();
+      const failed = res.job.status === "failed";
       setStatusMessage({
-        success: true,
-        text: `Export job queued (Job ID: ${res.job.id}). The archive is being prepared.`,
+        success: !failed,
+        text: `${tr(failed ? "Export failed" : "Export job created")} (${tr("Job ID")}: ${res.job.id}).`,
       });
     } catch (err: unknown) {
       setStatusMessage({
@@ -73,9 +75,10 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
       }
 
       const res = await createImportApi(envelope);
+      const failed = res.job.status === "failed";
       setStatusMessage({
-        success: true,
-        text: `Import job created (Job ID: ${res.job.id}). Content is being processed in the background.`,
+        success: !failed,
+        text: `${tr(failed ? "Import failed" : "Import job created")} (${tr("Job ID")}: ${res.job.id}).`,
       });
     } catch (err: unknown) {
       setStatusMessage({
@@ -93,13 +96,8 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
       <SettingsCard id="advanced-import-export" isHighlighted={isHighlighted}>
         <SettingsCardRow
           icon={<FileJson className="h-4 w-4" />}
-          title="Import / export content"
-          description="Back up your entire publication content or migrate from Ghost, WordPress, or Substack."
-          currentValue={
-            <Badge variant="outline" className="text-xs font-mono">
-              Universal Importer Ready
-            </Badge>
-          }
+          title="Import and export settings and redirects"
+          description="Transfer supported publication settings and redirects using Vibress JSON."
           actionLabel="Open tools"
           onAction={() => {
             setIsModalOpen(true);
@@ -120,7 +118,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
               <div className="flex items-center gap-2">
                 <FileJson className="h-4 w-4 text-primary" />
                 <h3 className="text-sm font-bold text-foreground">
-                  Import & Export Content
+                  {tr("Import and export settings and redirects")}
                 </h3>
               </div>
               <button
@@ -137,11 +135,10 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
                 <div className="p-4 rounded-xl border border-border/60 bg-muted/10 space-y-2.5 flex flex-col justify-between">
                   <div>
                     <h4 className="text-xs font-semibold text-foreground">
-                      Export all content
+                      {tr("Export settings and redirects")}
                     </h4>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Generate a complete JSON archive of all posts, pages,
-                      tags, and authors.
+                      {tr("Create a Vibress JSON export of publication settings and redirects. Secrets are excluded.")}
                     </p>
                   </div>
                   <Button
@@ -157,7 +154,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
                       <Download className="h-3.5 w-3.5" />
                     )}
                     <span>
-                      {exporting ? "Exporting..." : "Download Export"}
+                      {tr(exporting ? "Processing..." : "Create export")}
                     </span>
                   </Button>
                 </div>
@@ -165,11 +162,10 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
                 <div className="p-4 rounded-xl border border-border/60 bg-muted/10 space-y-2.5 flex flex-col justify-between">
                   <div>
                     <h4 className="text-xs font-semibold text-foreground">
-                      Import content
+                      {tr("Import settings and redirects")}
                     </h4>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Upload an exported JSON archive from Vibress, Ghost, or
-                      Substack.
+                      {tr("Choose a Vibress version 1 JSON file. Only supported settings and redirects are imported.")}
                     </p>
                   </div>
                   <input
@@ -192,7 +188,7 @@ export const ImportExportCard: React.FC<ImportExportCardProps> = ({
                       <Upload className="h-3.5 w-3.5" />
                     )}
                     <span>
-                      {importing ? "Validating..." : "Universal Import"}
+                      {tr(importing ? "Processing..." : "Choose JSON file")}
                     </span>
                   </Button>
                 </div>

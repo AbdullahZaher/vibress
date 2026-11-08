@@ -490,17 +490,14 @@ export const SETTINGS_REGISTRY: SettingPillarMeta[] = [
       },
       {
         id: "import-export",
-        title: "Import / export content",
+        title: "Import and export settings and redirects",
         description:
-          "Back up your entire publication content or migrate from Ghost, WordPress, or Substack.",
+          "Transfer supported publication settings and redirects using Vibress JSON.",
         keywords: [
           "import",
           "export",
-          "backup",
-          "migrate",
-          "ghost",
-          "wordpress",
-          "substack",
+          "settings",
+          "redirects",
           "json",
         ],
         pillarId: "advanced",
