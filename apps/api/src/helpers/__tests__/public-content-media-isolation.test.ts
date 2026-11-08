@@ -419,4 +419,48 @@ describe("resolveDocumentMedia — cross-publication media isolation", () => {
     expect(JSON.stringify(result)).not.toMatch(/SECRET|UNSAFE URI|secret-poster|CROSS PUBLICATION/i);
   });
 
+  it("does not publish empty media captions or malformed gallery items as public metadata", async () => {
+    const getMediaById = vi.fn(async () => { throw new Error("not needed"); });
+    const service = { getMediaById } as unknown as MediaService;
+    const doc = { root: { type: "root", children: [
+      { type: "studio-card", cardType: "image", cardData: {
+        alt: "EMPTY IMAGE ALT", caption: "EMPTY IMAGE CAPTION",
+      } },
+      { type: "studio-card", cardType: "video", cardData: {
+        caption: "EMPTY VIDEO CAPTION",
+      } },
+      { type: "studio-card", cardType: "audio", cardData: {
+        title: "EMPTY AUDIO TITLE",
+      } },
+      { type: "studio-card", cardType: "file", cardData: {
+        fileName: "EMPTY FILE NAME",
+      } },
+      { type: "studio-card", cardType: "gallery", cardData: {
+        caption: "EMPTY GALLERY CAPTION",
+        images: [
+          { alt: "NO SOURCE" },
+          "MALFORMED ITEM",
+          null,
+          { src: "", alt: "INVALID ITEM" },
+        ],
+      } },
+    ] } };
+    const original = JSON.stringify(doc);
+    const projected = await resolveDocumentMedia(doc, service, "pub_a");
+    const cards = (projected.root as {
+      children: Array<{ cardData: Record<string, unknown> }>
+    }).children;
+    expect(cards.map((card) => card.cardData)).toEqual([{}, {}, {}, {}, {}]);
+    const json = JSON.stringify(projected);
+    for (const marker of [
+      "EMPTY IMAGE", "EMPTY VIDEO", "EMPTY AUDIO", "EMPTY FILE",
+      "EMPTY GALLERY", "NO SOURCE", "MALFORMED ITEM", "INVALID ITEM",
+    ]) {
+      expect(json).not.toContain(marker);
+    }
+    expect(renderStudioDocumentToHtml(projected)).not.toMatch(/EMPTY|INVALID ITEM/);
+    expect(JSON.stringify(doc)).toBe(original);
+    expect(getMediaById).not.toHaveBeenCalled();
+  });
+
 });
