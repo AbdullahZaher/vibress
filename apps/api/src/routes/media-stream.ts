@@ -223,23 +223,12 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
         return reply.status(404).send();
       }
 
-      // Check if migration to canonical storage has completed with verified marker
-      const migrationMarkerPath = path.join(canonicalMediaRoot, ".media-storage-migrated.json");
-      try {
-        if (fs.existsSync(migrationMarkerPath)) {
-          const markerRaw = await fs.promises.readFile(migrationMarkerPath, "utf8");
-          const marker = JSON.parse(markerRaw);
-          if (marker && marker.version === 1 && marker.status === "complete") {
-            request.log.debug(
-              { rawKey, canonicalPath: path.resolve(canonicalMediaRoot, rawKey) },
-              "Bypassing legacy media fallback: canonical media migration verified complete",
-            );
-            return reply.status(404).send();
-          }
-        }
-      } catch {
-        // If marker file is malformed or unreadable, fall through safely to legacy fallback
-      }
+      // A migration marker is a snapshot, not a guarantee that all legacy
+      // writers have stopped. New legacy media can appear after verification.
+      // Keep the authorized legacy lookup until the operator explicitly sets
+      // VIBRESS_STORAGE_LEGACY_FALLBACK=0 after a verified storage cutover.
+      // Never turn a missing canonical asset into an implicit 404 on the basis
+      // of a potentially stale marker alone.
 
       // Transitional fallback check for legacy API storage directory
       const legacyMediaRoot = path.resolve(
@@ -263,7 +252,7 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
             servedFrom: "transitional_legacy_root",
             canonicalPath: path.resolve(canonicalMediaRoot, rawKey),
             removalCondition:
-              "Vibress v1.2.0 or upon completed sync via scripts/sync-media-storage.ts",
+              "Only after operator-verified cutover; set VIBRESS_STORAGE_LEGACY_FALLBACK=0 when legacy writers have stopped",
           },
           "Serving media asset from transitional legacy root. Run scripts/sync-media-storage.ts to migrate.",
         );
