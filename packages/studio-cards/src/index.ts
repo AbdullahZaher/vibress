@@ -311,7 +311,13 @@ export const CalloutCardDefinition: StudioCardDefinition<CalloutCardData> = {
   renderHtml: (data) => {
     const emoji = escapeHtml(data.emoji || "💡");
     const content = sanitizeHtml(data.text || "");
-    return `<div class="kg-card kg-callout-card bg-${data.backgroundColor}"><span class="emoji">${emoji}</span><div class="content">${content}</div></div>`;
+    // The standalone renderer enforces the same safe CSS-class suffix.
+    // Card renderHtml() can be called directly by consumers, before a final
+    // HTML sanitizer, so never interpolate unvalidated attribute text.
+    const safeBackground = /^[a-zA-Z0-9_-]+$/.test(data.backgroundColor || "")
+      ? data.backgroundColor
+      : "grey";
+    return `<div class="kg-card kg-callout-card bg-${safeBackground}"><span class="emoji">${emoji}</span><div class="content">${content}</div></div>`;
   },
   renderPlainText: (data) => `${data.emoji} ${data.text}`,
 };

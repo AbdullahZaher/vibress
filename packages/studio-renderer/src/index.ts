@@ -52,7 +52,30 @@ export function renderStudioDocumentToHtml(
   // FINAL security boundary: every Studio card's rendered markup passes
   // through the shared allowlist sanitizer before leaving the server.
   // CSP remains a second, independent defense layer.
-  return sanitizeStudioHtml(raw);
+  return sanitizeStudioHtml(raw, { preservePresentationStyles: true });
+}
+
+function mergeOrderedListItems(children: unknown[]): unknown[] {
+  const items: unknown[] = [];
+  let previous: { children: unknown[] } | undefined;
+  for (const child of children) {
+    // Lexical stores nested lists in a separate listitem wrapper. Attach it
+    // to its parent item so the browser does not count the wrapper as a step.
+    if (isListItem(child) && previous && child.children.length > 0 &&
+        child.children.every((node) => typeof node === "object" && node !== null &&
+          "type" in node && node.type === "list")) {
+      previous.children.push(...child.children);
+      continue;
+    }
+    previous = isListItem(child) ? { ...child, children: [...child.children] } : undefined;
+    items.push(previous ?? child);
+  }
+  return items;
+}
+
+function isListItem(node: unknown): node is { type: "listitem"; children: unknown[] } {
+  return typeof node === "object" && node !== null && "type" in node &&
+    node.type === "listitem" && "children" in node && Array.isArray(node.children);
 }
 
 function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingSlugAllocator): string {
@@ -75,6 +98,9 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
   } & Record<string, unknown>;
 
   const type = n.type;
+  const direction = n.direction === "rtl" || n.direction === "ltr"
+    ? ` dir="${n.direction}"`
+    : "";
 
   // Handle TextNode
   if (type === "text") {
@@ -88,7 +114,9 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
     if (format & 4) text = `<s>${text}</s>`;
     if (format & 8) text = `<u>${text}</u>`;
 
-    return text;
+    return typeof n.style === "string" && n.style
+      ? `<span style="${escapeHtml(n.style)}">${text}</span>`
+      : text;
   }
 
   // Render children helper
@@ -119,7 +147,7 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
       const styleAttr = n.style
         ? ` style="${escapeHtml(String(n.style))}"`
         : "";
-      return content ? `<p${styleAttr}>${content}</p>` : "<p></p>";
+      return `<p${direction}${styleAttr}>${content}</p>`;
     }
 
     case "heading": {
@@ -142,18 +170,23 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
       const anchor = slug
         ? `<a href="#${escapeHtml(slug)}" class="heading-anchor" aria-label="Link to section: ${escapeHtml(label)}">#</a>`
         : "";
-      return `<${level}${idAttr}${styleAttr}>${childrenHtml}${anchor}</${level}>`;
+      return `<${level}${idAttr}${direction}${styleAttr}>${childrenHtml}${anchor}</${level}>`;
     }
 
     case "quote":
-      return `<blockquote>${renderChildren()}</blockquote>`;
+      return `<blockquote${direction}>${renderChildren()}</blockquote>`;
 
     case "list": {
       if (n.listType === "check") {
-        return `<ul class="studio-checklist">${renderChildren()}</ul>`;
+        return `<ul class="studio-checklist"${direction}>${renderChildren()}</ul>`;
       }
       const listType = n.listType === "number" ? "ol" : "ul";
-      return `<${listType}>${renderChildren()}</${listType}>`;
+      const start = listType === "ol" && Number.isSafeInteger(n.start) && n.start !== 1
+        ? ` start="${n.start}"`
+        : "";
+      const children = Array.isArray(n.children) ? n.children : [];
+      const items = listType === "ol" ? mergeOrderedListItems(children) : children;
+      return `<${listType}${start}${direction}>${items.map((item) => renderNodeToHtml(item, options, slugs)).join("")}</${listType}>`;
     }
 
     case "listitem": {
@@ -167,7 +200,7 @@ function renderNodeToHtml(node: unknown, options: RenderOptions, slugs: HeadingS
     }
 
     case "table":
-      return `<div class="studio-table-container"><table class="studio-table"><tbody>${renderChildren()}</tbody></table></div>`;
+      return `<div class="studio-table-container"><table class="studio-table"${direction}><tbody>${renderChildren()}</tbody></table></div>`;
 
     case "tablerow":
       return `<tr>${renderChildren()}</tr>`;

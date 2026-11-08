@@ -48,3 +48,17 @@ export function shouldAllowLegacyThemeFallback(
     scope.activeThemeVersion === version
   );
 }
+
+/**
+ * Built-in Molten uses one shipped client script. External theme ZIPs forbid
+ * JavaScript. Keep this exception exact so a broad .js rule cannot expose
+ * editor/server source files.
+ */
+export function isAllowedBuiltInThemeScript(
+  themeId: string,
+  version: string,
+  relativePath: string,
+): boolean {
+  return themeId === "vibress-molten" && version === "1.0.0" &&
+    relativePath === "main.min.js";
+}

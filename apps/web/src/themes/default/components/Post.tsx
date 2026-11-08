@@ -11,6 +11,7 @@ import { ImageLightbox } from "../../../components/reader/ImageLightbox";
 import { CommentSection } from "../../../components/comments/CommentSection";
 import { t } from "../../../lib/i18n";
 import { buildPostJsonLd, safeJsonLdScript } from "../../../lib/seo-helpers";
+import { sanitizeStudioHtml } from "@vibress/studio-utils";
 
 export async function Post(props: ThemePostProps) {
   const post = props.post;
@@ -150,7 +151,17 @@ export async function Post(props: ThemePostProps) {
                 loading="eager"
               />
               {post.featureImage.caption && (
-                <figcaption dangerouslySetInnerHTML={{ __html: post.featureImage.caption }} />
+                <figcaption>
+                  {post.featureImage.caption.includes("<") ? (
+                    <span
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeStudioHtml(post.featureImage.caption),
+                      }}
+                    />
+                  ) : (
+                    post.featureImage.caption
+                  )}
+                </figcaption>
               )}
             </figure>
           )}

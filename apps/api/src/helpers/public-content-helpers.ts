@@ -1,4 +1,4 @@
-import { MediaService } from "@vibress/media";
+import { MediaService, isSafeMediaAssetUrl } from "@vibress/media";
 import { Post } from "@vibress/posts";
 import { Page } from "@vibress/pages";
 import { Tag } from "@vibress/tags";
@@ -35,10 +35,22 @@ export function getSiteUrl(): string {
   }
 }
 
+/**
+ * Build an authorized, read-only public projection. Never change persisted
+ * card data: a denied/deleted media reference must not expose stale fields
+ * previously stored in a document (including foreign src/alt/dimensions).
+ */
 export async function resolveDocumentMedia(
   docInput: unknown,
   mediaService: MediaService,
+  publicationId: string,
 ): Promise<Record<string, unknown>> {
+  // The media repository accepts an optional scope for administrative callers.
+  // This public helper must never call it without a real publication context.
+  if (!publicationId || !publicationId.trim()) {
+    throw new Error("Public media resolution requires a publication ID");
+  }
+
   if (!docInput || typeof docInput !== "object") {
     return {
       schema: "vibress-studio",
@@ -47,9 +59,7 @@ export async function resolveDocumentMedia(
     };
   }
 
-  // Canonicalization first: legacy react-studio-card nodes become
-  // studio-card, so media resolution only ever needs to understand the
-  // canonical representation (no permanent dual branches).
+  // Clone before canonicalizing: this projection never changes stored content.
   const doc = JSON.parse(JSON.stringify(docInput)) as Record<string, unknown>;
   const canonical = normalizeStudioDocument(toRenderablePublicDocument(doc)) as Record<string, unknown>;
   const root = canonical.root as
@@ -58,49 +68,150 @@ export async function resolveDocumentMedia(
     return canonical;
   }
 
+  // A missing assetId means an intentionally embedded external-media reference.
+  // Any nonempty assetId (including a malformed one) MUST be authorized.
+  function hasAssetReference(data: Record<string, unknown>): boolean {
+    return data.assetId !== undefined && data.assetId !== null && data.assetId !== "";
+  }
+
+  // Bare local URLs must be checked against the same publication ownership
+  // gate as the actual /content/media/* stream route. They have no assetId to
+  // authorize, and otherwise retain stale captions/alt text in public JSON.
+  function getLocalMediaStorageKey(url: string): string | null {
+    // An absolute URL pointing to a Vibress media stream must not turn a
+    // publication-scoped catalog URL into an unverified external reference.
+    // Without assetId we cannot know ownership of a different site's host.
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        return new URL(url).pathname.startsWith("/content/media/") ? "" : null;
+      } catch {
+        return "";
+      }
+    }
+    const pathOnly = url.split(/[?#]/, 1)[0] || "";
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(pathOnly);
+    } catch {
+      return ""; // Malformed escape sequences must not bypass a local path.
+    }
+    if (!decoded.startsWith("/content/media/")) {
+      // Relative media stream paths can resolve to /content/media/ on a
+      // root-mounted published page. Never treat these as remote embeds.
+      const relative = decoded.replace(/^(?:\.\/)+/, "");
+      return relative.startsWith("content/media/") ||
+        relative.includes("/content/media/") ? "" : null;
+    }
+    const key = decoded.slice("/content/media/".length);
+    if (decoded !== pathOnly || url !== pathOnly || !key ||
+        key.includes("\\") || key.includes("\0") ||
+        key.split("/").some((segment) => !segment || segment === "." || segment === "..")) {
+      return "";
+    }
+    return key;
+  }
+
+  async function isAuthorizedEmbeddedMediaUrl(value: unknown): Promise<boolean> {
+    if (!isSafeMediaAssetUrl(value)) return false;
+    const localStorageKey = getLocalMediaStorageKey(value);
+    if (localStorageKey === null) return true; // e.g. legitimate HTTPS embeds
+    if (!localStorageKey) return false;
+    try {
+      return await mediaService.canStreamLocalMedia(localStorageKey, publicationId);
+    } catch {
+      return false;
+    }
+  }
+
+  async function scrubOptionalMediaUrls(data: Record<string, unknown>): Promise<void> {
+    for (const field of ["poster", "thumbnail"]) {
+      if (data[field] !== undefined && data[field] !== "" &&
+          !await isAuthorizedEmbeddedMediaUrl(data[field])) {
+        delete data[field];
+      }
+    }
+    // An image link can legitimately be mailto:/tel: or an ordinary page
+    // route. Only media-stream links need the media ownership gate; the HTML
+    // renderer separately validates ordinary hyperlink protocols.
+    if (typeof data.href === "string" &&
+        data.href.includes("/content/media/") &&
+        !await isAuthorizedEmbeddedMediaUrl(data.href)) {
+      delete data.href;
+    }
+  }
+
+  async function resolveScopedAsset(
+    data: Record<string, unknown>,
+    populateImageDimensions: boolean,
+  ): Promise<boolean> {
+    if (typeof data.assetId !== "string" || !data.assetId.trim()) {
+      return false;
+    }
+    try {
+      const asset = await mediaService.getMediaById(data.assetId.trim(), publicationId);
+      // Defense in depth even if an alternative media repository ignores scope.
+      if (!asset || asset.publicationId !== publicationId) return false;
+      const url = await mediaService.getMediaUrl(asset);
+      if (!isSafeMediaAssetUrl(url)) return false;
+      data.src = url;
+      if (populateImageDimensions) {
+        if (asset.width) data.width = asset.width;
+        if (asset.height) data.height = asset.height;
+      }
+      if (asset.displayName && !data.alt) data.alt = asset.displayName;
+      return true;
+    } catch {
+      // A missing, deleted, foreign or unavailable asset always fails closed.
+      return false;
+    }
+  }
+
   async function processNode(node: unknown): Promise<void> {
     if (!node || typeof node !== "object") return;
     const n = node as Record<string, unknown>;
 
-    if (n.type === "studio-card" && n.cardData) {
+    if (n.type === "studio-card" && n.cardData &&
+        typeof n.cardData === "object" && !Array.isArray(n.cardData)) {
       const data = n.cardData as Record<string, unknown>;
 
-      // Handle singular assetId (image, video, audio, file)
-      if (typeof data.assetId === "string" && data.assetId.trim()) {
-        try {
-          const asset = await mediaService.getMediaById(data.assetId.trim());
-          if (asset) {
-            data.src = await mediaService.getMediaUrl(asset);
-            if (n.cardType === "image") {
-              if (asset.width) data.width = asset.width;
-              if (asset.height) data.height = asset.height;
-              if (asset.displayName && !data.alt) data.alt = asset.displayName;
-            }
-          }
-        } catch {
-          // Keep existing src or fallback silently
+      if (hasAssetReference(data)) {
+        const allowed = await resolveScopedAsset(data, n.cardType === "image");
+        if (!allowed) {
+          // The rejected payload may contain previously published foreign metadata.
+          n.cardData = {};
         }
+      } else if (["image", "video", "audio", "file"].includes(String(n.cardType)) &&
+          (typeof data.src !== "string" || !data.src ||
+            !await isAuthorizedEmbeddedMediaUrl(data.src))) {
+        // A media card without an authorized source is not renderable, and
+        // its captions/titles must not survive in public JSON or excerpts.
+        n.cardData = {};
       }
+      if (n.cardData === data) await scrubOptionalMediaUrls(data);
 
-      // Handle gallery assetIds / images array
-      if (Array.isArray(data.images)) {
-        for (const imgItem of data.images) {
-          const img = imgItem as Record<string, unknown> | null;
-          if (
-            img &&
-            typeof img === "object" &&
-            typeof img.assetId === "string"
-          ) {
-            try {
-              const asset = await mediaService.getMediaById(img.assetId.trim());
-              if (asset) {
-                img.src = await mediaService.getMediaUrl(asset);
-                if (asset.displayName && !img.alt) img.alt = asset.displayName;
-              }
-            } catch {
-              // Fallback
-            }
+      // A gallery may contain both authorized and foreign items. Keep only
+      // authorized asset-backed items, plus supported external items without
+      // asset IDs; do not erase legitimate neighbors or the gallery caption.
+      if (Array.isArray(data.images) && n.cardData === data) {
+        const authorizedImages: unknown[] = [];
+        for (const item of data.images) {
+          if (!item || typeof item !== "object" || Array.isArray(item)) {
+            continue; // Malformed entries are not publication media.
           }
+          const image = item as Record<string, unknown>;
+          const allowed = hasAssetReference(image)
+            ? await resolveScopedAsset(image, true)
+            : typeof image.src === "string" && Boolean(image.src) &&
+              await isAuthorizedEmbeddedMediaUrl(image.src);
+          if (allowed) {
+            await scrubOptionalMediaUrls(image);
+            authorizedImages.push(image);
+          }
+        }
+        if (authorizedImages.length === 0) {
+          n.cardData = {}; // Do not publish a removed gallery's stale caption.
+        } else {
+          data.images = authorizedImages;
         }
       }
     }
@@ -137,7 +248,7 @@ export function extractFeatureImage(
     if (n.type === "studio-card" && n.cardType === "image" && n.cardData) {
       const cardData = n.cardData as Record<string, unknown>;
       const src = cardData.src;
-      if (src && typeof src === "string") {
+      if (isSafeMediaAssetUrl(src)) {
         found = {
           id: (cardData.assetId as string) || "embedded-img",
           url: src,
@@ -222,27 +333,44 @@ export async function buildPublicPostSummaryDto(
   commentCount?: number,
   localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPostSummaryDto> {
-  const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    post.content,
+    mediaService,
+    post.publicationId,
+  );
   let featureImage: PublicMediaDto | null = null;
   if (post.featureImageId) {
     try {
       const asset = await mediaService.getMediaById(post.featureImageId, post.publicationId);
-      if (asset) {
-        const unsplashHotlinkUrl = (asset.metadata as any)?.unsplash?.urls?.regular;
-        const url = unsplashHotlinkUrl || (await mediaService.getMediaUrl(asset));
-        const unsplashMeta = (asset.metadata as any)?.unsplash;
-        const defaultCaption = unsplashMeta?.photographerName
-          ? `Photo by [${unsplashMeta.photographerName}](${unsplashMeta.photographerUrl}) on [Unsplash](${unsplashMeta.photoUrl})`
-          : null;
-        featureImage = {
-          id: asset.id,
-          url,
-          alt: post.featureImageAlt || asset.displayName || post.title,
-          caption: post.featureImageCaption || defaultCaption,
-          assetType: "image",
-          width: asset.width ?? null,
-          height: asset.height ?? null,
-        };
+      if (asset && asset.publicationId === post.publicationId) {
+        const metadata = asset.metadata as Record<string, unknown> | null;
+        const unsplash = metadata?.unsplash;
+        const unsplashMeta = unsplash && typeof unsplash === "object"
+          ? unsplash as Record<string, unknown> : null;
+        const urls = unsplashMeta?.urls;
+        const unsplashUrls = urls && typeof urls === "object"
+          ? urls as Record<string, unknown> : null;
+        const candidate = unsplashUrls?.regular;
+        const url = isSafeMediaAssetUrl(candidate)
+          ? candidate : await mediaService.getMediaUrl(asset);
+        if (isSafeMediaAssetUrl(url)) {
+          const photographerName = unsplashMeta?.photographerName;
+          const photographerUrl = unsplashMeta?.photographerUrl;
+          const photoUrl = unsplashMeta?.photoUrl;
+          const defaultCaption = typeof photographerName === "string" &&
+            isSafeMediaAssetUrl(photographerUrl) && isSafeMediaAssetUrl(photoUrl)
+            ? `Photo by [${photographerName}](${photographerUrl}) on [Unsplash](${photoUrl})`
+            : null;
+          featureImage = {
+            id: asset.id,
+            url,
+            alt: post.featureImageAlt || asset.displayName || post.title,
+            caption: post.featureImageCaption || defaultCaption,
+            assetType: "image",
+            width: asset.width ?? null,
+            height: asset.height ?? null,
+          };
+        }
       }
     } catch {
       // Fallback to legacy extraction if asset not found
@@ -267,7 +395,7 @@ export async function buildPublicPostSummaryDto(
 
   const formattedTags = (tags || []).map(formatPublicTag);
 
-  const excerpt = deriveExcerpt(post.excerpt, post.content);
+  const excerpt = deriveExcerpt(post.excerpt, resolvedDoc);
   const postWithLocale = post as Post & { locale?: string };
   const postLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? postWithLocale.locale ?? "en";
   const postDirection = getDirection(postLocale);
@@ -338,7 +466,11 @@ export async function buildPublicPostDetailDto(
     commentCount,
     localeContext,
   );
-  const resolvedDoc = await resolveDocumentMedia(post.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    post.content,
+    mediaService,
+    post.publicationId,
+  );
   // Read-only publication compatibility: never rewrite the persisted DTO.
   // Older TipTap JSON may be rendered through a strictly allowlisted projection.
   let renderable: unknown = resolvedDoc;
@@ -372,7 +504,11 @@ export async function buildPublicPageDetailDto(
   mediaService: MediaService,
   localeContext?: PublicContentLocaleContext,
 ): Promise<PublicPageDetailDto> {
-  const resolvedDoc = await resolveDocumentMedia(page.content, mediaService);
+  const resolvedDoc = await resolveDocumentMedia(
+    page.content,
+    mediaService,
+    page.publicationId,
+  );
   const featureImage = extractFeatureImage(resolvedDoc);
   let renderable: unknown = resolvedDoc;
   try { renderable = toRenderablePublicDocument(resolvedDoc); } catch {
@@ -380,7 +516,7 @@ export async function buildPublicPageDetailDto(
   }
   const siteUrl = getSiteUrl();
 
-  const excerpt = deriveExcerpt(page.excerpt, page.content);
+  const excerpt = deriveExcerpt(page.excerpt, resolvedDoc);
   const pageWithLocale = page as Page & { locale?: string };
   const pageLocale = localeContext?.locale ?? localeContext?.primaryLocale ?? pageWithLocale.locale ?? "en";
   const pageDirection = getDirection(pageLocale);

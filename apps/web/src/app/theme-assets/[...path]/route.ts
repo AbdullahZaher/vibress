@@ -3,9 +3,12 @@ import fs from "fs";
 import path from "path";
 import {
   isPublicExternalThemeAssetPath,
+  isAllowedBuiltInThemeScript,
   shouldAllowLegacyThemeFallback,
   type PublicationThemeScope,
 } from "../../../lib/theme-asset-scope";
+import { themeAssetResponseHeaders } from "../../../lib/theme-asset-headers";
+import { resolveContainedThemeAsset } from "../../../lib/theme-asset-files";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +123,11 @@ function resolveThemeAssetPath(
   ) {
     return null;
   }
+
+  // Only presentation assets are public. Never serve theme.ts, Markdown,
+  // private manifests, templates or executable scripts from source folders.
+  if (!isPublicExternalThemeAssetPath(relativePath) &&
+      !isAllowedBuiltInThemeScript(themeId, version, relativePath)) return null;
 
   const publicationId = scope?.publicationId ?? null;
   if (
@@ -283,9 +291,8 @@ function resolveThemeAssetPath(
       path.join(themeRoot, fileName),
     ];
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-        return candidate;
-      }
+      const safePath = resolveContainedThemeAsset(themeRoot, candidate);
+      if (safePath) return safePath;
     }
   }
 
@@ -351,9 +358,8 @@ function resolveThemeAssetPath(
   ];
 
   for (const candidate of builtinPaths) {
-    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-      return candidate;
-    }
+    const safePath = resolveContainedThemeAsset(path.dirname(candidate), candidate);
+    if (safePath) return safePath;
   }
 
   return null;
@@ -417,7 +423,7 @@ export async function GET(
     let responseBody: BodyInit;
 
     if (isText) {
-      let text = fs.readFileSync(assetPath, "utf-8");
+      let text = await fs.promises.readFile(assetPath, "utf-8");
       if (fileName.endsWith(".css")) {
         const sharedCardsPath = [
           path.join(
@@ -439,13 +445,13 @@ export async function GET(
         ].find((p) => fs.existsSync(p));
 
         if (sharedCardsPath) {
-          const sharedCardsCss = fs.readFileSync(sharedCardsPath, "utf-8");
+          const sharedCardsCss = await fs.promises.readFile(sharedCardsPath, "utf-8");
           text = `${text}\n\n${sharedCardsCss}`;
         }
       }
       responseBody = text;
     } else {
-      const buffer = fs.readFileSync(assetPath);
+      const buffer = await fs.promises.readFile(assetPath);
       responseBody = new Uint8Array(buffer);
     }
 
@@ -453,11 +459,10 @@ export async function GET(
       ? "public, max-age=3600, stale-while-revalidate=86400"
       : "no-cache, no-store, must-revalidate";
 
+    const responseHeaders = themeAssetResponseHeaders(mimeType, cacheControl);
+
     return new NextResponse(responseBody, {
-      headers: {
-        "Content-Type": mimeType,
-        "Cache-Control": cacheControl,
-      },
+      headers: responseHeaders,
     });
   } catch (error) {
     console.error("Error reading theme asset:", error);

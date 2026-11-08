@@ -8,6 +8,14 @@ import {
 import { sanitizeHtml } from "../index";
 
 describe("sanitizeStudioHtml — allowlist sanitizer", () => {
+  it("allows only safe color declarations when rendering Studio presentation styles", () => {
+    const html = '<span style="color: #123456; position: fixed; background-color: rgb(4, 5, 6); color: url(https://example.com/x); --x: red; color: var(--x)">Text</span>';
+    expect(sanitizeStudioHtml(html)).toBe("<span>Text</span>");
+    expect(sanitizeStudioHtml(html, { preservePresentationStyles: true })).toBe(
+      '<span style="color: #123456; background-color: rgb(4, 5, 6)">Text</span>',
+    );
+  });
+
   it("blocks script tags entirely", () => {
     const out = sanitizeStudioHtml("<p>hi</p><script>alert(1)</script>");
     expect(out).not.toContain("<script");
@@ -169,5 +177,29 @@ describe("isSafeProtocolUrl", () => {
   it("allows only raster data: images", () => {
     expect(isSafeProtocolUrl("data:image/png;base64,iVBOR")).toBe(true);
     expect(isSafeProtocolUrl("data:image/svg+xml;base64,PHN2Zz4=")).toBe(false);
+  });
+
+  it("completely discards RAWTEXT containers without unwrapping malicious child nodes", () => {
+    expect(sanitizeStudioHtml("<script><img src=x onerror=alert(1)></script>")).toBe("");
+    expect(sanitizeStudioHtml("<style><img src=x onerror=alert(2)></style>")).toBe("");
+    expect(sanitizeStudioHtml("<textarea><script>alert(3)</script></textarea>")).toBe("");
+    expect(sanitizeStudioHtml("<title><img src=x onerror=alert(4)></title>")).toBe("");
+  });
+
+  it("neutralizes MathML/RAWTEXT mutation-XSS vectors and prevents executable tags", () => {
+    expect(sanitizeStudioHtml('<math><style><img src=x onerror=alert(1)></style></math>')).toBe('<img src="x">');
+    expect(sanitizeStudioHtml('<math><style><img src=x onerror=alert(1)></style></math>')).not.toMatch(/onerror|alert/i);
+    expect(sanitizeStudioHtml('<svg><style><script>alert(1)</script></style></svg>')).toBe("");
+    expect(sanitizeStudioHtml('<math><mtext><style><!--</style><script>alert(1)</script></mtext></math>')).toBe("");
+
+    const mxss = sanitizeStudioHtml('<math><mtext><table><mglyph><style><!--</style><img src=x onerror=alert(1)>');
+    expect(mxss).not.toMatch(/onerror|alert/i);
+  });
+
+  it("rejects entity-obfuscated and control-character-laden protocol schemes", () => {
+    expect(isSafeProtocolUrl("java\u0000script:alert(1)")).toBe(false);
+    expect(isSafeProtocolUrl("java&#x09;script:alert(1)")).toBe(false);
+    expect(isSafeProtocolUrl("java&tab;script:alert(1)")).toBe(false);
+    expect(isSafeProtocolUrl("javascript&colon;alert(1)")).toBe(false);
   });
 });

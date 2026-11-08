@@ -2,11 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getNodeByKey,
-  $getNearestNodeFromDOMNode,
+  $getRoot,
   $createParagraphNode,
-  $isRootOrShadowRoot,
   $isElementNode,
-  LexicalNode,
 } from "lexical";
 import { createPortal } from "react-dom";
 import {
@@ -87,25 +85,18 @@ export function BlockHandleGutterPlugin({
       }
 
       if (blockElem && blockElem.parentElement === rootElement) {
-        editor.getEditorState().read(() => {
-          if (!blockElem) return;
-          const node = $getNearestNodeFromDOMNode(blockElem);
-          if (node) {
-            let topNode: LexicalNode = node;
-            while (
-              topNode.getParent() &&
-              !$isRootOrShadowRoot(topNode.getParent())
-            ) {
-              const parent = topNode.getParent();
-              if (parent) topNode = parent;
-            }
-            setHoveredNodeKey(topNode.getKey());
-            setTargetRect(blockElem.getBoundingClientRect());
-          }
-        });
+        // Lexical 0.13 editor-state reads have no active editor for DOM
+        // lookup. Match the top-level element through the editor instance.
+        const blockKey = hoveredNodeKey && editor.getElementByKey(hoveredNodeKey) === blockElem
+          ? hoveredNodeKey
+          : editor.getEditorState().read(() =>
+              $getRoot().getChildrenKeys().find((key) => editor.getElementByKey(key) === blockElem),
+            );
+        setHoveredNodeKey(blockKey ?? null);
+        setTargetRect(blockKey ? blockElem.getBoundingClientRect() : null);
       }
     },
-    [editor, showMenu],
+    [editor, hoveredNodeKey, showMenu],
   );
 
   useEffect(() => {

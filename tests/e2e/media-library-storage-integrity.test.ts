@@ -6,21 +6,20 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { resolveCanonicalStorageRoot, LocalStorageProvider, StorageRegistry } from "@vibress/storage-core";
 import { MediaService } from "@vibress/media";
+import { SAMPLE_JPEG } from "./fixtures/decodable-jpeg";
+
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
+const API = process.env.API_URL || "http://127.0.0.1:7780";
 
 const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 const PUBLICATION_ID = "pub_default";
-
-const SAMPLE_JPEG = Buffer.from(
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCwApw//9k=",
-  "base64",
-);
 
 async function loginUser(
   page: any,
   email = "owner@example.com",
   password = "OwnerPass123!",
 ) {
-  await page.goto("http://localhost:7777/admin");
+  await page.goto(`${BASE}/admin/`);
   const retryBtn = page.locator('button:has-text("Retry")');
   if (await retryBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
     await retryBtn.click();
@@ -129,7 +128,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
         .split("/")
         .map((p: string) => encodeURIComponent(p))
         .join("/");
-      const res = await request.get(`http://127.0.0.1:7780/content/media/${encodedKey}`);
+      const res = await request.get(`${API}/content/media/${encodedKey}`);
       expect(res.status()).toBe(200);
       expect(res.headers()["content-type"]).toBe(asset.mime_type);
       const body = await res.body();
@@ -164,7 +163,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     try {
       // Verify streaming endpoint serves it with HTTP 200
       const encodedKey = relKey.split("/").map((p) => encodeURIComponent(p)).join("/");
-      const res = await request.get(`http://127.0.0.1:7780/content/media/${encodedKey}`);
+      const res = await request.get(`${API}/content/media/${encodedKey}`);
       expect(res.status()).toBe(200);
       expect(res.headers()["x-content-type-options"]).toBe("nosniff");
       const body = await res.body();
@@ -205,7 +204,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
       // Ensure post starts without a feature image so the Add trigger is directly active
       await pool.query("UPDATE posts SET feature_image_id = NULL WHERE id = $1", [TARGET_POST_ID]);
       await loginUser(page);
-      await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+      await page.goto(`${BASE}/admin/posts/${TARGET_POST_ID}`);
       await expect(
         page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
       ).toBeVisible({ timeout: 15000 });
@@ -250,7 +249,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
   }) => {
     test.setTimeout(60000);
     await loginUser(page);
-    await page.goto(`http://localhost:7777/admin/posts/${TARGET_POST_ID}`);
+    await page.goto(`${BASE}/admin/posts/${TARGET_POST_ID}`);
     await expect(
       page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
     ).toBeVisible({ timeout: 15000 });
@@ -359,7 +358,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
 
     try {
       await loginUser(page);
-      await page.goto("http://localhost:7777/admin/media");
+      await page.goto(`${BASE}/admin/media`);
       await page.waitForSelector('text=Media Library', { timeout: 15000 }).catch(() => {});
 
       // Verify the page doesn't crash or show white screen
@@ -384,7 +383,7 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
   }) => {
     test.setTimeout(60000);
     await loginUser(page);
-    await page.goto("http://localhost:7777/admin/media");
+    await page.goto(`${BASE}/admin/media`);
     await page.waitForLoadState("networkidle");
 
     // Check images before reload
@@ -437,12 +436,12 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     request,
   }) => {
     const badPaths = [
-      "http://127.0.0.1:7780/content/media/../package.json",
-      "http://127.0.0.1:7780/content/media/%2e%2e%2fpackage.json",
-      "http://127.0.0.1:7780/content/media/media/..%2f..%2fpackage.json",
-      "http://127.0.0.1:7780/content/media/..\\..\\package.json",
-      "http://127.0.0.1:7780/content/media/%00package.json",
-      "http://127.0.0.1:7780/content/media//etc/passwd",
+      `${API}/content/media/../package.json`,
+      `${API}/content/media/%2e%2e%2fpackage.json`,
+      `${API}/content/media/media/..%2f..%2fpackage.json`,
+      `${API}/content/media/..\\..\\package.json`,
+      `${API}/content/media/%00package.json`,
+      `${API}/content/media//etc/passwd`,
     ];
 
     for (const badUrl of badPaths) {

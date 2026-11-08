@@ -246,6 +246,28 @@ describe("MediaService Application Use Cases", () => {
       expect(url).toBe("https://images.unsplash.com/photo-sample");
     });
 
+    it("rejects executable, credentialed and protocol-relative metadata URLs", async () => {
+      for (const candidate of [
+        "javascript:alert(1)",
+        "data:text/html,<script>alert(1)</script>",
+        "//foreign.example/stale.jpg",
+        "https://user:secret@foreign.example/private.jpg",
+        "blob:https://example.com/123",
+      ]) {
+        const asset: MediaAsset = {
+          ...sampleAsset,
+          storageProvider: "external-unregistered",
+          metadata: { sourceUrl: candidate },
+        };
+        expect(await mediaService.getMediaUrl(asset)).toBeNull();
+      }
+    });
+
+    it("rejects an unsafe URL returned by an installed storage provider", async () => {
+      vi.mocked(mockStorage.getUrl).mockResolvedValue("javascript:alert(1)");
+      expect(await mediaService.getMediaUrl(sampleAsset)).toBeNull();
+    });
+
     it("falls back to active provider when storageProvider is null/undefined", async () => {
       const defaultAsset: MediaAsset = {
         ...sampleAsset,

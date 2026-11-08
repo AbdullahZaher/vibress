@@ -145,7 +145,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
   # PR gate: gateway smoke + media streaming, image picker, and traversal checks.
-  # Main release gate: full Playwright suite including fresh-install wizard.
+  # Main and Studio Beta PR #141: full Playwright suite including fresh-install wizard.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -156,6 +156,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.number == 141 && github.event.pull_request.head.sha || github.sha }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -186,6 +188,7 @@ jobs:
 
       - name: Run E2E suite (dev stack + fresh-install wizard)
         env:
+          FULL_STUDIO_BETA_E2E: ${{ github.event.pull_request.number == 141 }}
           DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
           REDIS_URL: "redis://127.0.0.1:6380"
           VIBRESS_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -208,6 +211,8 @@ jobs:
         # runner.
         run: |
           set -e
+          git log -1 --format='Checkout %H'
+          git status --short --untracked-files=no
 
           # --- Dev infrastructure + migrations + seed ---
           docker compose -f compose.dev.yml up -d --wait
@@ -241,7 +246,7 @@ jobs:
           done
           curl -sf http://127.0.0.1:7777/ >/dev/null || { echo 'gateway -> web round-trip failed'; tail -40 /tmp/web.log; tail -40 /tmp/api.log; exit 1; }
 
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ] || [ "$FULL_STUDIO_BETA_E2E" = "true" ]; then
             # --- Fresh-install stack (setup wizard E2E, :8899) ---
             # No `--wait`: the one-shot migrate service exits (0) and
             # `up --wait` treats any exited container as a failure.
@@ -261,12 +266,26 @@ jobs:
           # run its fallback pnpm dev webServer and collide with ports.
           export PLAYWRIGHT_SKIP_WEBSERVER=1
           mkdir -p artifacts/theme-studio-ci
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          if [ "$FULL_STUDIO_BETA_E2E" = "true" ]; then
+            pnpm exec playwright --version
+            node -e 'const { chromium } = require("@playwright/test"); (async () => { const browser = await chromium.launch(); console.log("Chromium " + browser.version()); await browser.close(); })().catch(error => { console.error(error); process.exitCode = 1; });'
+            pnpm exec playwright test --list
+            pnpm exec playwright test
+          elif [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             # PR gate: gateway health, upload/traversal regressions and a real
             # authenticated collaboration WebSocket handshake via Nginx.
             # Keep the complete install/functional suite on main pushes.
             npx playwright test tests/e2e/smoke.test.ts tests/e2e/media-library-storage-integrity.test.ts --grep 'Vibress Foundation Smoke Tests|TEST (B|C|J):'
             npx playwright test tests/e2e/auth-flow.test.ts tests/e2e/collaboration-websocket-gateway.test.ts tests/e2e/settings-full-suite.test.ts tests/e2e/studio-card-selection.test.ts tests/e2e/studio-media-toolbar.test.ts tests/e2e/collaboration-truncation-regression.test.ts tests/e2e/collaboration-feature-image-isolation.test.ts
+
+            # Beta-freeze acceptance: execute all four previously failing host
+            # browser files against these same authenticated real services.
+            # Do not replace their assertions with mocks or omit from the PR gate.
+            pnpm exec playwright test \
+              tests/e2e/collaboration-crdt-lifecycle.test.ts \
+              tests/e2e/content-modeler-flow.test.ts \
+              tests/e2e/image-truncation-forensic.test.ts \
+              tests/e2e/media-flow.test.ts
 
             # Required Native Admin UI PR acceptance: real Fastify/PostgreSQL/Redis
             # browser workflow (owns disposable services), plus fast RTL UI regressions.

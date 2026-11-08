@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
+
 test.describe("Studio Real-Time Collaboration & Editorial Review E2E", () => {
   test("Two independent browser contexts editing document and editorial workflow", async ({
     browser,
@@ -7,7 +9,7 @@ test.describe("Studio Real-Time Collaboration & Editorial Review E2E", () => {
     // 1. Context A: Login as Owner
     const contextA = await browser.newContext();
     const pageA = await contextA.newPage();
-    await pageA.goto("http://localhost:7777/admin/login");
+    await pageA.goto(`${BASE}/admin/login`);
     await pageA.fill("#email", "owner@example.com");
     await pageA.fill("#password", "OwnerPass123!");
     await pageA.click('button[type="submit"]');
@@ -29,7 +31,7 @@ test.describe("Studio Real-Time Collaboration & Editorial Review E2E", () => {
     // 2. Context B: Login as Admin
     const contextB = await browser.newContext();
     const pageB = await contextB.newPage();
-    await pageB.goto("http://localhost:7777/admin/login");
+    await pageB.goto(`${BASE}/admin/login`);
     await pageB.fill("#email", "owner@example.com");
     await pageB.fill("#password", "OwnerPass123!");
     await pageB.click('button[type="submit"]');

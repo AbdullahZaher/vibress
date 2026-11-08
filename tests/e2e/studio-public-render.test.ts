@@ -155,6 +155,13 @@ async function pickAsset(page: Page, title: string) {
 test.describe("Studio public rendering", () => {
   let postSlug = "";
   let pageSlug = "";
+  // Both publishing flows use catalog-backed assets created for the test
+  // publication. A synthetic /content/media URL must never bypass scoping.
+  let imageAId = "";
+  let imageBId = "";
+  let videoId = "";
+  let audioId = "";
+  let fileId = "";
   // The 13-card Post flow inserts + configures every card through the real
   // Studio UI and publishes — allow it more time than the default 30s.
   test.setTimeout(180 * 1000);
@@ -167,11 +174,11 @@ test.describe("Studio public rendering", () => {
       },
       data: { email: "owner@example.com", password: "OwnerPass123!" },
     });
-    await uploadAsset(request, "e2e-img-a.png", "image/png", PNG_1x1);
-    await uploadAsset(request, "e2e-img-b.png", "image/png", PNG_1x1);
-    await uploadAsset(request, "e2e-video.mp4", "video/mp4", MINI_MP4);
-    await uploadAsset(request, "e2e-audio.mp3", "audio/mpeg", MINI_MP3);
-    await uploadAsset(request, "e2e-file.pdf", "application/pdf", MINI_PDF);
+    imageAId = await uploadAsset(request, "e2e-img-a.png", "image/png", PNG_1x1);
+    imageBId = await uploadAsset(request, "e2e-img-b.png", "image/png", PNG_1x1);
+    videoId = await uploadAsset(request, "e2e-video.mp4", "video/mp4", MINI_MP4);
+    audioId = await uploadAsset(request, "e2e-audio.mp3", "audio/mpeg", MINI_MP3);
+    fileId = await uploadAsset(request, "e2e-file.pdf", "application/pdf", MINI_PDF);
   });
 
   test("[Post] all 13 Studio cards render on the published public page", async ({
@@ -400,7 +407,7 @@ test.describe("Studio public rendering", () => {
       {
         type: "studio-card",
         cardType: "image",
-        cardData: { src: `${BASE}/content/media/e2e-img.png`, alt: "p image" },
+        cardData: { assetId: imageAId, alt: "p image" },
         version: 1,
       },
       {
@@ -408,8 +415,8 @@ test.describe("Studio public rendering", () => {
         cardType: "gallery",
         cardData: {
           images: [
-            { src: `${BASE}/g1.png`, alt: "one" },
-            { src: `${BASE}/g2.png`, alt: "two" },
+            { assetId: imageAId, alt: "one" },
+            { assetId: imageBId, alt: "two" },
           ],
         },
         version: 1,
@@ -417,20 +424,20 @@ test.describe("Studio public rendering", () => {
       {
         type: "studio-card",
         cardType: "video",
-        cardData: { src: `${BASE}/v.mp4`, caption: "vid" },
+        cardData: { assetId: videoId, caption: "vid" },
         version: 1,
       },
       {
         type: "studio-card",
         cardType: "audio",
-        cardData: { src: `${BASE}/a.mp3`, title: "pod" },
+        cardData: { assetId: audioId, title: "pod" },
         version: 1,
       },
       {
         type: "studio-card",
         cardType: "file",
         cardData: {
-          src: `${BASE}/f.pdf`,
+          assetId: fileId,
           fileName: "report.pdf",
           fileSize: "1.2 MB",
         },
@@ -523,7 +530,11 @@ test.describe("Studio public rendering", () => {
     await page.goto(`${BASE}/pages/${pageSlug}`);
     await page.waitForSelector(".vb-content", { timeout: 15000 });
     await expect(page.locator("figure.kg-image-card img")).toBeVisible();
+    await expect(page.locator("figure.kg-image-card img")).toHaveAttribute(
+      "src", /\/content\/media\//,
+    );
     await expect(page.locator("figure.kg-gallery-card")).toBeVisible();
+    await expect(page.locator("figure.kg-gallery-card img")).toHaveCount(2);
     await expect(page.locator("video[controls]")).toBeVisible();
     await expect(page.locator("audio[controls]")).toBeVisible();
     await expect(page.locator(".kg-file-card a")).toBeVisible();

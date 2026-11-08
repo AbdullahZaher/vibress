@@ -19,7 +19,11 @@ export interface ListMediaFilter {
 
 export interface MediaRepository {
   findById(id: string, publicationId?: string): Promise<MediaAsset | null>;
-  findByStorageKey(storageKey: string, publicationId?: string): Promise<MediaAsset | null>;
+  findByStorageKey(
+    storageKey: string,
+    publicationId?: string,
+    options?: { includeDeleted?: boolean },
+  ): Promise<MediaAsset | null>;
   create(
     asset: Omit<MediaAsset, "createdAt" | "updatedAt">,
   ): Promise<MediaAsset>;

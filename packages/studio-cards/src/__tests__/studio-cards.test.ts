@@ -55,6 +55,25 @@ describe("Studio Card Definitions", () => {
   });
 
   describe("CalloutCard", () => {
+    it("does not permit HTML attribute injection through backgroundColor on direct render", () => {
+      const data = CalloutCardDefinition.validate({
+        text: "Safe body",
+        emoji: "💡",
+        backgroundColor: 'grey" onmouseover="alert(1)',
+      });
+      const html = CalloutCardDefinition.renderHtml(data);
+      expect(html).toContain('class="kg-card kg-callout-card bg-grey"');
+      expect(html).not.toMatch(/onmouseover|alert\(1\)/i);
+      expect(html).toContain("Safe body");
+    });
+
+    it("preserves safe custom background-color class names", () => {
+      const data = CalloutCardDefinition.validate({
+        text: "Hello",
+        backgroundColor: "custom_blue-700",
+      });
+      expect(CalloutCardDefinition.renderHtml(data)).toContain("bg-custom_blue-700");
+    });
     it("validates and renders callout with emoji and custom color", () => {
       const data = CalloutCardDefinition.validate({
         text: "<strong>Important:</strong> Please read before continuing.",

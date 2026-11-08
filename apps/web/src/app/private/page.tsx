@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { getSafeRedirectUrl } from "@/lib/safe-redirect";
 
 function PrivateGateContent() {
   const [password, setPassword] = useState("");
@@ -9,7 +10,7 @@ function PrivateGateContent() {
   const [isLoading, setIsLoading] = useState(false);
   const searchParams = useSearchParams();
 
-  const returnTo = searchParams.get("r") || "/";
+  const returnTo = getSafeRedirectUrl(searchParams.get("r"));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

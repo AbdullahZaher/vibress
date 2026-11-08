@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { resolveCanonicalStorageRoot } from "@vibress/storage-core";
 import { getConfig } from "@vibress/config";
-import { settingsService, workspaceService } from "../services";
+import { mediaService, settingsService, workspaceService } from "../services";
 import {
   SITE_AUTH_COOKIE_NAME,
   verifySiteAuthToken,
@@ -170,6 +170,7 @@ async function requirePublicMediaAccess(
 
   if (!isPrivate) return;
 
+  reply.header("Cache-Control", "private, no-store");
   const token = request.cookies?.[SITE_AUTH_COOKIE_NAME] as string | undefined;
   const hasSiteAuth = verifySiteAuthToken(
     token,
@@ -205,7 +206,8 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
     ) {
       return reply.status(404).send();
     }
-    let resolved = path.resolve(canonicalMediaRoot, rawKey);
+    let storageRoot = canonicalMediaRoot;
+    let resolved = path.resolve(storageRoot, rawKey);
     if (
       !resolved.startsWith(canonicalMediaRoot + path.sep) &&
       resolved !== canonicalMediaRoot
@@ -213,9 +215,8 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
       return reply.status(404).send();
     }
 
-    let stat: fs.Stats;
     try {
-      stat = await fs.promises.stat(resolved);
+      resolved = await fs.promises.realpath(resolved);
     } catch {
       // Transitional fallback check for legacy API storage directory
       const legacyMediaRoot = path.resolve(
@@ -226,13 +227,13 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
         "media",
       );
       const legacyResolved = path.resolve(legacyMediaRoot, rawKey);
-      if (
-        (legacyResolved.startsWith(legacyMediaRoot + path.sep) ||
-          legacyResolved === legacyMediaRoot) &&
-        fs.existsSync(legacyResolved)
-      ) {
-        resolved = legacyResolved;
-        stat = await fs.promises.stat(resolved);
+      if (legacyResolved.startsWith(legacyMediaRoot + path.sep)) {
+        storageRoot = legacyMediaRoot;
+        try {
+          resolved = await fs.promises.realpath(legacyResolved);
+        } catch {
+          return reply.status(404).send();
+        }
         request.log.warn(
           {
             rawKey,
@@ -249,9 +250,16 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      if (!stat.isFile()) {
+      const realRoot = await fs.promises.realpath(storageRoot);
+      if (!resolved.startsWith(realRoot + path.sep)) return reply.status(404).send();
+      const storageKey = path.relative(realRoot, resolved).split(path.sep).join("/");
+      const publicationId = request.publicationContext?.publicationId;
+      if (!publicationId || !await mediaService.canStreamLocalMedia(storageKey, publicationId)) {
         return reply.status(404).send();
       }
+
+      const stat = await fs.promises.stat(resolved);
+      if (!stat.isFile()) return reply.status(404).send();
 
       const fileSize = stat.size;
       const mimeType = getMimeType(resolved);
@@ -267,7 +275,9 @@ export async function mediaStreamRoutes(fastify: FastifyInstance) {
         reply.header("Content-Security-Policy", "sandbox; default-src 'none'");
       }
       reply.header("Accept-Ranges", "bytes");
-      reply.header("Cache-Control", "public, max-age=3600");
+      if (!reply.hasHeader("Cache-Control")) {
+        reply.header("Cache-Control", "public, max-age=3600");
+      }
       reply.header("ETag", etag);
       reply.header("Last-Modified", lastModified);
       reply.header(

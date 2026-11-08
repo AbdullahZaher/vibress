@@ -5,6 +5,10 @@ import { getRedisClient, buildPublicationCacheKey } from "@vibress/cache";
 import { getDb, posts, seedFixturePost } from "@vibress/database";
 import { eq } from "drizzle-orm";
 
+const BASE = process.env.VIBRESS_E2E_BASE || "http://localhost:7777";
+const API = process.env.API_URL || "http://localhost:7780";
+const WS_API = API.replace(/^http/, "ws");
+
 const PUBLICATION_ID = "pub_default";
 const TARGET_POST_ID = "bb46491c-dd25-492c-a035-89745ceffd6c";
 
@@ -35,10 +39,10 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     console.log(`Injected durable CRDT update into Redis: ${redisUpdatesKey}`);
 
     // Connect Peer 1 via WebSocket
-    const wsUrl = `ws://localhost:7780/api/admin/v1/posts/${TARGET_POST_ID}/collaboration/ws`;
+    const wsUrl = `${WS_API}/api/admin/v1/posts/${TARGET_POST_ID}/collaboration/ws`;
     
     // Authenticate by obtaining session cookie from login
-    const loginRes = await request.post("http://localhost:7780/api/admin/v1/auth/login", {
+    const loginRes = await request.post(`${API}/api/admin/v1/auth/login`, {
       data: {
         email: "owner@example.com",
         password: "OwnerPass123!",
@@ -52,7 +56,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer1 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: BASE,
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -99,7 +104,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer2 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: BASE,
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -152,7 +158,8 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const peer3 = new WebSocket(wsUrl, {
       headers: {
         Cookie: sessionCookie,
-      },
+        Origin: BASE,
+      }
     });
 
     await new Promise<void>((resolve, reject) => {
@@ -193,10 +200,10 @@ test.describe("CRDT Room Lifecycle & Stale Buffer Resilience", () => {
     const [dbPost] = await db.select().from(posts).where(eq(posts.id, TARGET_POST_ID));
     const currentVersion = dbPost.version;
 
-    const restPutRes = await request.put(`http://localhost:7780/api/admin/v1/posts/${TARGET_POST_ID}`, {
+    const restPutRes = await request.put(`${API}/api/admin/v1/posts/${TARGET_POST_ID}`, {
       headers: {
         Cookie: sessionCookie,
-        Origin: "http://localhost:7777",
+        Origin: BASE,
       },
       data: {
         title: dbPost.title,

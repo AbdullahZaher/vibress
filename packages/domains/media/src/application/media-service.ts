@@ -16,6 +16,41 @@ import {
   MediaUploadFailedError,
 } from "../domain/errors";
 
+/** Validate provider and stored metadata URLs before they reach public DTOs.
+ * Relative host-owned URLs and HTTPS/HTTP CDN URLs are supported; executable,
+ * protocol-relative, credential-bearing and transient URLs are not.
+ */
+export function isSafeMediaAssetUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value || value !== value.trim() ||
+      value.length > 8192) {
+    return false;
+  }
+  // Explicit code-point checks avoid accidentally accepting controls or
+  // backslashes, without a broad regex matching unsafe URL characters.
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 32 || (code >= 127 && code <= 159) || code === 92) {
+      return false;
+    }
+  }
+  if (value.startsWith("//")) return false;
+  if (value.startsWith("/")) {
+    return !/(?:^|\/)\.\.?($|\/)/.test(value.split(/[?#]/, 1)[0] || "");
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      return (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+        Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+    } catch {
+      return false;
+    }
+  }
+  // Preserve legitimate relative media paths while excluding URL tricks.
+  return !value.includes(":") && !value.startsWith("#") && !value.startsWith("?") &&
+    !value.split("/").some((segment) => segment === "..");
+}
+
 export class MediaService {
   constructor(
     private mediaRepo: MediaRepository,
@@ -42,7 +77,8 @@ export class MediaService {
   async getMediaUrl(asset: MediaAsset): Promise<string | null> {
     const provider = this.resolveProviderForAsset(asset.storageProvider);
     if (provider) {
-      return provider.getUrl(asset.storageKey);
+      const url = await provider.getUrl(asset.storageKey);
+      return isSafeMediaAssetUrl(url) ? url : null;
     }
 
     // Deliberate fallback for external providers (e.g. Unsplash canonical metadata)
@@ -53,7 +89,7 @@ export class MediaService {
       (asset.metadata as Record<string, any> | null)?.sourceUrl ||
       (asset.metadata as Record<string, any> | null)?.url;
 
-    if (unsplashUrl && typeof unsplashUrl === "string") {
+    if (isSafeMediaAssetUrl(unsplashUrl)) {
       return unsplashUrl;
     }
 
@@ -153,6 +189,15 @@ export class MediaService {
       throw new MediaNotFoundError(id);
     }
     return asset;
+  }
+
+  async canStreamLocalMedia(storageKey: string, publicationId: string): Promise<boolean> {
+    const asset = await this.mediaRepo.findByStorageKey(storageKey, undefined, { includeDeleted: true });
+    if (!asset) {
+      // Files that predate the media catalog belong to the original site.
+      return publicationId === "pub_default";
+    }
+    return asset.publicationId === publicationId && asset.storageProvider === "local" && !asset.deletedAt;
   }
 
   async listMedia(
