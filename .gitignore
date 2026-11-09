@@ -110,3 +110,9 @@ temp/
 apps/api/content/*
 !apps/api/content/.gitkeep
 infrastructure/data/
+
+# Local-only Nx graph and point-in-time diagnostic output
+/graph.json
+/scripts/media-storage-audit.json
+# Generated into the designer distribution from the canonical starter ZIP
+/VIBRESS_THEME_DESIGNER_PACKAGE/vibress-theme-starter.zip

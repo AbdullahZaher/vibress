@@ -4,6 +4,12 @@ Vibress is a modern publishing, membership, newsletter, analytics, and extensibi
 
 The system is designed as a **TypeScript modular monolith** with strong domain boundaries, a separate editor product called **Vibress Studio**, and a plugin ecosystem for storage, integrations, editor extensions, analytics, and payments.
 
+## Historical records and repository maintenance
+
+- [September 2026 implementation and release evidence](archive/2026-09/README.md) — preserved for traceability, **not** current production certification.
+- [Media storage inventory: historical summary](audits/media-storage-2026-09-19-summary.md) — aggregate evidence only; not an instruction to remove stored media.
+- [Repository hygiene and preservation policy](maintenance/repository-hygiene.md) — tracked artifacts, theme distribution, upgrade and testing rules.
+
 ## Canonical publication language policy (accepted; implementation pending)
 
 - **Authoritative product/architecture decision:** [Single language by default; publication-scoped localization](14-decisions/publication-language-policy.md).

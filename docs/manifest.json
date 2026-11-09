@@ -33,5 +33,6 @@
     "post-v1-hardening-scope.md",
     "settings-system-tools-boundary.md",
     "theme-engine.md"
-  ]
+  ],
+  "document_count_scope": "Historical initial curated documentation catalog; not a live count of all Markdown documents under docs/"
 }

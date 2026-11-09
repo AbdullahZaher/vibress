@@ -37,7 +37,7 @@
 18. **`starter-theme/`**: القالب النموذجي المصدري المفتوح لبدء العمل منه مباشرة.
 19. **`examples/`**: أمثلة حية لـ `theme.json` و `settings.json` ومقتطفات Liquid.
 20. **`scripts/validate-theme.mjs`**: أداة فحص آلية للتحقق من مطابقة الثيم لمواصفات Vibress.
-21. **`vibress-theme-starter.zip`**: حزمة الثيم المرجعي مضغوطة وجاهزة للرفع الفوري للتجربة.
+21. **`vibress-theme-starter.zip`**: تُضمّن في الحزمة الموزعة عند تشغيل `node scripts/pack-theme-designer-package.js` باستخدام النسخة المرجعية في `content/vibress-theme-starter.zip`؛ لم نعد نحتفظ بنسخة ثانية متطابقة داخل مجلد المصادر.
 
 ---
 
