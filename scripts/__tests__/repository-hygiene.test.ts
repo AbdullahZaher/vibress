@@ -1,0 +1,90 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const forbiddenTracked = [
+  "graph.json",
+  "run_tests.sh",
+  "setup-workspace.sh",
+  "setup-domain-packages.sh",
+  "setup-platform-packages.sh",
+  "scripts/capture-settings-screenshots.ts",
+  "scripts/media-storage-audit.json",
+  "VIBRESS_THEME_DESIGNER_PACKAGE/vibress-theme-starter.zip",
+];
+const archivedReports = [
+  "VIBRESS_CONTENT_MODELER_FINAL_CERTIFICATION_REPORT.md",
+  "VIBRESS_CONTENT_MODELER_FINAL_CONSISTENCY_AUDIT.md",
+  "VIBRESS_CONTENT_MODELER_IMPLEMENTATION_REPORT.md",
+  "VIBRESS_CONTENT_MODELER_PRODUCTION_AUDIT.md",
+  "VIBRESS_CONTENT_MODELER_RELATIONS_FINAL_CERTIFICATION.md",
+  "VIBRESS_CONTENT_MODELER_RELATION_CONTRACT_FINAL_AUDIT.md",
+  "VIBRESS_FEATURE_IMAGE_UNSPLASH_IMPLEMENTATION_REPORT.md",
+  "VIBRESS_FINAL_GIT_RELEASE_REPORT.md",
+  "VIBRESS_MEDIA_LIBRARY_BROKEN_ASSETS_FORENSIC_ANALYSIS.md",
+  "VIBRESS_MEDIA_STORAGE_REMEDIATION_FINAL_REPORT.md",
+  "VIBRESS_STUDIO_MEDIA_FLOATING_TOOLBAR_IMPLEMENTATION.md",
+  "VIBRESS_V1.0.0_RELEASE_REPORT.md"
+];
+
+function trackedFiles(): Set<string> {
+  const output = execFileSync("git", ["ls-files", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+  return new Set(output.split("\0").filter(Boolean));
+}
+
+describe("repository hygiene compatibility", () => {
+  it("does not track generated, obsolete, or environment-specific artifacts", () => {
+    const tracked = trackedFiles();
+    for (const entry of forbiddenTracked) {
+      expect(tracked.has(entry), entry).toBe(false);
+    }
+  });
+
+  it("preserves each historical report under the dated archive", () => {
+    const tracked = trackedFiles();
+    for (const filename of archivedReports) {
+      expect(tracked.has(filename), filename).toBe(false);
+      expect(tracked.has(`docs/archive/2026-09/${filename}`), filename).toBe(true);
+    }
+  });
+
+  it("retains stable public paths and canonical theme distribution", () => {
+    const tracked = trackedFiles();
+    for (const path of [
+      "content/vibress-theme-starter.zip",
+      "content/theme-starter/theme.json",
+      "VIBRESS_THEME_DESIGNER_PACKAGE.zip",
+      "apps/web/public/student.html",
+      "apps/web/public/theme-assets/student.html",
+    ]) {
+      expect(tracked.has(path), path).toBe(true);
+    }
+    const a = readFileSync(path.join(root, "apps/web/public/student.html"));
+    const b = readFileSync(path.join(root, "apps/web/public/theme-assets/student.html"));
+    expect(a.equals(b)).toBe(true);
+  });
+
+  it("builds the designer ZIP with the canonical starter and without writing tracked artifacts", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "vibress-theme-package-test-"));
+    try {
+      const output = path.join(directory, "designer.zip");
+      execFileSync(process.execPath, ["scripts/pack-theme-designer-package.js"], {
+        cwd: root,
+        env: { ...process.env, VIBRESS_THEME_DESIGNER_PACKAGE_OUTPUT: output },
+        timeout: 30000,
+      });
+      const buffer = readFileSync(output);
+      expect(buffer.subarray(0, 2).toString()).toBe("PK");
+      expect(buffer.includes(Buffer.from("vibress-theme-starter.zip"))).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
