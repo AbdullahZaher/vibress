@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0-beta.2] - 2026-11-09
+
+### Milestone Summary
+Vibress v1.2.0-beta.2 provides critical operational safeguards for local media storage migration, ensuring late-arriving legacy assets remain accessible following marker generation until explicit operational cutover.
+
+### Changed
+- **Media Migration Safety (PR #147)**:
+  - Decoupled runtime HTTP media streaming route (`apps/api/src/routes/media-stream.ts`) from `.media-storage-migrated.json`, treating the marker strictly as an inventory verification artifact rather than an automatic cutover switch.
+  - Required explicit operator setting `VIBRESS_STORAGE_LEGACY_FALLBACK=0` to disable legacy storage fallback.
+  - Maintained canonical-first precedence, strict `realpath` containment, and publication authorization (`canStreamLocalMedia`) across all media streaming requests.
+
+### Documentation & Operations
+- **Legacy Media Cutover Runbook**: Added `docs/07-storage/legacy-media-cutover.md` detailing the 7-stage operational cutover and rollback sequence before setting `VIBRESS_STORAGE_LEGACY_FALLBACK=0`.
+
+### Fixed
+- **Media Test Fixture Alignment**: Corrected byte-length specification for late legacy asset fixture in `apps/api/src/__tests__/media-stream-publication.test.ts` to match payload length (23 bytes).
+
+---
+
+## [1.2.0-beta.1] - 2026-11-08
+
+### Milestone Summary
+First v1.2.0 Beta release implementing Gate G2 security and supply-chain hardening, fail-closed privacy secrets, and verified media storage synchronization.
+
+### Security
+- **Fail-Closed Privacy Secret**: Enforced strict production validation for site privacy secret tokens in API and media streaming services.
+- **Dependency Hardening**: Applied scoped overrides for `brace-expansion`, `nanoid`, and development dependencies to eliminate all high-severity advisories.
+- **Media Storage Verification**: Added `--verify` and `--dry-run` modes with SHA-256 integrity checks in `scripts/sync-media-storage.ts`.
+
+---
+
 ## [1.1.0] - 2026-09-17
 
 ### Milestone Summary
