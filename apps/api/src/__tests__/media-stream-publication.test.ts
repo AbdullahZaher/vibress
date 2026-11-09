@@ -24,6 +24,7 @@ describe("public local media publication ownership", () => {
   const svgUrl = `/content/media/${svgKey}`;
   const assetUrl = `/content/media/${storageKey}`;
   const bytes = Buffer.from("Private publication asset");
+  const lateBytes = Buffer.from("Late legacy media bytes");
   const password = "Temporary media fixture password";
   let app: ReturnType<typeof buildApp> | undefined;
   let storageBase: string | undefined;
@@ -64,7 +65,7 @@ describe("public local media publication ownership", () => {
     await db.insert(mediaAssets).values({
       id: randomUUID(), publicationId: publicId, storageProvider: "local", storageKey: lateLegacyKey,
       originalFilename: "late-legacy.jpg", displayName: "Late legacy asset", mimeType: "image/jpeg",
-      extension: "jpg", sizeBytes: 18, checksum: `legacy-${suffix}`, assetType: "image",
+      extension: "jpg", sizeBytes: lateBytes.length, checksum: `legacy-${suffix}`, assetType: "image",
     });
     await db.insert(mediaAssets).values({
       id: svgAssetId, publicationId: privateId, storageProvider: "local", storageKey: svgKey,
