@@ -38,7 +38,7 @@ describe("Documentation Truth & Product Claims Consistency Guard", () => {
     expect(relNotes).toContain("Next.js 15 Server-Side Rendered (SSR)");
     expect(relNotes).not.toContain("Next.js 14 Server-Side Rendered (SSR)");
 
-    const relReportPath = path.join(rootDir, "VIBRESS_V1.0.0_RELEASE_REPORT.md");
+    const relReportPath = path.join(rootDir, "docs/archive/2026-09/VIBRESS_V1.0.0_RELEASE_REPORT.md");
     const relReport = fs.readFileSync(relReportPath, "utf-8");
     expect(relReport).toContain("Next.js 15 SSR");
     expect(relReport).not.toContain("Next.js 14 SSR");

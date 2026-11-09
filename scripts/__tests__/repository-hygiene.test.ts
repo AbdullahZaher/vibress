@@ -66,6 +66,20 @@ describe("repository hygiene compatibility", () => {
     ]) {
       expect(tracked.has(path), path).toBe(true);
     }
+    // Different URLs remain valid public contracts; identical bytes are intentional.
+    const stableCopies = [
+      ["apps/web/public/student.html", "apps/web/public/theme-assets/student.html"],
+      ["apps/web/src/themes/default/casper.css", "apps/web/public/theme-assets/vibress-default/1.0.0/default.css"],
+      ["apps/web/src/themes/minimal/source.css", "apps/web/public/theme-assets/vibress-minimal/1.0.0/source.css"],
+      ["apps/web/src/themes/molten/screen.css", "apps/web/public/theme-assets/vibress-molten/1.0.0/screen.css"],
+      ["apps/web/src/themes/shared/studio-cards.css", "apps/web/public/theme-assets/shared/studio-cards.css"],
+    ] as const;
+    for (const [source, publicCopy] of stableCopies) {
+      const canonical = readFileSync(path.join(root, source));
+      const published = readFileSync(path.join(root, publicCopy));
+      expect(published.equals(canonical), `${publicCopy} diverged from ${source}`).toBe(true);
+    }
+
     const a = readFileSync(path.join(root, "apps/web/public/student.html"));
     const b = readFileSync(path.join(root, "apps/web/public/theme-assets/student.html"));
     expect(a.equals(b)).toBe(true);

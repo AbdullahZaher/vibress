@@ -15,7 +15,7 @@ import type {
 describe("Starter Theme Contract & Consistency Test", () => {
   const starterZipPath = path.resolve(
     __dirname,
-    "../../../../VIBRESS_THEME_DESIGNER_PACKAGE/vibress-theme-starter.zip",
+    "../../../../content/vibress-theme-starter.zip",
   );
 
   const mockSite: SiteViewModel = {
