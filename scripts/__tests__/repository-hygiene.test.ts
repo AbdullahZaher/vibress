@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,27 @@ describe("repository hygiene compatibility", () => {
     for (const filename of archivedReports) {
       expect(tracked.has(filename), filename).toBe(false);
       expect(tracked.has(`docs/archive/2026-09/${filename}`), filename).toBe(true);
+    }
+  });
+
+  it("keeps committed admin redesign screenshots unique and valid PNGs", () => {
+    const directory = path.join(root, "docs/design/screenshots/redesign");
+    const filenames = readdirSync(directory).filter((name) => name.endsWith(".png")).sort();
+    const firstPathByHash = new Map<string, string>();
+    expect(filenames.length).toBeGreaterThan(0);
+
+    for (const filename of filenames) {
+      const bytes = readFileSync(path.join(directory, filename));
+      expect(
+        bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+        `${filename} must be a PNG`,
+      ).toBe(true);
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      expect(
+        firstPathByHash.has(hash),
+        `Duplicate screenshot: ${filename} and ${firstPathByHash.get(hash)}`,
+      ).toBe(false);
+      firstPathByHash.set(hash, filename);
     }
   });
 

@@ -22,7 +22,7 @@ The GitHub release workflow runs both commands and fails if either fails. `VIBRE
 - Keep released Drizzle SQL migrations and their metadata snapshots; upgrades must replay on a populated database.
 - Keep public `/student.html` and `/theme-assets/student.html` aliases, theme CSS delivery URLs, `/rss.xml`, and `/feed.xml` until a separately tested compatibility redirect is in place.
 - Keep both production smoke-test runners while the package command and deploy shell script invoke different formats.
-- Keep `tests/e2e/baselines/` and Arabic/RTL design evidence. Two design captures currently have identical bytes (`08-subscriptions-list-1440-dark.png` and `09-settings-hub-1440-dark.png`); replace the incorrect capture through a verified visual QA run, not by deleting coverage.
+- Keep `tests/e2e/baselines/` and Arabic/RTL design evidence. The formerly tracked `08-subscriptions-list-1440-dark.png` was an incorrectly labeled byte-for-byte copy of the genuine `09-settings-hub-1440-dark.png`; it was retired from active evidence. The existing `/admin/subscriptions` route serves the membership settings hub, **not** an independent subscriptions-list screen. See [design-evidence provenance](../design/screenshots/redesign/README.md); do not claim or fabricate an unavailable subscription-list capture.
 - Keep all database backups, restore scripts, disaster-recovery drills, plugin SDK/public API contracts, and supported theme templates.
 
 ## Historical reports

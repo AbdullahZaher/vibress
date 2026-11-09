@@ -183,6 +183,8 @@ Automated verification run against the live PostgreSQL database, gateway server,
 - **Playwright E2E Design Acceptance Suite:** 11 browser acceptance tests passed cleanly in 20.1s across 320px, 390px, 430px, 1440px, dark/light themes, and Arabic RTL.
 - **Visual Screenshots Artifacts:** Captured and stored in `docs/design/screenshots/redesign/` across all core routes, viewports, locales, and color themes.
 
+**Evidence correction (2026-11-09):** The historical `08-subscriptions-list-1440-dark.png` was an exact copy of the settings hub screenshot, not proof of a separate subscriptions list. It has been retired from active screenshots; the original bytes are preserved in Git history. The [screenshot provenance index](screenshots/redesign/README.md) explains the route contract and remaining capture gap. Historical certification statements above must not be read as coverage of a subscriptions-list screen.
+
 
 ## 7. Vibress Modern Workspace — 2026-10-31 refinements
 
