@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lexical/html": "0.13.1",
+    "@lexical/html": "0.53.0",
     "@vibress/studio-cards": "workspace:*",
     "@vibress/studio-core": "workspace:*",
     "@vibress/studio-nodes": "workspace:*",
