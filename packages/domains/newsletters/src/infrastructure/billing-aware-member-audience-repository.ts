@@ -20,10 +20,11 @@ export class BillingAwareMemberAudienceRepository implements MemberAudienceRepos
   async listAudienceMembers(
     filter: "all" | "paid" | "free",
     productId: string | null,
+    publicationId: string,
   ): Promise<AudienceMember[]> {
-    // 1. Batch fetch active members and subscriptions in parallel
+    // 1. Batch fetch active members in this publication and their subscriptions
     const [membersRes, subsRes] = await Promise.all([
-      this.memberRepo.list({ limit: 10000 }),
+      this.memberRepo.list({ publicationId, limit: 10000 }),
       this.subscriptionRepo.list({ limit: 50000 }),
     ]);
 

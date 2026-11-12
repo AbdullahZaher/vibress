@@ -164,9 +164,11 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
       const params: {
         status?: SendStatus;
         newsletterId?: string;
+        publicationId: string;
         limit: number;
         offset: number;
       } = {
+        publicationId: req.publicationContext!.publicationId,
         limit: query.limit ? parseInt(query.limit, 10) : 20,
         offset: query.offset ? parseInt(query.offset, 10) : 0,
       };
@@ -181,7 +183,10 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("newsletters.read")],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const send = await newslettersService.getSend(id);
+      const send = await newslettersService.getSend(
+        id,
+        req.publicationContext!.publicationId,
+      );
       if (!send)
         return sendError(
           reply,
@@ -218,7 +223,11 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         planId: audience.planId ?? null,
       };
 
-      const newsletter = await newslettersService.getNewsletter(newsletterId);
+      const publicationId = req.publicationContext!.publicationId;
+      const newsletter = await newslettersService.getNewsletter(
+        newsletterId,
+        publicationId,
+      );
       if (!newsletter)
         return sendError(
           reply,
@@ -233,12 +242,14 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         await newslettersService.computeAudience(
           newsletterId,
           audienceDefinition,
+          publicationId,
         )
       ).length;
 
       try {
         const send = await newslettersService.createSend(
           {
+            publicationId,
             newsletterId,
             subject,
             content,
@@ -258,7 +269,7 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
 
         if (sendNow) {
           // Enqueue immediately; worker processes asynchronously
-          await newsletterSendEnqueuer.startSendAndEnqueue(send.id);
+          await newsletterSendEnqueuer.startSendAndEnqueue(send.id, publicationId);
         }
 
         return reply.status(201).send({ send, audienceCount });
@@ -279,7 +290,10 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const result = await newsletterSendEnqueuer.startSendAndEnqueue(id);
+        const result = await newsletterSendEnqueuer.startSendAndEnqueue(
+          id,
+          req.publicationContext!.publicationId,
+        );
         return reply.status(200).send(result);
       } catch (err) {
         if (err instanceof NewsletterDomainError)
@@ -298,7 +312,10 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       try {
-        const send = await newslettersService.cancelSend(id);
+        const send = await newslettersService.cancelSend(
+          id,
+          req.publicationContext!.publicationId,
+        );
         return reply.status(200).send({ send });
       } catch (err) {
         if (err instanceof NewsletterDomainError)
@@ -413,10 +430,24 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
         productId: parsed.data.audience.productId ?? null,
         planId: parsed.data.audience.planId ?? null,
       };
+      const publicationId = req.publicationContext!.publicationId;
+      const newsletter = await newslettersService.getNewsletter(
+        parsed.data.newsletterId,
+        publicationId,
+      );
+      if (!newsletter)
+        return sendError(
+          reply,
+          "NEWSLETTER_NOT_FOUND",
+          "Newsletter not found",
+          req.id,
+          404,
+        );
       const count = (
         await newslettersService.computeAudience(
           parsed.data.newsletterId,
           definition,
+          publicationId,
         )
       ).length;
       return reply.status(200).send({ count });

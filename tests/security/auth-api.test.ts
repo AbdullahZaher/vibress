@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import crypto from "node:crypto";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDbPool,
@@ -53,6 +54,15 @@ describe("Auth & Authorization API Security", () => {
     });
     const contribRole = await rolesService.findByKey("contributor");
     await rolesService.assignRoleToUser(limitedUser.id, contribRole!.id);
+
+    // Tenant access is membership-based; attach the limited user to the default
+    // publication so this case exercises RBAC rather than tenant resolution.
+    await pool.query(
+      `INSERT INTO publication_memberships (id, publication_id, user_id, role)
+       VALUES ($1, 'pub_default', $2, 'contributor')
+       ON CONFLICT DO NOTHING`,
+      [crypto.randomUUID(), limitedUser.id],
+    );
 
     app = buildApp();
     await app.ready();

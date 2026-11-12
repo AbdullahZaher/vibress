@@ -57,6 +57,7 @@ export interface MemberAudienceRepository {
   listAudienceMembers(
     filter: "all" | "paid" | "free",
     productId: string | null,
+    publicationId: string,
   ): Promise<AudienceMember[]>;
 }
 
@@ -236,10 +237,12 @@ export class NewslettersService {
   async computeAudience(
     newsletterId: string,
     definition: AudienceDefinition,
+    publicationId: string,
   ): Promise<AudienceMember[]> {
     const all = await this.deps.audienceRepo.listAudienceMembers(
       definition.filter,
       definition.productId,
+      publicationId,
     );
     const members: AudienceMember[] = [];
     for (const member of all) {
@@ -264,8 +267,13 @@ export class NewslettersService {
   ): Promise<NewsletterSend> {
     const newsletter = await this.deps.newsletterRepo.findById(
       data.newsletterId,
+      data.publicationId,
     );
-    if (!newsletter || newsletter.status === "archived") {
+    if (
+      !newsletter ||
+      newsletter.status === "archived" ||
+      newsletter.publicationId !== data.publicationId
+    ) {
       throw new NewsletterDomainError(
         "NEWSLETTER_NOT_FOUND",
         "Newsletter not found",
@@ -332,6 +340,7 @@ export class NewslettersService {
     const audience = await this.computeAudience(
       send.newsletterId,
       send.audience,
+      send.publicationId,
     );
 
     // Snapshot recipients with per-recipient unsubscribe tokens
@@ -381,8 +390,11 @@ export class NewslettersService {
     return updated;
   }
 
-  async cancelSend(sendId: string): Promise<NewsletterSend> {
-    const send = await this.deps.sendRepo.findById(sendId);
+  async cancelSend(
+    sendId: string,
+    publicationId?: string,
+  ): Promise<NewsletterSend> {
+    const send = await this.deps.sendRepo.findById(sendId, publicationId);
     if (!send)
       throw new NewsletterDomainError("SEND_NOT_FOUND", "Send not found");
     if (send.status === "sending" || send.status === "sent") {
@@ -391,16 +403,25 @@ export class NewslettersService {
         "Send is already in progress",
       );
     }
-    return this.deps.sendRepo.updateStatus(sendId, "cancelled");
+    return this.deps.sendRepo.updateStatus(
+      sendId,
+      "cancelled",
+      undefined,
+      publicationId,
+    );
   }
 
-  async getSend(sendId: string): Promise<NewsletterSend | null> {
-    return this.deps.sendRepo.findById(sendId);
+  async getSend(
+    sendId: string,
+    publicationId?: string,
+  ): Promise<NewsletterSend | null> {
+    return this.deps.sendRepo.findById(sendId, publicationId);
   }
 
   async listSends(filter?: {
     status?: SendStatus;
     newsletterId?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ sends: NewsletterSend[]; total: number }> {

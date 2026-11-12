@@ -94,6 +94,56 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(body.errors[0].code).toBe("EMAIL_ALREADY_EXISTS");
     });
 
+    it("rejects an administrator inviting a global owner (role ceiling)", async () => {
+      const adminLogin = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        payload: {
+          email: "admin@example.com",
+          password: "DevPassword123!",
+        },
+      });
+      expect(adminLogin.statusCode).toBe(200);
+      const adminSetCookie = adminLogin.headers["set-cookie"];
+      const adminCookie = Array.isArray(adminSetCookie)
+        ? adminSetCookie[0]!
+        : (adminSetCookie as string);
+
+      const escalation = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/users/invite",
+        headers: {
+          cookie: adminCookie,
+          origin: "http://localhost:7779",
+        },
+        payload: {
+          email: `escalation-${Date.now()}@example.com`,
+          name: "Escalation Attempt",
+          roleKey: "owner",
+        },
+      });
+
+      expect(escalation.statusCode).toBe(403);
+      expect(JSON.parse(escalation.body).errors[0].code).toBe(
+        "ROLE_ESCALATION_DENIED",
+      );
+
+      const delegated = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/users/invite",
+        headers: {
+          cookie: adminCookie,
+          origin: "http://localhost:7779",
+        },
+        payload: {
+          email: `delegated-editor-${Date.now()}@example.com`,
+          name: "Delegated Editor",
+          roleKey: "editor",
+        },
+      });
+      expect(delegated.statusCode).toBe(201);
+    });
+
     it("allows resending an invitation to an invited staff user", async () => {
       const res = await app.inject({
         method: "POST",

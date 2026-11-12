@@ -116,6 +116,25 @@ describe("Drizzle Workspace & Publication Context Resolution", () => {
     expect(ctx.actorType).toBe("staff");
   });
 
+  it("denies unaffiliated staff without a publication membership", async () => {
+    // Non-owner global roles must not inherit pub_default tenant access.
+    await expect(
+      service.resolveStaffPublicationContext(
+        crypto.randomUUID(),
+        undefined,
+        ["editor"],
+      ),
+    ).rejects.toThrow(TenantAccessDeniedError);
+
+    await expect(
+      service.resolveStaffPublicationContext(
+        crypto.randomUUID(),
+        undefined,
+        ["administrator"],
+      ),
+    ).rejects.toThrow(TenantAccessDeniedError);
+  });
+
   it("rejects unauthorized publication switch to another publication", async () => {
     // User attempts to switch to an unassigned publication "pub_random"
     await expect(

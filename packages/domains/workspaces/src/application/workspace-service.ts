@@ -122,14 +122,9 @@ export class WorkspaceService {
     isSystemOperation: boolean;
   }> {
     if (!this.pubRepo) {
-      return {
-        publicationId: requestedPublicationId || "pub_default",
-        workspaceId: "ws_default",
-        actorId: userId,
-        actorType: "staff",
-        role: "owner",
-        isSystemOperation: false,
-      };
+      throw new TenantAccessDeniedError(
+        "Cannot resolve staff publication context without publication memberships",
+      );
     }
 
     if (requestedPublicationId) {
@@ -228,17 +223,21 @@ export class WorkspaceService {
       }
     }
 
-    // Default fallback for bootstrap system owner
-    const defaultPub = await this.pubRepo.findById("pub_default");
-    if (defaultPub) {
-      return {
-        publicationId: defaultPub.id,
-        workspaceId: defaultPub.workspaceId,
-        actorId: userId,
-        actorType: "staff",
-        role: globalUserRoles.includes("owner") ? "owner" : "editor",
-        isSystemOperation: false,
-      };
+    // Bootstrap fallback: only a global owner may reach pub_default without an
+    // explicit publication or workspace membership. Everyone else is denied so
+    // unaffiliated staff never inherit tenant access.
+    if (globalUserRoles.includes("owner")) {
+      const defaultPub = await this.pubRepo.findById("pub_default");
+      if (defaultPub) {
+        return {
+          publicationId: defaultPub.id,
+          workspaceId: defaultPub.workspaceId,
+          actorId: userId,
+          actorType: "staff",
+          role: "owner",
+          isSystemOperation: false,
+        };
+      }
     }
 
     throw new TenantAccessDeniedError(`No active publication found for user ${userId}`);

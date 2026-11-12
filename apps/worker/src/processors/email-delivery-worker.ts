@@ -88,7 +88,7 @@ export class EmailDeliveryWorker {
   }
 
   private async processJob(job: Job<EmailDeliveryJob>): Promise<void> {
-    assertJobScope(job.data);
+    const scope = assertJobScope(job.data);
     const { sendId, recipientIds } = job.data;
     if (!sendId || !Array.isArray(recipientIds) || recipientIds.length === 0) {
       return;
@@ -103,6 +103,12 @@ export class EmailDeliveryWorker {
     ) {
       // Idempotent no-op: terminal sends are not re-delivered.
       return;
+    }
+
+    if (scope.scope === "publication" && send.publicationId !== scope.publicationId) {
+      throw new Error(
+        `Send ${sendId} does not belong to publication ${scope.publicationId}`,
+      );
     }
 
     for (const recipientId of recipientIds) {

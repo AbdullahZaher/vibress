@@ -8,6 +8,7 @@ import {
   userRoles,
   contentModels,
   contentEntries,
+  publicationMemberships,
 } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
@@ -37,6 +38,16 @@ async function ensureUser(email: string, roleKey: string, pass: string): Promise
   if (roleRows[0]) {
     await db.insert(userRoles).values({ userId, roleId: roleRows[0].id }).onConflictDoNothing();
   }
+  // Staff publication context now fails closed without an explicit membership.
+  await db
+    .insert(publicationMemberships)
+    .values({
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId,
+      role: roleKey,
+    })
+    .onConflictDoNothing();
   return userId;
 }
 

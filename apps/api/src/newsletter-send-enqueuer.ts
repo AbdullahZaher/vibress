@@ -4,7 +4,7 @@ import {
   enqueueTraced,
   getBullMqRedisConnection,
 } from "@vibress/queue";
-import { NewslettersService } from "@vibress/newsletters";
+import { NewslettersService, NewsletterDomainError } from "@vibress/newsletters";
 import { DrizzleEmailRecipientRepository } from "@vibress/email";
 
 const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
@@ -39,9 +39,13 @@ export class NewsletterSendEnqueuer {
 
   async startSendAndEnqueue(
     sendId: string,
-    publicationId?: string,
+    publicationId: string,
   ): Promise<{ recipientCount: number; batchCount: number }> {
-    const pubId = publicationId || "pub_default";
+    const scoped = await this.newslettersService.getSend(sendId, publicationId);
+    if (!scoped) {
+      throw new NewsletterDomainError("SEND_NOT_FOUND", "Send not found");
+    }
+
     const { recipientCount } = await this.newslettersService.startSend(
       sendId,
       async (rows) => {
@@ -71,7 +75,7 @@ export class NewsletterSendEnqueuer {
         "deliver",
         {
           scope: "publication",
-          publicationId: pubId,
+          publicationId,
           sendId,
           recipientIds: batches[i]!,
         },

@@ -87,6 +87,9 @@ export const newsletterSends = pgTable(
   "newsletter_sends",
   {
     id: text("id").primaryKey(),
+    publicationId: text("publication_id")
+      .notNull()
+      .references(() => publications.id, { onDelete: "cascade" }),
     newsletterId: text("newsletter_id")
       .notNull()
       .references(() => newsletters.id, { onDelete: "restrict" }),
@@ -121,6 +124,9 @@ export const newsletterSends = pgTable(
       ),
       newsletterIdx: index("newsletter_sends_newsletter_idx").on(
         table.newsletterId,
+      ),
+      publicationIdx: index("newsletter_sends_publication_id_idx").on(
+        table.publicationId,
       ),
     };
   },

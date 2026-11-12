@@ -9,7 +9,7 @@ export interface AudienceDefinition {
 
 export interface NewsletterSend {
   id: string;
-  publicationId?: string;
+  publicationId: string;
   newsletterId: string;
   subject: string;
   contentVersion: number;
@@ -33,7 +33,7 @@ export interface NewsletterSend {
 
 export interface CreateSendData {
   id?: string | undefined;
-  publicationId?: string | undefined;
+  publicationId: string;
   newsletterId: string;
   subject: string;
   contentVersion?: number | undefined;
@@ -47,17 +47,23 @@ export interface CreateSendData {
   status?: SendStatus | undefined;
 }
 
+/**
+ * publicationId scopes staff-facing reads/writes. Trusted worker paths
+ * (scheduled sweeps, delivery) omit it only after resolving the send itself.
+ */
 export interface SendRepository {
   create(data: CreateSendData): Promise<NewsletterSend>;
-  findById(id: string): Promise<NewsletterSend | null>;
+  findById(id: string, publicationId?: string): Promise<NewsletterSend | null>;
   updateStatus(
     id: string,
     status: SendStatus,
     patch?: Partial<NewsletterSend>,
+    publicationId?: string,
   ): Promise<NewsletterSend>;
   list(filter?: {
     status?: SendStatus;
     newsletterId?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ sends: NewsletterSend[]; total: number }>;

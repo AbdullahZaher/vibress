@@ -58,7 +58,10 @@ export class NewsletterSendSchedulerWorker {
     }
 
     const send = await this.sendRepo.findById(sendId);
-    const pubId = send?.publicationId || "pub_default";
+    if (!send) {
+      throw new Error(`Send not found: ${sendId}`);
+    }
+    const pubId = send.publicationId;
 
     const queue = getEmailQueue();
     const pending = await this.recipientRepo.findPending(

@@ -22,6 +22,14 @@ describe("API Security & Themes — Theme Lifecycle & Multi-Version Hardening", 
       };
       (req as any).roles = ["admin"];
       (req as any).permissions = ["themes.manage", "themes.read"];
+      (req as any).publicationContext = {
+        publicationId: "pub_default",
+        workspaceId: "ws_default",
+        actorId: "test-admin-1",
+        actorType: "staff",
+        role: "admin",
+        isSystemOperation: false,
+      };
     });
 
     await app.register(themeRoutes);

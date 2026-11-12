@@ -47,6 +47,33 @@ export function isOwner(userRoles: string[]): boolean {
   return userRoles.includes("owner");
 }
 
+const STAFF_ROLE_RANK: Record<string, number> = {
+  contributor: 10,
+  author: 20,
+  editor: 30,
+  administrator: 40,
+  owner: 50,
+};
+
+/**
+ * Actor-ceiling invariant for staff role assignment. An actor may grant roles
+ * up to their own highest rank; `owner` is grantable only by an owner. Unknown
+ * role keys are not assignable through untrusted surfaces.
+ */
+export function canAssignRole(
+  actorRoles: readonly string[],
+  targetRoleKey: string,
+): boolean {
+  const targetRank = STAFF_ROLE_RANK[targetRoleKey];
+  if (targetRank === undefined) {
+    return false;
+  }
+  if (targetRoleKey === "owner") {
+    return actorRoles.includes("owner");
+  }
+  return actorRoles.some((role) => (STAFF_ROLE_RANK[role] ?? 0) >= targetRank);
+}
+
 export interface ResourceAuthContext {
   actorId: string;
   resourceOwnerId?: string | null | undefined;

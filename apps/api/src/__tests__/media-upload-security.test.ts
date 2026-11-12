@@ -24,6 +24,14 @@ describe("API Security — Media Uploads & Direct Upload Hardening", () => {
       };
       (req as any).roles = ["admin"];
       (req as any).permissions = ["media.upload", "storage.manage"];
+      (req as any).publicationContext = {
+        publicationId: "pub_default",
+        workspaceId: "ws_default",
+        actorId: currentUserId,
+        actorType: "staff",
+        role: "admin",
+        isSystemOperation: false,
+      };
     });
 
     await app.register(storageRoutes);

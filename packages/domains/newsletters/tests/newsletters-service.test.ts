@@ -22,6 +22,7 @@ import {
 function makeNewsletter(overrides: Partial<Newsletter> = {}): Newsletter {
   return {
     id: "nl-1",
+    publicationId: "pub_default",
     key: "weekly",
     name: "Weekly",
     description: null,
@@ -39,6 +40,7 @@ function makeNewsletter(overrides: Partial<Newsletter> = {}): Newsletter {
 function makeSend(overrides: Partial<NewsletterSend> = {}): NewsletterSend {
   return {
     id: "send-1",
+    publicationId: "pub_default",
     newsletterId: "nl-1",
     subject: "Hello",
     contentVersion: 1,
@@ -292,11 +294,15 @@ describe("NewslettersService", () => {
       preferenceRepo: prefRepoWith,
       isMemberSuppressed: async (email: string) => email === "a@example.com", // m1 suppressed
     });
-    const audience = await service.computeAudience("nl-1", {
-      filter: "all",
-      productId: null,
-      planId: null,
-    });
+    const audience = await service.computeAudience(
+      "nl-1",
+      {
+        filter: "all",
+        productId: null,
+        planId: null,
+      },
+      "pub_default",
+    );
     // m1 suppressed, m2 unverified, m3 disabled → none remain
     expect(audience.length).toBe(0);
   });
@@ -340,11 +346,15 @@ describe("NewslettersService", () => {
       audienceRepo: audRepo,
       preferenceRepo: prefRepoAll,
     });
-    const audience = await service.computeAudience("nl-1", {
-      filter: "paid",
-      productId: null,
-      planId: null,
-    });
+    const audience = await service.computeAudience(
+      "nl-1",
+      {
+        filter: "paid",
+        productId: null,
+        planId: null,
+      },
+      "pub_default",
+    );
     expect(audience.map((m) => m.email)).toEqual(["a@example.com"]);
   });
 

@@ -256,6 +256,7 @@ export class DrizzleSendRepository implements SendRepository {
       .insert(newsletterSends)
       .values({
         id: data.id || crypto.randomUUID(),
+        publicationId: data.publicationId,
         newsletterId: data.newsletterId,
         subject: data.subject,
         contentVersion: data.contentVersion || 1,
@@ -275,12 +276,22 @@ export class DrizzleSendRepository implements SendRepository {
     return this.mapToDomain(row);
   }
 
-  async findById(id: string): Promise<NewsletterSend | null> {
+  async findById(
+    id: string,
+    publicationId?: string,
+  ): Promise<NewsletterSend | null> {
     const db = getDb();
     const rows = await db
       .select()
       .from(newsletterSends)
-      .where(eq(newsletterSends.id, id))
+      .where(
+        publicationId
+          ? and(
+              eq(newsletterSends.id, id),
+              eq(newsletterSends.publicationId, publicationId),
+            )
+          : eq(newsletterSends.id, id),
+      )
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -291,6 +302,7 @@ export class DrizzleSendRepository implements SendRepository {
     id: string,
     status: SendStatus,
     patch?: Partial<NewsletterSend>,
+    publicationId?: string,
   ): Promise<NewsletterSend> {
     const db = getDb();
     const payload: Record<string, unknown> = { status, updatedAt: new Date() };
@@ -309,7 +321,14 @@ export class DrizzleSendRepository implements SendRepository {
     const [row] = await db
       .update(newsletterSends)
       .set(payload)
-      .where(eq(newsletterSends.id, id))
+      .where(
+        publicationId
+          ? and(
+              eq(newsletterSends.id, id),
+              eq(newsletterSends.publicationId, publicationId),
+            )
+          : eq(newsletterSends.id, id),
+      )
       .returning();
     if (!row) throw new Error(`Send not found: ${id}`);
     return this.mapToDomain(row);
@@ -318,6 +337,7 @@ export class DrizzleSendRepository implements SendRepository {
   async list(filter?: {
     status?: SendStatus;
     newsletterId?: string;
+    publicationId?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ sends: NewsletterSend[]; total: number }> {
@@ -329,6 +349,10 @@ export class DrizzleSendRepository implements SendRepository {
       conditions.push(eq(newsletterSends.status, filter.status));
     if (filter?.newsletterId)
       conditions.push(eq(newsletterSends.newsletterId, filter.newsletterId));
+    if (filter?.publicationId)
+      conditions.push(
+        eq(newsletterSends.publicationId, filter.publicationId),
+      );
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
     const countRes = await db
@@ -387,6 +411,7 @@ export class DrizzleSendRepository implements SendRepository {
   private mapToDomain(row: NewsletterSendRow): NewsletterSend {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       newsletterId: row.newsletterId,
       subject: row.subject,
       contentVersion: row.contentVersion,

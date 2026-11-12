@@ -8,6 +8,7 @@ import {
   hashToken,
   hasPermission,
   isOwner,
+  canAssignRole,
 } from "../index";
 
 describe("Password Primitives", () => {
@@ -71,5 +72,28 @@ describe("Authorization Primitives", () => {
   it("checks owner status", () => {
     expect(isOwner(["owner"])).toBe(true);
     expect(isOwner(["editor", "author"])).toBe(false);
+  });
+
+  it("only lets an owner grant the owner role", () => {
+    expect(canAssignRole(["owner"], "owner")).toBe(true);
+    expect(canAssignRole(["administrator"], "owner")).toBe(false);
+    expect(canAssignRole(["editor"], "owner")).toBe(false);
+  });
+
+  it("enforces the actor role ceiling", () => {
+    expect(canAssignRole(["administrator"], "administrator")).toBe(true);
+    expect(canAssignRole(["administrator"], "editor")).toBe(true);
+    expect(canAssignRole(["administrator"], "author")).toBe(true);
+    expect(canAssignRole(["editor"], "administrator")).toBe(false);
+    expect(canAssignRole(["author"], "editor")).toBe(false);
+  });
+
+  it("rejects unknown or custom role keys on untrusted assignment", () => {
+    expect(canAssignRole(["owner"], "superuser")).toBe(false);
+    expect(canAssignRole(["owner"], "custom-role")).toBe(false);
+  });
+
+  it("rejects assignment by actors without a recognized role", () => {
+    expect(canAssignRole([], "contributor")).toBe(false);
   });
 });

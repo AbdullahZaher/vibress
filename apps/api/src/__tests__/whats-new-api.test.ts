@@ -2,9 +2,10 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vites
 import { FastifyInstance } from "fastify";
 import { buildApp } from "../main";
 import { whatsNewService, usersService, rolesService } from "../services";
-import { getDb, users } from "@vibress/database";
+import { getDb, users, publicationMemberships } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
 import * as security from "@vibress/security";
 
 async function loginStaff(
@@ -47,6 +48,16 @@ async function ensureStaffUser(
   if (role) {
     await rolesService.assignRoleToUser(user.id, role.id);
   }
+  // Staff publication context now fails closed without an explicit membership.
+  await db
+    .insert(publicationMemberships)
+    .values({
+      id: crypto.randomUUID(),
+      publicationId: "pub_default",
+      userId: user.id,
+      role: roleKey,
+    })
+    .onConflictDoNothing();
   return user.id;
 }
 

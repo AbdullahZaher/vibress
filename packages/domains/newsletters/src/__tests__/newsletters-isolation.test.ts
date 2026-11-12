@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, beforeAll } from "vitest";
-import { getDb, publications, newsletters } from "@vibress/database";
+import {
+  getDb,
+  publications,
+  newsletters,
+  newsletterSends,
+} from "@vibress/database";
 import { inArray } from "drizzle-orm";
-import { DrizzleNewsletterRepository } from "../infrastructure/drizzle-newsletter-repositories";
+import {
+  DrizzleNewsletterRepository,
+  DrizzleSendRepository,
+} from "../infrastructure/drizzle-newsletter-repositories";
 import { NewslettersService, NewsletterDomainError } from "../application/newsletters-service";
 
 describe("Newsletters Multi-Publication Isolation", () => {
@@ -33,6 +41,9 @@ describe("Newsletters Multi-Publication Isolation", () => {
 
   beforeEach(async () => {
     const db = getDb();
+    await db
+      .delete(newsletterSends)
+      .where(inArray(newsletterSends.publicationId, ["pub_alpha", "pub_beta"]));
     await db.delete(newsletters).where(inArray(newsletters.publicationId, ["pub_alpha", "pub_beta"]));
 
     newsletterRepo = new DrizzleNewsletterRepository();
@@ -140,5 +151,94 @@ describe("Newsletters Multi-Publication Isolation", () => {
 
     expect(listA.every((nl) => nl.publicationId === pubA)).toBe(true);
     expect(listB.every((nl) => nl.publicationId === pubB)).toBe(true);
+  });
+
+  it("scopes newsletter sends to their publication", async () => {
+    const pubA = "pub_alpha";
+    const pubB = "pub_beta";
+
+    const nlA = await newslettersService.createNewsletter(
+      {
+        key: "send-scope",
+        name: "Send Scope A",
+        senderName: "A",
+        senderEmail: "a@a.com",
+      },
+      "staff",
+      pubA,
+    );
+    await newslettersService.createNewsletter(
+      {
+        key: "send-scope",
+        name: "Send Scope B",
+        senderName: "B",
+        senderEmail: "b@b.com",
+      },
+      "staff",
+      pubB,
+    );
+
+    const sendService = new NewslettersService({
+      newsletterRepo,
+      preferenceRepo: {} as any,
+      sendRepo: new DrizzleSendRepository(),
+      audienceRepo: {} as any,
+      isMemberSuppressed: async () => false,
+      unsubscribeSecret: "test-secret",
+      portalUrl: "http://localhost:3000",
+    });
+
+    const send = await sendService.createSend(
+      {
+        publicationId: pubA,
+        newsletterId: nlA.id,
+        subject: "Alpha only",
+        content: {
+          schema: "vibress-studio",
+          version: 1,
+          root: { type: "root", children: [] },
+        },
+        senderName: "Alpha Editor",
+        senderEmail: "news@alpha.com",
+        audience: { filter: "all", productId: null, planId: null },
+        status: "draft",
+      },
+      "staff",
+    );
+    expect(send.publicationId).toBe(pubA);
+
+    // Cross-publication detail, cancellation, and listing are denied.
+    expect(await sendService.getSend(send.id, pubB)).toBeNull();
+    await expect(sendService.cancelSend(send.id, pubB)).rejects.toThrow(
+      NewsletterDomainError,
+    );
+    const listB = await sendService.listSends({ publicationId: pubB });
+    expect(listB.sends).toHaveLength(0);
+
+    // The owning publication still sees and can cancel it.
+    expect((await sendService.getSend(send.id, pubA))?.id).toBe(send.id);
+    const cancelled = await sendService.cancelSend(send.id, pubA);
+    expect(cancelled.status).toBe("cancelled");
+
+    // A send cannot be created against another publication's newsletter.
+    await expect(
+      sendService.createSend(
+        {
+          publicationId: pubB,
+          newsletterId: nlA.id,
+          subject: "Cross-tenant",
+          content: {
+            schema: "vibress-studio",
+            version: 1,
+            root: { type: "root", children: [] },
+          },
+          senderName: "Beta Editor",
+          senderEmail: "news@beta.com",
+          audience: { filter: "all", productId: null, planId: null },
+          status: "draft",
+        },
+        "staff",
+      ),
+    ).rejects.toThrow(NewsletterDomainError);
   });
 });

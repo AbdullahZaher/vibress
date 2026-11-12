@@ -113,6 +113,16 @@ describe("Multi-Publication Workspaces & Cross-Tenant Isolation", () => {
     ).toThrow(TenantAccessDeniedError);
   });
 
+  it("fails closed when no publication repository is configured", async () => {
+    const service = new WorkspaceService(new InMemoryWorkspaceRepository());
+
+    await expect(
+      service.resolveStaffPublicationContext("user_unaffiliated", undefined, [
+        "owner",
+      ]),
+    ).rejects.toThrow(TenantAccessDeniedError);
+  });
+
   it("switches workspaces and verifies publication tenant boundary isolation", async () => {
     const repo = new InMemoryWorkspaceRepository();
     const service = new WorkspaceService(repo);

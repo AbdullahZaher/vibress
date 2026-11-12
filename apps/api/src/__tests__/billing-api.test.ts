@@ -30,7 +30,7 @@ import {
   BillingPortalResult,
 } from "@vibress/billing";
 import Stripe from "stripe";
-import { getDb, users, userRoles, roles } from "@vibress/database";
+import { getDb, users, userRoles, roles, publicationMemberships } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
@@ -958,6 +958,16 @@ describe("Batch 9 — Billing Integration & Security", () => {
     if (authorRole) {
       await db.insert(userRoles).values({ userId: uid, roleId: authorRole.id });
     }
+    // Staff publication context now fails closed without an explicit membership.
+    await db
+      .insert(publicationMemberships)
+      .values({
+        id: crypto.randomUUID(),
+        publicationId: "pub_default",
+        userId: uid,
+        role: "author",
+      })
+      .onConflictDoNothing();
     const loginRes = await app.inject({
       method: "POST",
       url: "/api/admin/v1/auth/login",

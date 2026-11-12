@@ -1,10 +1,10 @@
 import { FastifyInstance } from "fastify";
-import { usersService, rolesService } from "../services";
+import { usersService, rolesService, auditService } from "../services";
 import { requireStaffSession, requirePermission } from "../middleware/auth";
 import { getDb, userInvitations } from "@vibress/database";
 import { eq, and, desc } from "drizzle-orm";
 import crypto from "node:crypto";
-import { hashToken } from "@vibress/security";
+import { hashToken, canAssignRole } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { staffAuthMailer } from "../mailer/staff-auth-mailer";
 
@@ -97,6 +97,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      if (!canAssignRole(req.roles ?? [], role.key)) {
+        return reply.status(403).send({
+          errors: [
+            {
+              code: "ROLE_ESCALATION_DENIED",
+              message: `Role '${role.key}' cannot be granted by the current actor`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
       let userId: string;
       if (existing) {
         userId = existing.id;
@@ -157,6 +169,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         invitedBy: req.user!.id,
         createdAt: new Date(),
         updatedAt: new Date(),
+      });
+
+      await auditService.record({
+        action: "staff.invited",
+        actorUserId: req.user!.id,
+        targetType: "user",
+        targetId: userId,
+        metadata: {
+          roleKey: role.key,
+          publicationId,
+          invitationId,
+        },
       });
 
       const config = getConfig();

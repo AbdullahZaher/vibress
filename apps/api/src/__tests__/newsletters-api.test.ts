@@ -284,6 +284,101 @@ describe("Batch 10 — Newsletters & Email Integration & Security", () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it("denies cross-publication access to newsletter sends", async () => {
+    const db = getDb();
+    const { users, publicationMemberships } = await import("@vibress/database");
+    const ownerRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, "owner@example.com"))
+      .limit(1);
+    const ownerId = ownerRows[0]!.id;
+    const membershipId = crypto.randomUUID();
+
+    await db
+      .insert(publicationMemberships)
+      .values({
+        id: membershipId,
+        publicationId: "pub_alpha",
+        userId: ownerId,
+        role: "owner",
+      })
+      .onConflictDoNothing();
+
+    try {
+      const alphaHeaders = {
+        cookie: staffCookie,
+        origin: "http://localhost:7777",
+        "x-publication-id": "pub_alpha",
+      };
+
+      const nlRes = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/newsletters",
+        headers: alphaHeaders,
+        payload: {
+          key: `alpha-send-${Date.now()}`,
+          name: "Alpha Send",
+          senderName: "Alpha",
+          senderEmail: "alpha@vibress.test",
+        },
+      });
+      expect(nlRes.statusCode).toBe(201);
+
+      const sendRes = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/newsletter-sends",
+        headers: alphaHeaders,
+        payload: {
+          newsletterId: nlRes.json().newsletter.id,
+          subject: "Alpha only",
+          content: { schema: "vibress-studio", version: 1, root: { type: "root", children: [] } },
+          audience: { filter: "all" },
+          scheduledAt: new Date(Date.now() + 3600000).toISOString(),
+        },
+      });
+      expect(sendRes.statusCode).toBe(201);
+      const alphaSendId = sendRes.json().send.id;
+
+      const defaultHeaders = {
+        cookie: staffCookie,
+        origin: "http://localhost:7777",
+        "x-publication-id": "pub_default",
+      };
+
+      const crossRead = await app.inject({
+        method: "GET",
+        url: `/api/admin/v1/newsletter-sends/${alphaSendId}`,
+        headers: defaultHeaders,
+      });
+      expect(crossRead.statusCode).toBe(404);
+
+      const crossCancel = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/newsletter-sends/${alphaSendId}/cancel`,
+        headers: defaultHeaders,
+      });
+      expect(crossCancel.statusCode).toBe(400);
+      expect(crossCancel.json().errors[0].code).toBe("SEND_NOT_FOUND");
+
+      const listRes = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/newsletter-sends",
+        headers: defaultHeaders,
+      });
+      expect(listRes.statusCode).toBe(200);
+      expect(
+        listRes
+          .json()
+          .sends.some((s: { id: string }) => s.id === alphaSendId),
+      ).toBe(false);
+    } finally {
+      await db
+        .delete(publicationMemberships)
+        .where(eq(publicationMemberships.id, membershipId));
+    }
+  });
+
   it("RBAC 403: staff without newsletter permission cannot create sends", async () => {
     // Create a restricted staff user with the author role (no newsletter perms)
     const db = getDb();
@@ -291,7 +386,9 @@ describe("Batch 10 — Newsletters & Email Integration & Security", () => {
     const suffix = `${Date.now()}`;
     const email = `restricted-nl-${suffix}@example.com`;
     const hash = await hashPassword("RestrictedPass123!");
-    const { users, userRoles, roles } = await import("@vibress/database");
+    const { users, userRoles, roles, publicationMemberships } = await import(
+      "@vibress/database"
+    );
     await db.insert(users).values({
       id: `u-nl-${suffix}`,
       email,
@@ -310,6 +407,14 @@ describe("Batch 10 — Newsletters & Email Integration & Security", () => {
         .insert(userRoles)
         .values({ userId: `u-nl-${suffix}`, roleId: authorRole[0].id });
     }
+    // Tenant access requires an explicit publication membership; without one
+    // the request is denied before RBAC is evaluated.
+    await db.insert(publicationMemberships).values({
+      id: `pm-nl-${suffix}`,
+      publicationId: "pub_default",
+      userId: `u-nl-${suffix}`,
+      role: "author",
+    });
     const loginRes = await app.inject({
       method: "POST",
       url: "/api/admin/v1/auth/login",
