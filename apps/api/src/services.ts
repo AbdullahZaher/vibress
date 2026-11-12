@@ -275,7 +275,8 @@ export const newslettersService = new NewslettersService({
     memberRepo,
     subscriptionRepo,
   ),
-  isMemberSuppressed: (email) => emailSuppressionRepo.isSuppressed(email),
+  isMemberSuppressed: (email, publicationId) =>
+    emailSuppressionRepo.isSuppressed(email, publicationId),
   unsubscribeSecret: config.newsletters.unsubscribeSecret || "dev-unsub-secret",
   portalUrl: config.site.portalUrl,
 });

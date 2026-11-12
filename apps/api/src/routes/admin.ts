@@ -1,33 +1,87 @@
 import { FastifyInstance } from "fastify";
 import { usersService, rolesService, auditService } from "../services";
 import { requireStaffSession, requirePermission } from "../middleware/auth";
-import { getDb, userInvitations } from "@vibress/database";
-import { eq, and, desc } from "drizzle-orm";
+import {
+  getDb,
+  userInvitations,
+  publications,
+  publicationMemberships,
+  workspaceMembers,
+} from "@vibress/database";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashToken, canAssignRole } from "@vibress/security";
 import { getConfig } from "@vibress/config";
 import { staffAuthMailer } from "../mailer/staff-auth-mailer";
 
+/**
+ * Staff who legitimately belong to the caller's publication: explicit
+ * publication members plus workspace owners/admins, who can administer every
+ * publication in their workspace.
+ */
+async function listPublicationStaffIds(
+  publicationId: string,
+): Promise<Set<string>> {
+  const db = getDb();
+  const pubRows = await db
+    .select({ workspaceId: publications.workspaceId })
+    .from(publications)
+    .where(eq(publications.id, publicationId))
+    .limit(1);
+
+  const ids = new Set<string>();
+  const pubMembers = await db
+    .select({ userId: publicationMemberships.userId })
+    .from(publicationMemberships)
+    .where(eq(publicationMemberships.publicationId, publicationId));
+  for (const member of pubMembers) ids.add(member.userId);
+
+  const workspaceId = pubRows[0]?.workspaceId;
+  if (workspaceId) {
+    const workspaceAdmins = await db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          inArray(workspaceMembers.role, ["owner", "admin"]),
+        ),
+      );
+    for (const admin of workspaceAdmins) ids.add(admin.userId);
+  }
+
+  return ids;
+}
+
 export async function adminRoutes(fastify: FastifyInstance) {
   // Users list
   fastify.get("/users", {
     preHandler: [requireStaffSession, requirePermission("users.read")],
-    handler: async (_req, reply) => {
+    handler: async (req, reply) => {
       const allUsers = await usersService.listAll();
-      const safeUsers = await Promise.all(
-        allUsers.map(async (u) => {
-          const userRoles = await rolesService.getUserRoleKeys(u.id);
-          return {
-            id: u.id,
-            email: u.email,
-            name: u.name,
-            status: u.status,
-            roles: userRoles,
-            createdAt: u.createdAt,
-            lastLoginAt: u.lastLoginAt,
-          };
-        }),
-      );
+      const actorIsOwner = (req.roles ?? []).includes("owner");
+      const visibleIds = actorIsOwner
+        ? null
+        : await listPublicationStaffIds(
+            req.publicationContext!.publicationId,
+          );
+
+      const safeUsers = (
+        await Promise.all(
+          allUsers.map(async (u) => {
+            const userRoles = await rolesService.getUserRoleKeys(u.id);
+            return {
+              id: u.id,
+              email: u.email,
+              name: u.name,
+              status: u.status,
+              roles: userRoles,
+              createdAt: u.createdAt,
+              lastLoginAt: u.lastLoginAt,
+            };
+          }),
+        )
+      ).filter((u) => visibleIds === null || visibleIds.has(u.id));
 
       return reply.status(200).send({ users: safeUsers });
     },
@@ -36,9 +90,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
   // Roles list
   fastify.get("/roles", {
     preHandler: [requireStaffSession, requirePermission("roles.read")],
-    handler: async (_req, reply) => {
+    handler: async (req, reply) => {
       const allRoles = await rolesService.listAll();
-      return reply.status(200).send({ roles: allRoles });
+      const actorRoles = req.roles ?? [];
+      const visibleRoles = actorRoles.includes("owner")
+        ? allRoles
+        : allRoles.filter((role) => canAssignRole(actorRoles, role.key));
+      return reply.status(200).send({ roles: visibleRoles });
     },
   });
 

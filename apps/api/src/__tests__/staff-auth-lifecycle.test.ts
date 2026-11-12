@@ -1,8 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import crypto from "node:crypto";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb, publicationMemberships, seedDatabase } from "@vibress/database";
-import { and, eq } from "drizzle-orm";
+import {
+  getDb,
+  publicationMemberships,
+  publications,
+  seedDatabase,
+  users,
+  workspaces,
+} from "@vibress/database";
+import { and, eq, inArray } from "drizzle-orm";
 
 describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite", () => {
   let app: FastifyInstance;
@@ -522,6 +530,170 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(res.statusCode).toBe(400);
       const body = JSON.parse(res.body);
       expect(body.errors[0].code).toBe("TOKEN_ALREADY_USED");
+    });
+  });
+
+  describe("F-004: Staff directory and role visibility are tenant-scoped", () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const outsideWorkspaceId = `ws_f004_${suffix}`;
+    const outsidePublicationId = `pub_f004_${suffix}`;
+    const outsideUserId = `user_f004_${suffix}`;
+    const outsideEmail = `outside-f004-${suffix}@example.com`;
+    const globalOnlyUserId = `user_f004_global_${suffix}`;
+    const globalOnlyEmail = `global-only-f004-${suffix}@example.com`;
+    let editorCookie: string;
+
+    beforeAll(async () => {
+      const db = getDb();
+      await db.insert(workspaces).values({
+        id: outsideWorkspaceId,
+        name: "F-004 Outside Workspace",
+        slug: `f004-ws-${suffix}`,
+      });
+      await db.insert(publications).values({
+        id: outsidePublicationId,
+        workspaceId: outsideWorkspaceId,
+        name: "F-004 Outside Publication",
+        slug: `f004-pub-${suffix}`,
+      });
+      await db.insert(users).values({
+        id: outsideUserId,
+        email: outsideEmail,
+        name: "Outside Staff",
+        slug: `outside-f004-${suffix}`,
+        passwordHash: "not-a-real-hash",
+        status: "active",
+      });
+      await db.insert(publicationMemberships).values({
+        id: crypto.randomUUID(),
+        publicationId: outsidePublicationId,
+        userId: outsideUserId,
+        role: "editor",
+      });
+      await db.insert(users).values({
+        id: globalOnlyUserId,
+        email: globalOnlyEmail,
+        name: "Global Only Staff",
+        slug: `global-only-f004-${suffix}`,
+        passwordHash: "not-a-real-hash",
+        status: "active",
+      });
+
+      const editorRow = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, "editor@vibress.local"))
+        .limit(1);
+      const editorUserId = editorRow[0]!.id;
+      await db.insert(publicationMemberships).values({
+        id: crypto.randomUUID(),
+        publicationId: outsidePublicationId,
+        userId: editorUserId,
+        role: "editor",
+      });
+
+      const login = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/login",
+        payload: {
+          email: "editor@vibress.local",
+          password: "DevPassword123!",
+        },
+      });
+      expect(login.statusCode).toBe(200);
+      const setCookie = login.headers["set-cookie"];
+      editorCookie = Array.isArray(setCookie)
+        ? setCookie[0]!
+        : (setCookie as string);
+    });
+
+    async function listUserEmails(
+      cookie: string,
+      publicationId: string,
+    ): Promise<string[]> {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/users",
+        headers: { cookie, "x-publication-id": publicationId },
+      });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body).users as Array<{ email: string }>).map(
+        (u) => u.email,
+      );
+    }
+
+    async function listRoleKeys(
+      cookie: string,
+      publicationId: string,
+    ): Promise<string[]> {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/roles",
+        headers: { cookie, "x-publication-id": publicationId },
+      });
+      expect(res.statusCode).toBe(200);
+      return (JSON.parse(res.body).roles as Array<{ key: string }>).map(
+        (r) => r.key,
+      );
+    }
+
+    it("hides staff from other tenants in the caller's publication directory", async () => {
+      const emails = await listUserEmails(editorCookie, "pub_default");
+      expect(emails).not.toContain(outsideEmail);
+      expect(emails).toContain("admin@example.com");
+    });
+
+    it("shows only the selected publication's staff, not other tenants' users", async () => {
+      const emails = await listUserEmails(editorCookie, outsidePublicationId);
+      expect(emails).toContain(outsideEmail);
+      expect(emails).not.toContain("admin@example.com");
+    });
+
+    it("excludes globally orphaned accounts from non-owner directories", async () => {
+      const editorEmails = await listUserEmails(editorCookie, "pub_default");
+      expect(editorEmails).not.toContain(globalOnlyEmail);
+
+      const ownerEmails = await listUserEmails(ownerCookie, "pub_default");
+      expect(ownerEmails).toContain(globalOnlyEmail);
+    });
+
+    it("shows the complete directory to a global owner", async () => {
+      const emails = await listUserEmails(ownerCookie, "pub_default");
+      expect(emails).toContain(outsideEmail);
+      expect(emails).toContain("admin@example.com");
+    });
+
+    it("hides owner/administrator roles from an editor's role catalogue", async () => {
+      const keys = await listRoleKeys(editorCookie, "pub_default");
+      expect(keys).not.toContain("owner");
+      expect(keys).not.toContain("administrator");
+      expect(keys).toEqual(
+        expect.arrayContaining(["editor", "author", "contributor"]),
+      );
+    });
+
+    it("returns the full role catalogue to a global owner", async () => {
+      const keys = await listRoleKeys(ownerCookie, "pub_default");
+      expect(keys).toEqual(
+        expect.arrayContaining([
+          "owner",
+          "administrator",
+          "editor",
+          "author",
+          "contributor",
+        ]),
+      );
+    });
+
+    afterAll(async () => {
+      const db = getDb();
+      await db
+        .delete(publications)
+        .where(eq(publications.id, outsidePublicationId));
+      await db.delete(workspaces).where(eq(workspaces.id, outsideWorkspaceId));
+      await db
+        .delete(users)
+        .where(inArray(users.id, [outsideUserId, globalOnlyUserId]));
     });
   });
 });

@@ -3,6 +3,7 @@ import {
   EmailRecipientRepository,
   EmailEventRepository,
   EmailSuppressionRepository,
+  EmailSuppressionScope,
 } from "../domain/recipient";
 import { SuppressionReason } from "../domain/recipient";
 import { domainEvents } from "@vibress/events";
@@ -95,8 +96,11 @@ export class EmailService {
    * Suppression policy: hard bounces and complaints suppress the address.
    * Delivery/open/click never suppress.
    */
-  isSuppressed(email: string): Promise<boolean> {
-    return this.deps.suppressionRepo.isSuppressed(email);
+  isSuppressed(
+    email: string,
+    publicationId?: string | null,
+  ): Promise<boolean> {
+    return this.deps.suppressionRepo.isSuppressed(email, publicationId);
   }
 
   async suppress(
@@ -105,6 +109,7 @@ export class EmailService {
     source: string,
     detail?: string | null,
     memberId?: string | null,
+    publicationId?: string | null,
   ): Promise<void> {
     await this.deps.suppressionRepo.add({
       email,
@@ -112,14 +117,16 @@ export class EmailService {
       source,
       detail,
       memberId,
+      publicationId,
     });
   }
 
   async listSuppressions(
     limit = 50,
     offset = 0,
+    scope?: EmailSuppressionScope,
   ): Promise<{ suppressions: unknown[]; total: number }> {
-    return this.deps.suppressionRepo.list(limit, offset);
+    return this.deps.suppressionRepo.list(limit, offset, scope);
   }
 
   /**
@@ -132,10 +139,10 @@ export class EmailService {
   }
 
   async removeSuppression(
-    email: string,
-    reason: SuppressionReason,
-  ): Promise<void> {
-    await this.deps.suppressionRepo.remove(email, reason);
+    id: string,
+    scope?: EmailSuppressionScope,
+  ): Promise<boolean> {
+    return this.deps.suppressionRepo.removeById(id, scope);
   }
 
   /**
@@ -225,6 +232,9 @@ export class EmailService {
     }
 
     const at = event.timestamp ? new Date(event.timestamp * 1000) : new Date();
+    const publicationId = recipient.sendId
+      ? await this.deps.recipientRepo.findSendPublicationId(recipient.sendId)
+      : null;
     const domainType = event.type;
 
     switch (domainType) {
@@ -253,6 +263,7 @@ export class EmailService {
         await this.deps.suppressionRepo.add({
           email: recipient.email,
           memberId: recipient.memberId,
+          publicationId,
           reason,
           source: "provider_webhook",
           detail: event.detail,
@@ -273,6 +284,7 @@ export class EmailService {
         await this.deps.suppressionRepo.add({
           email: recipient.email,
           memberId: recipient.memberId,
+          publicationId,
           reason: "spam_complaint",
           source: "provider_webhook",
           detail: event.detail,

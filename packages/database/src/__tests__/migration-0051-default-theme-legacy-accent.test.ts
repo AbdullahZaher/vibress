@@ -100,7 +100,12 @@ describe("migration 0051 Default theme compatibility on real Drizzle tables", ()
       path.resolve(process.cwd(), "packages/database/migrations/meta/_journal.json"),
       "utf8",
     )) as { entries: Array<{ idx: number; tag: string }> };
-    expect(journal.entries.at(-1)).toMatchObject({ idx: 51, tag: migrationTag });
+    const position = journal.entries.findIndex((entry) => entry.tag === migrationTag);
+    expect(position).toBeGreaterThan(0);
+    expect(journal.entries[position]).toMatchObject({ idx: 51, tag: migrationTag });
+    expect(journal.entries[position - 1]?.tag).toBe(
+      "0050_plugin_marketplace_publisher_revocations",
+    );
   });
 
   it("preserves effective published colors without changing other themes or publications", async () => {

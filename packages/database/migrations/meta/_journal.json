@@ -372,6 +372,13 @@
       "when": 1794900000000,
       "tag": "0052_newsletter_sends_publication_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794900000001,
+      "tag": "0053_email_suppressions_publication_scope",
+      "breakpoints": true
     }
   ]
 }

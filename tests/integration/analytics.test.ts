@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
+  getDb,
   getDbPool,
   closeDbPool,
   seedDatabase,
   runMigrations,
+  publicationMemberships,
 } from "@vibress/database";
 import {
   AnalyticsService,
@@ -323,6 +325,24 @@ describe("Analytics v1 (traffic)", () => {
         "AnalyticsPass123!",
       );
       void owner;
+
+      // Staff tenant context fails closed without an explicit membership;
+      // only the global owner receives the pub_default bootstrap context.
+      const db = getDb();
+      await db.insert(publicationMemberships).values([
+        {
+          id: crypto.randomUUID(),
+          publicationId: "pub_default",
+          userId: admin.id,
+          role: "admin",
+        },
+        {
+          id: crypto.randomUUID(),
+          publicationId: "pub_default",
+          userId: editor.id,
+          role: "editor",
+        },
+      ]);
 
       const ownerCookie = await login(
         "a-owner@test.local",

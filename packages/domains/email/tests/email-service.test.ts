@@ -98,6 +98,7 @@ describe("EmailService suppression policy", () => {
     findById: vi.fn(async () => null),
     findByMessageId: vi.fn(async () => null),
     findByEmailAndSend: vi.fn(async () => null),
+    findSendPublicationId: vi.fn(async () => null),
     markSent: vi.fn(),
     markFailed: vi.fn(async (id) => ({ id }) as any),
     markDelivered: vi.fn(),
@@ -113,7 +114,7 @@ describe("EmailService suppression policy", () => {
     isSuppressed: vi.fn(async () => false),
     findByEmail: vi.fn(async () => null),
     list: vi.fn(async () => ({ suppressions: [], total: 0 })),
-    remove: vi.fn(async () => undefined),
+    removeById: vi.fn(async () => true),
   };
   const providerEventRepo: ProviderEventRepository = {
     create: vi.fn(async (d) => ({
@@ -208,6 +209,7 @@ describe("EmailService suppression policy", () => {
     const recipientRepoWith: EmailRecipientRepository = {
       ...recipientRepo,
       findByMessageId: vi.fn(async () => recipient),
+      findSendPublicationId: vi.fn(async () => "pub_test"),
       markFailed: vi.fn(async (id, error) => ({
         ...recipient,
         status: "failed",
@@ -227,6 +229,7 @@ describe("EmailService suppression policy", () => {
       expect.objectContaining({
         email: "bounce@example.com",
         reason: "hard_bounce",
+        publicationId: "pub_test",
       }),
     );
     expect(recipientRepoWith.markFailed).toHaveBeenCalled();

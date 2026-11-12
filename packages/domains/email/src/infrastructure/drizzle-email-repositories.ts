@@ -8,8 +8,9 @@ import {
   EmailSuppressionRow,
   providerEvents,
   ProviderEventRow,
+  newsletterSends,
 } from "@vibress/database";
-import { eq, and, count, desc, sql } from "drizzle-orm";
+import { eq, and, count, desc, sql, isNull, or } from "drizzle-orm";
 import crypto from "node:crypto";
 import {
   EmailRecipientRepository,
@@ -20,6 +21,7 @@ import {
   EmailEvent,
   SuppressionReason,
   EmailSuppression,
+  EmailSuppressionScope,
 } from "../domain/recipient";
 import { RecipientStatus } from "../domain/recipient-status";
 import {
@@ -110,6 +112,16 @@ export class DrizzleEmailRecipientRepository implements EmailRecipientRepository
     const row = rows[0];
     if (!row) return null;
     return this.mapToDomain(row);
+  }
+
+  async findSendPublicationId(sendId: string): Promise<string | null> {
+    const db = getDb();
+    const rows = await db
+      .select({ publicationId: newsletterSends.publicationId })
+      .from(newsletterSends)
+      .where(eq(newsletterSends.id, sendId))
+      .limit(1);
+    return rows[0]?.publicationId ?? null;
   }
 
   async markSent(
@@ -348,6 +360,7 @@ export class DrizzleProviderEventRepository implements ProviderEventRepository {
 
 export class DrizzleEmailSuppressionRepository implements EmailSuppressionRepository {
   async add(data: {
+    publicationId?: string | null | undefined;
     memberId?: string | null | undefined;
     email: string;
     reason: SuppressionReason;
@@ -360,6 +373,7 @@ export class DrizzleEmailSuppressionRepository implements EmailSuppressionReposi
       .insert(emailSuppressions)
       .values({
         id: crypto.randomUUID(),
+        publicationId: data.publicationId || null,
         memberId: data.memberId || null,
         email,
         reason: data.reason,
@@ -370,22 +384,53 @@ export class DrizzleEmailSuppressionRepository implements EmailSuppressionReposi
       .onConflictDoNothing();
   }
 
-  async isSuppressed(email: string): Promise<boolean> {
+  /**
+   * A suppression applies when it belongs to the requested publication or is a
+   * global provider-level suppression (publication_id NULL). Callers without a
+   * publication scope see any matching suppression.
+   */
+  async isSuppressed(
+    email: string,
+    publicationId?: string | null,
+  ): Promise<boolean> {
     const db = getDb();
+    const normalized = email.trim().toLowerCase();
+    const where = publicationId
+      ? and(
+          eq(emailSuppressions.email, normalized),
+          or(
+            eq(emailSuppressions.publicationId, publicationId),
+            isNull(emailSuppressions.publicationId),
+          ),
+        )
+      : eq(emailSuppressions.email, normalized);
     const rows = await db
       .select({ id: emailSuppressions.id })
       .from(emailSuppressions)
-      .where(eq(emailSuppressions.email, email.trim().toLowerCase()))
+      .where(where)
       .limit(1);
     return rows.length > 0;
   }
 
-  async findByEmail(email: string): Promise<EmailSuppression | null> {
+  async findByEmail(
+    email: string,
+    publicationId?: string | null,
+  ): Promise<EmailSuppression | null> {
     const db = getDb();
+    const normalized = email.trim().toLowerCase();
+    const where = publicationId
+      ? and(
+          eq(emailSuppressions.email, normalized),
+          or(
+            eq(emailSuppressions.publicationId, publicationId),
+            isNull(emailSuppressions.publicationId),
+          ),
+        )
+      : eq(emailSuppressions.email, normalized);
     const rows = await db
       .select()
       .from(emailSuppressions)
-      .where(eq(emailSuppressions.email, email.trim().toLowerCase()))
+      .where(where)
       .limit(1);
     const row = rows[0];
     if (!row) return null;
@@ -395,38 +440,66 @@ export class DrizzleEmailSuppressionRepository implements EmailSuppressionReposi
   async list(
     limit = 50,
     offset = 0,
+    scope?: EmailSuppressionScope,
   ): Promise<{ suppressions: EmailSuppression[]; total: number }> {
     const db = getDb();
-    const countRes = await db
-      .select({ total: count() })
-      .from(emailSuppressions);
-    const rows = await db
-      .select()
-      .from(emailSuppressions)
-      .orderBy(desc(emailSuppressions.createdAt))
-      .limit(Math.min(limit, 100))
-      .offset(offset);
+    const where = this.buildScopeFilter(scope);
+    const countRes = where
+      ? await db
+          .select({ total: count() })
+          .from(emailSuppressions)
+          .where(where)
+      : await db.select({ total: count() }).from(emailSuppressions);
+    const rows = where
+      ? await db
+          .select()
+          .from(emailSuppressions)
+          .where(where)
+          .orderBy(desc(emailSuppressions.createdAt))
+          .limit(Math.min(limit, 100))
+          .offset(offset)
+      : await db
+          .select()
+          .from(emailSuppressions)
+          .orderBy(desc(emailSuppressions.createdAt))
+          .limit(Math.min(limit, 100))
+          .offset(offset);
     return {
       suppressions: rows.map((r) => this.mapToDomain(r)),
       total: Number(countRes[0]?.total || 0),
     };
   }
 
-  async remove(email: string, reason: SuppressionReason): Promise<void> {
+  async removeById(
+    id: string,
+    scope?: EmailSuppressionScope,
+  ): Promise<boolean> {
     const db = getDb();
-    await db
+    const scopeFilter = this.buildScopeFilter(scope);
+    const where = scopeFilter
+      ? and(eq(emailSuppressions.id, id), scopeFilter)
+      : eq(emailSuppressions.id, id);
+    const deleted = await db
       .delete(emailSuppressions)
-      .where(
-        and(
-          eq(emailSuppressions.email, email.trim().toLowerCase()),
-          eq(emailSuppressions.reason, reason),
-        ),
-      );
+      .where(where)
+      .returning({ id: emailSuppressions.id });
+    return deleted.length > 0;
+  }
+
+  private buildScopeFilter(scope?: EmailSuppressionScope) {
+    if (!scope?.publicationId) return null;
+    return scope.includeGlobal
+      ? or(
+          eq(emailSuppressions.publicationId, scope.publicationId),
+          isNull(emailSuppressions.publicationId),
+        )
+      : eq(emailSuppressions.publicationId, scope.publicationId);
   }
 
   private mapToDomain(row: EmailSuppressionRow): EmailSuppression {
     return {
       id: row.id,
+      publicationId: row.publicationId,
       memberId: row.memberId,
       email: row.email,
       reason: row.reason as SuppressionReason,

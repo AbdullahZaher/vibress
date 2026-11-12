@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { members } from "./members";
 import { publications } from "./publications";
 
@@ -221,6 +222,11 @@ export const emailSuppressions = pgTable(
   "email_suppressions",
   {
     id: text("id").primaryKey(),
+    // NULL marks a provider-level (global) deliverability suppression that is
+    // not attributable to a single publication.
+    publicationId: text("publication_id").references(() => publications.id, {
+      onDelete: "cascade",
+    }),
     memberId: text("member_id").references(() => members.id, {
       onDelete: "cascade",
     }),
@@ -234,9 +240,18 @@ export const emailSuppressions = pgTable(
   },
   (table) => {
     return {
-      uniqueEmailIdx: uniqueIndex("email_suppressions_email_reason_idx").on(
-        table.email,
-        table.reason,
+      globalUniqueEmailIdx: uniqueIndex(
+        "email_suppressions_global_email_reason_idx",
+      )
+        .on(table.email, table.reason)
+        .where(sql`"publication_id" IS NULL`),
+      publicationUniqueEmailIdx: uniqueIndex(
+        "email_suppressions_publication_email_reason_idx",
+      )
+        .on(table.publicationId, table.email, table.reason)
+        .where(sql`"publication_id" IS NOT NULL`),
+      publicationIdx: index("email_suppressions_publication_id_idx").on(
+        table.publicationId,
       ),
       emailIdx: index("email_suppressions_email_idx").on(table.email),
     };

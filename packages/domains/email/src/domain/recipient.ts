@@ -37,6 +37,7 @@ export interface EmailRecipientRepository {
     email: string,
     sendId: string,
   ): Promise<EmailRecipient | null>;
+  findSendPublicationId(sendId: string): Promise<string | null>;
   markSent(id: string, messageId: string, at: Date): Promise<EmailRecipient>;
   markFailed(
     id: string,
@@ -78,6 +79,7 @@ export type SuppressionReason =
 
 export interface EmailSuppression {
   id: string;
+  publicationId: string | null;
   memberId: string | null;
   email: string;
   reason: SuppressionReason;
@@ -86,19 +88,29 @@ export interface EmailSuppression {
   createdAt: Date;
 }
 
+export interface EmailSuppressionScope {
+  publicationId?: string | null | undefined;
+  includeGlobal?: boolean | undefined;
+}
+
 export interface EmailSuppressionRepository {
   add(data: {
+    publicationId?: string | null | undefined;
     memberId?: string | null | undefined;
     email: string;
     reason: SuppressionReason;
     source: string;
     detail?: string | null | undefined;
   }): Promise<void>;
-  isSuppressed(email: string): Promise<boolean>;
-  findByEmail(email: string): Promise<EmailSuppression | null>;
+  isSuppressed(email: string, publicationId?: string | null): Promise<boolean>;
+  findByEmail(
+    email: string,
+    publicationId?: string | null,
+  ): Promise<EmailSuppression | null>;
   list(
     limit?: number,
     offset?: number,
+    scope?: EmailSuppressionScope,
   ): Promise<{ suppressions: EmailSuppression[]; total: number }>;
-  remove(email: string, reason: SuppressionReason): Promise<void>;
+  removeById(id: string, scope?: EmailSuppressionScope): Promise<boolean>;
 }

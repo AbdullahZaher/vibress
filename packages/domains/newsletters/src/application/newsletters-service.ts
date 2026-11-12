@@ -66,7 +66,10 @@ export interface NewsletterServiceDeps {
   preferenceRepo: NewsletterPreferenceRepository;
   sendRepo: SendRepository;
   audienceRepo: MemberAudienceRepository;
-  isMemberSuppressed: (email: string) => Promise<boolean>;
+  isMemberSuppressed: (
+    email: string,
+    publicationId: string,
+  ) => Promise<boolean>;
   unsubscribeSecret: string;
   portalUrl: string;
 }
@@ -250,7 +253,10 @@ export class NewslettersService {
       // Defense in depth: enforce the paid/free filter in the domain too
       if (definition.filter === "paid" && !member.hasPaidSubscription) continue;
       if (definition.filter === "free" && member.hasPaidSubscription) continue;
-      const suppressed = await this.deps.isMemberSuppressed(member.email);
+      const suppressed = await this.deps.isMemberSuppressed(
+        member.email,
+        publicationId,
+      );
       if (suppressed) continue;
       const pref = await this.deps.preferenceRepo.get(member.id, newsletterId);
       if (!pref || !pref.subscribed) continue;

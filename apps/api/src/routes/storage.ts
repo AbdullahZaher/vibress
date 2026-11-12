@@ -14,8 +14,16 @@ import {
   requirePermission,
   validateOrigin,
 } from "../middleware/auth";
-import { validateAndDetectFile, validateMediaMetadata } from "@vibress/media";
-import { defaultStorageRegistry } from "@vibress/storage-core";
+import {
+  DEFAULT_MEDIA_LIMITS,
+  validateAndDetectFile,
+  validateMediaMetadata,
+} from "@vibress/media";
+import {
+  defaultStorageRegistry,
+  hasObjectBufferSupport,
+  StorageProvider,
+} from "@vibress/storage-core";
 import crypto from "node:crypto";
 
 type CodedError = Error & { code?: string };
@@ -25,6 +33,62 @@ function asCodedError(err: unknown): CodedError {
   return new Error(
     typeof err === "string" ? err : "Unknown error",
   ) as CodedError;
+}
+
+function maxBytesForAssetType(assetType: string): number {
+  if (assetType === "image") return DEFAULT_MEDIA_LIMITS.maxImageSize;
+  if (assetType === "audio") return DEFAULT_MEDIA_LIMITS.maxAudioSize;
+  if (assetType === "video") return DEFAULT_MEDIA_LIMITS.maxVideoSize;
+  return DEFAULT_MEDIA_LIMITS.maxFileSize;
+}
+
+function codedError(code: string, message: string): CodedError {
+  const err = new Error(message) as CodedError;
+  err.code = code;
+  return err;
+}
+
+/**
+ * Reads the leading bytes of a completed upload for magic-byte validation.
+ * Fails closed: when no provider read path exists (or the read fails) the
+ * upload is rejected instead of being registered unverified.
+ */
+async function readObjectHead(
+  provider: StorageProvider,
+  key: string,
+): Promise<Buffer> {
+  if (provider.getSignedUrl) {
+    const downloadUrl = await provider.getSignedUrl(key, {
+      operation: "get",
+      expiresInSeconds: 60,
+    });
+    const rangeRes = await fetch(downloadUrl, {
+      headers: { Range: "bytes=0-512" },
+    });
+    if (!rangeRes.ok) {
+      throw codedError(
+        "STORAGE_SIGNATURE_UNAVAILABLE",
+        `Storage provider returned HTTP ${rangeRes.status} while reading the uploaded object`,
+      );
+    }
+    return Buffer.from(await rangeRes.arrayBuffer());
+  }
+
+  if (hasObjectBufferSupport(provider)) {
+    const buffer = await provider.getObjectBuffer(key);
+    if (!buffer) {
+      throw codedError(
+        "STORAGE_SIGNATURE_UNAVAILABLE",
+        "Storage provider returned no content for the uploaded object",
+      );
+    }
+    return buffer.subarray(0, 512);
+  }
+
+  throw codedError(
+    "STORAGE_SIGNATURE_UNSUPPORTED",
+    "Active storage provider cannot read the uploaded object for signature verification",
+  );
 }
 
 type StorageConnectionTestBody = {
@@ -517,39 +581,51 @@ export async function storageRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Perform signature verification on initial byte range if getSignedUrl is supported
-      if (activeProvider.getSignedUrl) {
-        try {
-          const downloadUrl = await activeProvider.getSignedUrl(
-            session.storageKey,
-            { operation: "get", expiresInSeconds: 60 },
-          );
-          const rangeRes = await fetch(downloadUrl, {
-            headers: { Range: "bytes=0-512" },
-          });
-          if (rangeRes.ok) {
-            const arrBuf = await rangeRes.arrayBuffer();
-            const headBuf = Buffer.from(arrBuf);
-            validateAndDetectFile({
-              filename: session.originalFilename,
-              buffer: headBuf,
-              mimeType: session.declaredMime,
-            });
-          }
-        } catch (valErr) {
-          const ve = asCodedError(valErr);
-          await repo.updateUploadSessionState(uploadSessionId, "failed");
-          await activeProvider.delete(session.storageKey).catch(() => {});
-          return reply.status(400).send({
-            errors: [
-              {
-                code: ve.code || "MEDIA_MIME_MISMATCH",
-                message: `Direct upload signature verification failed: ${ve.message}`,
-                requestId: req.id,
-              },
-            ],
-          });
-        }
+      // The client-chosen signed URL can upload any size; enforce the declared
+      // bound and the per-asset-type ceiling at completion.
+      const maxAllowedBytes = Math.min(
+        session.expectedSize,
+        maxBytesForAssetType(session.assetType),
+      );
+      if (head.size > maxAllowedBytes) {
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        await activeProvider.delete(session.storageKey).catch(() => {});
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "MEDIA_TOO_LARGE",
+              message: `Uploaded file is ${head.size} bytes; maximum allowed is ${maxAllowedBytes} bytes`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // Signature verification is mandatory for every provider; an unreadable
+      // object fails closed rather than being registered unverified.
+      try {
+        const headBuf = await readObjectHead(
+          activeProvider,
+          session.storageKey,
+        );
+        validateAndDetectFile({
+          filename: session.originalFilename,
+          buffer: headBuf,
+          mimeType: session.declaredMime,
+        });
+      } catch (valErr) {
+        const ve = asCodedError(valErr);
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        await activeProvider.delete(session.storageKey).catch(() => {});
+        return reply.status(400).send({
+          errors: [
+            {
+              code: ve.code || "MEDIA_MIME_MISMATCH",
+              message: `Direct upload signature verification failed: ${ve.message}`,
+              requestId: req.id,
+            },
+          ],
+        });
       }
 
       // Create MediaAsset record
@@ -829,39 +905,49 @@ export async function storageRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Signature verification on byte range if getSignedUrl is supported
-      if (activeProvider.getSignedUrl) {
-        try {
-          const downloadUrl = await activeProvider.getSignedUrl(
-            session.storageKey,
-            { operation: "get", expiresInSeconds: 60 },
-          );
-          const rangeRes = await fetch(downloadUrl, {
-            headers: { Range: "bytes=0-512" },
-          });
-          if (rangeRes.ok) {
-            const arrBuf = await rangeRes.arrayBuffer();
-            const headBuf = Buffer.from(arrBuf);
-            validateAndDetectFile({
-              filename: session.originalFilename,
-              buffer: headBuf,
-              mimeType: session.declaredMime,
-            });
-          }
-        } catch (valErr) {
-          const ve = asCodedError(valErr);
-          await repo.updateUploadSessionState(uploadSessionId, "failed");
-          await activeProvider.delete(session.storageKey).catch(() => {});
-          return reply.status(400).send({
-            errors: [
-              {
-                code: ve.code || "MEDIA_MIME_MISMATCH",
-                message: `Multipart upload signature verification failed: ${ve.message}`,
-                requestId: req.id,
-              },
-            ],
-          });
-        }
+      const maxAllowedBytes = Math.min(
+        session.expectedSize,
+        maxBytesForAssetType(session.assetType),
+      );
+      if (storedObj.size > maxAllowedBytes) {
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        await activeProvider.delete(session.storageKey).catch(() => {});
+        return reply.status(400).send({
+          errors: [
+            {
+              code: "MEDIA_TOO_LARGE",
+              message: `Uploaded file is ${storedObj.size} bytes; maximum allowed is ${maxAllowedBytes} bytes`,
+              requestId: req.id,
+            },
+          ],
+        });
+      }
+
+      // Signature verification is mandatory for every provider; an unreadable
+      // object fails closed rather than being registered unverified.
+      try {
+        const headBuf = await readObjectHead(
+          activeProvider,
+          session.storageKey,
+        );
+        validateAndDetectFile({
+          filename: session.originalFilename,
+          buffer: headBuf,
+          mimeType: session.declaredMime,
+        });
+      } catch (valErr) {
+        const ve = asCodedError(valErr);
+        await repo.updateUploadSessionState(uploadSessionId, "failed");
+        await activeProvider.delete(session.storageKey).catch(() => {});
+        return reply.status(400).send({
+          errors: [
+            {
+              code: ve.code || "MEDIA_MIME_MISMATCH",
+              message: `Multipart upload signature verification failed: ${ve.message}`,
+              requestId: req.id,
+            },
+          ],
+        });
       }
 
       const assetId = session.storageKey.split("/")[1] || crypto.randomUUID();

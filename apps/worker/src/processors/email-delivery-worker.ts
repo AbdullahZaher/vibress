@@ -55,7 +55,8 @@ export class EmailDeliveryWorker {
     preferenceRepo: new DrizzleNewsletterPreferenceRepository(),
     sendRepo: this.sendRepo,
     audienceRepo: new NoopAudienceRepository(),
-    isMemberSuppressed: (email) => this.suppressionRepo.isSuppressed(email),
+    isMemberSuppressed: (email, publicationId) =>
+      this.suppressionRepo.isSuppressed(email, publicationId),
     unsubscribeSecret:
       appConfig.newsletters.unsubscribeSecret || "dev-unsub-secret",
     portalUrl: appConfig.site.portalUrl,
@@ -141,7 +142,12 @@ export class EmailDeliveryWorker {
     if (recipient.attemptCount >= MAX_ATTEMPTS_PER_RECIPIENT) return;
 
     // Suppression policy check at delivery time (Email domain owns policy)
-    if (await this.suppressionRepo.isSuppressed(recipient.email)) {
+    if (
+      await this.suppressionRepo.isSuppressed(
+        recipient.email,
+        send.publicationId,
+      )
+    ) {
       await this.recipientRepo.markFailed(
         recipientId,
         "suppressed",

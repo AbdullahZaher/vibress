@@ -33,7 +33,8 @@ export class NewsletterSendSchedulerWorker {
       new DrizzleMemberRepository(),
       new DrizzleSubscriptionRepository(),
     ),
-    isMemberSuppressed: (email) => this.suppressionRepo.isSuppressed(email),
+    isMemberSuppressed: (email, publicationId) =>
+      this.suppressionRepo.isSuppressed(email, publicationId),
     unsubscribeSecret:
       appConfig.newsletters.unsubscribeSecret || "dev-unsub-secret",
     portalUrl: appConfig.site.portalUrl,

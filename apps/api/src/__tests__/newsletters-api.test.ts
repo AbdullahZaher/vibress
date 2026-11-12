@@ -9,8 +9,15 @@ import {
   DrizzleMemberSessionRepository,
   MemberAuthService,
 } from "@vibress/members";
-import { getDb } from "@vibress/database";
-import { eq } from "drizzle-orm";
+import {
+  getDb,
+  publicationMemberships,
+  publications,
+  seedDatabase,
+  users,
+  workspaces,
+} from "@vibress/database";
+import { eq, inArray } from "drizzle-orm";
 import {
   EmailService,
   DrizzleEmailRecipientRepository,
@@ -613,5 +620,185 @@ describe("Batch 10 — Newsletters & Email Integration & Security", () => {
       url: "/api/admin/v1/email-suppressions",
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  describe("F-005: suppressions are publication-scoped", () => {
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const workspaceId = `ws_f005_${suffix}`;
+    const pubA = `pub_f005_a_${suffix}`;
+    const pubB = `pub_f005_b_${suffix}`;
+    const emailA = `scoped-a-${suffix}@example.com`;
+    const emailB = `scoped-b-${suffix}@example.com`;
+    const emailGlobal = `scoped-global-${suffix}@example.com`;
+    let editorCookie: string;
+    let suppressionBId: string;
+    let globalSuppressionId: string;
+    let ownSuppressionId: string;
+
+    const suppressionRepo = new DrizzleEmailSuppressionRepository();
+
+    beforeAll(async () => {
+      await seedDatabase();
+      const db = getDb();
+      await db
+        .insert(workspaces)
+        .values({ id: workspaceId, name: "F-005 WS", slug: `f005-ws-${suffix}` });
+      await db.insert(publications).values([
+        {
+          id: pubA,
+          workspaceId,
+          name: "F-005 Publication A",
+          slug: `f005-a-${suffix}`,
+        },
+        {
+          id: pubB,
+          workspaceId,
+          name: "F-005 Publication B",
+          slug: `f005-b-${suffix}`,
+        },
+      ]);
+
+      const editorRow = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, "editor@vibress.local"))
+        .limit(1);
+      const ownerRow = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, "owner@example.com"))
+        .limit(1);
+      const editorId = editorRow[0]!.id;
+      const ownerId = ownerRow[0]!.id;
+
+      await db.insert(publicationMemberships).values([
+        { id: crypto.randomUUID(), publicationId: pubA, userId: editorId, role: "editor" },
+        { id: crypto.randomUUID(), publicationId: pubA, userId: ownerId, role: "owner" },
+        { id: crypto.randomUUID(), publicationId: pubB, userId: ownerId, role: "owner" },
+      ]);
+
+      await suppressionRepo.add({
+        email: emailA,
+        reason: "manual",
+        source: "test",
+        publicationId: pubA,
+      });
+      await suppressionRepo.add({
+        email: emailB,
+        reason: "manual",
+        source: "test",
+        publicationId: pubB,
+      });
+      await suppressionRepo.add({
+        email: emailGlobal,
+        reason: "provider_suppression",
+        source: "test",
+      });
+
+      const listed = await suppressionRepo.list(100, 0, { publicationId: pubB });
+      suppressionBId = (listed.suppressions as Array<{ id: string }>)[0]!.id;
+      const own = await suppressionRepo.list(100, 0, { publicationId: pubA });
+      ownSuppressionId = (own.suppressions as Array<{ id: string }>)[0]!.id;
+      const global = await suppressionRepo.list(100, 0, {
+        publicationId: pubA,
+        includeGlobal: true,
+      });
+      globalSuppressionId = (
+        global.suppressions as Array<{ id: string; email: string }>
+      ).find((s) => s.email === emailGlobal)!.id;
+
+      editorCookie = await loginStaff(
+        app,
+        "editor@vibress.local",
+        "DevPassword123!",
+      );
+    });
+
+    it("applies a global suppression but ignores other publications' rows", async () => {
+      expect(await suppressionRepo.isSuppressed(emailGlobal, pubA)).toBe(true);
+      expect(await suppressionRepo.isSuppressed(emailA, pubA)).toBe(true);
+      expect(await suppressionRepo.isSuppressed(emailB, pubA)).toBe(false);
+    });
+
+    it("lists only the caller's publication suppressions for non-owner staff", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/email-suppressions",
+        headers: { cookie: editorCookie, "x-publication-id": pubA },
+      });
+      expect(res.statusCode).toBe(200);
+      const emails = (res.json().suppressions as Array<{ email: string }>).map(
+        (s) => s.email,
+      );
+      expect(emails).toContain(emailA);
+      expect(emails).not.toContain(emailB);
+      expect(emails).not.toContain(emailGlobal);
+    });
+
+    it("includes global suppressions in an owner's selected publication", async () => {
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/admin/v1/email-suppressions",
+        headers: { cookie: staffCookie, "x-publication-id": pubA },
+      });
+      expect(res.statusCode).toBe(200);
+      const emails = (res.json().suppressions as Array<{ email: string }>).map(
+        (s) => s.email,
+      );
+      expect(emails).toContain(emailA);
+      expect(emails).toContain(emailGlobal);
+      expect(emails).not.toContain(emailB);
+    });
+
+    it("does not let staff delete another publication's suppression", async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/admin/v1/email-suppressions/${suppressionBId}`,
+        headers: {
+          cookie: editorCookie,
+          origin: "http://localhost:7777",
+          "x-publication-id": pubA,
+        },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(await suppressionRepo.isSuppressed(emailB, pubB)).toBe(true);
+    });
+
+    it("does not let non-owner staff lift a global suppression", async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/admin/v1/email-suppressions/${globalSuppressionId}`,
+        headers: {
+          cookie: editorCookie,
+          origin: "http://localhost:7777",
+          "x-publication-id": pubA,
+        },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(await suppressionRepo.isSuppressed(emailGlobal, pubA)).toBe(true);
+    });
+
+    it("lets staff delete a suppression owned by their publication", async () => {
+      const res = await app.inject({
+        method: "DELETE",
+        url: `/api/admin/v1/email-suppressions/${ownSuppressionId}`,
+        headers: {
+          cookie: editorCookie,
+          origin: "http://localhost:7777",
+          "x-publication-id": pubA,
+        },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(await suppressionRepo.isSuppressed(emailA, pubA)).toBe(false);
+    });
+
+    afterAll(async () => {
+      const db = getDb();
+      await db
+        .delete(publications)
+        .where(inArray(publications.id, [pubA, pubB]));
+      await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+      await suppressionRepo.removeById(globalSuppressionId);
+    });
   });
 });

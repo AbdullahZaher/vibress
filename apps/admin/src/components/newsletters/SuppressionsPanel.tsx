@@ -23,9 +23,9 @@ export function SuppressionsPanel({
   onMessage,
   onChanged,
 }: SuppressionsPanelProps) {
-  const handleRemoveSuppression = async (email: string) => {
+  const handleRemoveSuppression = async (id: string) => {
     try {
-      await removeSuppressionApi(email);
+      await removeSuppressionApi(id);
       onMessage("Suppression removed");
       await onChanged();
     } catch (err: unknown) {
@@ -69,7 +69,7 @@ export function SuppressionsPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleRemoveSuppression(sup.email)}
+                    onClick={() => handleRemoveSuppression(sup.id)}
                     className="h-7 px-2 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10"
                   >
                     Remove

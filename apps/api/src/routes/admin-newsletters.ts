@@ -1,4 +1,4 @@
-import { FastifyInstance, FastifyReply } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {
   requireStaffSession,
   requirePermission,
@@ -21,7 +21,6 @@ import {
   NewsletterSend,
   SendStatus,
 } from "@vibress/newsletters";
-import { SuppressionReason } from "@vibress/email";
 import { DrizzleEmailRecipientRepository } from "@vibress/email";
 
 const recipientRepo = new DrizzleEmailRecipientRepository();
@@ -39,6 +38,13 @@ type NewsletterSendListQuery = {
   offset?: string;
 };
 type EmailSuppressionListQuery = { limit?: string; offset?: string };
+
+function suppressionScopeFor(req: FastifyRequest) {
+  return {
+    publicationId: req.publicationContext!.publicationId,
+    includeGlobal: (req.roles ?? []).includes("owner"),
+  };
+}
 
 export async function adminNewsletterRoutes(fastify: FastifyInstance) {
   const sendError = (
@@ -459,9 +465,11 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     preHandler: [requireStaffSession, requirePermission("email.read")],
     handler: async (req, reply) => {
       const query = (req.query ?? {}) as EmailSuppressionListQuery;
+      const scope = suppressionScopeFor(req);
       const result = await emailService.listSuppressions(
         query.limit ? parseInt(query.limit, 10) : 50,
         query.offset ? parseInt(query.offset, 10) : 0,
+        scope,
       );
       return reply.status(200).send(result);
     },
@@ -475,15 +483,11 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
     ],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
-      const list = await emailService.listSuppressions(100, 0);
-      const target = (
-        list.suppressions as Array<{
-          id: string;
-          email: string;
-          reason: SuppressionReason;
-        }>
-      ).find((s) => s.id === id);
-      if (!target)
+      const removed = await emailService.removeSuppression(
+        id,
+        suppressionScopeFor(req),
+      );
+      if (!removed)
         return sendError(
           reply,
           "SUPPRESSION_NOT_FOUND",
@@ -491,7 +495,6 @@ export async function adminNewsletterRoutes(fastify: FastifyInstance) {
           req.id,
           404,
         );
-      await emailService.removeSuppression(target.email, target.reason);
       return reply.status(200).send({ success: true });
     },
   });
