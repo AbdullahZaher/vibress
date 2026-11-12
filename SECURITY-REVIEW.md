@@ -26,7 +26,9 @@
   API suite and the affected domain suites), typecheck only for affected
   packages, no lint/build run, no RLS runtime test, no independent pentest. Edge
   TLS configuration is outside this repository. Migrations `0052` and `0053`
-  were applied to the local development database only.
+  were applied to the local Docker database, which the owner designated as the
+  staging rehearsal on 2026-11-13; no external staging or production database
+  was contacted.
 
 ## Executive Summary
 
@@ -122,7 +124,7 @@ None verified.
   - The enqueuer requires a publication and verifies the send first; the scheduler uses `send.publicationId` with no fallback; the delivery worker validates the BullMQ scope: [newsletter-send-enqueuer.ts](file:///Users/abdullahzaher/vibress/apps/api/src/newsletter-send-enqueuer.ts#L40), [newsletter-send-scheduler.ts](file:///Users/abdullahzaher/vibress/apps/worker/src/schedules/newsletter-send-scheduler.ts#L64), [email-delivery-worker.ts](file:///Users/abdullahzaher/vibress/apps/worker/src/processors/email-delivery-worker.ts#L108).
 - **Test command / expected / observed:** `pnpm vitest run packages/domains/newsletters` → 18/18 passed, including "scopes newsletter sends to their publication" (cross-publication read returns null, cancel rejects, list excludes). `pnpm vitest run apps/api` → 587/587 passed, including "denies cross-publication access to newsletter sends". `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` → 45/45 passed.
 - **Residual risk:** Historical rows are backfilled from their newsletter; the migration aborts if any row cannot be resolved, so rollout must be verified on a copy first. Replays or jobs enqueued before deployment should be drained during the cutover.
-- **Approval required:** Schema migration `0052` still needs approval to apply in staging/production (applied locally only).
+- **Approval required:** Migration `0052` is applied and verified in the owner-designated local Docker staging rehearsal; approval is still required for the external staging/production deployment.
 
 #### F-002 — Staff invite accepts an arbitrary global role, including `owner`
 - **Control:** 09 / 26
@@ -181,7 +183,7 @@ None verified.
   - The admin suppressions panel now deletes by row `id` rather than email, matching the scoped DELETE route: [SuppressionsPanel.tsx](file:///Users/abdullahzaher/vibress/apps/admin/src/components/newsletters/SuppressionsPanel.tsx#L26).
 - **Test command / expected / observed:** `pnpm vitest run apps/api/src/__tests__/newsletters-api.test.ts` → 26/26 passed, including "global suppression applies but another publication's row does not", "editor list excludes another publication and global rows", "owner list includes global rows but not another publication's", and delete 404s for out-of-scope/global rows. `pnpm vitest run packages/domains/email` → 12/12 passed, including webhook suppression attributed to the send's publication.
 - **Residual risk:** Existing rows migrate as global (`publication_id IS NULL`) and therefore still apply to every publication; operators may want to re-scope historical rows. Access is unaffected by the nullable column, but the migration must be applied before deploying the scoped code.
-- **Approval required:** Migration `0053` still needs approval to apply in staging/production (applied locally only).
+- **Approval required:** Migration `0053` is applied and verified in the owner-designated local Docker staging rehearsal; approval is still required for the external staging/production deployment.
 
 #### F-009 — Direct/multipart upload completion does not enforce the declared size limit
 - **Control:** 18
@@ -387,6 +389,7 @@ Remediation was explicitly authorized for F-001–F-005 and F-009.
 | `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` | local + dev DB | 1 file / 45 tests passed | pass | End-to-end multi-publication isolation |
 | `pnpm vitest run tests/security/auth-api.test.ts` | local + dev DB | 1 file / 6 tests passed | pass | Auth/authorization API security |
 | `pnpm -r --filter @vibress/database --filter @vibress/email --filter @vibress/newsletters --filter @vibress/api --filter @vibress/worker --filter @vibress/admin typecheck` | local | exit 0 | pass | Affected packages only |
+| `pnpm db:migrate` + psql invariant checks | local Docker staging rehearsal | migrator exit 0; 54 migrations; 0 null/mismatched `newsletter_sends.publication_id`; both columns, FKs, and all suppression indexes present | pass | Re-ran migrator as no-op after 0052/0053; no external target contacted |
 | Full monorepo `pnpm vitest run`, E2E, Playwright | not run | — | not_verified | Time/environment; CI runs these |
 | `pnpm typecheck`, `pnpm lint`, `pnpm build` | not run | — | not_verified | CI covers them |
 | Staging/public HTTP, TLS/HSTS checks | not run | — | not_verified | No authorized external target |
@@ -395,9 +398,11 @@ Remediation was explicitly authorized for F-001–F-005 and F-009.
 
 - [x] F-001, F-002, F-003, F-004, F-005, and F-009 remediated and covered by
   negative isolation/authorization tests (authorized 2026-11-13).
-- [ ] Approve and apply migrations `0052_newsletter_sends_publication_scope` and
-  `0053_email_suppressions_publication_scope` in staging then production; verify
-  backfills and drain in-flight send jobs during the cutover.
+- [x] Applied and verified migrations `0052_newsletter_sends_publication_scope`
+  and `0053_email_suppressions_publication_scope` in the local Docker staging
+  rehearsal (2026-11-13).
+- [ ] Apply the same migrations to the external staging then production
+  deployment; verify backfills and drain in-flight send jobs during the cutover.
 - [ ] Grant explicit publication memberships to any operator who previously
   relied on implicit `pub_default` access.
 - [ ] Decide whether historical global suppressions should be re-scoped to a
