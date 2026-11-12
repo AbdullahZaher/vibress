@@ -383,7 +383,7 @@ Remediation was explicitly authorized for F-001–F-005 and F-009.
 | `pnpm vitest run apps/api/src/__tests__/media-upload-security.test.ts` | local + dev DB | 1 file / 18 tests passed | pass | Includes F-009 size ceilings, MIME mismatch, fail-closed provider |
 | `pnpm vitest run packages/domains/newsletters` | local + dev DB | 2 files / 18 tests passed | pass | Includes send publication isolation |
 | `pnpm vitest run packages/domains/email` | local + dev DB | 12 tests passed | pass | Includes publication-attributed webhook suppressions |
-| `pnpm vitest run tests/integration/analytics.test.ts packages/database` | local + dev DB | 21 files / 86 tests passed | pass | Tenant-scoped analytics authorization and migration journal ordering (includes CI failure fixes) |
+| `pnpm vitest run tests/integration/analytics.test.ts packages/database` | local + dev DB | 21 files / 72 tests passed | pass | Tenant-scoped analytics authorization and migration journal ordering (includes CI failure fixes) |
 | `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` | local + dev DB | 1 file / 45 tests passed | pass | End-to-end multi-publication isolation |
 | `pnpm vitest run tests/security/auth-api.test.ts` | local + dev DB | 1 file / 6 tests passed | pass | Auth/authorization API security |
 | `pnpm -r --filter @vibress/database --filter @vibress/email --filter @vibress/newsletters --filter @vibress/api --filter @vibress/worker --filter @vibress/admin typecheck` | local | exit 0 | pass | Affected packages only |
