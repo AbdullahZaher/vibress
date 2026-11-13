@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import crypto from "node:crypto";
 import { NextRequest } from "next/server";
 import {
   middleware,
@@ -189,6 +190,87 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
     // The prefix and language must remain private to the Next.js request.
     expect(res.headers.get("x-vibress-preview-token")).toBeNull();
     expect(res.headers.get("x-vibress-preview-path")).toBeNull();
+  });
+
+  describe("Private site cookie verification", () => {
+    const originalKey = process.env.VIBRESS_ENCRYPTION_KEY;
+
+    afterEach(() => {
+      if (originalKey === undefined) {
+        delete process.env.VIBRESS_ENCRYPTION_KEY;
+      } else {
+        process.env.VIBRESS_ENCRYPTION_KEY = originalKey;
+      }
+    });
+
+    function signToken(secret: string, publicationId: string): string {
+      const timestamp = Date.now().toString();
+      const scope = Buffer.from(publicationId, "utf8").toString("base64url");
+      const signature = crypto
+        .createHmac("sha256", secret)
+        .update(`v2:${timestamp}:${scope}`)
+        .digest("hex");
+      return `v2.${timestamp}.${scope}.${signature}`;
+    }
+
+    function mockPrivateSite() {
+      return vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/content/v1/site")) {
+          return Promise.resolve({
+            ok: true,
+            headers: new Headers({ "x-vibress-publication-id": "pub_test" }),
+            json: () =>
+              Promise.resolve({
+                site: { title: "Private Site", locale: "en", enabledLocales: ["en"] },
+                security: { isPrivate: true },
+              }),
+          });
+        }
+        return Promise.resolve({ ok: false, status: 404 });
+      });
+    }
+
+    it("allows a v2 cookie signed with the shared key", async () => {
+      process.env.VIBRESS_ENCRYPTION_KEY = "shared-test-key";
+      global.fetch = mockPrivateSite() as any;
+
+      const token = signToken("shared-test-key", "pub_test");
+      const req = new NextRequest("http://localhost:7777/posts/hello", {
+        headers: { cookie: `vb_site_auth=${token}` },
+      });
+      const res = await middleware(req);
+
+      expect(res.headers.get("location")).toBeNull();
+      expect(res.status).not.toBe(307);
+    });
+
+    it("fails closed when the shared key is absent", async () => {
+      delete process.env.VIBRESS_ENCRYPTION_KEY;
+      global.fetch = mockPrivateSite() as any;
+
+      const token = signToken("vibress-site-privacy-secret", "pub_test");
+      const req = new NextRequest("http://localhost:7777/posts/hello", {
+        headers: { cookie: `vb_site_auth=${token}` },
+      });
+      const res = await middleware(req);
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/private");
+    });
+
+    it("rejects a cookie signed with the former public fallback secret", async () => {
+      process.env.VIBRESS_ENCRYPTION_KEY = "shared-test-key";
+      global.fetch = mockPrivateSite() as any;
+
+      const token = signToken("vibress-site-privacy-secret", "pub_test");
+      const req = new NextRequest("http://localhost:7777/posts/hello", {
+        headers: { cookie: `vb_site_auth=${token}` },
+      });
+      const res = await middleware(req);
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/private");
+    });
   });
 
   it("emits staged HSTS and a restrictive Permissions-Policy on page responses", async () => {

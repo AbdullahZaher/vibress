@@ -109,6 +109,10 @@ The config layer (`@vibress/config`) refuses to boot in production without
 these (`enforceProductionGuards`). Compose additionally fails fast via
 `${VAR:?}` interpolation when required variables are missing.
 
+`VIBRESS_ENCRYPTION_KEY` is also passed to the `web` service: it verifies the
+API-signed private-site cookie with the same key and, if the key is absent,
+denies access instead of accepting a shared fallback secret.
+
 ## Reverse proxy
 
 `infrastructure/nginx/nginx.prod.conf` enforces request body limits

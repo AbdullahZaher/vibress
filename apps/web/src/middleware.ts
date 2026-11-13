@@ -312,8 +312,10 @@ async function verifySiteAuth(
   if (scope !== expectedScope) return false;
 
   try {
-    const secret =
-      process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
+    const secret = process.env.VIBRESS_ENCRYPTION_KEY?.trim();
+    // Fail closed without the shared key; a well-known fallback secret would
+    // let anyone mint a private-site cookie.
+    if (!secret) return false;
     const enc = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",

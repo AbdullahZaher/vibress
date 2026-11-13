@@ -1,9 +1,9 @@
 # Prelaunch Security Review — Vibress
 
 > Audit plus owner-authorized remediation of F-001, F-002, F-003, F-004, F-005,
-> F-007, F-008, F-009, F-011, and F-014. No other findings were changed. This
-> report is not a certification and does not replace an independent penetration
-> test.
+> F-007, F-008, F-009, F-010, F-011, and F-014. No other findings were changed.
+> This report is not a certification and does not replace an independent
+> penetration test.
 
 ## Scope
 
@@ -77,11 +77,15 @@
   10. F-008 — password reset acceptance is limited to 5 requests/minute per
       client IP in production, matching forgot-password, so unauthenticated
       submissions can no longer spend unbounded Argon2 CPU.
+  11. F-010 — web private-site verification now uses only the shared
+      `VIBRESS_ENCRYPTION_KEY` and fails closed without it; the public fallback
+      secret is removed from both verification and cookie minting, and the
+      production compose passes the key to `web`.
 - **Verified medium issues still open:** login CSRF on
-  `GET /members/auth/verify`, public site-privacy HMAC fallback, DB superuser
-  with no RLS, and an in-memory rate limiter with several unprotected expensive
-  routes. Edge TLS/redirect and the HSTS max-age ramp remain deployment actions;
-  the shipped HSTS value is intentionally short.
+  `GET /members/auth/verify`, DB superuser with no RLS, and an in-memory rate
+  limiter with several unprotected expensive routes. Edge TLS/redirect and the
+  HSTS max-age ramp remain deployment actions; the shipped HSTS value is
+  intentionally short.
 - **Remaining approvals:** the remaining medium-severity fixes and the
   production rollout of migrations `0052`/`0053` still require owner approval;
   see [Approvals and Manual Actions](#approvals-and-manual-actions).
@@ -93,9 +97,9 @@
 | ID | Control | Status | Severity | Evidence | Fix | Test result | Owner action |
 |---|---|---|---|---|---|---|---|
 | 01 | Authentication | pass | low | Opaque 32-byte sessions stored as SHA-256, revoked/expiry checked per request; per-request role reload ([auth-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/application/auth-service.ts#L82), [middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L42), [drizzle-session-repository.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/infrastructure/drizzle-session-repository.ts#L33)) | Wire MFA/SSO or document them as not shipped; add idle timeout | 82 unit + 98 API tests passed | Confirm MFA expectation for launch |
-| 02 | Protect API keys | failed | medium | No server secret in client bundles; only `NEXT_PUBLIC_SITE_URL` is public. But site-privacy HMAC falls back to a public literal ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L301), [route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L41)) and the `web` service does not receive `VIBRESS_ENCRYPTION_KEY` ([compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L172)) | Remove fallback; fail closed; pass key to web or verify in API only | Build artifacts scanned: no secret names/keys found | Decide private-site cookie architecture |
+| 02 | Protect API keys | fixed_verified | medium | No server secret in client bundles; only `NEXT_PUBLIC_SITE_URL` is public. Site-privacy verification now uses only `VIBRESS_ENCRYPTION_KEY` and fails closed without it ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L315)); the web cookie-minting fallback is removed and `web` receives the key in compose ([route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L37), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L183)) | Keep the key shared between `api` and `web` | Middleware/route 22/22; build artifacts scanned previously: no secret names/keys | Confirm the key is set for `web` at deployment |
 | 03 | Secure database access | failed | medium | F-001, F-003, F-004, and F-005 fixed: sends carry `publication_id`, staff context fails closed, directory/roles are publication-scoped, and suppressions carry `publication_id` ([0052_newsletter_sends_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0052_newsletter_sends_publication_scope.sql#L1), [0053_email_suppressions_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0053_email_suppressions_publication_scope.sql#L1), [admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [workspace-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/workspaces/src/application/workspace-service.ts#L126)). Remaining: no RLS and superuser DB role (F-012) | Least-privilege DB role | Newsletter isolation 18/18, runtime multi-publication 45/45, full API 593/593 | Apply migrations 0052/0053 in deploy; approve remaining |
-| 04 | Enforce HTTPS | needs_approval | medium | Boot now rejects any non-`https:` production origin (`SITE_URL`, `PORTAL_URL`, `API_URL`, every CORS origin) ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); staged HSTS (`max-age=300`) is emitted by web middleware, the gateway, both SPAs, and the API. The gateway itself still listens on HTTP and relies on an external edge for TLS + HTTP→HTTPS redirect ([nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L13)) | Configure edge TLS + redirect, then raise HSTS max-age after staging verification | Config tests 9/9; middleware 17/17 | Approve edge deployment and HSTS ramp |
+| 04 | Enforce HTTPS | needs_approval | medium | Boot now rejects any non-`https:` production origin (`SITE_URL`, `PORTAL_URL`, `API_URL`, every CORS origin) ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); staged HSTS (`max-age=300`) is emitted by web middleware, the gateway, both SPAs, and the API. The gateway itself still listens on HTTP and relies on an external edge for TLS + HTTP→HTTPS redirect ([nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L13)) | Configure edge TLS + redirect, then raise HSTS max-age after staging verification | Config tests 9/9; middleware 20/20 | Approve edge deployment and HSTS ramp |
 | 05 | Hash passwords | pass | none | Argon2id; library-generated salt; no password logging ([passwords/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/passwords/index.ts#L37)) | Set explicit memory/time/parallelism parameters | Unit tests passed | Confirm tuning on smallest target |
 | 06 | Server-side validation | pass | low | Zod at most boundaries (`safeParse`); global 1 MB body limit; per-route limits ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L137)); some handlers cast bodies directly (F-017) | Add schemas to collaboration/ai/admin/operations handlers | API tests passed | Schedule hardening |
 | 07 | Cross-site scripting | pass | low | parse5 allowlist sanitizer on ingest and render; iframe/URL allowlists; nonce CSP ([sanitize.ts](file:///Users/abdullahzaher/vibress/packages/studio-utils/src/sanitize.ts#L1), [middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L124)); theme HTML is staff-only and unsanitized (F-018) | Sanitize or sandbox theme output | XSS regression tests passed | Decide theme trust model |
@@ -105,7 +109,7 @@
 | 11 | Environment variables | pass | low | `.env`/`.env.prod` untracked; no secret client prefixes; the production guard now rejects any non-live Stripe key, a malformed webhook secret, and non-HTTPS origins ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L405)) | Keep runtime secrets out of images | Config tests 9/9 (positive + negative) | Confirm production secrets |
 | 12 | Rate limiting | failed | medium | Global limiter disabled; per-route limits exist for login/forgot/member/search/comments/webhooks, and reset acceptance is now limited to 5/min per IP in production ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L449)). Remaining: invitation acceptance, uploads, exports, theme ZIP have no limiter and the store is in-memory ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163)) | Add remaining route limits + Redis store | Auth hardening (reset 429) passed; full API 593/593; not load-tested | Approve remaining limits and Redis store |
 | 13 | Restrict CORS | pass | none | Production allowlist union, `credentials: true`, no wildcard; boot fails without a production origin and now rejects any non-`https:` origin ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L195), [config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); dev reflects any origin | None | Config tests 9/9 | Verify prod origins |
-| 14 | Security headers | fixed_verified | medium | Enforced CSP on API/web/SPA; media SVG sandbox; gateway headers set. Staged HSTS (`max-age=300`) and a restrictive `Permissions-Policy` are now emitted by web middleware, the gateway, both SPAs, and API Helmet ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L8), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L23), [nginx.spa.conf.template](file:///Users/abdullahzaher/vibress/docker/nginx.spa.conf.template#L12), [main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L176)) | Raise HSTS max-age after edge verification | Middleware 17/17; API hardening 20/20; nginx config reviewed, not executed | Verify live headers at edge |
+| 14 | Security headers | fixed_verified | medium | Enforced CSP on API/web/SPA; media SVG sandbox; gateway headers set. Staged HSTS (`max-age=300`) and a restrictive `Permissions-Policy` are now emitted by web middleware, the gateway, both SPAs, and API Helmet ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L8), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L23), [nginx.spa.conf.template](file:///Users/abdullahzaher/vibress/docker/nginx.spa.conf.template#L12), [main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L176)) | Raise HSTS max-age after edge verification | Middleware 20/20; API hardening 20/20; nginx config reviewed, not executed | Verify live headers at edge |
 | 15 | Secure cookies | pass | low | `HttpOnly`, `Secure` in production, `SameSite=Lax`, path `/`, 7d staff/30d member ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L133), [members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L167)) | Consider `__Host-` prefix and member rotation | No Set-Cookie assertion test | Confirm member TTL |
 | 16 | CSRF | failed | medium | F-007 fixed: every cookie-authenticated staff mutation (invite/resend/revoke, comment moderation/report actions, What's New dismissal) now validates Origin, enforced by a route-scanner test ([middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L143), [csrf-origin-coverage.test.ts](file:///Users/abdullahzaher/vibress/apps/api/src/__tests__/csrf-origin-coverage.test.ts#L17)). Remaining: `GET /members/auth/verify` sets a session with no origin check (F-006) ([members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L200)) | Make member verify a POST with Origin validation | CSRF negative tests passed; scanner 2/2; full API 593/593 | Approve member-verify flow change |
 | 17 | Password reset links | pass | low | 32-byte token, SHA-256 at rest, 15 min, row-locked single use, all tokens invalidated, sessions revoked ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L401), [#L499](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L499)); non-prod returns the raw token (F-021) | Never return token outside tests | Lifecycle tests passed | Confirm production `NODE_ENV` |
@@ -117,8 +121,8 @@
 | 23 | Exposed files | pass | low | Public roots clean; no client source maps; media path traversal/containment guarded ([media-stream.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media-stream.ts#L202)); `.env*` excluded from images; `backups/` still enters the Docker build context (F-023 note) | Add `backups/` and `**/.env*` to `.dockerignore` | Artifact grep found no secrets | Verify with `docker buildx` |
 | 24 | Git history secrets | pass | none | Gitleaks 8.30.1 scanned 2,324 commits: 17 findings, all reviewed as synthetic test/CI fixtures; `.env`/`.env.prod` never committed | None for history; keep providers out of commits | Gitleaks exit 0 with `--redact` | — |
 | 25 | Revoke and replace exposed keys | not_applicable | none | No confirmed live credential in Git history or client artifacts. Working-tree `.env`, `.env.prod`, and `apps/web/.env.local` contain real-looking secrets but are untracked/ignored | If any file or image leaked, rotate at the provider | Not applicable | Confirm no artifact/image leak |
-| 26 | Integrated security review | failed | medium | F-001–F-005, F-007–F-009, F-011, and F-014 fixed and verified; remaining medium issues: member-verify login CSRF, site-privacy HMAC fallback, DB role separation, in-memory/unprotected rate limits (F-006, F-010, F-012, F-013) | See prioritized actions | Full API 593/593; integration/security 532/532; targeted config/middleware suites passed | Approve remaining remediation plan |
-| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 593 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, and 17 web middleware tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
+| 26 | Integrated security review | failed | medium | F-001–F-005, F-007–F-011, and F-014 fixed and verified; remaining medium issues: member-verify login CSRF, DB role separation, in-memory/unprotected rate limits (F-006, F-012, F-013) | See prioritized actions | Full API 593/593; integration/security 532/532; targeted config/middleware suites passed | Approve remaining remediation plan |
+| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 593 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
 
 ## Findings by Severity
 
@@ -271,19 +275,27 @@ None verified.
 - **Residual risk:** The limit is per IP and shared by users behind NAT; the limiter depends on `TRUST_PROXY` being configured so `req.ip` reflects the client. Throttle state is per API instance unless the limiter store is shared, so horizontal scaling multiplies the effective budget.
 - **Approval required:** None for the code change; confirm the proxy/trust configuration in production.
 
+#### F-010 — Public site-privacy HMAC fallback; web container lacks the key
+- **Control:** 02 / 11
+- **Status:** `fixed_verified` (2026-11-13)
+- **Severity / rationale:** Medium (resolved). The web tier verified private-site cookies with the literal `vibress-site-privacy-secret` when `VIBRESS_ENCRYPTION_KEY` was absent, and minted a v1 cookie with that same literal when the API's `Set-Cookie` was missing. Because the shipped compose file did not give `web` the key, legitimate API-signed cookies failed verification while the fallback secret was publicly known.
+- **Original evidence (redacted):** [middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L316), [route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L41), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L172).
+- **Root cause:** The verification key was optional with a shared fallback, and the web deployment was never wired to the API's key.
+- **Fix applied:**
+  - Web middleware now reads only `VIBRESS_ENCRYPTION_KEY` and returns false (redirect to `/private`) when it is absent; the public literal is gone: [middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L315).
+  - `POST /api/verify-site-password` no longer signs its own cookie. It forwards the API's `Set-Cookie`; if the API reports success without one, it fails closed with 502 instead of minting a v1 token: [route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L37).
+  - `web` now receives `VIBRESS_ENCRYPTION_KEY` in `compose.prod.yml`, and the setup-e2e compose passes the same fixture key: [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L183), [compose.setup-e2e.yml](file:///Users/abdullahzaher/vibress/compose.setup-e2e.yml#L107).
+  - Deployment docs note that the web tier needs the key and fails closed without it: [production.md](file:///Users/abdullahzaher/vibress/docs/12-infrastructure/production.md#L112).
+- **Test command / expected / observed:** `pnpm vitest run apps/web/src/__tests__/middleware.test.ts apps/web/src/__tests__/verify-site-password-route.test.ts` → 22/22 passed, including "allows a v2 cookie signed with the shared key", "fails closed when the shared key is absent", "rejects a cookie signed with the former public fallback secret", and "fails closed instead of minting a cookie with a shared fallback secret". `pnpm --filter @vibress/web exec tsc --noEmit` → clean.
+- **Residual risk:** The API still has a development-only literal default (`getSitePrivacySecret`/`content.ts`), but production boot refuses to start without a real key, so it cannot reach a deployment. A misconfigured deployment without the web key now locks private sites rather than accepting forged cookies; the browser access flow itself was not exercised end-to-end.
+- **Approval required:** None for the code change. Confirm `VIBRESS_ENCRYPTION_KEY` is present in the `web` environment at deployment and reflects the same value as `api`.
+
 #### F-006 — `GET /members/auth/verify` creates a session without Origin validation
 - **Control:** 16
 - **Severity / rationale:** Medium. A cross-site GET with a valid magic-link token logs the victim into the token owner's account (login CSRF) and leaks the token via URL/Referer logs.
 - **Evidence:** [members.ts:200](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L200) sets the cookie at [#L259](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L259); no `validateMemberOrigin`.
 - **Proposed fix:** Make verification a POST with Origin validation, or require a same-site confirmation step; strip tokens from Referer.
 - **Approval:** Yes (flow change).
-
-#### F-010 — Public site-privacy HMAC fallback; web container lacks the key
-- **Control:** 02 / 11
-- **Severity / rationale:** Medium. The web tier signs/verifies private-site cookies with the literal `vibress-site-privacy-secret` when `VIBRESS_ENCRYPTION_KEY` is absent, while the API signs with the real key. In the shipped compose file the `web` service does not receive the key, so legitimate private-site cookies are rejected (fail closed) and the fallback secret is publicly known. API-side enforcement prevents a full content bypass.
-- **Evidence:** [middleware.ts:301](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L301), [route.ts:41](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L41), [compose.prod.yml:172](file:///Users/abdullahzaher/vibress/compose.prod.yml#L172), [content.ts:280](file:///Users/abdullahzaher/vibress/apps/api/src/routes/content.ts#L280).
-- **Proposed fix:** Remove the fallback and fail closed; pass the key to `web` or delegate cookie verification to the API.
-- **Approval:** Yes.
 
 #### F-012 — Database access uses the PostgreSQL owner role; no RLS
 - **Control:** 03
@@ -324,7 +336,7 @@ None verified.
 - **Control:** 14
 - **Status:** `fixed_verified` (2026-11-13)
 - **Original severity:** Low. Only one iframe route set it ([extension-admin-iframe.ts:226](file:///Users/abdullahzaher/vibress/apps/api/src/routes/extension-admin-iframe.ts#L226)).
-- **Fix applied:** Web middleware, the gateway, both SPA images, and the API (Helmet) now emit a restrictive policy denying camera, microphone, geolocation, USB, and payment ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L9), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L29)). Verified by the middleware header assertion (17/17).
+- **Fix applied:** Web middleware, the gateway, both SPA images, and the API (Helmet) now emit a restrictive policy denying camera, microphone, geolocation, USB, and payment ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L9), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L29)). Verified by the middleware header assertions (20/20).
 
 #### F-020 — No storage quota
 - **Control:** 18
@@ -353,7 +365,7 @@ None verified.
 
 ## Changed Files
 
-Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-011, and F-014.
+Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-014.
 
 **F-001 — publication-scoped newsletter sends**
 - `packages/database/migrations/0052_newsletter_sends_publication_scope.sql` (new)
@@ -431,6 +443,15 @@ Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-
 - `apps/api/src/routes/auth.ts`
 - Tests: `apps/api/src/__tests__/auth-hardening.test.ts`
 
+**F-010 — shared private-site HMAC key, fail closed**
+- `apps/web/src/middleware.ts`
+- `apps/web/src/app/api/verify-site-password/route.ts`
+- `compose.prod.yml`
+- `compose.setup-e2e.yml`
+- `docs/12-infrastructure/production.md`
+- Tests: `apps/web/src/__tests__/middleware.test.ts`,
+  `apps/web/src/__tests__/verify-site-password-route.test.ts` (new)
+
 **Fixture update for the fail-closed tenant context:** `tests/integration/translations-management.test.ts` now creates an explicit `pub_default` membership for its fixture users, because other suites truncate `users` and cascade the membership away.
 
 - `SECURITY-REVIEW.md` — this report (updated).
@@ -461,7 +482,8 @@ Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-
 | `pnpm vitest run tests/integration/analytics.test.ts packages/database` | local + dev DB | 21 files / 72 tests passed | pass | Tenant-scoped analytics authorization and migration journal ordering (includes CI failure fixes) |
 | `pnpm vitest run tests/integration/runtime-multi-publication-isolation.test.ts` | local + dev DB | 1 file / 45 tests passed | pass | End-to-end multi-publication isolation |
 | `pnpm vitest run tests/security/auth-api.test.ts` | local + dev DB | 1 file / 6 tests passed | pass | Auth/authorization API security |
-| `pnpm vitest run tests/integration/config.test.ts apps/web/src/__tests__/middleware.test.ts` | local | 2 files / 26 tests passed | pass | F-014 test/live/malformed key modes and webhook shape; F-011 non-HTTPS origins rejected; HSTS/Permissions-Policy assertions |
+| `pnpm vitest run tests/integration/config.test.ts apps/web/src/__tests__/middleware.test.ts` | local | 2 files / 29 tests passed | pass | F-014 test/live/malformed key modes and webhook shape; F-011 non-HTTPS origins rejected; HSTS/Permissions-Policy assertions; F-010 shared-key accept/deny |
+| `pnpm vitest run apps/web/src/__tests__/middleware.test.ts apps/web/src/__tests__/verify-site-password-route.test.ts` | local | 2 files / 22 tests passed | pass | Private-site cookie signed with the shared key allowed; missing key and former fallback secret rejected; API Set-Cookie forwarded; missing Set-Cookie fails closed with 502 |
 | `pnpm vitest run apps/api/src/__tests__/api-hardening.test.ts apps/api/src/__tests__/auth-hardening.test.ts` | local + dev DB | 2 files / 20 tests passed | pass | Production fixtures boot with `SITE_URL` and live-mode keys; reset acceptance returns 429 after 5 submissions |
 | `pnpm vitest run` on the six F-007/F-008 suites (`csrf-origin-coverage`, `staff-auth-lifecycle`, `comments-closure-gates`, `whats-new-api`, `api-hardening`, `auth-hardening`) | local + dev DB | 6 files / 66 tests passed | pass | Scanner coverage, three untrusted/no-Origin 403 tests, reset 429 |
 | `pnpm vitest run tests/integration tests/security` | local + dev DB | 50 files / 532 tests passed | pass | Includes the translations fixture membership fix |
@@ -474,10 +496,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-
 
 ## Approvals and Manual Actions
 
-- [x] F-001, F-002, F-003, F-004, F-005, F-007, F-008, F-009, F-011, and F-014
-  remediated and covered by negative isolation/authorization/config/CSRF/rate
-  tests (authorized 2026-11-13). F-011's edge TLS/redirect and HSTS ramp remain
-  deployment actions.
+- [x] F-001, F-002, F-003, F-004, F-005, F-007, F-008, F-009, F-010, F-011, and
+  F-014 remediated and covered by negative isolation/authorization/config/
+  CSRF/rate/private-site tests (authorized 2026-11-13). F-011's edge
+  TLS/redirect and HSTS ramp remain deployment actions.
 - [x] Applied and verified migrations `0052_newsletter_sends_publication_scope`
   and `0053_email_suppressions_publication_scope` in the local Docker staging
   rehearsal (2026-11-13).
@@ -494,6 +516,8 @@ Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-
 - [ ] Approve changing `GET /members/auth/verify` to a POST flow with Origin
   validation (F-006).
 - [x] Reset-acceptance rate limit (F-008) applied.
+- [x] Private-site HMAC fallback removed and `web` wired to the shared key
+  (F-010).
 - [ ] Approve the remaining rate limits (invitation acceptance, uploads,
   exports, theme ZIP) and a Redis-backed store (F-013).
 - [ ] Approve a per-publication storage quota (F-020).
@@ -502,6 +526,8 @@ Remediation was explicitly authorized for F-001–F-005, F-007, F-008, F-009, F-
 - [ ] Confirm production `SITE_URL`, `PORTAL_URL`, `API_URL`, and CORS origins
   are `https:` and the Stripe secret is live-mode (`sk_live_`/`rk_live_`) with a
   `whsec_` webhook secret before deployment.
+- [ ] Confirm `VIBRESS_ENCRYPTION_KEY` is present in the `web` environment and
+  matches the API value (private-site access locks out if it is missing).
 - [ ] Create a least-privilege PostgreSQL runtime role; evaluate RLS.
 - [ ] Confirm `NODE_ENV=production` in every deployment (reset-token exposure and
   cookie `Secure` depend on it).

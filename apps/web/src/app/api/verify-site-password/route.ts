@@ -35,38 +35,15 @@ export async function POST(request: NextRequest) {
 
     const response = NextResponse.json({ valid: true });
     const setCookie = res.headers.get("set-cookie");
-    if (setCookie) {
-      response.headers.set("set-cookie", setCookie);
-    } else {
-      const secret =
-        process.env.VIBRESS_ENCRYPTION_KEY || "vibress-site-privacy-secret";
-      const timestamp = Date.now().toString();
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"],
+    if (!setCookie) {
+      // The API owns cookie signing; without its Set-Cookie this client cannot
+      // mint a token and must not fall back to a shared secret.
+      return NextResponse.json(
+        { valid: false, message: "Site access could not be established" },
+        { status: 502 },
       );
-      const sigBuffer = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        enc.encode(`v1:${timestamp}`),
-      );
-      const hex = Array.from(new Uint8Array(sigBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const token = `v1.${timestamp}.${hex}`;
-
-      response.cookies.set("vb_site_auth", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 30 * 24 * 60 * 60,
-      });
     }
+    response.headers.set("set-cookie", setCookie);
 
     return response;
   } catch (err: unknown) {

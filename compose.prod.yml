@@ -180,6 +180,9 @@ services:
       HOSTNAME: 0.0.0.0
       API_URL: "http://api:7780"
       THEME_STORAGE_ROOT: "/repo/content/themes"
+      # Private-site cookies are HMAC-signed by the API; the web tier must
+      # verify them with the same key (no public fallback).
+      VIBRESS_ENCRYPTION_KEY: ${VIBRESS_ENCRYPTION_KEY:?set VIBRESS_ENCRYPTION_KEY}
     volumes:
       - vibress_content:/repo/content
       - vibress_content:/repo/apps/api/content
