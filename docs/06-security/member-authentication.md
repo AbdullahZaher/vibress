@@ -45,13 +45,14 @@ Enter email
 ## Abuse Protection
 
 - `POST /auth/request`: rate-limited by IP (10/min, 100/min in test env) and account throttle (5 requests per normalized email per 10-minute window).
-- `POST|GET /auth/verify`: rate-limited by IP (20/min) and account throttle (5 attempts per token per 15-minute window).
+- `POST /auth/verify`: rate-limited by IP (20/min) and account throttle (5 attempts per token per 15-minute window). Verification is POST-only; there is no GET variant.
 - Resend cooldown enforced client-side (30s).
 
 ## CSRF
 
 - State-changing member endpoints require a same-site `Origin`/`Referer` when cookie-authenticated (`validateMemberOrigin`).
 - JSON `Content-Type` for mutations; no permissive credentialed CORS.
+- Magic-link verification is POST-only. The API does not consume tokens on GET, so a cross-site navigation cannot establish a session (login CSRF).
 
 ## Magic-Link URL
 

@@ -1,14 +1,14 @@
 # Prelaunch Security Review — Vibress
 
 > Audit plus owner-authorized remediation of F-001, F-002, F-003, F-004, F-005,
-> F-007, F-008, F-009, F-010, F-011, and F-014. No other findings were changed.
-> This report is not a certification and does not replace an independent
-> penetration test.
+> F-006, F-007, F-008, F-009, F-010, F-011, and F-014. No other findings were
+> changed. This report is not a certification and does not replace an
+> independent penetration test.
 
 ## Scope
 
-- **Project / revision:** `vibress-monorepo` at `6e725938` (`main`) with the
-  F-007/F-008 changes uncommitted in the working tree; version 1.2.0. The audit
+- **Project / revision:** `vibress-monorepo` at `262b2390` (`main`) plus the
+  uncommitted F-006 route removal in the working tree; version 1.2.0. The audit
   baseline was `67a4de4b`.
 - **Owner-approved repositories / environments:** local working tree at
   `/Users/abdullahzaher/vibress`; local docker services (`vibress-postgres`,
@@ -81,11 +81,13 @@
       `VIBRESS_ENCRYPTION_KEY` and fails closed without it; the public fallback
       secret is removed from both verification and cookie minting, and the
       production compose passes the key to `web`.
-- **Verified medium issues still open:** login CSRF on
-  `GET /members/auth/verify`, DB superuser with no RLS, and an in-memory rate
-  limiter with several unprotected expensive routes. Edge TLS/redirect and the
-  HSTS max-age ramp remain deployment actions; the shipped HSTS value is
-  intentionally short.
+  12. F-006 — magic-link verification is POST-only. The GET handler that
+      consumed tokens and set the session cookie without any Origin check is
+      removed; the portal already verified through POST.
+- **Verified medium issues still open:** DB superuser with no RLS and an
+  in-memory rate limiter with several unprotected expensive routes. Edge
+  TLS/redirect and the HSTS max-age ramp remain deployment actions; the shipped
+  HSTS value is intentionally short.
 - **Remaining approvals:** the remaining medium-severity fixes and the
   production rollout of migrations `0052`/`0053` still require owner approval;
   see [Approvals and Manual Actions](#approvals-and-manual-actions).
@@ -98,7 +100,7 @@
 |---|---|---|---|---|---|---|---|
 | 01 | Authentication | pass | low | Opaque 32-byte sessions stored as SHA-256, revoked/expiry checked per request; per-request role reload ([auth-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/application/auth-service.ts#L82), [middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L42), [drizzle-session-repository.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/infrastructure/drizzle-session-repository.ts#L33)) | Wire MFA/SSO or document them as not shipped; add idle timeout | 82 unit + 98 API tests passed | Confirm MFA expectation for launch |
 | 02 | Protect API keys | fixed_verified | medium | No server secret in client bundles; only `NEXT_PUBLIC_SITE_URL` is public. Site-privacy verification now uses only `VIBRESS_ENCRYPTION_KEY` and fails closed without it ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L315)); the web cookie-minting fallback is removed and `web` receives the key in compose ([route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L37), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L183)) | Keep the key shared between `api` and `web` | Middleware/route 22/22; build artifacts scanned previously: no secret names/keys | Confirm the key is set for `web` at deployment |
-| 03 | Secure database access | failed | medium | F-001, F-003, F-004, and F-005 fixed: sends carry `publication_id`, staff context fails closed, directory/roles are publication-scoped, and suppressions carry `publication_id` ([0052_newsletter_sends_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0052_newsletter_sends_publication_scope.sql#L1), [0053_email_suppressions_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0053_email_suppressions_publication_scope.sql#L1), [admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [workspace-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/workspaces/src/application/workspace-service.ts#L126)). Remaining: no RLS and superuser DB role (F-012) | Least-privilege DB role | Newsletter isolation 18/18, runtime multi-publication 45/45, full API 593/593 | Apply migrations 0052/0053 in deploy; approve remaining |
+| 03 | Secure database access | failed | medium | F-001, F-003, F-004, and F-005 fixed: sends carry `publication_id`, staff context fails closed, directory/roles are publication-scoped, and suppressions carry `publication_id` ([0052_newsletter_sends_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0052_newsletter_sends_publication_scope.sql#L1), [0053_email_suppressions_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0053_email_suppressions_publication_scope.sql#L1), [admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [workspace-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/workspaces/src/application/workspace-service.ts#L126)). Remaining: no RLS and superuser DB role (F-012) | Least-privilege DB role | Newsletter isolation 18/18, runtime multi-publication 45/45, full API 594/594 | Apply migrations 0052/0053 in deploy; approve remaining |
 | 04 | Enforce HTTPS | needs_approval | medium | Boot now rejects any non-`https:` production origin (`SITE_URL`, `PORTAL_URL`, `API_URL`, every CORS origin) ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); staged HSTS (`max-age=300`) is emitted by web middleware, the gateway, both SPAs, and the API. The gateway itself still listens on HTTP and relies on an external edge for TLS + HTTP→HTTPS redirect ([nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L13)) | Configure edge TLS + redirect, then raise HSTS max-age after staging verification | Config tests 9/9; middleware 20/20 | Approve edge deployment and HSTS ramp |
 | 05 | Hash passwords | pass | none | Argon2id; library-generated salt; no password logging ([passwords/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/passwords/index.ts#L37)) | Set explicit memory/time/parallelism parameters | Unit tests passed | Confirm tuning on smallest target |
 | 06 | Server-side validation | pass | low | Zod at most boundaries (`safeParse`); global 1 MB body limit; per-route limits ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L137)); some handlers cast bodies directly (F-017) | Add schemas to collaboration/ai/admin/operations handlers | API tests passed | Schedule hardening |
@@ -107,11 +109,11 @@
 | 09 | Restrict admin routes | fixed_verified | low | All admin routes carry `requireStaffSession` + permission; invite enforces an actor→target role ceiling and audit event; the directory and role list are publication-scoped and rank-filtered ([admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [#L58](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L58), [#L91](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L91), [authorization/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/authorization/index.ts#L63)) | Review existing elevated assignments | Security 12/12; staff lifecycle 23/23 | Review existing owner/administrator assignments |
 | 10 | Parameterized queries | pass | none | Drizzle builder throughout; raw `sql` templates bind values; dynamic identifiers whitelisted/hashed ([plugin-storage-migrations.ts](file:///Users/abdullahzaher/vibress/packages/domains/plugins/src/infrastructure/drizzle-plugin-storage-migrations.ts#L190)); no user-controlled raw SQL found | None | Reviewed; no injection found | — |
 | 11 | Environment variables | pass | low | `.env`/`.env.prod` untracked; no secret client prefixes; the production guard now rejects any non-live Stripe key, a malformed webhook secret, and non-HTTPS origins ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L405)) | Keep runtime secrets out of images | Config tests 9/9 (positive + negative) | Confirm production secrets |
-| 12 | Rate limiting | failed | medium | Global limiter disabled; per-route limits exist for login/forgot/member/search/comments/webhooks, and reset acceptance is now limited to 5/min per IP in production ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L449)). Remaining: invitation acceptance, uploads, exports, theme ZIP have no limiter and the store is in-memory ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163)) | Add remaining route limits + Redis store | Auth hardening (reset 429) passed; full API 593/593; not load-tested | Approve remaining limits and Redis store |
+| 12 | Rate limiting | failed | medium | Global limiter disabled; per-route limits exist for login/forgot/member/search/comments/webhooks, and reset acceptance is now limited to 5/min per IP in production ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L449)). Remaining: invitation acceptance, uploads, exports, theme ZIP have no limiter and the store is in-memory ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163)) | Add remaining route limits + Redis store | Auth hardening (reset 429) passed; full API 594/594; not load-tested | Approve remaining limits and Redis store |
 | 13 | Restrict CORS | pass | none | Production allowlist union, `credentials: true`, no wildcard; boot fails without a production origin and now rejects any non-`https:` origin ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L195), [config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); dev reflects any origin | None | Config tests 9/9 | Verify prod origins |
 | 14 | Security headers | fixed_verified | medium | Enforced CSP on API/web/SPA; media SVG sandbox; gateway headers set. Staged HSTS (`max-age=300`) and a restrictive `Permissions-Policy` are now emitted by web middleware, the gateway, both SPAs, and API Helmet ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L8), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L23), [nginx.spa.conf.template](file:///Users/abdullahzaher/vibress/docker/nginx.spa.conf.template#L12), [main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L176)) | Raise HSTS max-age after edge verification | Middleware 20/20; API hardening 20/20; nginx config reviewed, not executed | Verify live headers at edge |
 | 15 | Secure cookies | pass | low | `HttpOnly`, `Secure` in production, `SameSite=Lax`, path `/`, 7d staff/30d member ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L133), [members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L167)) | Consider `__Host-` prefix and member rotation | No Set-Cookie assertion test | Confirm member TTL |
-| 16 | CSRF | failed | medium | F-007 fixed: every cookie-authenticated staff mutation (invite/resend/revoke, comment moderation/report actions, What's New dismissal) now validates Origin, enforced by a route-scanner test ([middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L143), [csrf-origin-coverage.test.ts](file:///Users/abdullahzaher/vibress/apps/api/src/__tests__/csrf-origin-coverage.test.ts#L17)). Remaining: `GET /members/auth/verify` sets a session with no origin check (F-006) ([members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L200)) | Make member verify a POST with Origin validation | CSRF negative tests passed; scanner 2/2; full API 593/593 | Approve member-verify flow change |
+| 16 | CSRF | fixed_verified | medium | Cookie-authenticated staff mutations validate Origin (F-007), and magic-link verification is POST-only: the unguarded GET handler is removed, so a cross-site navigation cannot consume a token or set a session (F-006) ([middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L143), [members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L107), [csrf-origin-coverage.test.ts](file:///Users/abdullahzaher/vibress/apps/api/src/__tests__/csrf-origin-coverage.test.ts#L17)) | — | CSRF negative tests passed; cross-site GET returns 404 with no cookie; full API 594/594 | None |
 | 17 | Password reset links | pass | low | 32-byte token, SHA-256 at rest, 15 min, row-locked single use, all tokens invalidated, sessions revoked ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L401), [#L499](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L499)); non-prod returns the raw token (F-021) | Never return token outside tests | Lifecycle tests passed | Confirm production `NODE_ENV` |
 | 18 | File uploads | fixed_verified | low | Magic bytes, extension/MIME denylist, SVG active-content checks, traversal stripping, per-type limits ([file-validator.ts](file:///Users/abdullahzaher/vibress/packages/domains/media/src/domain/file-validator.ts#L480)); direct and multipart completion now enforce declared size and per-asset ceilings and verify magic bytes fail-closed ([storage.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/storage.ts#L38), [#L586](file:///Users/abdullahzaher/vibress/apps/api/src/routes/storage.ts#L586), [#L908](file:///Users/abdullahzaher/vibress/apps/api/src/routes/storage.ts#L908)). Remaining: no storage quota (F-020) | Add per-publication quota | Media security 18/18 | Approve quota |
 | 19 | Prices and payments | pass | low | Client sends only `planId`/`offerKey`; server resolves price; Stripe signature verified; unique event dedupe ([billing-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/billing/src/application/billing-service.ts#L196), [stripe-provider.ts](file:///Users/abdullahzaher/vibress/packages/domains/billing/src/infrastructure/stripe/stripe-provider.ts#L132)); production boot now rejects test-mode Stripe keys and a malformed `whsec_` secret ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L405)); paid offers are metadata-only and never redeemed/applied (F-015) | Apply discount at provider or remove paid offers | Config tests 9/9; webhook tests passed (sandbox/fixtures) | Decide offers roadmap |
@@ -121,8 +123,8 @@
 | 23 | Exposed files | pass | low | Public roots clean; no client source maps; media path traversal/containment guarded ([media-stream.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media-stream.ts#L202)); `.env*` excluded from images; `backups/` still enters the Docker build context (F-023 note) | Add `backups/` and `**/.env*` to `.dockerignore` | Artifact grep found no secrets | Verify with `docker buildx` |
 | 24 | Git history secrets | pass | none | Gitleaks 8.30.1 scanned 2,324 commits: 17 findings, all reviewed as synthetic test/CI fixtures; `.env`/`.env.prod` never committed | None for history; keep providers out of commits | Gitleaks exit 0 with `--redact` | — |
 | 25 | Revoke and replace exposed keys | not_applicable | none | No confirmed live credential in Git history or client artifacts. Working-tree `.env`, `.env.prod`, and `apps/web/.env.local` contain real-looking secrets but are untracked/ignored | If any file or image leaked, rotate at the provider | Not applicable | Confirm no artifact/image leak |
-| 26 | Integrated security review | failed | medium | F-001–F-005, F-007–F-011, and F-014 fixed and verified; remaining medium issues: member-verify login CSRF, DB role separation, in-memory/unprotected rate limits (F-006, F-012, F-013) | See prioritized actions | Full API 593/593; integration/security 532/532; targeted config/middleware suites passed | Approve remaining remediation plan |
-| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 593 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
+| 26 | Integrated security review | failed | medium | F-001–F-011 and F-014 fixed and verified; remaining medium issues: DB role separation and in-memory/unprotected rate limits (F-012, F-013) | See prioritized actions | Full API 594/594; integration/security 532/532; targeted config/middleware suites passed | Approve remaining remediation plan |
+| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 594 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
 
 ## Findings by Severity
 
@@ -292,10 +294,18 @@ None verified.
 
 #### F-006 — `GET /members/auth/verify` creates a session without Origin validation
 - **Control:** 16
-- **Severity / rationale:** Medium. A cross-site GET with a valid magic-link token logs the victim into the token owner's account (login CSRF) and leaks the token via URL/Referer logs.
-- **Evidence:** [members.ts:200](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L200) sets the cookie at [#L259](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L259); no `validateMemberOrigin`.
-- **Proposed fix:** Make verification a POST with Origin validation, or require a same-site confirmation step; strip tokens from Referer.
-- **Approval:** Yes (flow change).
+- **Status:** `fixed_verified` (2026-11-13)
+- **Severity / rationale:** Medium (resolved). A cross-site GET navigation with a valid magic-link token consumed the token, set the member session cookie, and logged the victim into the token owner's account (login CSRF); the token also leaked into URL/Referer logs.
+- **Original evidence (redacted):** `GET /members/auth/verify` duplicated the POST handler's throttle/verify/`setCookie` logic with no Origin guard ([members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L199)).
+- **Root cause:** The GET route was a "browser navigation convenience" predating the portal verify page; `validateMemberOrigin` skips GET by design and only applies when a member cookie already exists, so no guard could protect this path.
+- **Fix applied:**
+  - Removed the GET handler entirely. Magic-link tokens are consumed only by `POST /auth/verify`, which is rate-limited and reachable from browser clients only via a JSON request subject to CORS preflight: [members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L107), [#L199](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L199).
+  - The emailed link already targets `{portalBase}/portal/auth/verify?token=...`, whose page submits the token through `memberApi.verifyToken` (POST), so no client depended on the GET route: [member-auth-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/members/src/application/member-auth-service.ts#L262), [VerifyPage.tsx](file:///Users/abdullahzaher/vibress/apps/portal/src/pages/VerifyPage.tsx#L52).
+  - Regression test: a cross-site GET with a fresh valid token returns 404 with no `Set-Cookie`, and a subsequent POST with the same token succeeds, proving the token was not consumed: [member-auth-api.test.ts](file:///Users/abdullahzaher/vibress/apps/api/src/__tests__/member-auth-api.test.ts#L130).
+  - Docs now state verification is POST-only: [member-api.md](file:///Users/abdullahzaher/vibress/docs/10-api/member-api.md#L46), [member-authentication.md](file:///Users/abdullahzaher/vibress/docs/06-security/member-authentication.md#L48).
+- **Test command / expected / observed:** `pnpm vitest run apps/api/src/__tests__/member-auth-api.test.ts apps/api/src/__tests__/csrf-origin-coverage.test.ts` → 12/12 passed, including "does not create a session from a cross-site GET to the verify endpoint" (GET 404, no cookie; POST 200). Full `pnpm vitest run apps/api` → 59 files / 594 tests passed. `pnpm --filter @vibress/api exec tsc --noEmit` → clean.
+- **Residual risk:** `validateMemberOrigin` does not challenge an unauthenticated cross-site POST, so the POST path relies on the JSON `Content-Type` requiring a CORS preflight that the allowlist blocks; keep that content-type requirement and CORS policy intact. Tokens may still appear in mail-provider or proxy logs for the portal URL and should be treated as sensitive until expiry.
+- **Approval required:** None for the code change. Any external integration that relied on the removed GET endpoint must switch to the portal verify page or `POST /auth/verify`.
 
 #### F-012 — Database access uses the PostgreSQL owner role; no RLS
 - **Control:** 03
@@ -473,7 +483,9 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 | `git log --all -- .env .env.prod` | local | no output | pass | Env files never committed |
 | `pnpm audit --json` | local + npm advisory DB | exit 1; 1 high / 2 moderate | fail (dev-only) | `nx`, `minimatch` |
 | `pnpm vitest run packages/domains/workspaces packages/security` | local + dev DB | 10 files / 84 tests passed | pass | Includes fail-closed context, role ceiling, and publication isolation |
-| `pnpm vitest run apps/api` | local + dev DB | 59 files / 593 tests passed | pass | Full API unit/integration suite; includes newsletters, staff lifecycle, RBAC, upload security |
+| `pnpm vitest run apps/api` | local + dev DB | 59 files / 594 tests passed | pass | Full API unit/integration suite; includes newsletters, staff lifecycle, RBAC, upload security, and the cross-site GET verify regression |
+| `pnpm vitest run apps/api/src/__tests__/member-auth-api.test.ts apps/api/src/__tests__/csrf-origin-coverage.test.ts` | local + dev DB | 2 files / 12 tests passed | pass | F-006: cross-site GET verify returns 404 without `Set-Cookie`; same token then verifies via POST |
+| `pnpm exec eslint apps/api/src/routes/members.ts apps/api/src/__tests__/member-auth-api.test.ts` | local | exit 0 | pass | No findings on changed files |
 | `pnpm vitest run apps/api/src/__tests__/staff-auth-lifecycle.test.ts` | local + dev DB | 1 file / 22 tests passed | pass | Includes F-004 directory/role isolation and cleanup |
 | `pnpm vitest run apps/api/src/__tests__/newsletters-api.test.ts` | local + dev DB | 1 file / 26 tests passed | pass | Includes F-005 suppression scope and delete isolation |
 | `pnpm vitest run apps/api/src/__tests__/media-upload-security.test.ts` | local + dev DB | 1 file / 18 tests passed | pass | Includes F-009 size ceilings, MIME mismatch, fail-closed provider |
@@ -496,10 +508,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 
 ## Approvals and Manual Actions
 
-- [x] F-001, F-002, F-003, F-004, F-005, F-007, F-008, F-009, F-010, F-011, and
-  F-014 remediated and covered by negative isolation/authorization/config/
-  CSRF/rate/private-site tests (authorized 2026-11-13). F-011's edge
-  TLS/redirect and HSTS ramp remain deployment actions.
+- [x] F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010,
+  F-011, and F-014 remediated and covered by negative isolation/authorization/
+  config/CSRF/rate/private-site/verify-flow tests (authorized 2026-11-13).
+  F-011's edge TLS/redirect and HSTS ramp remain deployment actions.
 - [x] Applied and verified migrations `0052_newsletter_sends_publication_scope`
   and `0053_email_suppressions_publication_scope` in the local Docker staging
   rehearsal (2026-11-13).
@@ -513,8 +525,8 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
   `getObjectBuffer`, otherwise uploads fail closed.
 - [x] Staff-mutation Origin rollout (F-007) applied and enforced by a
   route-scanner test.
-- [ ] Approve changing `GET /members/auth/verify` to a POST flow with Origin
-  validation (F-006).
+- [x] Member magic-link verification made POST-only; the unguarded GET handler
+  is removed and a cross-site GET regression test is in place (F-006).
 - [x] Reset-acceptance rate limit (F-008) applied.
 - [x] Private-site HMAC fallback removed and `web` wired to the shared key
   (F-010).

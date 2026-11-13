@@ -127,6 +127,31 @@ describe("Batch 8 — Member API Integration & Security", () => {
     ).rejects.toThrow();
   });
 
+  it("does not create a session from a cross-site GET to the verify endpoint", async () => {
+    const email = `get-csrf-${Date.now()}@example.com`;
+    await authService.requestAuthLink(email);
+    const rawToken = new URL(
+      mailer.sent[mailer.sent.length - 1]!.magicLinkUrl,
+    ).searchParams.get("token")!;
+
+    const getRes = await app.inject({
+      method: "GET",
+      url: `/api/members/v1/auth/verify?token=${encodeURIComponent(rawToken)}`,
+      headers: { origin: "https://evil.example" },
+    });
+    expect(getRes.statusCode).toBe(404);
+    expect(getRes.headers["set-cookie"]).toBeUndefined();
+
+    // The token was not consumed by the rejected GET.
+    const postRes = await app.inject({
+      method: "POST",
+      url: "/api/members/v1/auth/verify",
+      payload: { token: rawToken },
+    });
+    expect(postRes.statusCode).toBe(200);
+    expect(postRes.headers["set-cookie"]).toBeDefined();
+  });
+
   it("extension member API rejects a member from another publication before plugin execution", async () => {
     const email = `ext-member-${Date.now()}@example.com`;
     await authService.requestAuthLink(email);

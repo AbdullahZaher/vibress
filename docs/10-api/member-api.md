@@ -45,7 +45,7 @@ Errors:
 
 ### `GET /auth/verify?token=...`
 
-Browser-navigation convenience; same semantics as POST. Sets the cookie and returns the member.
+Removed. Verification is POST-only so a cross-site navigation cannot create a session (login CSRF); the emailed link opens the portal verify page, which submits the token via `POST /auth/verify`.
 
 ### `POST /auth/logout`
 
