@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../../apps/api/src/main";
 import {
   getDb, posts, contentTranslations, users, settings, roles, userRoles,
-  publicationLocales, publications, tags, postTags, installation, eq, and, sql,
+  publicationLocales, publications, publicationMemberships, tags, postTags,
+  installation, eq, and, sql,
 } from "@vibress/database";
 import { hashPassword } from "@vibress/security";
 import { DrizzleUserRepository, UsersService } from "@vibress/users";
@@ -39,6 +40,18 @@ async function ensureUserWithRole(email: string, roleName: string, passwordPlain
       });
     }
   }
+  // Tenant resolution is fail-closed: posts reference
+  // (publication_id, primary_author_id), so the fixture user must belong to
+  // the publication. Seed truncation in other suites removes memberships.
+  await db
+    .insert(publicationMemberships)
+    .values({
+      id: randomUUID(),
+      publicationId: "pub_default",
+      userId: user.id,
+      role: roleName,
+    })
+    .onConflictDoNothing();
   return user.id;
 }
 

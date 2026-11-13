@@ -175,6 +175,9 @@ export const buildApp = () => {
 
   fastify.register(helmet, {
     global: true,
+    // Staged HSTS, matching web/SPA/gateway. Raise maxAge only after the edge
+    // is verified to serve HTTPS exclusively.
+    hsts: { maxAge: 300 },
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'none'"],

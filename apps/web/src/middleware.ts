@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = process.env.API_URL || "http://127.0.0.1:7780";
 
+// Staged HSTS: a short max-age first. Browsers ignore HSTS over plain HTTP, so
+// local development is unaffected; raise the value once staging verifies the
+// edge always serves HTTPS.
+const HSTS_HEADER = "max-age=300";
+const PERMISSIONS_POLICY =
+  "camera=(), microphone=(), geolocation=(), usb=(), payment=(), interest-cohort=()";
+
+function applyTransportSecurityHeaders(response: NextResponse): void {
+  response.headers.set("Strict-Transport-Security", HSTS_HEADER);
+  response.headers.set("Permissions-Policy", PERMISSIONS_POLICY);
+}
+
 /**
  * Strict origin sanitizer for preview iframe embedding.
  * Enforces HTTPS in production (allowing loopback in non-prod/testing),
@@ -194,6 +206,7 @@ function createCspResponse(
 
   response.headers.set("Content-Security-Policy", cspHeader);
   response.headers.set("x-nonce", nonce);
+  applyTransportSecurityHeaders(response);
   return response;
 }
 
@@ -210,6 +223,7 @@ function localizedErrorResponse(status: 404 | 503, message: string): NextRespons
   });
   response.headers.set("Content-Security-Policy", buildCsp(nonce));
   response.headers.set("X-Content-Type-Options", "nosniff");
+  applyTransportSecurityHeaders(response);
   return response;
 }
 

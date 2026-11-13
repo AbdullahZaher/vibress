@@ -191,6 +191,20 @@ describe("Web Edge Middleware Localization Routing (LOC-002 & LOC-003)", () => {
     expect(res.headers.get("x-vibress-preview-path")).toBeNull();
   });
 
+  it("emits staged HSTS and a restrictive Permissions-Policy on page responses", async () => {
+    global.fetch = mockSiteApi({ locale: "en", enabledLocales: ["en"] }) as any;
+
+    const req = new NextRequest("http://localhost:7777/posts/post-1");
+    const res = await middleware(req);
+
+    expect(res.headers.get("Strict-Transport-Security")).toBe("max-age=300");
+    const permissionsPolicy = res.headers.get("Permissions-Policy") || "";
+    expect(permissionsPolicy).toContain("camera=()");
+    expect(permissionsPolicy).toContain("microphone=()");
+    expect(permissionsPolicy).toContain("geolocation=()");
+    expect(permissionsPolicy).not.toContain("*");
+  });
+
   describe("Production CSP & Iframe Embedding Security", () => {
     it("strictly returns frame-ancestors 'none' when allowEmbedding is false across any environment", () => {
       expect(getValidatedFrameAncestors(false, { NODE_ENV: "production" })).toBe("frame-ancestors 'none'");

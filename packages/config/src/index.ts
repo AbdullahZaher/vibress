@@ -399,18 +399,40 @@ function enforceProductionGuards(config: AppConfig): void {
   ) {
     issues.push("NEWSLETTER_UNSUBSCRIBE_SECRET must be set in production");
   }
+  // A live deployment must never silently accept test-mode payments: reject
+  // any test-mode Stripe key rather than only the development placeholder.
   if (
     !config.billing.stripeSecretKey ||
-    config.billing.stripeSecretKey === "sk_test_missing"
+    !/^(sk|rk)_live_/i.test(config.billing.stripeSecretKey)
   ) {
-    issues.push("STRIPE_SECRET_KEY must be set in production");
+    issues.push(
+      "STRIPE_SECRET_KEY must be a live-mode key (sk_live_ or rk_live_) in production",
+    );
   }
-  if (!config.billing.stripeWebhookSecret) {
-    issues.push("STRIPE_WEBHOOK_SECRET must be set in production");
+  if (
+    !config.billing.stripeWebhookSecret ||
+    !/^whsec_/.test(config.billing.stripeWebhookSecret)
+  ) {
+    issues.push(
+      "STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret (whsec_...) in production",
+    );
   }
   if (config.cors.origins.length === 0) {
     issues.push(
       "CORS_ORIGINS, ADMIN_ORIGIN, or PORTAL_ORIGIN must define at least one production origin",
+    );
+  }
+  // Public traffic must be HTTPS-only. Allowing an http:// origin in
+  // production silently downgrades transport security and defeats HSTS.
+  const insecureOrigins = uniqueStrings([
+    config.site.url,
+    config.site.portalUrl,
+    config.site.apiUrl,
+    ...config.cors.origins,
+  ]).filter((origin) => !isHttpsUrl(origin));
+  if (insecureOrigins.length > 0) {
+    issues.push(
+      `All production origins must use https: (offending: ${insecureOrigins.join(", ")})`,
     );
   }
   // First-run setup bootstrap secret: production must fail closed. A missing
@@ -476,6 +498,14 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
       ),
     ),
   );
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function parseKeyValuePairs(value: string | undefined): Record<string, string> {

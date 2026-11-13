@@ -14,6 +14,7 @@ import { appLogger } from "../observability";
 
 const PROD_ENV = {
   NODE_ENV: "production",
+  SITE_URL: "https://www.example.com",
   VIBRESS_ENCRYPTION_KEY:
     "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   NEWSLETTER_UNSUBSCRIBE_SECRET: "newsletter-prod-secret",

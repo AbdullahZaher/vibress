@@ -52,12 +52,61 @@ describe("Typed configuration", () => {
       expect(issues).toContain("STRIPE_WEBHOOK_SECRET");
       expect(issues).toContain("CORS_ORIGINS");
       expect(issues).toContain("VIBRESS_SETUP_TOKEN");
+      expect(issues).toContain("STRIPE_WEBHOOK_SECRET");
     }
+  });
+
+  it("rejects test-mode Stripe keys, malformed webhook secrets, and non-HTTPS origins in production", () => {
+    const baseEnv: Record<string, string> = {
+      NODE_ENV: "production",
+      SITE_URL: "https://www.example.com",
+      VIBRESS_ENCRYPTION_KEY:
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      NEWSLETTER_UNSUBSCRIBE_SECRET: "newsletter-prod-secret",
+      STRIPE_SECRET_KEY: "sk_live_real",
+      STRIPE_WEBHOOK_SECRET: "whsec_real",
+      CORS_ORIGINS: "https://admin.example.com,https://portal.example.com",
+      VIBRESS_SETUP_TOKEN: "prod-setup-token-0123456789abcdef0123456789abcdef",
+    };
+    const issuesFor = (overrides: Record<string, string>): string => {
+      try {
+        loadConfig({ ...baseEnv, ...overrides });
+        return "";
+      } catch (err) {
+        expect(err).toBeInstanceOf(ConfigError);
+        return (err as ConfigError).issues.join("\n");
+      }
+    };
+
+    for (const key of ["sk_test_real", "rk_test_real", "pk_test_real"]) {
+      expect(issuesFor({ STRIPE_SECRET_KEY: key })).toContain(
+        "STRIPE_SECRET_KEY must be a live-mode key",
+      );
+    }
+    expect(issuesFor({ STRIPE_WEBHOOK_SECRET: "not-a-webhook-secret" })).toContain(
+      "STRIPE_WEBHOOK_SECRET must be a Stripe webhook signing secret",
+    );
+    expect(issuesFor({ SITE_URL: "http://www.example.com" })).toContain(
+      "All production origins must use https:",
+    );
+    expect(issuesFor({ PORTAL_URL: "http://portal.example.com" })).toContain(
+      "All production origins must use https:",
+    );
+    expect(issuesFor({ API_URL: "http://api.example.com" })).toContain(
+      "All production origins must use https:",
+    );
+    expect(
+      issuesFor({ CORS_ORIGINS: "https://admin.example.com,http://portal.example.com" }),
+    ).toContain("All production origins must use https:");
+
+    // The same fixture boots cleanly with HTTPS-only values.
+    expect(issuesFor({})).toBe("");
   });
 
   it("loads production with explicit secrets and CORS origins", () => {
     const config = loadConfig({
       NODE_ENV: "production",
+      SITE_URL: "https://www.example.com",
       VIBRESS_ENCRYPTION_KEY:
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       NEWSLETTER_UNSUBSCRIBE_SECRET: "newsletter-prod-secret",
