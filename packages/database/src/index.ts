@@ -5,6 +5,11 @@ export { Client, Pool } from "pg";
 export { schema };
 export * from "./schema";
 export { runMigrations } from "./migrate";
+export {
+  provisionRuntimeRole,
+  readRuntimeRoleConfig,
+  type RuntimeRoleConfig,
+} from "./runtime-role";
 export { seedDatabase, SYSTEM_ROLES, SYSTEM_PERMISSIONS } from "./seed";
 export { seedFixturePost, TARGET_POST_ID } from "./seed-fixture-post";
 export * from "./transaction";

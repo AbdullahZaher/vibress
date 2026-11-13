@@ -97,6 +97,7 @@ VIBRESS_VERSION=1.2.0
 LOG_LEVEL=info
 POSTGRES_USER=vibress
 POSTGRES_PASSWORD=drill-secure-password-12345
+POSTGRES_APP_PASSWORD=drill-app-password-12345
 POSTGRES_DB=${DRILL_DB}
 SITE_URL=http://localhost:${DRILL_PORT}
 ADMIN_ORIGIN=http://localhost:${DRILL_PORT}

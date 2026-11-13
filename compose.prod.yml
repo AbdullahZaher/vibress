@@ -83,7 +83,11 @@ services:
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       TRACING_ENABLED: ${TRACING_ENABLED:-true}
       API_PORT: "7780"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vibress}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-vibress}
+      # api/worker connect as the least-privilege runtime role; the migrate
+      # service provisions it and keeps using POSTGRES_USER (owner).
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-vibress_app}:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-vibress}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-vibress_app}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}
       REDIS_URL: redis://redis:6379
       SITE_URL: ${SITE_URL:?set SITE_URL (public origin, e.g. https://example.com)}
       PORTAL_URL: ${PORTAL_URL:-}
@@ -161,7 +165,10 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      # Migrations keep the owner role; api/worker use the runtime role.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vibress}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-vibress}
     command: ["node", "dist/migrate.js"]
     networks: [backend]
     depends_on:

@@ -210,6 +210,12 @@ if [ -z "${SETUP_TOKEN}" ] || [ "${#SETUP_TOKEN}" -lt 16 ]; then
   exit 1
 fi
 
+APP_PASSWORD="${POSTGRES_APP_PASSWORD:-$(grep -E '^[[:space:]]*POSTGRES_APP_PASSWORD=' "${ENV_FILE}" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)}"
+if [ -z "${APP_PASSWORD}" ] || [ "${APP_PASSWORD}" = "change-me-strong-app-password" ] || [ "${#APP_PASSWORD}" -lt 16 ]; then
+  echo "Error: POSTGRES_APP_PASSWORD must be a non-placeholder value of at least 16 characters in '${ENV_FILE}' (least-privilege api/worker database role)." >&2
+  exit 1
+fi
+
 # Check disk space (warn if < 5GB)
 FREE_DISK_KB=$(df -k . | awk 'NR==2 {print $4}')
 if [ "${FREE_DISK_KB}" -lt 5242880 ]; then

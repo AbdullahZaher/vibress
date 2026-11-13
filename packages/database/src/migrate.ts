@@ -1,6 +1,7 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { getDb, closeDbPool } from "./connection";
+import { getDb, getDbPool, closeDbPool } from "./connection";
 import { prepareOnlineSearchLocaleMigration } from "./online-locale-migration";
+import { provisionRuntimeRole, readRuntimeRoleConfig } from "./runtime-role";
 import path from "node:path";
 import fs from "node:fs";
 const currentDir =
@@ -31,6 +32,20 @@ export const runMigrations = async (): Promise<void> => {
   console.log(`Running migrations from ${migrationsFolder}...`);
   await prepareOnlineSearchLocaleMigration();
   await migrate(db, { migrationsFolder });
+
+  const runtimeRole = readRuntimeRoleConfig();
+  if (runtimeRole) {
+    const client = await getDbPool().connect();
+    try {
+      await provisionRuntimeRole(client, runtimeRole);
+      console.log(
+        `Runtime role "${runtimeRole.roleName}" provisioned (DML and plugin DDL, no ownership).`,
+      );
+    } finally {
+      client.release();
+    }
+  }
+
   console.log("Migrations completed successfully.");
 };
 

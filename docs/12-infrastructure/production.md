@@ -98,6 +98,7 @@ See `infrastructure/env.prod.example`. Notably:
 ```text
 DATABASE_URL              # set by compose (service name `postgres`)
 REDIS_URL                 # set by compose (service name `redis`)
+POSTGRES_APP_USER / POSTGRES_APP_PASSWORD  # least-privilege api/worker role
 VIBRESS_ENCRYPTION_KEY    # master key for encrypted credentials
 NEWSLETTER_UNSUBSCRIBE_SECRET
 STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
@@ -112,6 +113,35 @@ these (`enforceProductionGuards`). Compose additionally fails fast via
 `VIBRESS_ENCRYPTION_KEY` is also passed to the `web` service: it verifies the
 API-signed private-site cookie with the same key and, if the key is absent,
 denies access instead of accepting a shared fallback secret.
+
+## Database roles
+
+Two roles separate schema ownership from runtime access:
+
+- `POSTGRES_USER` (owner) owns the schema and is used only by the one-shot
+  `migrate` service. It creates and alters tables.
+- `POSTGRES_APP_USER` (default `vibress_app`) is the runtime role for `api` and
+  `worker`. The migrate job creates or refreshes it from
+  `POSTGRES_APP_PASSWORD` and grants:
+
+  - `CONNECT` on the database and `USAGE` on schema `public`;
+  - `SELECT, INSERT, UPDATE, DELETE` on all tables and default privileges for
+    future tables;
+  - `USAGE, SELECT` on sequences and `EXECUTE` on functions;
+  - `CREATE` on schema `public`, required because the runtime provisions
+    operator-approved plugin storage tables on demand.
+
+  It is not a superuser, cannot create databases or roles, and does not own core
+  tables, so it cannot `ALTER`, `DROP`, or `TRUNCATE` them.
+
+Provisioning is idempotent and runs on every migrate. Existing installations
+must add `POSTGRES_APP_USER`/`POSTGRES_APP_PASSWORD` to `.env` before upgrading;
+compose fails fast otherwise. If the owner role cannot create roles (for example
+on a locked-down managed PostgreSQL), pre-create the role and grants with a
+superuser and keep the credentials identical. Rotate the runtime password by
+changing `POSTGRES_APP_PASSWORD` and re-running the migrate job. Row-level
+security is not enabled; tenant isolation remains application-level and is
+covered by the isolation test suites.
 
 ## Reverse proxy
 

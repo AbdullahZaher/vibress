@@ -52,6 +52,7 @@ required variable is missing or insecure, the process halts immediately with
 | :------------------------------ | :------: | :----------------------------------------------------------------- |
 | `NODE_ENV`                      |   Yes    | Must be set to `production`.                                       |
 | `POSTGRES_PASSWORD`             |   Yes    | Strong database password (no default).                             |
+| `POSTGRES_APP_PASSWORD`         |   Yes    | Password for the least-privilege `api`/`worker` database role.     |
 | `VIBRESS_ENCRYPTION_KEY`        |   Yes    | 32-byte hex string for AES-256-GCM field encryption.               |
 | `NEWSLETTER_UNSUBSCRIBE_SECRET` |   Yes    | 32-byte hex secret for cryptographic unsubscribe tokens.           |
 | `STRIPE_SECRET_KEY`             | Optional | Live Stripe API secret key (`sk_live_...`).                        |
