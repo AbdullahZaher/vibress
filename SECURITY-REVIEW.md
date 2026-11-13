@@ -1,15 +1,15 @@
 # Prelaunch Security Review — Vibress
 
 > Audit plus owner-authorized remediation of F-001, F-002, F-003, F-004, F-005,
-> F-006, F-007, F-008, F-009, F-010, F-011, and F-014. No other findings were
-> changed. This report is not a certification and does not replace an
+> F-006, F-007, F-008, F-009, F-010, F-011, F-012, and F-014. No other findings
+> were changed. This report is not a certification and does not replace an
 > independent penetration test.
 
 ## Scope
 
-- **Project / revision:** `vibress-monorepo` at `262b2390` (`main`) plus the
-  uncommitted F-006 route removal in the working tree; version 1.2.0. The audit
-  baseline was `67a4de4b`.
+- **Project / revision:** `vibress-monorepo` at `85e58dd5` (`main`) plus the
+  uncommitted F-012 runtime-role change in the working tree; version 1.2.0. The
+  audit baseline was `67a4de4b`.
 - **Owner-approved repositories / environments:** local working tree at
   `/Users/abdullahzaher/vibress`; local docker services (`vibress-postgres`,
   `vibress-redis`, `vibress-minio`, `vibress-mailpit`, gateway on 7777). No
@@ -84,10 +84,14 @@
   12. F-006 — magic-link verification is POST-only. The GET handler that
       consumed tokens and set the session cookie without any Origin check is
       removed; the portal already verified through POST.
-- **Verified medium issues still open:** DB superuser with no RLS and an
-  in-memory rate limiter with several unprotected expensive routes. Edge
-  TLS/redirect and the HSTS max-age ramp remain deployment actions; the shipped
-  HSTS value is intentionally short.
+  13. F-012 — `api`/`worker` now connect through a provisioned, non-owner
+      runtime role (DML plus plugin-storage DDL, no ownership); only the
+      one-shot migrate job keeps the database owner credential. RLS was
+      evaluated and deferred.
+- **Verified medium issues still open:** the in-memory rate limiter with
+  several unprotected expensive routes (F-013). Edge TLS/redirect and the HSTS
+  max-age ramp remain deployment actions; the shipped HSTS value is
+  intentionally short.
 - **Remaining approvals:** the remaining medium-severity fixes and the
   production rollout of migrations `0052`/`0053` still require owner approval;
   see [Approvals and Manual Actions](#approvals-and-manual-actions).
@@ -100,7 +104,7 @@
 |---|---|---|---|---|---|---|---|
 | 01 | Authentication | pass | low | Opaque 32-byte sessions stored as SHA-256, revoked/expiry checked per request; per-request role reload ([auth-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/application/auth-service.ts#L82), [middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L42), [drizzle-session-repository.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/infrastructure/drizzle-session-repository.ts#L33)) | Wire MFA/SSO or document them as not shipped; add idle timeout | 82 unit + 98 API tests passed | Confirm MFA expectation for launch |
 | 02 | Protect API keys | fixed_verified | medium | No server secret in client bundles; only `NEXT_PUBLIC_SITE_URL` is public. Site-privacy verification now uses only `VIBRESS_ENCRYPTION_KEY` and fails closed without it ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L315)); the web cookie-minting fallback is removed and `web` receives the key in compose ([route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L37), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L183)) | Keep the key shared between `api` and `web` | Middleware/route 22/22; build artifacts scanned previously: no secret names/keys | Confirm the key is set for `web` at deployment |
-| 03 | Secure database access | failed | medium | F-001, F-003, F-004, and F-005 fixed: sends carry `publication_id`, staff context fails closed, directory/roles are publication-scoped, and suppressions carry `publication_id` ([0052_newsletter_sends_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0052_newsletter_sends_publication_scope.sql#L1), [0053_email_suppressions_publication_scope.sql](file:///Users/abdullahzaher/vibress/packages/database/migrations/0053_email_suppressions_publication_scope.sql#L1), [admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [workspace-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/workspaces/src/application/workspace-service.ts#L126)). Remaining: no RLS and superuser DB role (F-012) | Least-privilege DB role | Newsletter isolation 18/18, runtime multi-publication 45/45, full API 594/594 | Apply migrations 0052/0053 in deploy; approve remaining |
+| 03 | Secure database access | fixed_verified | medium | F-001, F-003, F-004, and F-005 fixed, and F-012 role separation applied: `api`/`worker` connect as a non-owner runtime role with DML but no ownership of core tables, while the migrate job keeps the owner credential ([runtime-role.ts](file:///Users/abdullahzaher/vibress/packages/database/src/runtime-role.ts#L33), [migrate.ts](file:///Users/abdullahzaher/vibress/packages/database/src/migrate.ts#L36), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L88)). RLS remains disabled by design | Add `POSTGRES_APP_PASSWORD` at deploy; approve an RLS project if required | DB 20 files / 58 tests (incl. 7 role tests); runtime probe denied DROP/TRUNCATE; full API 594/594; integration/security 532/532 | Confirm runtime-role credentials per deployment |
 | 04 | Enforce HTTPS | needs_approval | medium | Boot now rejects any non-`https:` production origin (`SITE_URL`, `PORTAL_URL`, `API_URL`, every CORS origin) ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); staged HSTS (`max-age=300`) is emitted by web middleware, the gateway, both SPAs, and the API. The gateway itself still listens on HTTP and relies on an external edge for TLS + HTTP→HTTPS redirect ([nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L13)) | Configure edge TLS + redirect, then raise HSTS max-age after staging verification | Config tests 9/9; middleware 20/20 | Approve edge deployment and HSTS ramp |
 | 05 | Hash passwords | pass | none | Argon2id; library-generated salt; no password logging ([passwords/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/passwords/index.ts#L37)) | Set explicit memory/time/parallelism parameters | Unit tests passed | Confirm tuning on smallest target |
 | 06 | Server-side validation | pass | low | Zod at most boundaries (`safeParse`); global 1 MB body limit; per-route limits ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L137)); some handlers cast bodies directly (F-017) | Add schemas to collaboration/ai/admin/operations handlers | API tests passed | Schedule hardening |
@@ -123,8 +127,8 @@
 | 23 | Exposed files | pass | low | Public roots clean; no client source maps; media path traversal/containment guarded ([media-stream.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media-stream.ts#L202)); `.env*` excluded from images; `backups/` still enters the Docker build context (F-023 note) | Add `backups/` and `**/.env*` to `.dockerignore` | Artifact grep found no secrets | Verify with `docker buildx` |
 | 24 | Git history secrets | pass | none | Gitleaks 8.30.1 scanned 2,324 commits: 17 findings, all reviewed as synthetic test/CI fixtures; `.env`/`.env.prod` never committed | None for history; keep providers out of commits | Gitleaks exit 0 with `--redact` | — |
 | 25 | Revoke and replace exposed keys | not_applicable | none | No confirmed live credential in Git history or client artifacts. Working-tree `.env`, `.env.prod`, and `apps/web/.env.local` contain real-looking secrets but are untracked/ignored | If any file or image leaked, rotate at the provider | Not applicable | Confirm no artifact/image leak |
-| 26 | Integrated security review | failed | medium | F-001–F-011 and F-014 fixed and verified; remaining medium issues: DB role separation and in-memory/unprotected rate limits (F-012, F-013) | See prioritized actions | Full API 594/594; integration/security 532/532; targeted config/middleware suites passed | Approve remaining remediation plan |
-| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 594 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
+| 26 | Integrated security review | failed | medium | F-001–F-012 and F-014 fixed and verified; remaining medium issue: in-memory/unprotected rate limits (F-013) | See prioritized actions | Full API 594/594; integration/security 532/532; DB 59/59; targeted config/middleware suites passed | Approve remaining remediation plan |
+| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 59 database tests (incl. 8 runtime-role), 594 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
 
 ## Findings by Severity
 
@@ -309,10 +313,19 @@ None verified.
 
 #### F-012 — Database access uses the PostgreSQL owner role; no RLS
 - **Control:** 03
-- **Severity / rationale:** Medium. The application principal can `DROP`/`ALTER` all tables and bypasses any future RLS; tenant isolation is entirely application-level.
-- **Evidence:** [compose.prod.yml:44](file:///Users/abdullahzaher/vibress/compose.prod.yml#L44) initializes with `POSTGRES_USER`; [#L86](file:///Users/abdullahzaher/vibress/compose.prod.yml#L86) reuses it for API/worker/migrate. No `ENABLE ROW LEVEL SECURITY`/`CREATE POLICY` in `packages/database/migrations`.
-- **Proposed fix:** Create a least-privilege runtime role (DML only) with a separate migration role; consider RLS for tenant tables.
-- **Approval:** Yes (infrastructure + migrations).
+- **Status:** `fixed_verified` (2026-11-13) for role separation; RLS evaluated and deferred (see residual risk)
+- **Severity / rationale:** Medium (role separation resolved). `api`/`worker` connected as the database owner, so the application principal could `DROP`/`ALTER` every table and would bypass any future RLS; tenant isolation was entirely application-level.
+- **Original evidence (redacted):** [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L86) reused `POSTGRES_USER` for API/worker/migrate; no `ENABLE ROW LEVEL SECURITY`/`CREATE POLICY` existed in `packages/database/migrations`.
+- **Root cause:** A single credential was used both to apply schema migrations and to serve requests, so runtime and DDL privileges were identical.
+- **Fix applied:**
+  - A new provisioning step creates or refreshes a least-privilege runtime role (`POSTGRES_APP_USER`, default `vibress_app`): login-only, `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, `NOBYPASSRLS` ([runtime-role.ts](file:///Users/abdullahzaher/vibress/packages/database/src/runtime-role.ts#L33)).
+  - It grants `CONNECT`, schema `USAGE`, DML on all current and future tables, sequence `USAGE/SELECT`, function `EXECUTE`, and schema `CREATE` (required because the runtime provisions operator-approved plugin storage tables on demand). Core tables stay owned by the migration role, so the runtime cannot `ALTER`, `DROP`, or `TRUNCATE` them.
+  - The migrate entrypoint runs provisioning after migrations, idempotently, and fails closed on error ([migrate.ts](file:///Users/abdullahzaher/vibress/packages/database/src/migrate.ts#L36)); it is skipped when `POSTGRES_APP_PASSWORD` is unset (local tests/dev).
+  - `compose.prod.yml` gives `api`/`worker` a `DATABASE_URL` for the runtime role while the one-shot `migrate` service keeps the owner URL ([compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L88), [#L171](file:///Users/abdullahzaher/vibress/compose.prod.yml#L171)). `env.prod.example`, deployment docs ([production.md](file:///Users/abdullahzaher/vibress/docs/12-infrastructure/production.md#L117)), drill fixtures, and the deploy preflight were updated.
+  - Regression test provisions a throwaway role, connects as it, and asserts no superuser/createdb/createrole, DML allowed, `TRUNCATE` denied, core `DROP` denied (42501), and plugin-style `CREATE`/`DROP` allowed; config parsing, invalid-role-name rejection, and the refusal to provision the migration/owner role are covered too ([runtime-role.test.ts](file:///Users/abdullahzaher/vibress/packages/database/src/__tests__/runtime-role.test.ts#L64)).
+- **Test command / expected / observed:** `pnpm vitest run packages/database` → 20 files / 59 tests passed (including the 8 runtime-role tests). `pnpm --filter @vibress/database exec tsc --noEmit` → clean. Migrate entrypoint run against the local dev DB provisioned `vibress_app_verify`; a connection as that role read `publications`, created/dropped a probe table, and `DROP TABLE publications` failed with `42501`. The verification role was removed afterwards. `docker compose -f compose.prod.yml config` renders the app role for `api`/`worker` and the owner for `migrate`. Full API 594/594; integration/security 532/532.
+- **Residual risk:** RLS is still not enabled. Enabling it requires a per-request tenant context (including workers, public-site requests, and cross-publication platform operations); doing it blind would break legitimate flows. Until then, cross-tenant reads depend on application-level scoping and its test suites, and the runtime role can still run DML on any tenant's rows. The runtime also holds schema `CREATE` for plugin storage, so it can create/drop its own tables; that is required by design. Existing deployments must add `POSTGRES_APP_PASSWORD`; managed PostgreSQL owners that cannot create roles need the role pre-created by a superuser.
+- **Approval required:** None for the code change. Approve a future RLS project if defense-in-depth tenant isolation is required before launch; confirm every deployment adds the runtime-role credentials and that the migrate job completes before API/worker start.
 
 #### F-013 — Rate limiter is per-process and several expensive routes are unprotected
 - **Control:** 12
@@ -486,6 +499,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 | `pnpm vitest run apps/api` | local + dev DB | 59 files / 594 tests passed | pass | Full API unit/integration suite; includes newsletters, staff lifecycle, RBAC, upload security, and the cross-site GET verify regression |
 | `pnpm vitest run apps/api/src/__tests__/member-auth-api.test.ts apps/api/src/__tests__/csrf-origin-coverage.test.ts` | local + dev DB | 2 files / 12 tests passed | pass | F-006: cross-site GET verify returns 404 without `Set-Cookie`; same token then verifies via POST |
 | `pnpm exec eslint apps/api/src/routes/members.ts apps/api/src/__tests__/member-auth-api.test.ts` | local | exit 0 | pass | No findings on changed files |
+| `pnpm vitest run packages/database` | local + dev DB | 20 files / 59 tests passed | pass | F-012 runtime role: config parsing, non-superuser, DML allowed, TRUNCATE/DROP denied, plugin-style DDL allowed, owner-role guard rejects self-provisioning; throwaway role removed |
+| `pnpm --filter @vibress/database run db:migrate` with `POSTGRES_APP_*` | local + dev DB | migrator exit 0; "Runtime role \"vibress_app_verify\" provisioned" | pass | Exercise of the real migrate entrypoint; verification role dropped afterwards |
+| `docker compose -f compose.prod.yml config` (fixture env) | local | renders app role URL for `api`/`worker`, owner URL for `migrate` | pass | No secrets printed |
+| `bash -n` deploy/drill scripts; `pnpm --filter @vibress/database exec tsc --noEmit` | local | exit 0 | pass | Preflight placeholder check and role-module typecheck |
 | `pnpm vitest run apps/api/src/__tests__/staff-auth-lifecycle.test.ts` | local + dev DB | 1 file / 22 tests passed | pass | Includes F-004 directory/role isolation and cleanup |
 | `pnpm vitest run apps/api/src/__tests__/newsletters-api.test.ts` | local + dev DB | 1 file / 26 tests passed | pass | Includes F-005 suppression scope and delete isolation |
 | `pnpm vitest run apps/api/src/__tests__/media-upload-security.test.ts` | local + dev DB | 1 file / 18 tests passed | pass | Includes F-009 size ceilings, MIME mismatch, fail-closed provider |
@@ -509,9 +526,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 ## Approvals and Manual Actions
 
 - [x] F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010,
-  F-011, and F-014 remediated and covered by negative isolation/authorization/
-  config/CSRF/rate/private-site/verify-flow tests (authorized 2026-11-13).
-  F-011's edge TLS/redirect and HSTS ramp remain deployment actions.
+  F-011, F-012, and F-014 remediated and covered by negative isolation/
+  authorization/config/CSRF/rate/private-site/verify-flow/privilege tests
+  (authorized 2026-11-13). F-011's edge TLS/redirect and HSTS ramp remain
+  deployment actions.
 - [x] Applied and verified migrations `0052_newsletter_sends_publication_scope`
   and `0053_email_suppressions_publication_scope` in the local Docker staging
   rehearsal (2026-11-13).
@@ -540,7 +558,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
   `whsec_` webhook secret before deployment.
 - [ ] Confirm `VIBRESS_ENCRYPTION_KEY` is present in the `web` environment and
   matches the API value (private-site access locks out if it is missing).
-- [ ] Create a least-privilege PostgreSQL runtime role; evaluate RLS.
+- [x] Least-privilege runtime role added (F-012): migrate provisions it and
+  `api`/`worker` use it instead of the owner.
+- [ ] Add `POSTGRES_APP_USER`/`POSTGRES_APP_PASSWORD` to each deployment `.env`
+  and confirm the migrate job completes before API/worker start.
 - [ ] Confirm `NODE_ENV=production` in every deployment (reset-token exposure and
   cookie `Secure` depend on it).
 - [ ] If any `.env`/`.env.prod`/`apps/web/.env.local` content or Docker build
@@ -557,8 +578,12 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
   confirmed with `docker buildx` before relying on `.dockerignore`.
 - The full monorepo regression matrix, E2E, typecheck, lint, and production build
   were not executed; they are not implied by the passing tests above.
-- RLS is absent, so database-level isolation claims depend entirely on
-  application predicates.
+- RLS is not enabled. The runtime role cannot alter or drop core tables, but it
+  can read and write every tenant's rows; database-level tenant isolation would
+  require a per-request tenant context across the API, workers, and public-site
+  flows. This was evaluated and deferred.
+- The compose/prod runtime-role path was exercised with rendered config and a
+  local provision/probe, not a full container boot; confirm it in staging.
 - An independent professional penetration test is advisable before a
   multi-tenant production launch, especially for billing, plugins, collaboration
   WebSockets, and media delivery.
