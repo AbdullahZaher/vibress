@@ -7,9 +7,9 @@
 
 ## Scope
 
-- **Project / revision:** `vibress-monorepo` at `e6366bff` (`main`) plus the
-  uncommitted F-013 rate-limit change in the working tree; version 1.2.0. The
-  audit baseline was `67a4de4b`.
+- **Project / revision:** `vibress-monorepo` at `12307144` (`main`) after the
+  F-012 runtime-role and F-013 rate-limit commits; version 1.2.0. The audit
+  baseline was `67a4de4b`.
 - **Owner-approved repositories / environments:** local working tree at
   `/Users/abdullahzaher/vibress`; local docker services (`vibress-postgres`,
   `vibress-redis`, `vibress-minio`, `vibress-mailpit`, gateway on 7777). No
