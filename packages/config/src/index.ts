@@ -424,12 +424,16 @@ function enforceProductionGuards(config: AppConfig): void {
   }
   // Public traffic must be HTTPS-only. Allowing an http:// origin in
   // production silently downgrades transport security and defeats HSTS.
+  // Loopback origins are exempt: they are only reachable from the host
+  // itself, so they cannot downgrade a public connection. The first-run
+  // setup E2E stack relies on this by running in production mode on
+  // localhost to keep production seeding and locking behavior.
   const insecureOrigins = uniqueStrings([
     config.site.url,
     config.site.portalUrl,
     config.site.apiUrl,
     ...config.cors.origins,
-  ]).filter((origin) => !isHttpsUrl(origin));
+  ]).filter((origin) => !isHttpsUrl(origin) && !isLoopbackHttpUrl(origin));
   if (insecureOrigins.length > 0) {
     issues.push(
       `All production origins must use https: (offending: ${insecureOrigins.join(", ")})`,
@@ -503,6 +507,20 @@ function uniqueStrings(values: Array<string | null | undefined>): string[] {
 function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isLoopbackHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      LOOPBACK_HOSTNAMES.has(url.hostname.toLowerCase())
+    );
   } catch {
     return false;
   }

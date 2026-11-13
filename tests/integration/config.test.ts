@@ -103,6 +103,42 @@ describe("Typed configuration", () => {
     expect(issuesFor({})).toBe("");
   });
 
+  it("allows loopback HTTP origins in production while keeping public origins and payment keys strict", () => {
+    const loopbackEnv: Record<string, string> = {
+      NODE_ENV: "production",
+      SITE_URL: "http://localhost:8899",
+      ADMIN_ORIGIN: "http://127.0.0.1:8899",
+      PORTAL_ORIGIN: "http://[::1]:8899",
+      CORS_ORIGINS: "http://localhost:8899",
+      VIBRESS_ENCRYPTION_KEY:
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      NEWSLETTER_UNSUBSCRIBE_SECRET: "newsletter-prod-secret",
+      STRIPE_SECRET_KEY: "sk_live_setup_e2e_fixture",
+      STRIPE_WEBHOOK_SECRET: "whsec_real",
+      VIBRESS_SETUP_TOKEN: "prod-setup-token-0123456789abcdef0123456789abcdef",
+    };
+
+    const config = loadConfig(loopbackEnv);
+    expect(config.isProduction).toBe(true);
+    expect(config.cookies.secure).toBe(true);
+
+    // Public HTTP origins stay rejected even when loopback origins are present.
+    expect(() =>
+      loadConfig({ ...loopbackEnv, SITE_URL: "http://www.example.com" }),
+    ).toThrow(/All production origins must use https:/);
+    expect(() =>
+      loadConfig({
+        ...loopbackEnv,
+        CORS_ORIGINS: "http://localhost:8899,http://portal.example.com",
+      }),
+    ).toThrow(/All production origins must use https:/);
+
+    // The loopback exemption does not relax the payment-key guard.
+    expect(() =>
+      loadConfig({ ...loopbackEnv, STRIPE_SECRET_KEY: "sk_test_setup_e2e" }),
+    ).toThrow(/STRIPE_SECRET_KEY must be a live-mode key/);
+  });
+
   it("loads production with explicit secrets and CORS origins", () => {
     const config = loadConfig({
       NODE_ENV: "production",

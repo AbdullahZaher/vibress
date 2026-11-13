@@ -6,6 +6,8 @@
 # Runs on host port 8899 with its own fresh volumes, so it never touches the
 # dev stack (7777) or the production stack. VIBRESS_SETUP_TOKEN must be set —
 # the wizard spec uses the value from tests/e2e/fixtures/setup-env.ts.
+# NODE_ENV stays "production" so seeding/locking behave like a real install;
+# the config guard accepts HTTP here only because every origin is loopback.
 
 name: vibress-setup-e2e
 
@@ -51,7 +53,9 @@ services:
       CORS_ORIGINS: http://localhost:8899
       VIBRESS_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       NEWSLETTER_UNSUBSCRIBE_SECRET: setup-e2e-unsub-secret
-      STRIPE_SECRET_KEY: sk_test_setup_e2e
+      # Disposable fixture, not a credential: production mode requires a
+      # live-mode prefix and the setup wizard never calls Stripe.
+      STRIPE_SECRET_KEY: sk_live_setup_e2e_fixture
       STRIPE_WEBHOOK_SECRET: whsec_setup_e2e
       SMTP_HOST: 127.0.0.1
       SMTP_PORT: "1025"
