@@ -105,6 +105,16 @@ describe("What's New API & Service Subsystem", () => {
       });
       expect(res.statusCode).toBe(401);
     });
+
+    it("rejects cookie-authenticated dismissal without a trusted Origin", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/whats-new/test-id/dismiss",
+        headers: { cookie: ownerCookie },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().errors[0].code).toBe("INVALID_ORIGIN");
+    });
   });
 
   describe("Feed Fetching & In-Memory Caching (1 Hour TTL)", () => {
@@ -136,7 +146,7 @@ describe("What's New API & Service Subsystem", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -150,7 +160,7 @@ describe("What's New API & Service Subsystem", () => {
       const res2 = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(res2.statusCode).toBe(200);
       expect(res2.json().item?.id).toBe("feature-1");
@@ -178,7 +188,7 @@ describe("What's New API & Service Subsystem", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -195,7 +205,7 @@ describe("What's New API & Service Subsystem", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -242,7 +252,7 @@ describe("What's New API & Service Subsystem", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       expect(res.statusCode).toBe(200);
@@ -279,7 +289,7 @@ describe("What's New API & Service Subsystem", () => {
       const res1 = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(res1.json().item?.id).toBe("dismiss-test-item");
 
@@ -287,7 +297,7 @@ describe("What's New API & Service Subsystem", () => {
       const dismissRes = await app.inject({
         method: "POST",
         url: "/api/admin/v1/whats-new/dismiss-test-item/dismiss",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(dismissRes.statusCode).toBe(200);
       expect(dismissRes.json().success).toBe(true);
@@ -297,7 +307,7 @@ describe("What's New API & Service Subsystem", () => {
       const res2 = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(res2.json().item).toBeNull();
       expect(res2.json().dismissedIds).toContain("dismiss-test-item");
@@ -306,7 +316,7 @@ describe("What's New API & Service Subsystem", () => {
       const dismissRes2 = await app.inject({
         method: "POST",
         url: "/api/admin/v1/whats-new/dismiss-test-item/dismiss",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(dismissRes2.statusCode).toBe(200);
       const occurrences = dismissRes2
@@ -341,14 +351,14 @@ describe("What's New API & Service Subsystem", () => {
       await app.inject({
         method: "POST",
         url: "/api/admin/v1/whats-new/cross-user-item/dismiss",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       // Owner sees null
       const ownerRes = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
       expect(ownerRes.json().item).toBeNull();
 
@@ -356,7 +366,7 @@ describe("What's New API & Service Subsystem", () => {
       const editorRes = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: editorCookie },
+        headers: { cookie: editorCookie, origin: "http://localhost:7777" },
       });
       expect(editorRes.json().item?.id).toBe("cross-user-item");
     });
@@ -381,7 +391,7 @@ describe("What's New API & Service Subsystem", () => {
       await app.inject({
         method: "POST",
         url: "/api/admin/v1/whats-new/old-item/dismiss",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       // 2. Feed updates with a brand new item (new-item)
@@ -407,7 +417,7 @@ describe("What's New API & Service Subsystem", () => {
       const res = await app.inject({
         method: "GET",
         url: "/api/admin/v1/whats-new",
-        headers: { cookie: ownerCookie },
+        headers: { cookie: ownerCookie, origin: "http://localhost:7777" },
       });
 
       expect(res.json().item?.id).toBe("new-item");

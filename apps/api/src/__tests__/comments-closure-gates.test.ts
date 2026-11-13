@@ -484,7 +484,11 @@ describe("Comments Final Evidence Closure Gates", () => {
       const delRes = await app.inject({
         method: "DELETE",
         url: `/api/admin/v1/comments/${commentId}`,
-        headers: { cookie: staffCookie, "x-publication-id": pubId },
+        headers: {
+          cookie: staffCookie,
+          "x-publication-id": pubId,
+          origin: "http://localhost:7777",
+        },
       });
       expect(delRes.statusCode).toBe(200);
 
@@ -492,10 +496,33 @@ describe("Comments Final Evidence Closure Gates", () => {
       const hideRes = await app.inject({
         method: "POST",
         url: `/api/admin/v1/comments/${commentId}/hide`,
-        headers: { cookie: staffCookie, "x-publication-id": pubId },
+        headers: {
+          cookie: staffCookie,
+          "x-publication-id": pubId,
+          origin: "http://localhost:7777",
+        },
       });
       expect(hideRes.statusCode).toBe(400);
       expect(hideRes.json().errors[0].code).toBe("INVALID_STATE_TRANSITION");
+    });
+
+    it("rejects staff moderation without a trusted Origin", async () => {
+      const createRes = await app.inject({
+        method: "POST",
+        url: "/api/members/v1/comments",
+        headers: { cookie: member1.cookie, origin: "http://localhost:7777" },
+        payload: { postId, body: "Comment for CSRF origin check" },
+      });
+      const commentId = createRes.json().comment.id;
+
+      const res = await app.inject({
+        method: "POST",
+        url: `/api/admin/v1/comments/${commentId}/hide`,
+        headers: { cookie: staffCookie, "x-publication-id": pubId },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(res.json().errors[0].code).toBe("INVALID_ORIGIN");
     });
 
     it("delete vs reply race: replying to a deleted parent fails cleanly", async () => {

@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { whatsNewService } from "../services";
-import { requireStaffSession } from "../middleware/auth";
+import { requireStaffSession, validateOrigin } from "../middleware/auth";
 import { appLogger } from "../observability";
 
 export async function whatsNewRoutes(fastify: FastifyInstance) {
@@ -31,7 +31,7 @@ export async function whatsNewRoutes(fastify: FastifyInstance) {
 
   // POST /api/admin/v1/whats-new/:id/dismiss
   fastify.post("/whats-new/:id/dismiss", {
-    preHandler: [requireStaffSession],
+    preHandler: [requireStaffSession, validateOrigin],
     handler: async (req, reply) => {
       const params = req.params as { id?: string } | undefined;
       const notificationId = params?.id?.trim();

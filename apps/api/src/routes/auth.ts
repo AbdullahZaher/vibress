@@ -444,7 +444,15 @@ export async function authRoutes(fastify: FastifyInstance) {
   });
 
   // Reset Password Execution (AUTH-02)
+  // Token guessing is infeasible (256-bit tokens), but unthrottled submissions
+  // still invite abuse; limit acceptance per client IP like forgot-password.
   fastify.post("/reset-password", {
+    config: {
+      rateLimit: {
+        max: getConfig().isProduction ? 5 : 1000,
+        timeWindow: "1 minute",
+      },
+    },
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
       const candidate = req.body as

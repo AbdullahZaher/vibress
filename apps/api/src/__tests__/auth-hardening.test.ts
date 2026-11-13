@@ -105,6 +105,45 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
     expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
   });
 
+  it("rate-limits password reset acceptance per client IP", async () => {
+    app = buildApp();
+    await app.ready();
+
+    for (let i = 1; i <= 5; i++) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/auth/reset-password",
+        headers: {
+          "x-forwarded-for": "203.0.113.140",
+          origin: "https://admin.example.com",
+        },
+        remoteAddress: "127.0.0.1",
+        payload: {
+          token: "invalid-reset-token",
+          password: "ValidPassword123!",
+        },
+      });
+      expect(res.statusCode).toBe(400);
+    }
+
+    const res6 = await app.inject({
+      method: "POST",
+      url: "/api/admin/v1/auth/reset-password",
+      headers: {
+        "x-forwarded-for": "203.0.113.140",
+        origin: "https://admin.example.com",
+      },
+      remoteAddress: "127.0.0.1",
+      payload: {
+        token: "invalid-reset-token",
+        password: "ValidPassword123!",
+      },
+    });
+
+    expect(res6.statusCode).toBe(429);
+    expect(res6.json().errors[0].code).toBe("TOO_MANY_REQUESTS");
+  });
+
   it("ensures an attacker IP cannot lock out the owner logging in from a different IP", async () => {
     app = buildApp();
     await app.ready();

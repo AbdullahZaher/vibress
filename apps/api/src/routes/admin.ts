@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { usersService, rolesService, auditService } from "../services";
-import { requireStaffSession, requirePermission } from "../middleware/auth";
+import { requireStaffSession, requirePermission, validateOrigin } from "../middleware/auth";
 import {
   getDb,
   userInvitations,
@@ -102,7 +102,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // Invite staff user (AUTH-01)
   fastify.post("/users/invite", {
-    preHandler: [requireStaffSession, requirePermission("users.create")],
+    preHandler: [requireStaffSession, requirePermission("users.create"), validateOrigin],
     handler: async (req, reply) => {
       const body = req.body as
         | { email?: string; name?: string; roleKey?: string }
@@ -275,7 +275,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // Resend invitation
   fastify.post("/users/invite/resend", {
-    preHandler: [requireStaffSession, requirePermission("users.create")],
+    preHandler: [requireStaffSession, requirePermission("users.create"), validateOrigin],
     handler: async (req, reply) => {
       const body = req.body as { email?: string } | undefined;
       if (!body || !body.email) {
@@ -388,7 +388,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
   // Revoke invitation
   fastify.post("/users/invite/revoke", {
-    preHandler: [requireStaffSession, requirePermission("users.delete")],
+    preHandler: [requireStaffSession, requirePermission("users.delete"), validateOrigin],
     handler: async (req, reply) => {
       const body = req.body as { email?: string; userId?: string } | undefined;
       const db = getDb();

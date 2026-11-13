@@ -23,6 +23,7 @@ import {
 import {
   requireStaffSession,
   requirePermission,
+  validateOrigin,
 } from "../middleware/auth";
 import { getConfig } from "@vibress/config";
 import { getDb } from "@vibress/database";
@@ -542,7 +543,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: approve comment
   fastify.post("/comments/:id/approve", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
@@ -576,7 +577,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: reject comment
   fastify.post("/comments/:id/reject", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
@@ -610,7 +611,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: hide comment
   fastify.post("/comments/:id/hide", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
@@ -644,7 +645,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: restore comment
   fastify.post("/comments/:id/restore", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
@@ -678,7 +679,7 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
 
   // Admin: delete comment
   fastify.delete("/comments/:id", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: async (req, reply) => {
       const { id } = req.params as { id: string };
       const staffUser = (req as any).user!;
@@ -794,11 +795,11 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
   };
 
   fastify.post("/comment-reports/:id/resolve", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: resolveReportHandler,
   });
   fastify.post("/comments/reports/:id/resolve", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: resolveReportHandler,
   });
 
@@ -829,11 +830,11 @@ export async function adminCommentRoutes(fastify: FastifyInstance) {
   };
 
   fastify.post("/comment-reports/:id/dismiss", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: dismissReportHandler,
   });
   fastify.post("/comments/reports/:id/dismiss", {
-    preHandler: [requireStaffSession, requirePermission("comments.moderate")],
+    preHandler: [requireStaffSession, requirePermission("comments.moderate"), validateOrigin],
     handler: dismissReportHandler,
   });
 }

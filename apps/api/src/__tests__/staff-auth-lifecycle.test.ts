@@ -102,6 +102,25 @@ describe("AUTH-01 & AUTH-02: Staff Identity Lifecycle & Password Recovery Suite"
       expect(body.errors[0].code).toBe("EMAIL_ALREADY_EXISTS");
     });
 
+    it("rejects an untrusted Origin on cookie-authenticated invite", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/admin/v1/users/invite",
+        headers: {
+          cookie: ownerCookie,
+          origin: "https://attacker.example.com",
+        },
+        payload: {
+          email: `csrf-${Date.now()}@example.com`,
+          name: "CSRF Attempt",
+          roleKey: "editor",
+        },
+      });
+
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).errors[0].code).toBe("INVALID_ORIGIN");
+    });
+
     it("rejects an administrator inviting a global owner (role ceiling)", async () => {
       const adminLogin = await app.inject({
         method: "POST",
