@@ -22,11 +22,13 @@ import {
 } from "@vibress/media";
 import { errorMessage } from "../helpers/errors";
 import { MEDIA_UPLOAD_BODY_LIMIT_BYTES } from "../constants/limits";
+import { rateLimitConfig } from "../constants/rate-limits";
 
 export async function mediaRoutes(fastify: FastifyInstance) {
   // Upload media asset
   fastify.post("/media", {
     bodyLimit: MEDIA_UPLOAD_BODY_LIMIT_BYTES,
+    config: rateLimitConfig(30),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),

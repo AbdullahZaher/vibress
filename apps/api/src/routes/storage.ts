@@ -25,6 +25,7 @@ import {
   StorageProvider,
 } from "@vibress/storage-core";
 import crypto from "node:crypto";
+import { rateLimitConfig } from "../constants/rate-limits";
 
 type CodedError = Error & { code?: string };
 
@@ -390,6 +391,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
   // Direct Upload: Initiate
   fastify.post("/media/uploads/direct/initiate", {
+    config: rateLimitConfig(60),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
@@ -479,6 +481,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
   // Direct Upload: Complete / Finalize
   fastify.post("/media/uploads/direct/complete", {
+    config: rateLimitConfig(60),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
@@ -659,6 +662,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
   // Multipart Upload: Initiate
   fastify.post("/media/uploads/multipart/initiate", {
+    config: rateLimitConfig(30),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
@@ -727,7 +731,9 @@ export async function storageRoutes(fastify: FastifyInstance) {
   });
 
   // Multipart Upload: Sign Part URL
+  // A single 500 MB asset can legitimately need ~100 part URLs with 5 MB parts.
   fastify.post("/media/uploads/multipart/part-url", {
+    config: rateLimitConfig(300),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
@@ -800,6 +806,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
   // Multipart Upload: Complete
   fastify.post("/media/uploads/multipart/complete", {
+    config: rateLimitConfig(30),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),
@@ -980,6 +987,7 @@ export async function storageRoutes(fastify: FastifyInstance) {
 
   // Multipart Upload: Abort
   fastify.post("/media/uploads/multipart/abort", {
+    config: rateLimitConfig(60),
     preHandler: [
       requireStaffSession,
       requirePermission("media.upload"),

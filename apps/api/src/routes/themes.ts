@@ -27,6 +27,7 @@ import {
 } from "@vibress/theme-core";
 import { asCodedError, errorMessage } from "../helpers/errors";
 import { getConfig } from "@vibress/config";
+import { rateLimitConfig } from "../constants/rate-limits";
 
 export async function themeRoutes(fastify: FastifyInstance) {
   // List all themes (built-in + installed external)
@@ -120,6 +121,7 @@ export async function themeRoutes(fastify: FastifyInstance) {
   // Upload external theme ZIP package
   fastify.post("/themes/upload", {
     bodyLimit: THEME_UPLOAD_BODY_LIMIT_BYTES,
+    config: rateLimitConfig(10),
     preHandler: [
       requireStaffSession,
       requirePermission("themes.manage"),

@@ -143,6 +143,18 @@ changing `POSTGRES_APP_PASSWORD` and re-running the migrate job. Row-level
 security is not enabled; tenant isolation remains application-level and is
 covered by the isolation test suites.
 
+## Rate limiting
+
+Route limits use the Redis instance (`vibress:rate-limit:` namespace), so
+counters are shared across API replicas and survive restarts, with a TTL bounded
+by each route's window. Limited routes include login, forgot/reset password,
+invitation acceptance, member auth, public search, comments, webhooks, uploads
+(direct and multipart), theme ZIP upload, and imports/exports.
+
+If Redis is unreachable the limiter fails open (`skipOnError`) rather than
+returning errors for every limited route; monitor Redis availability and treat
+an outage as a reduction in abuse protection.
+
 ## Reverse proxy
 
 `infrastructure/nginx/nginx.prod.conf` enforces request body limits

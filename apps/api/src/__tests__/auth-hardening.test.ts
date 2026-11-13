@@ -36,11 +36,16 @@ describe("Task 1: Rate limiting IP resolution and account-level throttling", () 
       process.env[key] = PROD_ENV[key as keyof typeof PROD_ENV];
     }
     await seedDatabase({ skipDevUsers: false });
-    // Clear any leftover redis throttle keys
+    // Clear leftover redis throttle and shared rate-limit counters so cases do
+    // not inherit each other's budgets now that the limiter store is Redis.
     const redis = getRedisClient();
     const keys = await redis.keys("sys:auth_throttle:*");
     if (keys.length > 0) {
       await redis.del(...keys);
+    }
+    const limiterKeys = await redis.keys("vibress:rate-limit:*");
+    if (limiterKeys.length > 0) {
+      await redis.del(...limiterKeys);
     }
   });
 

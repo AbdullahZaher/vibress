@@ -26,6 +26,7 @@ import crypto from "node:crypto";
 import { hashToken, hashPassword, dummyVerifyPassword } from "@vibress/security";
 import { normalizeEmail } from "@vibress/users";
 import { staffAuthMailer } from "../mailer/staff-auth-mailer";
+import { rateLimitConfig } from "../constants/rate-limits";
 import {
   checkAccountThrottle,
   recordAccountFailure,
@@ -210,6 +211,7 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // Accept Staff Invitation (AUTH-01)
   fastify.post("/invitation/accept", {
+    config: rateLimitConfig(5),
     preHandler: [validateOrigin],
     handler: async (req, reply) => {
       const body = req.body as

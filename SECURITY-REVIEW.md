@@ -1,14 +1,14 @@
 # Prelaunch Security Review — Vibress
 
 > Audit plus owner-authorized remediation of F-001, F-002, F-003, F-004, F-005,
-> F-006, F-007, F-008, F-009, F-010, F-011, F-012, and F-014. No other findings
-> were changed. This report is not a certification and does not replace an
-> independent penetration test.
+> F-006, F-007, F-008, F-009, F-010, F-011, F-012, F-013, and F-014. No other
+> findings were changed. This report is not a certification and does not replace
+> an independent penetration test.
 
 ## Scope
 
-- **Project / revision:** `vibress-monorepo` at `85e58dd5` (`main`) plus the
-  uncommitted F-012 runtime-role change in the working tree; version 1.2.0. The
+- **Project / revision:** `vibress-monorepo` at `e6366bff` (`main`) plus the
+  uncommitted F-013 rate-limit change in the working tree; version 1.2.0. The
   audit baseline was `67a4de4b`.
 - **Owner-approved repositories / environments:** local working tree at
   `/Users/abdullahzaher/vibress`; local docker services (`vibress-postgres`,
@@ -37,11 +37,11 @@
 ## Executive Summary
 
 - **Launch recommendation: CONDITIONAL LAUNCH.** The three verified high-severity
-  authorization defects (F-001, F-002, F-003) and the cross-tenant/size defects
-  F-004, F-005, and F-009 have been remediated and covered by negative regression
-  tests locally. Multi-publication deployments still require applying migrations
-  `0052` and `0053` and completing the remaining medium-severity actions below;
-  no external/staging verification was performed.
+  authorization defects (F-001, F-002, F-003) and the other verified issues have
+  been remediated and covered by negative regression tests locally.
+  Multi-publication deployments still require applying migrations `0052` and
+  `0053` and completing the deployment actions below; no external/staging
+  verification was performed.
 - **Fixed and verified high issues:**
   1. F-001 — newsletter sends now carry `publication_id`, every send/audience
      route uses the resolved staff publication, and the worker validates job
@@ -88,13 +88,15 @@
       runtime role (DML plus plugin-storage DDL, no ownership); only the
       one-shot migrate job keeps the database owner credential. RLS was
       evaluated and deferred.
-- **Verified medium issues still open:** the in-memory rate limiter with
-  several unprotected expensive routes (F-013). Edge TLS/redirect and the HSTS
+  14. F-013 — rate-limit counters moved to Redis, so they are shared across API
+      replicas and survive restarts, and the previously unlimited invitation,
+      upload, theme ZIP, and import/export routes now have per-IP limits.
+- **Verified medium issues still open:** none. Edge TLS/redirect and the HSTS
   max-age ramp remain deployment actions; the shipped HSTS value is
   intentionally short.
-- **Remaining approvals:** the remaining medium-severity fixes and the
-  production rollout of migrations `0052`/`0053` still require owner approval;
-  see [Approvals and Manual Actions](#approvals-and-manual-actions).
+- **Remaining approvals:** production rollout of migrations `0052`/`0053` and
+  the other deployment actions below still require owner approval; see
+  [Approvals and Manual Actions](#approvals-and-manual-actions).
 - **Unverified areas:** live TLS/HSTS, Docker build-context matching, full test
   matrix, dependency tree unused-package analysis, runtime RLS behavior.
 
@@ -104,7 +106,7 @@
 |---|---|---|---|---|---|---|---|
 | 01 | Authentication | pass | low | Opaque 32-byte sessions stored as SHA-256, revoked/expiry checked per request; per-request role reload ([auth-service.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/application/auth-service.ts#L82), [middleware/auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/middleware/auth.ts#L42), [drizzle-session-repository.ts](file:///Users/abdullahzaher/vibress/packages/domains/auth/src/infrastructure/drizzle-session-repository.ts#L33)) | Wire MFA/SSO or document them as not shipped; add idle timeout | 82 unit + 98 API tests passed | Confirm MFA expectation for launch |
 | 02 | Protect API keys | fixed_verified | medium | No server secret in client bundles; only `NEXT_PUBLIC_SITE_URL` is public. Site-privacy verification now uses only `VIBRESS_ENCRYPTION_KEY` and fails closed without it ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L315)); the web cookie-minting fallback is removed and `web` receives the key in compose ([route.ts](file:///Users/abdullahzaher/vibress/apps/web/src/app/api/verify-site-password/route.ts#L37), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L183)) | Keep the key shared between `api` and `web` | Middleware/route 22/22; build artifacts scanned previously: no secret names/keys | Confirm the key is set for `web` at deployment |
-| 03 | Secure database access | fixed_verified | medium | F-001, F-003, F-004, and F-005 fixed, and F-012 role separation applied: `api`/`worker` connect as a non-owner runtime role with DML but no ownership of core tables, while the migrate job keeps the owner credential ([runtime-role.ts](file:///Users/abdullahzaher/vibress/packages/database/src/runtime-role.ts#L33), [migrate.ts](file:///Users/abdullahzaher/vibress/packages/database/src/migrate.ts#L36), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L88)). RLS remains disabled by design | Add `POSTGRES_APP_PASSWORD` at deploy; approve an RLS project if required | DB 20 files / 58 tests (incl. 7 role tests); runtime probe denied DROP/TRUNCATE; full API 594/594; integration/security 532/532 | Confirm runtime-role credentials per deployment |
+| 03 | Secure database access | fixed_verified | medium | F-001, F-003, F-004, and F-005 fixed, and F-012 role separation applied: `api`/`worker` connect as a non-owner runtime role with DML but no ownership of core tables, while the migrate job keeps the owner credential ([runtime-role.ts](file:///Users/abdullahzaher/vibress/packages/database/src/runtime-role.ts#L33), [migrate.ts](file:///Users/abdullahzaher/vibress/packages/database/src/migrate.ts#L36), [compose.prod.yml](file:///Users/abdullahzaher/vibress/compose.prod.yml#L88)). RLS remains disabled by design | Add `POSTGRES_APP_PASSWORD` at deploy; approve an RLS project if required | DB 20 files / 59 tests (incl. 8 role tests); runtime probe denied DROP/TRUNCATE; full API 594/594; integration/security 532/532 | Confirm runtime-role credentials per deployment |
 | 04 | Enforce HTTPS | needs_approval | medium | Boot now rejects any non-`https:` production origin (`SITE_URL`, `PORTAL_URL`, `API_URL`, every CORS origin) ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); staged HSTS (`max-age=300`) is emitted by web middleware, the gateway, both SPAs, and the API. The gateway itself still listens on HTTP and relies on an external edge for TLS + HTTP→HTTPS redirect ([nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L13)) | Configure edge TLS + redirect, then raise HSTS max-age after staging verification | Config tests 9/9; middleware 20/20 | Approve edge deployment and HSTS ramp |
 | 05 | Hash passwords | pass | none | Argon2id; library-generated salt; no password logging ([passwords/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/passwords/index.ts#L37)) | Set explicit memory/time/parallelism parameters | Unit tests passed | Confirm tuning on smallest target |
 | 06 | Server-side validation | pass | low | Zod at most boundaries (`safeParse`); global 1 MB body limit; per-route limits ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L137)); some handlers cast bodies directly (F-017) | Add schemas to collaboration/ai/admin/operations handlers | API tests passed | Schedule hardening |
@@ -113,7 +115,7 @@
 | 09 | Restrict admin routes | fixed_verified | low | All admin routes carry `requireStaffSession` + permission; invite enforces an actor→target role ceiling and audit event; the directory and role list are publication-scoped and rank-filtered ([admin.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L22), [#L58](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L58), [#L91](file:///Users/abdullahzaher/vibress/apps/api/src/routes/admin.ts#L91), [authorization/index.ts](file:///Users/abdullahzaher/vibress/packages/security/src/authorization/index.ts#L63)) | Review existing elevated assignments | Security 12/12; staff lifecycle 23/23 | Review existing owner/administrator assignments |
 | 10 | Parameterized queries | pass | none | Drizzle builder throughout; raw `sql` templates bind values; dynamic identifiers whitelisted/hashed ([plugin-storage-migrations.ts](file:///Users/abdullahzaher/vibress/packages/domains/plugins/src/infrastructure/drizzle-plugin-storage-migrations.ts#L190)); no user-controlled raw SQL found | None | Reviewed; no injection found | — |
 | 11 | Environment variables | pass | low | `.env`/`.env.prod` untracked; no secret client prefixes; the production guard now rejects any non-live Stripe key, a malformed webhook secret, and non-HTTPS origins ([config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L405)) | Keep runtime secrets out of images | Config tests 9/9 (positive + negative) | Confirm production secrets |
-| 12 | Rate limiting | failed | medium | Global limiter disabled; per-route limits exist for login/forgot/member/search/comments/webhooks, and reset acceptance is now limited to 5/min per IP in production ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L449)). Remaining: invitation acceptance, uploads, exports, theme ZIP have no limiter and the store is in-memory ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163)) | Add remaining route limits + Redis store | Auth hardening (reset 429) passed; full API 594/594; not load-tested | Approve remaining limits and Redis store |
+| 12 | Rate limiting | fixed_verified | medium | `@fastify/rate-limit` now uses the shared Redis client (`vibress:rate-limit:` namespace, `skipOnError`), so counters span replicas and restarts; added per-IP limits for invitation acceptance, direct/multipart uploads, theme ZIP, and imports/exports alongside the existing login/forgot/reset/member/search/comment/webhook limits ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163), [rate-limits.ts](file:///Users/abdullahzaher/vibress/apps/api/src/constants/rate-limits.ts#L1), [auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L213), [storage.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/storage.ts#L393), [themes.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/themes.ts#L122), [operations.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/operations.ts#L605)) | — | F-013 shared-store test 2/2; full API 596/596; integration/security 532/532; not load-tested | Monitor Redis availability; limits fail open during an outage |
 | 13 | Restrict CORS | pass | none | Production allowlist union, `credentials: true`, no wildcard; boot fails without a production origin and now rejects any non-`https:` origin ([main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L195), [config/index.ts](file:///Users/abdullahzaher/vibress/packages/config/src/index.ts#L435)); dev reflects any origin | None | Config tests 9/9 | Verify prod origins |
 | 14 | Security headers | fixed_verified | medium | Enforced CSP on API/web/SPA; media SVG sandbox; gateway headers set. Staged HSTS (`max-age=300`) and a restrictive `Permissions-Policy` are now emitted by web middleware, the gateway, both SPAs, and API Helmet ([middleware.ts](file:///Users/abdullahzaher/vibress/apps/web/src/middleware.ts#L8), [nginx.prod.conf](file:///Users/abdullahzaher/vibress/infrastructure/nginx/nginx.prod.conf#L23), [nginx.spa.conf.template](file:///Users/abdullahzaher/vibress/docker/nginx.spa.conf.template#L12), [main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L176)) | Raise HSTS max-age after edge verification | Middleware 20/20; API hardening 20/20; nginx config reviewed, not executed | Verify live headers at edge |
 | 15 | Secure cookies | pass | low | `HttpOnly`, `Secure` in production, `SameSite=Lax`, path `/`, 7d staff/30d member ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L133), [members.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/members.ts#L167)) | Consider `__Host-` prefix and member rotation | No Set-Cookie assertion test | Confirm member TTL |
@@ -127,8 +129,8 @@
 | 23 | Exposed files | pass | low | Public roots clean; no client source maps; media path traversal/containment guarded ([media-stream.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media-stream.ts#L202)); `.env*` excluded from images; `backups/` still enters the Docker build context (F-023 note) | Add `backups/` and `**/.env*` to `.dockerignore` | Artifact grep found no secrets | Verify with `docker buildx` |
 | 24 | Git history secrets | pass | none | Gitleaks 8.30.1 scanned 2,324 commits: 17 findings, all reviewed as synthetic test/CI fixtures; `.env`/`.env.prod` never committed | None for history; keep providers out of commits | Gitleaks exit 0 with `--redact` | — |
 | 25 | Revoke and replace exposed keys | not_applicable | none | No confirmed live credential in Git history or client artifacts. Working-tree `.env`, `.env.prod`, and `apps/web/.env.local` contain real-looking secrets but are untracked/ignored | If any file or image leaked, rotate at the provider | Not applicable | Confirm no artifact/image leak |
-| 26 | Integrated security review | failed | medium | F-001–F-012 and F-014 fixed and verified; remaining medium issue: in-memory/unprotected rate limits (F-013) | See prioritized actions | Full API 594/594; integration/security 532/532; DB 59/59; targeted config/middleware suites passed | Approve remaining remediation plan |
-| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 59 database tests (incl. 8 runtime-role), 594 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
+| 26 | Integrated security review | pass | low | F-001–F-014 fixed and verified; only low/informational findings (F-015–F-025) remain | See prioritized actions | Full API 596/596; integration/security 532/532; DB 59/59; targeted config/middleware suites passed | Decide low-finding roadmap |
+| 27 | Test and report | pass | none | 84 security/workspace tests, 18 newsletter domain tests, 12 email domain tests, 18 media upload security tests, 59 database tests (incl. 8 runtime-role), 596 API tests, 532 integration/security tests, 45 runtime multi-publication tests, 9 config tests, 20 web middleware tests, and 2 private-site route tests passed; this report covers 01–27 | Expand coverage of remaining findings | See Verification Log | Decide remaining suites |
 
 ## Findings by Severity
 
@@ -329,10 +331,18 @@ None verified.
 
 #### F-013 — Rate limiter is per-process and several expensive routes are unprotected
 - **Control:** 12
-- **Severity / rationale:** Medium. Limits reset on restart and are not shared across replicas; uploads, imports/exports, theme ZIP, and invitation acceptance have no limiter. Reset acceptance is now limited (F-008), but the shared-store gap remains.
-- **Evidence:** [main.ts:163](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163) registers `@fastify/rate-limit` without a Redis store; [media.ts:28](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media.ts#L28), [themes.ts:120](file:///Users/abdullahzaher/vibress/apps/api/src/routes/themes.ts#L120), [operations.ts:604](file:///Users/abdullahzaher/vibress/apps/api/src/routes/operations.ts#L604).
-- **Proposed fix:** Use a Redis store and add limits to expensive/abuse-prone routes.
-- **Approval:** Yes.
+- **Status:** `fixed_verified` (2026-11-14)
+- **Severity / rationale:** Medium (resolved). Limits reset on restart and were not shared across replicas; uploads, imports/exports, theme ZIP, and invitation acceptance had no limiter.
+- **Original evidence (redacted):** [main.ts:163](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163) registered `@fastify/rate-limit` without a Redis store; [media.ts:28](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media.ts#L28), [themes.ts:120](file:///Users/abdullahzaher/vibress/apps/api/src/routes/themes.ts#L120), [operations.ts:604](file:///Users/abdullahzaher/vibress/apps/api/src/routes/operations.ts#L604) had no limiter.
+- **Root cause:** The plugin used its default per-process store, and limits were applied only to the routes that existed when the limiter was introduced.
+- **Fix applied:**
+  - `@fastify/rate-limit` now uses the shared Redis client with a `vibress:rate-limit:` namespace, so counters are shared across replicas and survive restarts. `skipOnError` keeps a Redis outage from turning every limited route into an error, matching the previous in-memory behavior: [main.ts](file:///Users/abdullahzaher/vibress/apps/api/src/main.ts#L163).
+  - Added `rateLimitConfig(productionMax)`, which enforces the production budget and raises it outside production so test suites are not throttled: [rate-limits.ts](file:///Users/abdullahzaher/vibress/apps/api/src/constants/rate-limits.ts#L1).
+  - New production limits: invitation acceptance 5/min, multipart `POST /media` 30/min, direct upload initiate/complete 60/min, multipart initiate/complete 30/min, part URLs 300/min (a 500 MB asset at 5 MB parts needs ~100), abort 60/min, theme ZIP 10/min, import validation 30/min, imports 10/min, exports 10/min ([auth.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/auth.ts#L213), [media.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/media.ts#L29), [storage.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/storage.ts#L393), [themes.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/themes.ts#L122), [operations.ts](file:///Users/abdullahzaher/vibress/apps/api/src/routes/operations.ts#L605)).
+  - `auth-hardening` now clears limiter keys between cases, since Redis counters (unlike the old per-app local store) persist across the suite's per-test app instances.
+- **Test command / expected / observed:** New `rate-limit-store.test.ts` builds two API instances, exhausts invitation acceptance on the first, and observes 429 on the second, then asserts counters live under `vibress:rate-limit:` with a positive TTL → 2/2 passed. `pnpm vitest run apps/api` → 60 files / 596 tests passed. `pnpm vitest run tests/integration tests/security` → 50 files / 532 tests passed. `tsc --noEmit` and eslint on changed files → clean. No load test was run.
+- **Residual risk:** Limits are per client IP, so users behind one NAT share a budget; correctness depends on `TRUST_PROXY` matching the edge so `req.ip` is the client, not the proxy. A Redis outage disables limiting until it recovers (by design). Collaboration WebSocket traffic still uses its own in-process CRDT limiter, which is not part of this store.
+- **Approval required:** None for the code change. Monitor Redis availability, since an outage removes rate limiting rather than failing requests.
 
 ### Low / Informational
 
@@ -388,7 +398,7 @@ None verified.
 
 ## Changed Files
 
-Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-014.
+Remediation was explicitly authorized for F-001–F-014.
 
 **F-001 — publication-scoped newsletter sends**
 - `packages/database/migrations/0052_newsletter_sends_publication_scope.sql` (new)
@@ -475,6 +485,37 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 - Tests: `apps/web/src/__tests__/middleware.test.ts`,
   `apps/web/src/__tests__/verify-site-password-route.test.ts` (new)
 
+**F-006 — magic-link verification made POST-only**
+- `apps/api/src/routes/members.ts`
+- `docs/06-security/member-authentication.md`
+- `docs/10-api/member-api.md`
+- Tests: `apps/api/src/__tests__/member-auth-api.test.ts`
+
+**F-012 — least-privilege runtime database role**
+- `packages/database/src/runtime-role.ts` (new)
+- `packages/database/src/__tests__/runtime-role.test.ts` (new)
+- `packages/database/src/migrate.ts`
+- `packages/database/src/index.ts`
+- `compose.prod.yml`
+- `infrastructure/env.prod.example`
+- `docs/12-infrastructure/production.md`
+- `docs/deployment/PRODUCTION.md`
+- `scripts/deploy-production.sh`
+- `scripts/verify-full-deployment-lifecycle.sh`
+- `scripts/verify-v1.1.0-upgrade-compatibility.sh`
+
+**F-013 — Redis-backed rate limiter and remaining route limits**
+- `apps/api/src/main.ts`
+- `apps/api/src/constants/rate-limits.ts` (new)
+- `apps/api/src/routes/auth.ts`
+- `apps/api/src/routes/media.ts`
+- `apps/api/src/routes/storage.ts`
+- `apps/api/src/routes/themes.ts`
+- `apps/api/src/routes/operations.ts`
+- `docs/12-infrastructure/production.md`
+- Tests: `apps/api/src/__tests__/rate-limit-store.test.ts` (new),
+  `apps/api/src/__tests__/auth-hardening.test.ts` (limiter-key cleanup)
+
 **Fixture update for the fail-closed tenant context:** `tests/integration/translations-management.test.ts` now creates an explicit `pub_default` membership for its fixture users, because other suites truncate `users` and cascade the membership away.
 
 - `SECURITY-REVIEW.md` — this report (updated).
@@ -496,7 +537,7 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 | `git log --all -- .env .env.prod` | local | no output | pass | Env files never committed |
 | `pnpm audit --json` | local + npm advisory DB | exit 1; 1 high / 2 moderate | fail (dev-only) | `nx`, `minimatch` |
 | `pnpm vitest run packages/domains/workspaces packages/security` | local + dev DB | 10 files / 84 tests passed | pass | Includes fail-closed context, role ceiling, and publication isolation |
-| `pnpm vitest run apps/api` | local + dev DB | 59 files / 594 tests passed | pass | Full API unit/integration suite; includes newsletters, staff lifecycle, RBAC, upload security, and the cross-site GET verify regression |
+| `pnpm vitest run apps/api` | local + dev DB | 60 files / 596 tests passed | pass | Full API unit/integration suite; includes newsletters, staff lifecycle, RBAC, upload security, the cross-site GET verify regression, and the shared rate-limit store |
 | `pnpm vitest run apps/api/src/__tests__/member-auth-api.test.ts apps/api/src/__tests__/csrf-origin-coverage.test.ts` | local + dev DB | 2 files / 12 tests passed | pass | F-006: cross-site GET verify returns 404 without `Set-Cookie`; same token then verifies via POST |
 | `pnpm exec eslint apps/api/src/routes/members.ts apps/api/src/__tests__/member-auth-api.test.ts` | local | exit 0 | pass | No findings on changed files |
 | `pnpm vitest run packages/database` | local + dev DB | 20 files / 59 tests passed | pass | F-012 runtime role: config parsing, non-superuser, DML allowed, TRUNCATE/DROP denied, plugin-style DDL allowed, owner-role guard rejects self-provisioning; throwaway role removed |
@@ -504,6 +545,9 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 | `docker compose -f compose.prod.yml config` (fixture env) | local | renders app role URL for `api`/`worker`, owner URL for `migrate` | pass | No secrets printed |
 | `bash -n` deploy/drill scripts; `pnpm --filter @vibress/database exec tsc --noEmit` | local | exit 0 | pass | Preflight placeholder check and role-module typecheck |
 | `pnpm vitest run apps/api/src/__tests__/staff-auth-lifecycle.test.ts` | local + dev DB | 1 file / 22 tests passed | pass | Includes F-004 directory/role isolation and cleanup |
+| `pnpm vitest run apps/api/src/__tests__/rate-limit-store.test.ts` | local + dev DB + Redis | 1 file / 2 tests passed | pass | F-013: two API instances share counters via Redis; sixth invitation request returns 429 on both; counters live under `vibress:rate-limit:` with a TTL |
+| `pnpm vitest run apps/api/src/__tests__/auth-hardening.test.ts` | local + dev DB + Redis | 1 file / 14 tests passed | pass | Per-test limiter-key cleanup keeps production-mode rate-limit assertions isolated with the shared Redis store |
+| `pnpm exec eslint` on the F-013 route/config/test files | local | exit 0 | pass | No findings on changed files |
 | `pnpm vitest run apps/api/src/__tests__/newsletters-api.test.ts` | local + dev DB | 1 file / 26 tests passed | pass | Includes F-005 suppression scope and delete isolation |
 | `pnpm vitest run apps/api/src/__tests__/media-upload-security.test.ts` | local + dev DB | 1 file / 18 tests passed | pass | Includes F-009 size ceilings, MIME mismatch, fail-closed provider |
 | `pnpm vitest run packages/domains/newsletters` | local + dev DB | 2 files / 18 tests passed | pass | Includes send publication isolation |
@@ -526,9 +570,9 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 ## Approvals and Manual Actions
 
 - [x] F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010,
-  F-011, F-012, and F-014 remediated and covered by negative isolation/
-  authorization/config/CSRF/rate/private-site/verify-flow/privilege tests
-  (authorized 2026-11-13). F-011's edge TLS/redirect and HSTS ramp remain
+  F-011, F-012, F-013, and F-014 remediated and covered by negative isolation/
+  authorization/config/CSRF/rate/private-site/verify-flow/privilege/shared-store
+  tests (authorized 2026-11-13). F-011's edge TLS/redirect and HSTS ramp remain
   deployment actions.
 - [x] Applied and verified migrations `0052_newsletter_sends_publication_scope`
   and `0053_email_suppressions_publication_scope` in the local Docker staging
@@ -548,8 +592,10 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
 - [x] Reset-acceptance rate limit (F-008) applied.
 - [x] Private-site HMAC fallback removed and `web` wired to the shared key
   (F-010).
-- [ ] Approve the remaining rate limits (invitation acceptance, uploads,
-  exports, theme ZIP) and a Redis-backed store (F-013).
+- [x] Rate limits on invitation acceptance, uploads, exports, and theme ZIP are
+  enforced, and counters use the shared Redis store (F-013).
+- [ ] Monitor Redis availability in production; an outage removes rate limiting
+  on limited routes until it recovers.
 - [ ] Approve a per-publication storage quota (F-020).
 - [ ] Verify edge TLS termination, HTTP→HTTPS redirect, and the emitted HSTS
   value in staging; then raise `max-age` and consider `includeSubDomains`.
@@ -578,6 +624,9 @@ Remediation was explicitly authorized for F-001–F-005, F-007–F-011, and F-01
   confirmed with `docker buildx` before relying on `.dockerignore`.
 - The full monorepo regression matrix, E2E, typecheck, lint, and production build
   were not executed; they are not implied by the passing tests above.
+- Rate limiting was not load-tested. Counters now depend on Redis and on
+  `TRUST_PROXY` matching the edge; if Redis is unavailable the limiter fails open
+  rather than rejecting requests.
 - RLS is not enabled. The runtime role cannot alter or drop core tables, but it
   can read and write every tenant's rows; database-level tenant isolation would
   require a per-request tenant context across the API, workers, and public-site

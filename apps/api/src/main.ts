@@ -162,6 +162,12 @@ export const buildApp = () => {
 
   fastify.register(rateLimit, {
     global: false, // Apply per route as configured
+    // Share counters across replicas and survive restarts. An outage must not
+    // turn limited routes into a full outage; the previous in-memory limiter
+    // never rejected requests for that reason either.
+    redis: getRedisClient(),
+    nameSpace: "vibress:rate-limit:",
+    skipOnError: true,
     errorResponseBuilder: (req, context) => {
       const err = new Error(
         `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
