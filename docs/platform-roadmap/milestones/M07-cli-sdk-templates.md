@@ -138,6 +138,14 @@ Run clean external CRM development/onboarding and competitor-matched tasks with 
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: executable scope, not a growing checklist
+
+The [first executable slice](../EXECUTION-FIRST-SLICE.md) prioritizes **existing M07-E09/E10/E11**. Only CMS and independent CRM are mandatory full v1 Golden Applications.
+
+- [ ] A clean independently packaged CRM demonstrates frontend, typed custom endpoint/action, multi-tenant checks and no kernel edits; old CMS fixture retains all publication-scoped identity and media behaviors.
+- [ ] External CLI/SDK documentation explicitly excludes unsupported materialized tenant reporting and any feature requiring unreviewed privileged SQL views.
+- [ ] First-adopter tasks and an actual owner/capacity decision determine v1 claim scope; no additional full reference application is made a GA blocker by this review.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
