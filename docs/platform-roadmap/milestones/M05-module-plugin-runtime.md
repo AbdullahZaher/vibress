@@ -1,0 +1,98 @@
+# M05 — Modular Runtime & Plugin Platform
+
+> **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Based on `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`.
+>
+> Planning content only: existence of a document or issue does **not** mean code shipped or production was approved. New `M00–M12` IDs do not replace the existing Plugin Platform `M0–M6` roadmap.
+
+**Wave:** 2 · **Size:** XL (relative) · **Dependencies:** M01–M04 · **State:** Proposed, not certified.
+
+## Outcome
+
+Extend existing trusted Vibress plugins into a stable general Module SDK with fully tested lifecycle and upgrade/recovery.
+
+## Workstreams and Epics
+
+### M05-E01 — Unified manifest
+
+Unified manifest: dependencies, permissions, data resources, APIs, jobs, events, admin contributions and migrations.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E02 — Dependency/compatibility solver
+
+Dependency/compatibility solver: required/optional modules, version constraints, incompatible capabilities and ABI versions.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E03 — Lifecycle
+
+Lifecycle: discover, validate, install, configure, activate, disable, migrate, observe and retire.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E04 — Trusted admission
+
+Trusted admission: immutable artifact digests, signed release/publisher evidence, lockfiles and operator approval separate from activation.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E05 — Safe upgrade
+
+Safe upgrade: plan, preflight, approve, quiesce, migrate, activate, observe, forward-fix/recover and rollback where feasible.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E06 — Public SDK
+
+Public SDK: compatibility matrix, package publishing, conformance harness and independent example plugin.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+### M05-E07 — Trust tiers
+
+Trust tiers: privileged reviewed Tier-1 ESM versus future OS-isolated Tier-2 for untrusted code.
+
+**Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
+
+
+## Deliverables
+
+- Versioned Module/Plugin SDK with conformance tests
+- Installer/upgrader runbook plus crash/restart/restore fixtures
+- Independent inventory extension and compatibility registry
+
+## Required acceptance gates
+
+- [ ] Independent plugin builds/installs/upgrades without core changes.
+- [ ] Tampered bytes, incorrect signer, unexpected capabilities and revoked releases fail closed.
+- [ ] Interrupted upgrade recovers/forward-fixes without silent data loss.
+- [ ] Tier-1 Node execution is never represented as an untrusted-code sandbox.
+
+## Known risks and non-goals
+
+- Plugin v3 existing M0–M6 roadmap IDs and evidence remain separate from master M00–M12.
+- Existing staged upgrade plans are not proof of completed fleet execution.
+
+## Execution and PR slicing
+
+1. ADR and contract design with explicit back-compat and tenant/security boundaries.
+2. Small working vertical slice using tests-first where feasible; no general framework rewrite.
+3. Feature-specific implementation behind safe defaults and migration/rollout controls.
+4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
+5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
+
+## Milestone closure evidence ledger
+
+| Evidence | Status / link |
+| --- | --- |
+| Accountable owner | TBD |
+| ADR / public contract | TBD |
+| Immutable implementation commit SHA | TBD |
+| CI checks and test fixtures | TBD |
+| Security/tenancy and migration evidence | TBD |
+| Deployment/restore evidence | TBD |
+| Independent reviewer and decision | **OPEN — not certified** |
+
+## Program links
+
+[Master roadmap](../README.md) · [Security gates](../SECURITY-AND-RELEASE-GATES.md) · [Governance](../DELIVERY-GOVERNANCE.md) · [Existing work](../EXISTING-ASSETS.md)
