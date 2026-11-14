@@ -68,6 +68,13 @@ Define *one measurable first-adopter hypothesis* for the code-first CRM, actual 
 
 This PR's manual link/ID check is **not** the CI documentation validator. M00 must implement and attach SHA-specific evidence for the repo-wide link, heading, epic ID, ADR cross-reference, release-scope and scorecard checker. Escalate failure or ownerless blockers rather than marking issues done.
 
+## Fourth-pass implementation prioritization and bounded backlog
+
+Use the [Execution-First Slice](EXECUTION-FIRST-SLICE.md) as the recommended M00-to-v1 P0 design/P0 GA ordering. The 140 existing milestone Epic IDs already cover R35–R39: **do not create a new Epic merely because a reviewer found another acceptance test**. Map PostgreSQL view access, scoped backups, nested transaction failure, existing CMS identity migration and developer adoption to M00–M08 owners and small implementation PRs.
+
+A review finding is **documented**, not **resolved**, until the affected runtime/SQL/Studio fixture has an immutable implementation SHA, negative test, repeatable environment and owner decision. Real owners, capacity and schedules must be assigned separately. The previous roadmap **8.0/10** remains a qualitative editorial assessment and conveys no GA authorization.
+
+
 ## Documentation CI requirement
 
 M00 must add automated Markdown relative-link/anchor verification, duplicate milestone/epic-ID checks, orphaned-document detection and Issue link integrity checks. Run on immutable PR commit and pin the checker version; do not claim this already runs.
