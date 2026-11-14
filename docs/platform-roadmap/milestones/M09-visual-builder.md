@@ -128,6 +128,11 @@ The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## International accessibility and product quality target
+
+- [ ] The eventual visual builder specifies [WCAG 2.2 AA](https://www.w3.org/TR/wcag/) as a target for its declared supported user journeys, with real keyboard, focus, screen-reader, high-contrast, RTL and automated regression testing; no AA conformance claim without scoped evaluation.
+- [ ] Builder-generated pages/forms conform to declared [ISO/IEC 25010:2023](https://www.iso.org/standard/78176.html) product-quality targets with measured authoring recoverability, correct output, security and reliability. Neither measure is automatic from successful compilation.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
