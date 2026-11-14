@@ -56,6 +56,19 @@ Are app and tenant identities separate across single/multi tenant installations?
 
 **Planning score:** [8.0/10](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md); it must not be interpreted as an implementation score, production security review or external benchmark.
 
+## Third-review risk additions and stop/go
+
+| IDs | Newly exposed risk | Blocking owner/gate |
+| --- | --- | --- |
+| **R26/R27** | Function PUBLIC EXECUTE and SECURITY DEFINER escalation; RLS permissive-OR / TRUNCATE / REFERENCES limitations | M02 DB/security, proven effective ACL + negative Postgres suite |
+| **R28/R34** | App installation "isolation" is only labels/prefixes, not real DB/Redis/S3 permissions | M01/M02/M11 infrastructure and cross-install credential tests |
+| **R29** | App-authored trusted server code confused with untrusted sandboxed extension | M01/M05 trusted-code ADR and runtime/API boundaries |
+| **R30** | API/Worker/Web/DB/Module/Event version-skew and backfill interruption | M03/M06/M08/M11 upgrade/restore matrix |
+| **R31/R32** | No validated customer hypothesis or executable roadmap docs CI | M00 product and docs leads with actual tests/owners |
+| **R33** | Cross-install service-to-service access through shared SQL/queue instead of scoped APIs/events | M02/M06/M07 service auth, audience/SSRF/idempotency tests |
+
+[Third review, findings R26–R34 and 8.0/10 rating](THIRD-REVIEW-AND-RATING-2026-11-14.md). All design corrections remain **implementation and acceptance work**, not completed security fixes.
+
 ## Relative complexity only
 
 M/L/XL/XXL are qualitative. Team capacity, dates, sprint plans and implementation costs require separate approval; this document contains no promised dates.

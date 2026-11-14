@@ -22,6 +22,14 @@ The master roadmap must reuse *actual* existing work and preserve *historical* p
 
 The current repository exposes Fastify routes and Next.js/React applications owned by the CMS host; the generic contract for a *third-party application* to register safe typed custom HTTP handlers, a user-facing web page and an authenticated transactional action is **proposed, not already implemented**. Its public SDK and clean-install/SSR security acceptance are tracked in [Application Runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and M01/M04/M07. Do not infer arbitrary application hosting from a collection CRUD generator alone.
 
+## Additional validated source observations for R26–R34
+
+- Current [runtime-role.ts](../../packages/database/src/runtime-role.ts) grants `EXECUTE ON ALL FUNCTIONS`; the role uses PostgreSQL's actual effective ACL, including PUBLIC and inherited privileges, not only direct role grants.
+- [CI workflow](../../.github/workflows/ci.yml) checks code, dependencies and E2E but is **not** evidence that a dedicated roadmap link/ID/scope checker has been built; M00 owns that new work.
+- [Connection pool](../../packages/database/src/connection.ts) and [ALS transaction context](../../packages/database/src/transaction/transaction-context.ts) expose different trusted data entry points; no tenant-safe security proof is claimed by current code.
+- Redis namespaces and S3 prefixes are not access isolation absent restrictive credentials/ACL/IAM. The proposed application-per-installation topology requires explicit operational proof.
+- Developers can author custom Node server code only as **trusted installation owners**. Framework contracts and GUC/RLS are not hostile-code sandbox boundaries. See [third review](THIRD-REVIEW-AND-RATING-2026-11-14.md).
+
 ## Current authoritative source documents
 
 - [Existing architecture](../01-architecture/overview.md), [dependency rules](../01-architecture/dependency-rules.md).

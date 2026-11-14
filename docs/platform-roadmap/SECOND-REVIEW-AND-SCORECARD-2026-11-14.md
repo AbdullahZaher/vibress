@@ -2,6 +2,8 @@
 
 > **Scope:** PR [#151](https://github.com/AbdullahZaher/vibress/pull/151), its M00–M12 roadmap, existing review R01–R16 and selected Vibress host/Plugin SDK/source files. **This scores the quality of the written roadmap only, NOT the implemented software, exploit resistance, uptime or release certification.** Review based on the commit identified in the PR; GitHub CI and external owner sign-off are independent.
 
+> **Later review (2026-11-14):** A separate [third-pass review R26–R34](THIRD-REVIEW-AND-RATING-2026-11-14.md) added effective PostgreSQL PUBLIC/SECURITY DEFINER privileges, RLS policy-composition limits, app-installation physical/credential isolation, trusted code boundaries, rolling-version upgrades and developer validation. **Current editorial rating remains 8.0/10** until implementation evidence changes; this historical second-pass rubric is preserved.
+
 ## Overall editorial assessment: 8.0 / 10
 
 **Verdict: Strong strategic roadmap; CONDITIONAL / needs design-owner approval before execution.** The plan is coherent, transparent about existing components and specific about security gates. Its score is limited by unapproved architectural decisions, remaining product breadth, unspecified people/capacity, no execution evidence and still-to-be-built runtime contracts.

@@ -47,6 +47,16 @@ Use **Production Readiness Review / GA Decision** for M08; do **not** imply accr
 
 v1 requires a testable authorized tenant export/offboarding policy, retention/audit/backup runbooks and owner-review of relevant legal/contractual obligations; no blanket compliance claim. The release owner must publish a supported topology, event version support policy, observed RPO/RTO and SLI/SLO targets based on measurements rather than arbitrary numbers. See [data lifecycle](DATA-LIFECYCLE-AND-OPERATIONS.md).
 
+## Additional v1 security and release proofs (third review)
+
+- **Effective DB ACL:** PUBLIC/inherited EXECUTE and SECURITY DEFINER audited, multiple RLS policy compositions verified, TRUNCATE and REFERENCES denied to ordinary runtime; inspect upgrades from old CMS/plugin baseline.
+- **Physical app isolation:** two installed apps with separate database and scoped Redis/storage credentials cannot cross boundaries; one app owner code is trusted only within its own installation. Tenant isolation applies to end users inside a supported app, not malicious same-process arbitrary SQL.
+- **Cross-app integration:** services communicate via scoped/signed API/events rather than shared SQL/queues; include token revocation, replay/SSRF tests.
+- **Upgrade matrix:** old/new API/worker/SDK/web/schema/event/module versions tested under rolling deployments; blocked downgrade/forward-fix scenarios documented with measured recovery.
+- **Developer validation and operators:** owner/capacity and first adopter hypothesis, real clean-install feedback and documented support/SLO budgets before public competitive claims.
+
+See [third review](THIRD-REVIEW-AND-RATING-2026-11-14.md), [Postgres rights](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [upgrade matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 ## Product success measurements
 
 Measure time-to-first-working-secure-app on fresh hardware, public SDK usability, edits to kernel needed per independent module (target **zero**), contract migration success, tenant break-out failures (target **zero in defined matrix**), version compatibility, incident recovery and p95 under disclosed load. M00 must set benchmark budgets before calling any system faster/better than Payload, WordPress, Ghost or Wix.

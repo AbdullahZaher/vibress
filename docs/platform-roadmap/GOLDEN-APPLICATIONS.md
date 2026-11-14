@@ -40,6 +40,12 @@ Metrics: setup time from clean checkout, scaffolding LOC/touches, authorization/
 
 M00 must register baseline hardware/seed fixtures, supported database/runtime/SDK versions and preagreed performance/security/DX budgets. Report **median and p95** onboarding and action timing, CI/recovery failure rates, cross-tenant denied attempts, number of manual steps, module compatibility across supported versions and kernel edits required (target zero for new app domains). No arbitrary superiority ranking until all comparator tasks and limitations are disclosed. Missing capability is recorded as **not supported**, not silently removed from the benchmark.
 
+## Third-pass comparison and adoption test requirement
+
+M00 must select **one narrow first-adopter cohort** and agree on a real-world task benchmark (e.g. independently creating CRM customers/deals, a custom authenticated approval endpoint and end-user page with tenant-safe data). Against each comparable product, use current version, equal constraints, disclosed differences and actual developer feedback. Measure first successful custom feature, bugs/denials, upgrade survival and kernel modifications; do not extrapolate a win over Wix/Ghost/WordPress from a single Payload-style CRUD task.
+
+For real self-hosting claims, test two independently deployed app installations with verified PostgreSQL, Redis and S3 credentials; no cross-access. Include a rolling upgrade and backup recovery scenario using [upgrade matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 ## Evidence protocol
 
 Pin versions/SHAs, hardware, PG version, seeded dataset and scripted tasks; run clean setup; publish raw artifacts and scripts; capture failures; explain unmatched features. Repeat after platform releases and security patches; independent reviewer signs the comparison.

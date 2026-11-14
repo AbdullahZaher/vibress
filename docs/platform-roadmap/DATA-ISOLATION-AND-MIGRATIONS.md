@@ -4,7 +4,7 @@
 
 ## 1. Distinct boundaries, deployment first
 
-Recommended v1: **one application per installation/runtime**. Each installation has independently scoped database credentials, Redis/queue namespace, object-storage prefix/bucket access, secrets, runtime identity, ingress/domain and backup. A customer may run multiple isolated *tenants* within that app when the app explicitly supports tenant isolation. Full multi-application shared-process runtime is out of v1 and requires a dedicated threat model, namespace/pool/network separation and separate certification.
+Recommended v1: **one application per installation/runtime**. For v1, the recommended boundary is a **dedicated PostgreSQL database plus runtime and migration credentials for each installation**, separate Redis instance or enforceable key ACL/queue authority, dedicated object-storage bucket or IAM-restricted access point, secrets, runtime identity, ingress/domain and backup. **Namespace/object prefixes and distinct usernames are insufficient as standalone isolation controls** if underlying grants still permit cross-installation access. Alternatives require an explicit design decision and negative credential tests. A customer may run multiple isolated *tenants* within that app when the app explicitly supports tenant isolation. Full multi-application shared-process runtime is out of v1 and requires a dedicated threat model, namespace/pool/network separation and separate certification.
 
 Tenant isolation inside an app uses **app ID + tenant ID + verified principal scope**, not `publication_id` or the incoming `x-publication-id` header alone. The legacy CMS resolver must remain backward-compatible and membership-validated, but application code must not inherit `pub_default`.
 
@@ -48,7 +48,7 @@ The runtime layer owns `scope`; callers cannot create one using a bare tenant ID
 - `ENABLE ROW LEVEL SECURITY`; use `FORCE ROW LEVEL SECURITY` when table ownership requires it; normal runtime is not an owner and has `NOBYPASSRLS`.
 - Policies fail closed if application/tenant context is missing; `USING` applies to reads/update/delete and `WITH CHECK` enforces insert/update target ownership.
 - Define explicit policies for shared/global catalog tables vs tenant-owned rows; **do not** indiscriminately enable RLS on auth/migration/system metadata without a migration/maintenance strategy.
-- Database-per-installation already isolates apps at credential/data boundaries; tenant RLS is an additional guard *within* an installation.
+- A **genuinely dedicated database with verified grants and credentials** separates apps at a physical/authorization boundary; two apps using the same shared public schema and broad grants do not. Tenant RLS is an additional guard *within* a supported installation, not an isolation substitute.
 - Foreign keys to cross-tenant models must be evaluated for existence disclosures and checked at API policy layer; never use an unscoped relation resolver or shared cache key.
 - Run pool-reuse and mixed-tenant concurrency tests, including transaction rollback, idle client reconnect and prepared statements.
 
@@ -69,6 +69,14 @@ Existing `provisionRuntimeRole` grants `CREATE ON SCHEMA public` and `EXECUTE ON
 Canonical IR enters through authenticated resource creation/modification controls. Validate field names, types, relation depth, index bounds, default expressions, reserved identifiers, namespaces and collisions; construct SQL with safe identifier escaping/parameter binding as applicable. **No user-supplied raw SQL** in managed application resource definitions; plugin physical schema changes must satisfy signed/operator-authorized plan. Ensure schema registry versions and migration checksums cannot be silently altered.
 
 Use deterministic diff and plan previews, drift checks against live database, advisory locks and bounded lock/statement timeout, schema snapshots and repeatable backfill tests. The normal runtime cannot execute migration plans. Destructive/narrowing changes require explicit approval, backup/restore rehearsal, compatibility window, and either tested rollback (reversible) or forward-fix/runbook. Document RPO/RTO under failure; never promise zero data loss for arbitrary schema downgrades.
+
+## Effective function privileges and RLS composition (new review findings)
+
+The current runtime role has broad function EXECUTE privileges. Revoke role-specific grants **and audit default PUBLIC EXECUTE and inherited privileges**: PostgreSQL normally grants function EXECUTE to PUBLIC, so a role-specific REVOKE does not necessarily deny invocation. Inventory SECURITY DEFINER routines, their owners, secure search_path and default privileges per function-creating role, with same-transaction create/revoke/grant for sensitive routines.
+
+RLS permissive policies may combine using **OR**; tests must exercise multiple policies and ensure an accidental broad policy does not widen access. RLS does **not** govern `TRUNCATE` or `REFERENCES`; deny such privileges through ordinary role ACLs. An untrusted actor with arbitrary SQL under a runtime role can modify custom GUC state: tenantUnitOfWork is a policy interface for trusted application code, **not** a sandbox against malicious application-owner code.
+
+See the [complete effective ACL/RLS proof matrix](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust contract](APP-INSTALLATION-TRUST-AND-OPERATIONS.md) and [rolling upgrade rules](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
 
 ## 6. Minimum negative acceptance matrix
 

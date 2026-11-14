@@ -48,6 +48,14 @@ export default defineApplication({
 
 *The above is an interface design sketch, not an executable CLI command or current SDK export.* Custom code remains trusted developer-owned code compiled into the specific application's package. Untrusted plugin code cannot use it to run arbitrary code on a shared host.
 
+## Trust limits for custom server code
+
+A developer-owned application may run custom server code **only inside its designated trusted installation** for the v1 topology. This code is **trusted with the privileges of its process and available credentials**; a malicious app author can bypass TypeScript client interfaces and potentially set tenant GUCs if arbitrary SQL is available. The framework's security promise is to protect untrusted users and tenants under approved/trusted app paths, and to isolate *different app installations* by real infrastructure access controls. It cannot claim to sandbox mutually distrustful app authors inside one Node runtime.
+
+Trusted in-process Tier-1 plugins are operator-admitted, not confined by the declared SDK capability list. AI-generated code is **untrusted until reviewed, built and deployed as owner-authorized application code**. Never allow arbitrary uploaded code or user-authored SQL to run in a privileged shared server.
+
+For distributed apps, cross-install integrations use authenticated APIs/webhooks or versioned events with explicit audiences, revocable credentials, SSRF/egress restrictions and replay protection; **no direct cross-app shared database credentials or Redis queues**. See [installation trust and integration spec](APP-INSTALLATION-TRUST-AND-OPERATIONS.md).
+
 ## Execution ownership and request context
 
 - App source is versioned separately from runtime and module artifacts. Every installation pins the application definition version, module graph digest, built web/API image and migration state.

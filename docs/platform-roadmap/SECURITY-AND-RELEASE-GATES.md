@@ -59,6 +59,17 @@ See [DB/RLS authority](DATA-ISOLATION-AND-MIGRATIONS.md), [architecture decision
 - Event envelopes carry a schema version, stable event/idempotency ID, trusted app/tenant scope and compatibility policy; consumer replay and poison-event handling must be tested.
 - SLO/SLI and operational restoration limits are **proposed then measured**, never declared fulfilled by writing targets. See [data lifecycle](DATA-LIFECYCLE-AND-OPERATIONS.md).
 
+## Third-pass mandatory runtime permission checks (R26–R34)
+
+- **Function grants:** query effective `has_function_privilege`, `PUBLIC` and inherited grants, `SECURITY DEFINER` owners/search_path and default privileges for new and existing Postgres functions. A role-specific REVOKE is not sufficient if PUBLIC still grants access.
+- **RLS:** verify permissive OR/restrictive AND composition when a second policy exists. Prove deny for missing/switched tenant, owner/BYPASSRLS, `TRUNCATE`, `REFERENCES` and relation/constraint information side channels using ordinary ACLs plus RLS.
+- **Physical apps:** two app installations with distinct PG/Redis/object-store credentials cannot read/write each other's resources or backups. Merely separated SQL role names/Redis key prefixes/storage paths do not count.
+- **Code trust:** explicitly accept trusted app-author code and vetted Tier-1 plugins as privileged within installation; test hostile end users cannot reach SQL or runtime secrets. Do not claim tenantUnitOfWork/GUCs sandbox arbitrary server SQL.
+- **Cross-app integration:** issuer/audience/scope and revocation for service accounts, signed/idempotent inbound webhooks, outbound SSRF/egress restrictions and dead-letter replay isolation.
+- **Release skew:** old/new API + workers + web + schema + module ABI + event versions must pass the defined compatibility matrix, with migration-backfill fault recovery and real RPO/RTO evidence.
+
+See [ACL/RLS test matrix](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling upgrades](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 ## Additional negative tests
 
 - Generated data: bulk mutations, aggregation/count/filter side channels, nested relation traversal, privileged field projections, unbounded sorting/pagination, SSR/service cache leakage.

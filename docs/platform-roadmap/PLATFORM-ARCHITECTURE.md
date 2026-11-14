@@ -73,6 +73,12 @@ The platform is **not** a general application framework merely because it genera
 
 See [code-first runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md). One app per installation is a recommended **v1 mode**, not a universal truth for every platform deployment. Multi-app shared runtime would require a separate later threat model and assessment.
 
+## Effective infrastructure isolation and rolling releases
+
+“App per installation” is only meaningful with **tested physical and authorization separation**, not just separate names. Recommend dedicated database credentials and databases, enforced Redis ACL/queue isolation, bucket/IAM restrictions, isolated secrets and per-install backups for v1; explicitly document any shared infrastructure exception. Custom app source code is trusted within its installation, and RLS custom session variables cannot defend against malicious code able to run SQL as the same role. Third-party cross-app communication must be authenticated API/event based.
+
+For schema evolution test **mixed API/Worker/SDK/Web versions** and delayed events during expand/backfill/contract. A rollback of code does not imply a safe downgrade of schema/data. See [trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [effective PG privilege proof](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [version matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 ## Product packaging
 
 - Vibress Framework: kernel + runtime + SDK + templates; complete self-hosting.

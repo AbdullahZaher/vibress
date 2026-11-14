@@ -60,6 +60,14 @@ Review high-risk findings in [PR review register](REVIEW-FINDINGS-2026-11-14.md)
 
 The [second-review scored assessment](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) rates this written plan **8.0/10**, not Vibress software or CI readiness. R17–R25 are documented corrections with unresolved implementation obligations; document/Issue acceptance is distinct from production verification. Owners, actual capacity/sequence, budget, SLIs/SLOs and the evidence schema must be agreed before milestone closure.
 
+## R26–R34 acceptance and product-development proof
+
+The [third review and current 8.0/10 editorial score](THIRD-REVIEW-AND-RATING-2026-11-14.md) **do not increase** the earlier score merely for expanding docs. DB/architecture owner must explicitly accept PUBLIC/inherited function ACL and RLS policy-composition tests; operations owners must prove per-installation PostgreSQL/Redis/object-storage access denial; trusted runtime owners must document custom code boundaries; release lead must own the [rolling compatibility matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+Define *one measurable first-adopter hypothesis* for the code-first CRM, actual developer interviews/installation trials, comparator-matched tasks and an owner/capacity/decision log before promising competitive superiority. Planned project dates cannot be invented from M/L/XL/XXL sizes.
+
+This PR's manual link/ID check is **not** the CI documentation validator. M00 must implement and attach SHA-specific evidence for the repo-wide link, heading, epic ID, ADR cross-reference, release-scope and scorecard checker. Escalate failure or ownerless blockers rather than marking issues done.
+
 ## Documentation CI requirement
 
 M00 must add automated Markdown relative-link/anchor verification, duplicate milestone/epic-ID checks, orphaned-document detection and Issue link integrity checks. Run on immutable PR commit and pin the checker version; do not claim this already runs.

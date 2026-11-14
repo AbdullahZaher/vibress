@@ -15,6 +15,20 @@
 | **009** | Code-first app frontend/custom runtime boundary | Public route/action extension with authenticated typed SDK and developer-owned web UI; IR for declarative metadata only | Promise 'any project' while delivering only CRUD/Admin or treat arbitrary TS as visual IR | M01/M04/M07 clean CRM test |
 | **010** | Data retention, deletion, export and operations | Lifecycle policy, tenant offboarding, privacy ownership and measured SLO/RPO/RTO with compliance review as applicable | Assume row deletion removes every copy or promise universal legal compliance | M00 ownership; M02/M06 policy; M08 GA |
 
+## Security-focused decision refinements (PR review R26–R34)
+
+**ADR-PLAT-001 — installation topology:** the v1 recommended physical boundary is a *dedicated PostgreSQL database and role set for each installed app*, with separately enforceable Redis ACLs/instances, storage bucket/IAM and deployment credentials. **Different role names or prefixes in the same shared public schema do not automatically isolate applications.** Shared-DB alternatives require evidence of equivalent effective ACLs and separate approval.
+
+**ADR-PLAT-003 — RLS/privilege security:** test *effective* permissions, including inherited and **PUBLIC** default function EXECUTE, SECURITY DEFINER owner/search_path, permissive-OR policy composition, TRUNCATE/REFERENCES (not covered by RLS), and transaction-local context. A custom GUC is not authentication against arbitrary SQL.
+
+**ADR-PLAT-006/009 — code trust:** custom developer-owned backend code is trusted within its dedicated runtime. A TypeScript port, runtime SDK, manifest capability or RLS GUC does not securely confine malicious server code that has access to the same process/credentials; Tier-1 plugins remain fully trusted in-process.
+
+**ADR-PLAT-008 — releases:** approve API/Worker/Web/DB/Module/Event version-skew matrix and irreversible-backfill recovery before release. **ADR-PLAT-002/009** additionally define authenticated service-to-service cross-application APIs/events rather than shared SQL/queue credentials.
+
+**M00 governance / ADR-PLAT-007:** register a testable customer/developer value hypothesis, competitor-matched proof tasks and real owner/capacity estimates; add required Markdown/epic/ADR consistency CI before claiming docs verification.
+
+See [third review R26–R34](THIRD-REVIEW-AND-RATING-2026-11-14.md). These refinements do **not** change any ADR from PROPOSED to ACCEPTED.
+
 ## ADR status workflow
 
 `proposed → reviewed → accepted (signed) / rejected (with rationale) → implemented (evidence) → verified (tests) → production approved (separate)`. Acceptance of an ADR is **not** implementation or security verification.

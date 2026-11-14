@@ -14,6 +14,12 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 
 **Roadmap quality (editorial, not a software certification): [8.0 / 10](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md).** The second review identified R17–R25, corrected internal scope inconsistencies and introduced the [code-first application runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle and operational requirements](DATA-LIFECYCLE-AND-OPERATIONS.md). This score does **not** evaluate runtime quality, security certification, actual deployment or superiority over competitors. All implementation/approval blockers remain open until tested.
 
+## Third-pass security and execution review
+
+**Updated editorial rating: [8.0/10, unchanged](THIRD-REVIEW-AND-RATING-2026-11-14.md).** Findings **R26–R34** refine effective PostgreSQL privileges (including PUBLIC function EXECUTE), RLS policy composition and non-RLS operations, physical per-installation access controls, trusted application-code limits, rolling upgrade/version skew, external integrations and practical discovery/CI evidence. **These are roadmap design corrections, not fixes to the running software.**
+
+Security/runtime designs: [PostgreSQL ACL and RLS threat model](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust and physical isolation](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), and [rolling upgrade compatibility](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 ## Review and decision status
 
 **Review result:** [PR #151 architecture/security findings (2026-11-14)](REVIEW-FINDINGS-2026-11-14.md) identifies high-impact planning gaps; the documentation has been revised, **not the runtime**. The review is advisory pending owner approval. [Mandatory ADR decisions](ARCHITECTURE-DECISION-GATES.md), [isolation and schema migration contract](DATA-ISOLATION-AND-MIGRATIONS.md), and the [explicit v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md) must be approved before implementation is treated as ready. This English set is the **normative current plan**; the earlier Arabic overview is informational and may lag behind new gates.
@@ -26,7 +32,7 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 2. CMS is an optional module/application, not the runtime's root identity.
 3. Project, Application, Installation, Environment, Organization, Tenant, Principal and Publication are distinct concepts.
 4. Canonical **declarative** resource IR drives TypeScript, visual and AI schema tooling; arbitrary developer-owned TypeScript is not round-tripped through IR.
-5. Secure by default: RBAC/ABAC, real PostgreSQL tenant RLS for supported scoped tables, audited service actions, isolated DB roles.
+5. Secure by default: audited server-owned identity/RBAC, tested PostgreSQL RLS for supported tenant resources, effective PUBLIC/inherited role grants and SECURITY DEFINER review, physical inter-installation ACL/IAM isolation, and scoped trusted developer code. RLS/custom GUCs alone are not a malicious-code sandbox.
 6. Reliable upgrades: SemVer, compatibility gates, expand/contract migrations, approvals, tested recovery and **measured** RPO/RTO; never promise zero loss for arbitrary downgrade or disaster.
 7. Trusted reviewed plugins first; untrusted code isolation must be real OS/process isolation.
 8. Preserve existing CMS/Studio semantics with adapters and pinned fixtures.
@@ -87,7 +93,11 @@ Every milestone requires typed public contracts; CI/build/typecheck; integration
 
 ## Related documentation
 
-- [Second review with 8.0/10 scored rubric and R17–R25](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md)
+- [Third review: R26–R34 and 8.0/10 editorial rating](THIRD-REVIEW-AND-RATING-2026-11-14.md)
+- [PostgreSQL ACL / RLS privilege threat model](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md)
+- [App installation trust and external integration contract](APP-INSTALLATION-TRUST-AND-OPERATIONS.md)
+- [Rolling upgrade/version-skew compatibility](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md)
+- [Second review with weighted score and R17–R25](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md)
 - [Code-first application runtime and extension contract](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md)
 - [Data lifecycle, privacy and operations](DATA-LIFECYCLE-AND-OPERATIONS.md)
 - [Review findings and remediation register R01–R16](REVIEW-FINDINGS-2026-11-14.md)
