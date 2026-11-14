@@ -129,6 +129,12 @@ The new [Vibress Universal Application Platform master roadmap](platform-roadmap
 **Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.
 
 
+## PR #151 — Conditional 9+ roadmap review and reproducible documentation checks
+
+[Current English roadmap](platform-roadmap/README.md) · [9.1/10 conditional design-quality assessment](platform-roadmap/QUALITY-9-PLUS-ASSESSMENT.md) · [Platform GA versioning / support matrix](platform-roadmap/RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release evidence and GO/NO-GO register](platform-roadmap/RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) · [Offline documentation validator](../scripts/verify-platform-roadmap.mjs).
+
+**Scope:** 9.1 is a provisional written-plan score, not a runtime security or production certificate. M08 code-first GA artifact version remains undecided pending [ADR-013](14-decisions/release-versioning-strategy.md) compatibility review, and no application code was remediated in this documentation PR.
+
 ## PR #151 — Fourth-pass universal-platform plan review
 
 The [English fourth-pass review (R35–R39)](platform-roadmap/FOURTH-PASS-REVIEW-2026-11-14.md) extends the proposed Platform master roadmap with [PostgreSQL RLS views, backup and nested-transaction tests](platform-roadmap/RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md), [legacy multi-publication CMS migration mapping](platform-roadmap/LEGACY-CMS-IDENTITY-AND-MIGRATION.md), and an [execution-first P0/P1 slice](platform-roadmap/EXECUTION-FIRST-SLICE.md). These are **planning-only documents**; the roadmap's editorial 8.0/10 is not a software release/security certification.
