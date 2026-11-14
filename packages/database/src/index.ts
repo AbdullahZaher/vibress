@@ -10,6 +10,11 @@ export {
   readRuntimeRoleConfig,
   type RuntimeRoleConfig,
 } from "./runtime-role";
+export {
+  provisionPlatformRuntimeRole,
+  readPlatformRuntimeRoleConfig,
+  type PlatformRuntimeRoleConfig,
+} from "./platform-runtime-role";
 export { seedDatabase, SYSTEM_ROLES, SYSTEM_PERMISSIONS } from "./seed";
 export { seedFixturePost, TARGET_POST_ID } from "./seed-fixture-post";
 export * from "./transaction";
