@@ -6,6 +6,12 @@
 **Document language:** English (canonical)  
 **Assessment type:** AI-assisted engineering design/documentation review with publicly verifiable framework references; **NOT** an accredited third-party audit, organizational sign-off or code-security certification.
 
+## Requester implementation adoption — subsequent directive
+
+A project requester has explicitly directed adoption of the plan **for controlled implementation across all five Waves**, including real engineering/security work, full testing and a written report at the end of each Wave. The directive and team prompt are recorded in [Requester Adoption](ROADMAP-EXECUTION-ADOPTION-2026-11-14.md) and [Five-Wave Master Prompt](FIVE-WAVE-ENGINEERING-SECURITY-MASTER-PROMPT.md).
+
+This **authorizes the program handoff and safe scoped M00 implementation work as a requester instruction**. It **does not** constitute a GitHub maintainer merge approval, an architecture/security/database owner's signature, an independent safety certification or approval to deploy/launch. The A1–A8 design-owner sign-offs and G0–G7 runtime/release gates below remain OPEN; reviewers record their actual decisions independently.
+
 ## Decision
 
 ### CONDITIONAL ACCEPTANCE — ROADMAP DESIGN BASELINE FOR M00 IMPLEMENTATION PLANNING
