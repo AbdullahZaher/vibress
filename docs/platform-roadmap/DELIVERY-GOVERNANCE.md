@@ -44,10 +44,10 @@ Keep plan on a separate documentation branch and Draft PR until reviewed. Make s
 
 ## Review-driven mandatory gates (addition)
 
-- **G0 design:** ADR-PLAT-001..008 approved by relevant architecture/security/DB/plugin/release reviewers. Any unresolved decision blocks affected implementation; an ADR is not runtime evidence.
+- **G0 design (M00 → M01):** record ownership and status of ADR-PLAT-001..010; **approve 001/002 and review the 003 security transaction spike before kernel extraction**. ADR-PLAT-004/005/009 are decision gates for M03/M04, 006 for M05, and 007/008/010 for M08; do not block early isolated prototyping on speculative sign-off of later features. Any unresolved *applicable* ADR blocks the affected release; an ADR is not runtime evidence.
 - **G1 early security:** before M01 is enabled for external consumers, topology and identity are accepted; prototypes use isolated dev environments. M02 requires a real Postgres RLS/transaction proof before any tenant production onboarding.
 - **G2 compiler:** M03/M04 cannot release generated SQL/endpoints without schema input trust policy, scoped execution, negative policy tests, unsafe migration denial and independent consumer fixtures.
-- **G3 v1 cut:** M07/M08 require **CMS + CRM** as mandatory Golden Apps; the three other full Golden Apps are later product acceptance tracks. MVP minimum event/workflow/Module SDK is specified in [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+- **G3 v1 cut:** M07/M08 require an independent **custom endpoint/action and end-user CRM page**, plus **CMS + CRM** as mandatory Golden Apps; the three other full Golden Apps are later product acceptance tracks. MVP minimum event/workflow/Module SDK is specified in [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
 - **G4 release:** M08 is a GA GO/NO-GO decision with independently reviewed evidence and no automatic certificate; rollback is only promised for tested reversible/compatible changes.
 
 ## Evidence schema (required per ticket)
@@ -55,6 +55,10 @@ Keep plan on a separate documentation branch and Draft PR until reviewed. Make s
 `{ requirementId, issue, PR, codeCommitSHA, testName, testRunURL, environment, postgresVersion, fixtureSHA, negativeCase, migrationPlanSHA?, runtimeArtifactDigest?, reviewer, reviewedAt, decision, exceptions? }`.
 
 Review high-risk findings in [PR review register](REVIEW-FINDINGS-2026-11-14.md). A docs-only PR does not satisfy code/testing gates. Assign a DR/security owner and a durable evidence location before closing M00.
+
+## Roadmap assessment and risk handoff
+
+The [second-review scored assessment](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) rates this written plan **8.0/10**, not Vibress software or CI readiness. R17–R25 are documented corrections with unresolved implementation obligations; document/Issue acceptance is distinct from production verification. Owners, actual capacity/sequence, budget, SLIs/SLOs and the evidence schema must be agreed before milestone closure.
 
 ## Documentation CI requirement
 

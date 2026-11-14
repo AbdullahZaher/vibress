@@ -67,6 +67,12 @@ Offer physical relational tables for transactional data; bounded dynamic models 
 
 Use default-deny permission policies at server and database boundaries. Tenant-aware queries require transaction-local Postgres context on the same pooled connection, RLS policy tests and non-BYPASSRLS roles. Separate migration and plugin schema provisioner from ordinary runtime. Outbox and business state share a transaction; job consumers are at-least-once and idempotent. Reviewed Tier-1 ESM plugins can access Node privileges and are **not** sandboxes; arbitrary untrusted plugins must not run before real isolation is certified.
 
+## Code-first application runtime boundary
+
+The platform is **not** a general application framework merely because it generates CRUD/Admin. The supported v1 runtime must accept **developer-owned front-end routes/pages**, typed custom HTTP endpoints and transactional actions through public contracts, and then compile an independently deployable app. The end-user web UI can be an ordinary Next.js/React app consuming its typed SDK. The secure host remains responsible for verified identity, tenancy, request validation, policy and transaction scope; it must not leak a privileged raw Fastify/SQL pool to external modules. The canonical IR describes declarative schemas and route/action *metadata*; arbitrary application code stays in developer-owned source.
+
+See [code-first runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md). One app per installation is a recommended **v1 mode**, not a universal truth for every platform deployment. Multi-app shared runtime would require a separate later threat model and assessment.
+
 ## Product packaging
 
 - Vibress Framework: kernel + runtime + SDK + templates; complete self-hosting.

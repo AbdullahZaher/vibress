@@ -18,6 +18,10 @@ The master roadmap must reuse *actual* existing work and preserve *historical* p
 | Vibress Studio Lexical/renderer | M00 baseline + M09 reusable editor controls | Lexical content doc is not app visual layout schema |
 | Docker Compose/API/Worker/observability | M08/M11 release & operations | cloud deployment/control plane not yet implemented |
 
+## Code-first runtime finding (second review)
+
+The current repository exposes Fastify routes and Next.js/React applications owned by the CMS host; the generic contract for a *third-party application* to register safe typed custom HTTP handlers, a user-facing web page and an authenticated transactional action is **proposed, not already implemented**. Its public SDK and clean-install/SSR security acceptance are tracked in [Application Runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and M01/M04/M07. Do not infer arbitrary application hosting from a collection CRUD generator alone.
+
 ## Current authoritative source documents
 
 - [Existing architecture](../01-architecture/overview.md), [dependency rules](../01-architecture/dependency-rules.md).

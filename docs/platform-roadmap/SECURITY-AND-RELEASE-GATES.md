@@ -52,6 +52,13 @@ No known unresolved Critical/High findings inside the independently audited scop
 
 See [DB/RLS authority](DATA-ISOLATION-AND-MIGRATIONS.md), [architecture decisions](ARCHITECTURE-DECISION-GATES.md), and [v1 mandatory scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
 
+## Data lifecycle and custom application checks
+
+- Exposed **custom application HTTP handlers and web pages** are subject to the same identity, tenant context, authorization, CSRF/origin as applicable, request schema, SSR/cache and rate-limit checks as generated CRUD. Never give low-trust extension code unrestricted SQL or secrets.
+- Tenant export and offboarding verify owner authorization, background-job revocation, signed-URL expiry, secrets/tokens rotation, search/cache/object cleanup and audit/recovery retention, including documented backup expiration caveats.
+- Event envelopes carry a schema version, stable event/idempotency ID, trusted app/tenant scope and compatibility policy; consumer replay and poison-event handling must be tested.
+- SLO/SLI and operational restoration limits are **proposed then measured**, never declared fulfilled by writing targets. See [data lifecycle](DATA-LIFECYCLE-AND-OPERATIONS.md).
+
 ## Additional negative tests
 
 - Generated data: bulk mutations, aggregation/count/filter side channels, nested relation traversal, privileged field projections, unbounded sorting/pagination, SSR/service cache leakage.

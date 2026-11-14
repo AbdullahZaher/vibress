@@ -44,7 +44,7 @@ The runtime layer owns `scope`; callers cannot create one using a bare tenant ID
 
 ## 3. Physical schema and RLS policy contract
 
-- Tenanted tables carry stable `application_id` and `tenant_id` (or a reviewed equivalent) with NOT NULL as appropriate, indexes scoped to ownership, and cross-tenant-safe composite foreign keys / unique constraints.
+- **Topology-aware physical model:** on a dedicated app database/installation, the immutable application/installation identity is enforced via database credentials, metadata and deployment boundary; tenant-owned tables require a stable `tenant_id` or reviewed equivalent, scoped indexes and cross-tenant-safe composite foreign keys/unique constraints. An `application_id` column may be retained for provenance, but is **not automatically required on every row** when one application owns the database. A future shared-database multi-app topology **must separately prove app+tenant row isolation** before use.
 - `ENABLE ROW LEVEL SECURITY`; use `FORCE ROW LEVEL SECURITY` when table ownership requires it; normal runtime is not an owner and has `NOBYPASSRLS`.
 - Policies fail closed if application/tenant context is missing; `USING` applies to reads/update/delete and `WITH CHECK` enforces insert/update target ownership.
 - Define explicit policies for shared/global catalog tables vs tenant-owned rows; **do not** indiscriminately enable RLS on auth/migration/system metadata without a migration/maintenance strategy.
@@ -78,5 +78,7 @@ Use deterministic diff and plan previews, drift checks against live database, ad
 - Shared caches, object storage, signed URLs, webhook delivery, SSR caches, analytics and audit record ownership.
 - Attempted schema declaration attack: conflicting identifier, malicious default, schema drift, unsanctioned DDL and stuck migration rollback.
 - Legacy CMS data and plugin storage remain accessible only under correct legacy compatibility rights after the phased transition.
+
+**Data lifecycle:** tenant offboarding, export/deletion, backup retention, cache/search/queue residues and legitimate audit/financial holds are separately specified in [Data Lifecycle and Operations](DATA-LIFECYCLE-AND-OPERATIONS.md). No instant erasure of immutable backups is promised.
 
 **Gate:** M02 may be considered ready only after real PostgreSQL integration tests under the same deployable runtime role succeed. Documentation acceptance by itself does not enable public tenant hosting.

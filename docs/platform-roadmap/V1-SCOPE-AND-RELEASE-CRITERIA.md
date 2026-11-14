@@ -10,16 +10,19 @@
 | Identity / security | Default deny RBAC, scoped resource policy, real PG RLS for supported intra-app multi-tenant resources, separate DML/DDL role | Cross-tenant HTTP/worker/database tests and independent audit |
 | Data / upgrades | Typed resource DSL, real relational schema, safe migration compiler, plan/preflight, nondestructive evolution and backfill | CRM customer/deal/activity migrations preserve fixture data |
 | APIs / admin | REST/OpenAPI/typed TS SDK, generated basic forms/tables with server-side field/row policy | Clean client and admin E2E from resource definitions |
+| Custom web application surface | **One authenticated custom server action + typed HTTP endpoint + end-user UI route** owned by the external CRM, with SSR/cache safety and no privileged kernel imports | Clean external front-end/route integration and no kernel modifications |
 | Modules | Stable minimum **trusted** module contract, signed/approved artifact handling, compatibility matrix, basic lifecycle and safe migration approval; no Tier-2 | Independent inventory module installs/upgrades with crash-recovery evidence for supported operations |
 | Actions | Transactional action boundary, tenant-aware worker, durable event/outbox, deduped webhooks, minimal service adapter(s) | Booking-approval or inventory state flow + duplicate-event fault test; full billing product not mandated |
 | DX | `create`, `add`, `doctor`, `upgrade --plan`, packaged SDK, minimal/CRM/CMS template | Clean external install and generated regression checks |
 | Release | Deployment/rollback/forward-fix plan, backup restore, support matrix, SBOM/supply chain, actual staging + independent security review | Immutable commit/artifacts, explicit GO/NO-GO by release owner |
 
+**Application types:** v1 proves a code-first, data-backed web/SaaS/admin workload; it does **not** prove support for arbitrary operating systems, native mobile runtime, games or every database. See [Application Runtime Contract](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md).
+
 **Mandatory Golden Applications:** (1) **existing Vibress CMS** backwards compatibility, (2) **new clean CRM** independent of publishing. Booking-like workflow can be a focused test fixture; full Booking/Commerce/Real Estate products do not block GA unless their claims are advertised at release.
 
 ## Not mandatory for first GA
 
-- Full Visual App Builder, external marketplace, untrusted Tier-2 plugin execution, built-in AI agent tools or Cloud.
+- Full Visual App Builder, external marketplace, untrusted Tier-2 plugin execution, built-in AI agent tools or Cloud; **arbitrary untrusted custom backend code**.
 - General GraphQL and every database engine/SQL provider.
 - Complete commerce/booking/real-estate products, advanced business workflow designer, full PaaS, or arbitrary plugin migrations.
 - All enterprise SSO/SCIM features or granular ABAC policies beyond the defined v1 policy profile.
@@ -39,6 +42,10 @@ Proof gates are about executable code and evidence, not the existence of plannin
 ## Terminology and certifications
 
 Use **Production Readiness Review / GA Decision** for M08; do **not** imply accreditation by a standards body, complete WCAG compliance, or verified exploit-free status from internal review. A GA claim requires an explicit audit scope, finding severity policy, named release decision-maker and dated immutable evidence. No universal guarantee of "zero data loss" in every upgrade; measure supported recovery scenario and RPO/RTO.
+
+## Data, legal and operations evidence
+
+v1 requires a testable authorized tenant export/offboarding policy, retention/audit/backup runbooks and owner-review of relevant legal/contractual obligations; no blanket compliance claim. The release owner must publish a supported topology, event version support policy, observed RPO/RTO and SLI/SLO targets based on measurements rather than arbitrary numbers. See [data lifecycle](DATA-LIFECYCLE-AND-OPERATIONS.md).
 
 ## Product success measurements
 

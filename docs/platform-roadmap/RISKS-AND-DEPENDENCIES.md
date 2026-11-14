@@ -42,6 +42,20 @@ flowchart TD
 
 Are app and tenant identities separate across single/multi tenant installations? Which schemas are physical versus dynamic? Which resource operations can be generated and which require handwritten policy? What are the plugin SDK/ABI support windows? How can custom code survive generators? What is permitted to auto-migrate? Can independently developed apps fully self-host without Cloud?
 
+## Second-review scope and operational risks
+
+| ID | Risk | Affected gates | Evidence |
+| --- | --- | --- | --- |
+| R17/R18 | v1 five-app conflict and absolute data-loss promise | M03, M07, M08 | [Second review](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md), revised scope/fixtures |
+| R19 | Code-first framework only generates CRUD/Admin | M01, M04, M07 | End-user CRM app with custom server route/action and UI |
+| R20 | All ADRs demanded at G0 regardless of phase | M00, M03–M08 | Stage-specific ADR acceptance |
+| R21 | Per-app DB vs mandatory per-row application IDs | M01, M02 | Explicit supported isolation topology and PG schema fixture |
+| R22 | Tenant data privacy/erasure and backup residues | M00, M02, M08, M11 | [Data lifecycle](DATA-LIFECYCLE-AND-OPERATIONS.md) |
+| R23 | Event schema and replay incompatibilities | M05/M06 | Versioned producer/consumer upgrade fixtures |
+| R24/R25 | No SLO/capacity and documentation validation yet | M00, M08 | Owned reliability budgets, docs checks and CI evidence |
+
+**Planning score:** [8.0/10](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md); it must not be interpreted as an implementation score, production security review or external benchmark.
+
 ## Relative complexity only
 
 M/L/XL/XXL are qualitative. Team capacity, dates, sprint plans and implementation costs require separate approval; this document contains no promised dates.

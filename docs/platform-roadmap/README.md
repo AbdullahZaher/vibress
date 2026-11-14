@@ -10,6 +10,10 @@ Turn Vibress into a **general-purpose, open-source application development frame
 
 Three coherent products: **Vibress Framework** (public code-first kernel + SDK), **Vibress Studio / App Builder** (independent Lexical editor and future schema-driven visual app builder), and **optional Vibress Cloud** (deployment control plane, never a dependency for self-hosted runtime).
 
+## Second review and scored assessment
+
+**Roadmap quality (editorial, not a software certification): [8.0 / 10](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md).** The second review identified R17–R25, corrected internal scope inconsistencies and introduced the [code-first application runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle and operational requirements](DATA-LIFECYCLE-AND-OPERATIONS.md). This score does **not** evaluate runtime quality, security certification, actual deployment or superiority over competitors. All implementation/approval blockers remain open until tested.
+
 ## Review and decision status
 
 **Review result:** [PR #151 architecture/security findings (2026-11-14)](REVIEW-FINDINGS-2026-11-14.md) identifies high-impact planning gaps; the documentation has been revised, **not the runtime**. The review is advisory pending owner approval. [Mandatory ADR decisions](ARCHITECTURE-DECISION-GATES.md), [isolation and schema migration contract](DATA-ISOLATION-AND-MIGRATIONS.md), and the [explicit v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md) must be approved before implementation is treated as ready. This English set is the **normative current plan**; the earlier Arabic overview is informational and may lag behind new gates.
@@ -21,9 +25,9 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 1. Modular monolith before microservices; clear public contracts and dependency boundaries.
 2. CMS is an optional module/application, not the runtime's root identity.
 3. Project, Application, Installation, Environment, Organization, Tenant, Principal and Publication are distinct concepts.
-4. Canonical application resource IR drives TypeScript code-first, visual and AI interfaces.
+4. Canonical **declarative** resource IR drives TypeScript, visual and AI schema tooling; arbitrary developer-owned TypeScript is not round-tripped through IR.
 5. Secure by default: RBAC/ABAC, real PostgreSQL tenant RLS for supported scoped tables, audited service actions, isolated DB roles.
-6. Reliable upgrades: semver, compatibility gates, additive migrations, preview/approval/restore. No data loss.
+6. Reliable upgrades: SemVer, compatibility gates, expand/contract migrations, approvals, tested recovery and **measured** RPO/RTO; never promise zero loss for arbitrary downgrade or disaster.
 7. Trusted reviewed plugins first; untrusted code isolation must be real OS/process isolation.
 8. Preserve existing CMS/Studio semantics with adapters and pinned fixtures.
 9. Evidence-based releases and independent review; never infer certification from a green CI check alone.
@@ -61,7 +65,7 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 
 **Document authority:** revised English master edition after PR #151 security/architecture review; normative review findings [R01–R16](REVIEW-FINDINGS-2026-11-14.md). Baseline SHA in this document is historical, not an assertion about current production branch after these documentation commits.
 
-The first general-purpose release is **not** blocked on five complete Golden Apps, a Wix-class builder or a complete PaaS. **Mandatory:** existing CMS compatibility plus a newly generated CRM; minimum trusted Module SDK, authenticated REST/OpenAPI/admin, PostgreSQL RLS, CLI, durable job/outbox and independent release review. Real Estate, Booking and Commerce are staged *reference tracks* rather than full GA gates unless a capability is explicitly marketed in GA. See [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+The first general-purpose release includes a **minimal authenticated custom action/HTTP endpoint and end-user web page** in addition to generated CRUD/Admin, proven by an external CRM that does not modify kernel. It is **not** blocked on five complete Golden Apps, a Wix-class builder or a complete PaaS. **Mandatory:** existing CMS compatibility plus a newly generated CRM; minimum trusted Module SDK, authenticated REST/OpenAPI/admin, PostgreSQL RLS, CLI, durable job/outbox and independent release review. Real Estate, Booking and Commerce are staged *reference tracks* rather than full GA gates unless a capability is explicitly marketed in GA. See [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
 
 ## Release boundaries
 
@@ -77,13 +81,16 @@ The first general-purpose release is **not** blocked on five complete Golden App
 
 ## Critical path and verification
 
-`M00 → M01 → M02 → M03 → M04 → (M05, M06, M07) → M08`. Early threat-model/CLI/design prototypes are allowed but do not bypass milestone gates. **First defining test:** a self-contained CRM app with customers/deals/activities, organizations/roles and RLS must boot via public contracts **without importing posts, publications or newsletters, or changing kernel**.
+`M00 (topology, identity and transaction security spike) → M01 (nonproduction application kernel) → M02 (proved tenant isolation and DB roles) → M03 → M04 → M05/M06/M07 → M08`. Early threat-model/CLI/design prototypes are allowed but do not bypass milestone gates. **First defining test:** a self-contained CRM app with customers/deals/activities, organizations/roles and RLS must boot via public contracts **without importing posts, publications or newsletters, or changing kernel**.
 
 Every milestone requires typed public contracts; CI/build/typecheck; integration/negative tests; compatibility and data migration evidence; recovery/rollout plan; documented deployment and reviewer acceptance. See [Governance](DELIVERY-GOVERNANCE.md) and [Security gates](SECURITY-AND-RELEASE-GATES.md).
 
 ## Related documentation
 
-- [Review findings and remediation register](REVIEW-FINDINGS-2026-11-14.md)
+- [Second review with 8.0/10 scored rubric and R17–R25](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md)
+- [Code-first application runtime and extension contract](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md)
+- [Data lifecycle, privacy and operations](DATA-LIFECYCLE-AND-OPERATIONS.md)
+- [Review findings and remediation register R01–R16](REVIEW-FINDINGS-2026-11-14.md)
 - [Mandatory architecture decision gates](ARCHITECTURE-DECISION-GATES.md)
 - [Tenant isolation and migration authority contract](DATA-ISOLATION-AND-MIGRATIONS.md)
 - [Explicit v1 release scope and phased delivery](V1-SCOPE-AND-RELEASE-CRITERIA.md)

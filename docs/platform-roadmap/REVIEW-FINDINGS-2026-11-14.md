@@ -44,6 +44,10 @@ All findings above are **review issues identified**. Their design corrections ar
 
 See [decision gates](ARCHITECTURE-DECISION-GATES.md), [DB design](DATA-ISOLATION-AND-MIGRATIONS.md) and [v1 release cut](V1-SCOPE-AND-RELEASE-CRITERIA.md).
 
+## Follow-up independent second-pass review
+
+Nine additional findings (**R17–R25**), a transparent [8.0/10 editorial score](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md), the missing [custom frontend/action runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md), staged ADR applicability and [data lifecycle requirements](DATA-LIFECYCLE-AND-OPERATIONS.md) are recorded separately. These changes correct plan inconsistencies only; they do not close source/runtime security findings R01–R16.
+
 ## Verification limits of this review
 
 - Read PR #151 metadata, filenames, discussions, all 13 milestone documents and the English governance/architecture/security files; checked selected repository sources and historical guidance through GitHub.

@@ -12,6 +12,8 @@
 | **006** | Module ABI and trust | Extend *existing* Plugin SDK; explicit platform/SDK/ABI compatibility, operator-trusted Tier-1; no untrusted ESM | Publish `private` SDK as-is or claim node:vm is isolation | M05 external pack/upgrade proof |
 | **007** | Code-first v1 scope | CMS regression + clean CRM + secure REST/OpenAPI/admin + minimal trusted modules + job/outbox + CLI + real PG isolation; others optional | Gate all five Golden Apps and Wix-like editor on v1 | M07/M08 scope ledger |
 | **008** | Upgrade and release semantics | Expand/contract, compatibility windows, evidence-led GA approval, reversible app rollback or documented forward-fix/restoration | Promise automatic schema downgrade with zero data loss | M08/M11 recovery drill |
+| **009** | Code-first app frontend/custom runtime boundary | Public route/action extension with authenticated typed SDK and developer-owned web UI; IR for declarative metadata only | Promise 'any project' while delivering only CRUD/Admin or treat arbitrary TS as visual IR | M01/M04/M07 clean CRM test |
+| **010** | Data retention, deletion, export and operations | Lifecycle policy, tenant offboarding, privacy ownership and measured SLO/RPO/RTO with compliance review as applicable | Assume row deletion removes every copy or promise universal legal compliance | M00 ownership; M02/M06 policy; M08 GA |
 
 ## ADR status workflow
 
@@ -26,10 +28,10 @@ Each ADR must include:
 
 ## Decision sequencing
 
-- **Before starting M01 runtime extraction:** accepted ADR-PLAT-001 and 002; explicitly commit to no multi-app shared runtime v1 without new gate.
+- **Before starting M01 runtime extraction:** accepted ADR-PLAT-001 and 002 plus a reviewed ADR-PLAT-003 transaction/security prototype; explicitly commit to no multi-app shared runtime v1 without a new gate.
 - **Before any tenant-owned data path:** accepted ADR-PLAT-003 and working tenant-bound Postgres prototype; no external tenants during prototyping.
-- **Before generated schemas/API are exposed:** ADR-PLAT-004 and 005 + negative security tests.
+- **Before generated schemas/API are exposed:** ADR-PLAT-004, 005 and **009** + negative security and app custom-route conformance tests.
 - **Before third-party modules:** ADR-PLAT-006 + independent consumer and upgrade checks.
-- **Before v1 release candidate:** ADR-PLAT-007 and 008, scoped independent review, immutable evidence.
+- **Before v1 release candidate:** ADR-PLAT-007, 008 and **010**, scoped independent review, measured operational evidence and privacy/data-owner sign-off where applicable.
 
 **Ownership:** architecture lead decides topology; database/security leads co-approve identity, RLS and migrations; plugin lead co-approves ABI/trust; release owner co-approves v1 scope and upgrades. Until owners are assigned, the status is BLOCKED FOR ACCEPTANCE, not implicitly approved.

@@ -14,13 +14,17 @@
 
 | Golden application | Business coverage | Non-negotiable proof |
 | --- | --- | --- |
-| Vibress CMS | posts/pages/publications, media, members/plans, themes, newsletters, Studio | zero unintended backward-compatibility loss |
+| Vibress CMS | posts/pages/publications, media, members/plans, themes, newsletters, Studio | pinned compatibility suites pass; every known unsupported difference documented and approved before GA |
 | CRM | customers, deals, activities, staff, organizations, policy scopes and dashboard | no publication import, generated CRUD, safe RLS |
 | Real Estate | properties, listing moderation, photos, filters, Arabic/RTL | scoped files and search, relations and workflows |
 | Booking | slots/reservations, state transitions, cancellation, notifications | transactions/concurrency, retries and fault recovery |
 | Commerce | products, orders, inventory, payments/subscriptions | webhook idempotency, entitlements, audit and recovery |
 
 Build new consumers *outside* the platform kernel through published SDK/templates; any internal edit required to implement a domain is a platform design defect to track explicitly.
+
+## Mandatory v1 CRM code-first demonstration
+
+In addition to generated CRUD and administrative UI, the clean CRM must implement a custom **transactional deal-approval action**, a typed authenticated HTTP endpoint, an **end-user-facing web page** using the generated SDK, a versioned tenant-safe event consumed by a worker, and a compatible schema migration. All functionality must work without kernel edits and with documented tenant and cache policies. See [code-first runtime](APPLICATION-RUNTIME-AND-EXTENSIBILITY.md).
 
 ## Competitor benchmarks and fair comparison
 

@@ -2,6 +2,8 @@
 
 > **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Planning on [Draft PR #151](https://github.com/AbdullahZaher/vibress/pull/151). These are **tracking Issues**, not native GitHub Milestone objects. No implementation completion, delivery dates, or production approvals are implied.
 
+**Second-pass independent review:** [Scored assessment 8.0/10, R17–R25](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md). New issues and milestones must link the exact milestone exit criteria, runtime product scope and actual evidence; the score is editorial only.
+
 **Review findings to triage before implementation:** [2026-11-14 PR review register](REVIEW-FINDINGS-2026-11-14.md). The master Issues should link remediation IDs R01–R16 to approved epic work; their existing checkboxes are not resolved by these document updates.
 
 **Central program tracker:** [#165 — Universal Application Platform M00–M12](https://github.com/AbdullahZaher/vibress/issues/165)
