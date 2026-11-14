@@ -75,6 +75,12 @@ Use the [Execution-First Slice](EXECUTION-FIRST-SLICE.md) as the recommended M00
 A review finding is **documented**, not **resolved**, until the affected runtime/SQL/Studio fixture has an immutable implementation SHA, negative test, repeatable environment and owner decision. Real owners, capacity and schedules must be assigned separately. The previous roadmap **8.0/10** remains a qualitative editorial assessment and conveys no GA authorization.
 
 
+## Documentation automation and proof separation
+
+A deterministic, no-dependency [roadmap validator](../../scripts/verify-platform-roadmap.mjs) and [GitHub Actions workflow](../../.github/workflows/platform-roadmap-docs.yml) are now included in the PR. It verifies local file/heading links, milestone coverage, unique Epic IDs, tracker issue numbering, v1 CMS+CRM scope markers and **historical** weighted score arithmetic. The check is **documentation-only**, not RLS, tenant, Studio, migration or runtime certification. Cite a **successful run on the final PR SHA**, not a green run from an earlier commit.
+
+**Required evidence and versioning:** use [Release Evidence & GO/NO-GO Ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) and [Runtime Version Matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md). Runtime owner sign-off and actual implementation artifact tests are separate. New Program-level date/owner/status claims must be backed by evidence.
+
 ## Documentation CI requirement
 
-M00 must add automated Markdown relative-link/anchor verification, duplicate milestone/epic-ID checks, orphaned-document detection and Issue link integrity checks. Run on immutable PR commit and pin the checker version; do not claim this already runs.
+The initial automated local-link/heading, milestone/Epic ID, issue-number and score arithmetic checker is implemented in this PR; GitHub Actions must **pass on the final commit**. **Remaining enhancements:** remote GitHub issue-body parity, reference link styles, full orphan-document indexing, signed ADR status and runtime evidence validation need separate work; do not claim the first checker covers these.
