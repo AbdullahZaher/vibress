@@ -2,6 +2,8 @@
 
 > **Status: documentation-only review; this is not an independent penetration test, shipped remediation, or release authorization.** Scope: [PR #151](https://github.com/AbdullahZaher/vibress/pull/151), its English master and M00–M12 documents, existing R01–R25 findings, and current code for transaction management, runtime DB grants, Plugin SDK/ExtensionHost and repository CI. Official PostgreSQL documentation was cross-checked. No live database or staging endpoint was accessed.
 
+> **Later fourth-pass review:** [R35–R39 and current executable-slice priorities](FOURTH-PASS-REVIEW-2026-11-14.md) cover view-owner RLS, complete backups, nested transaction semantics, CMS publication migration and prioritization. The editorial rating remains **8.0/10**; this historical report is retained for evidence traceability.
+
 ## Decision and score
 
 **Roadmap quality: 8.0 / 10 (unchanged from the second review).** The architecture and milestones are well developed and now include an explicit v1 code-first product proof, but no score increase is defensible before owners approve the ADRs, actual budgets are established and real security/migration/clean-install tests pass. This score assesses **plan design**, not the platform's code, security posture, production readiness or superiority to Payload/WordPress/Wix/Ghost.
