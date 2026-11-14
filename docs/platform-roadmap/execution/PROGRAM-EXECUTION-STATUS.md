@@ -22,22 +22,34 @@
 
 | Milestone | Done on branch | Missing before exit |
 | --- | --- | --- |
-| M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test | Documentation validator + CI job, pinned two-publication CMS/Studio fixture pack, named owners |
-| M01 Universal kernel | Branded identity, public contracts, definition helpers, registry, action/route/module reference, kernel-only import boundary | Persisted application registry, bootable standalone reference app, kernel route execution adapter |
-| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege runtime role, 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope |
+| M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test, docs-link validator wired into CI, unit/integration split in CI | Legacy docs link cleanup, pinned two-publication CMS/Studio fixture pack, named owners |
+| M01 Universal kernel | Branded identity, public contracts, definition helpers, in-memory registry, serializable manifest with digest, persisted registry (drift/integrity refusal, two-way verification), kernel route execution adapter, bootable standalone reference app, kernel-only import boundary | Independent review and named sign-off; production identity-provider adapter and deployment runbook |
+| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege runtime role (registry and membership tables denied), 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope |
 
 ## Evidence executed on this branch
 
 | Suite | Result |
 | --- | --- |
-| Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 39/39 passed |
+| Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 61 tests passed (7 files) |
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 22/22 passed |
+| Persisted registry + reference app over HTTP/PostgreSQL (`tests/integration/platform-reference-app.test.ts`) | 14/14 passed; runtime role denied registry and membership tables (`42501`) |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
 | R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | 33 public functions, 0 `SECURITY DEFINER`, 0 default-ACL entries |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed |
-| Targeted typecheck (kernel, tenancy, database) | passed |
-| Targeted ESLint (new packages, boundary test, integration test, new database files) | passed |
-| Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 73/73 projects succeeded |
+| Unit/boundary/component suite (`pnpm test:unit`) | 361 files / 2571 tests passed, exit 0 |
+| Full integration suite (`vitest.config.ts tests/integration`) | 45 files / 518 tests passed, exit 0 |
+| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`) | 45 files / 518 tests passed, exit 0, two consecutive runs |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | 25 links across 7 files resolve |
+| Full platform suite (`vitest.platform.config.ts`) | 11 files / 107 tests passed |
+| Targeted typecheck (kernel, tenancy, database, reference app) | passed |
+| Targeted ESLint (new packages, executor, registry store, reference app, boundary test, integration tests) | passed |
+| Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |
+
+Integration suites share the dev database and must run sequentially. One run that
+overlapped a second suite produced 2 spurious `setup.test.ts` failures (shared tables
+truncated mid-test); the cause is recorded in the
+[Wave 1 report](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md). Two later sequential
+runs passed.
 
 ## Known residual risks carried forward
 
@@ -47,6 +59,11 @@
 | F-012 | CMS tables are not covered by RLS; security review remains conditional | Unchanged, open |
 | R35 | PostgreSQL views/materialized reports do not inherit caller RLS | Open, feature excluded from contract |
 | R37 | Legacy transaction runner nests without savepoints | Unchanged, documented |
+| — | Reference app uses an operator-configured static bearer-token directory, not a production identity provider | Reference only; replace before any shared deployment |
+| — | Membership directory is not RLS-protected (read before a scope exists); runtime role is denied the table | By design; auth-service access model needs review |
+| — | No application/tenant provisioning API; registry drift update needs a deployment runbook and has no change audit | Open |
+| — | 76 pre-existing broken links in legacy docs outside `docs/platform-roadmap` | Docs rot | Recorded, cleanup not started |
+| — | Playwright E2E/acceptance suites require staging secrets and have not run | Open |
 | R40 | Release/version identity (`1.2.0` vs Framework GA) | Unresolved |
 | A1–A8, G0–G7 | Human sign-offs and gates | Open, unassigned |
 
