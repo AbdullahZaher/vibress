@@ -20,6 +20,7 @@ import {
   type VerifiedScope,
 } from "@vibress/tenancy";
 import { provisionPlatformRuntimeRole } from "../../packages/database/src/platform-runtime-role";
+import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "../../packages/database/src/platform-runtime-privilege-contract";
 
 /**
  * Real PostgreSQL isolation proof for the Wave 1 tenant contract.
@@ -118,7 +119,11 @@ beforeAll(async () => {
     "packages/database/migrations/0054_platform_tenant_rls.sql",
   );
   await owner.query(fs.readFileSync(migrationPath, "utf8"));
-  await provisionPlatformRuntimeRole(owner, { roleName, password });
+  await provisionPlatformRuntimeRole(
+    owner,
+    { roleName, password },
+    REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+  );
 
   // A separate non-superuser owner. The deployment owner role must not be a
   // superuser, otherwise FORCE ROW LEVEL SECURITY is never exercised.

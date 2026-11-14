@@ -9,12 +9,16 @@
  * - PLATFORM_ENVIRONMENT
  * - PLATFORM_ARTIFACT_DIGEST
  * - PLATFORM_REGISTRY_ACTOR
+ * - PLATFORM_CHANGE_REASON
  *
  * Optional:
  * - PLATFORM_REFERENCE_APP_ID (default reference-crm)
  * - PLATFORM_INSTALLATION_ID (default reference-installation)
+ * - PLATFORM_CHANGE_REFERENCE (deployment/ticket reference)
  * - PLATFORM_REGISTRY_UPDATE=1 (authorize manifest drift update)
- * - PLATFORM_EXPECTED_ENVIRONMENT, PLATFORM_EXPECTED_ARTIFACT_DIGEST (CAS guards)
+ * - PLATFORM_INSTALLATION_UPDATE=1 (authorize an installation update)
+ * - PLATFORM_EXPECTED_ENVIRONMENT (installation update CAS)
+ * - PLATFORM_EXPECTED_ARTIFACT_DIGEST (installation update CAS; empty = none)
  */
 import { Pool } from "pg";
 import { asInstallationId } from "@vibress/platform-kernel";
@@ -41,7 +45,11 @@ async function main(): Promise<void> {
     applicationId ? { id: applicationId } : {},
   );
   const expectedEnvironment = optional("PLATFORM_EXPECTED_ENVIRONMENT");
-  const expectedArtifactDigest = optional("PLATFORM_EXPECTED_ARTIFACT_DIGEST");
+  const expectedArtifactDigest =
+    process.env.PLATFORM_EXPECTED_ARTIFACT_DIGEST === undefined
+      ? undefined
+      : process.env.PLATFORM_EXPECTED_ARTIFACT_DIGEST.trim() || null;
+  const changeReference = optional("PLATFORM_CHANGE_REFERENCE");
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   try {
     const provisioned = await provisionReferenceApplication({
@@ -53,8 +61,15 @@ async function main(): Promise<void> {
       environment: required("PLATFORM_ENVIRONMENT"),
       artifactDigest: required("PLATFORM_ARTIFACT_DIGEST"),
       actor: required("PLATFORM_REGISTRY_ACTOR"),
+      changeReason: required("PLATFORM_CHANGE_REASON"),
+      ...(changeReference !== undefined
+        ? { deploymentReference: changeReference }
+        : {}),
       ...(process.env.PLATFORM_REGISTRY_UPDATE === "1"
         ? { allowRegistryUpdate: true }
+        : {}),
+      ...(process.env.PLATFORM_INSTALLATION_UPDATE === "1"
+        ? { allowInstallationUpdate: true }
         : {}),
       ...(expectedEnvironment !== undefined
         ? { expectedEnvironment }

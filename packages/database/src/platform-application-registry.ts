@@ -55,6 +55,66 @@ export class InstallationApplicationMissingError extends Error {
   }
 }
 
+/**
+ * Raised when a create attempted to change an existing installation's
+ * environment or artifact. Installation updates are separate, CAS-guarded and
+ * audited operations; they are never inferred from a repeated registration.
+ */
+export class InstallationUpdateRequiredError extends Error {
+  constructor(installationId: string) {
+    super(
+      `Installation ${installationId} already exists with different environment or artifact metadata; use updateInstallation with the expected previous state`,
+    );
+    this.name = "InstallationUpdateRequiredError";
+  }
+}
+
+export class InstallationChangeInputError extends Error {
+  constructor(message: string) {
+    super(`Invalid installation change: ${message}`);
+    this.name = "InstallationChangeInputError";
+  }
+}
+
+export interface InstallationRegistrationInput {
+  readonly id: InstallationId;
+  readonly applicationId: ApplicationId;
+  readonly environment: string;
+  readonly artifactDigest: string | null;
+  /** Operator identity recorded in the immutable installation audit. */
+  readonly actor: string;
+  /** Why this installation is being created or changed. */
+  readonly reason: string;
+  readonly deploymentReference?: string | null;
+}
+
+export interface InstallationUpdateInput extends InstallationRegistrationInput {
+  /** Exact persisted environment the operator observed before the update. */
+  readonly expectedEnvironment: string;
+  /**
+   * Exact persisted artifact digest before the update. `null` is an explicit
+   * expectation that no artifact was pinned; omitting it is rejected.
+   */
+  readonly expectedArtifactDigest: string | null;
+}
+
+export type InstallationChangeKind = "created" | "updated";
+
+export interface InstallationChangeRecord {
+  readonly id: string;
+  readonly installationId: InstallationId;
+  readonly applicationId: ApplicationId;
+  readonly changeKind: InstallationChangeKind;
+  readonly actor: string;
+  readonly reason: string;
+  readonly deploymentReference: string | null;
+  readonly previousEnvironment: string | null;
+  readonly newEnvironment: string;
+  readonly previousArtifactDigest: string | null;
+  readonly newArtifactDigest: string | null;
+  readonly recordedAt: Date;
+}
+
 export type RegistrySyncOutcome = "created" | "unchanged" | "updated";
 
 export interface RegistrySyncResult {
@@ -171,9 +231,43 @@ interface RegistryChangeRow {
   recorded_at: Date;
 }
 
+interface InstallationChangeRow {
+  id: string;
+  installation_id: string;
+  application_id: string;
+  change_kind: string;
+  actor: string;
+  reason: string;
+  deployment_reference: string | null;
+  previous_environment: string | null;
+  new_environment: string;
+  previous_artifact_digest: string | null;
+  new_artifact_digest: string | null;
+  recorded_at: Date;
+}
+
 function normalizeRegistryActor(value: string | undefined): string | null {
   const actor = value?.trim();
   return actor ? actor : null;
+}
+
+function requireChangeText(label: string, value: string): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    throw new InstallationChangeInputError(`${label} is required`);
+  }
+  return trimmed;
+}
+
+function normalizeArtifactDigest(value: string | null): string | null {
+  if (value === null) return null;
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    throw new InstallationChangeInputError(
+      "artifact digest must be null or a non-empty string",
+    );
+  }
+  return trimmed;
 }
 
 /**
@@ -323,58 +417,60 @@ export class PostgresApplicationRegistryStore {
   }
 
   /**
-   * Persists and binds an installation record to its application.
+   * Creates an installation binding. Creation is idempotent when the same
+   * application, environment and artifact are already persisted; any other
+   * existing state raises {@link InstallationUpdateRequiredError} instead of
+   * silently rewriting it.
    *
-   * The application must already be registered (`sync` runs first at boot).
-   * Binding is atomic and side-effect-free on rejection: when the installation
-   * already belongs to another application the conditional upsert changes no
-   * row, so `environment` and `artifact_digest` keep their persisted values and
-   * a concurrent conflicting bind cannot overwrite the winner.
+   * The insert and its immutable audit row are one statement. A conflicting
+   * application bind changes no row, so a concurrent loser cannot overwrite
+   * the winner.
    */
-  async syncInstallation(installation: {
-    readonly id: InstallationId;
-    readonly applicationId: ApplicationId;
-    readonly environment?: string;
-    readonly artifactDigest?: string | null;
-    /**
-     * Compare-and-swap guard for an operator-driven update. When supplied, an
-     * existing installation with a different environment is rejected instead
-     * of silently rewritten.
-     */
-    readonly expectedEnvironment?: string;
-    /** Compare-and-swap guard for artifact rotation. */
-    readonly expectedArtifactDigest?: string;
-  }): Promise<InstallationRegistrationRecord> {
-    const environment = installation.environment ?? "production";
-    const artifactDigest = installation.artifactDigest ?? null;
+  async registerInstallation(
+    input: InstallationRegistrationInput,
+  ): Promise<InstallationRegistrationRecord> {
+    const environment = requireChangeText(
+      "installation environment",
+      input.environment,
+    );
+    const actor = requireChangeText("installation actor", input.actor);
+    const reason = requireChangeText("installation change reason", input.reason);
+    const artifactDigest = normalizeArtifactDigest(input.artifactDigest);
 
     let result;
     try {
       result = await this.#client.query<InstallationRow>(
-        `INSERT INTO platform_installations
-           (id, application_id, environment, artifact_digest, created_at)
-         VALUES ($1, $2, $3, $4, now())
-         ON CONFLICT (id) DO UPDATE
-           SET environment = EXCLUDED.environment,
-               artifact_digest = COALESCE(EXCLUDED.artifact_digest, platform_installations.artifact_digest)
-           WHERE platform_installations.application_id = EXCLUDED.application_id
-             AND ($5::text IS NULL OR platform_installations.environment = $5)
-             AND ($6::text IS NULL OR platform_installations.artifact_digest = $6)
-         RETURNING id, application_id, environment, artifact_digest, created_at`,
+        `WITH inserted AS (
+           INSERT INTO platform_installations
+             (id, application_id, environment, artifact_digest, created_at)
+           VALUES ($1, $2, $3, $4, now())
+           ON CONFLICT (id) DO NOTHING
+           RETURNING id, application_id, environment, artifact_digest, created_at
+         ), audited AS (
+           INSERT INTO platform_installation_changes
+             (installation_id, application_id, change_kind, actor, reason,
+              deployment_reference, previous_environment, new_environment,
+              previous_artifact_digest, new_artifact_digest)
+           SELECT id, application_id, 'created', $5, $6, $7,
+                  NULL, environment, NULL, artifact_digest
+             FROM inserted
+         )
+         SELECT * FROM inserted`,
         [
-          installation.id,
-          installation.applicationId,
+          input.id,
+          input.applicationId,
           environment,
           artifactDigest,
-          installation.expectedEnvironment ?? null,
-          installation.expectedArtifactDigest ?? null,
+          actor,
+          reason,
+          input.deploymentReference ?? null,
         ],
       );
     } catch (error) {
       if ((error as { code?: string }).code === "23503") {
         throw new InstallationApplicationMissingError(
-          String(installation.id),
-          String(installation.applicationId),
+          String(input.id),
+          String(input.applicationId),
         );
       }
       throw error;
@@ -385,37 +481,115 @@ export class PostgresApplicationRegistryStore {
       return parseInstallationRow(row);
     }
 
-    const conflicting = await this.#loadInstallation(installation.id);
-    if (!conflicting) {
+    const existing = await this.loadInstallation(input.id);
+    if (!existing) {
       throw new Error(
-        `Installation ${installation.id} disappeared while being registered`,
+        `Installation ${input.id} disappeared while being registered`,
       );
     }
-    if (conflicting.applicationId !== installation.applicationId) {
+    if (existing.applicationId !== input.applicationId) {
       throw new InstallationMismatchError(
-        `Installation ${installation.id} is bound to application '${conflicting.applicationId}', but boot requested '${installation.applicationId}'`,
+        `Installation ${input.id} is bound to application '${existing.applicationId}', but registration requested '${input.applicationId}'`,
       );
     }
     if (
-      installation.expectedEnvironment !== undefined &&
-      conflicting.environment !== installation.expectedEnvironment
+      existing.environment !== environment ||
+      existing.artifactDigest !== artifactDigest
     ) {
-      throw new InstallationMismatchError(
-        `Installation ${installation.id} is in environment '${conflicting.environment}', expected '${installation.expectedEnvironment}'`,
-      );
+      throw new InstallationUpdateRequiredError(String(input.id));
     }
-    if (
-      installation.expectedArtifactDigest !== undefined &&
-      conflicting.artifactDigest !== installation.expectedArtifactDigest
-    ) {
-      throw new InstallationMismatchError(
-        `Installation ${installation.id} is pinned to artifact '${conflicting.artifactDigest ?? "none"}', expected '${installation.expectedArtifactDigest}'`,
-      );
-    }
-    return conflicting;
+    return existing;
   }
 
-  async #loadInstallation(
+  /**
+   * Changes an existing installation under a strict compare-and-swap guard.
+   *
+   * The update and its audit row are one statement. A missing row, a different
+   * application or any divergence from the expected previous environment or
+   * artifact changes nothing and raises {@link InstallationMismatchError}.
+   */
+  async updateInstallation(
+    input: InstallationUpdateInput,
+  ): Promise<InstallationRegistrationRecord> {
+    const environment = requireChangeText(
+      "installation environment",
+      input.environment,
+    );
+    const actor = requireChangeText("installation actor", input.actor);
+    const reason = requireChangeText("installation change reason", input.reason);
+    const artifactDigest = normalizeArtifactDigest(input.artifactDigest);
+    const expectedEnvironment = requireChangeText(
+      "expected previous environment",
+      input.expectedEnvironment,
+    );
+    if (input.expectedArtifactDigest === undefined) {
+      throw new InstallationChangeInputError(
+        "expected previous artifact digest is required for an installation update (use null when none is pinned)",
+      );
+    }
+    const expectedArtifactDigest = normalizeArtifactDigest(
+      input.expectedArtifactDigest,
+    );
+
+    const result = await this.#client.query<InstallationRow>(
+      `WITH previous AS (
+         SELECT id, environment, artifact_digest
+           FROM platform_installations
+          WHERE id = $1 AND application_id = $2
+       ), updated AS (
+         UPDATE platform_installations
+            SET environment = $3, artifact_digest = $4
+          WHERE id = $1 AND application_id = $2
+            AND environment = $5
+            AND artifact_digest IS NOT DISTINCT FROM $6
+          RETURNING id, application_id, environment, artifact_digest, created_at
+       ), audited AS (
+         INSERT INTO platform_installation_changes
+           (installation_id, application_id, change_kind, actor, reason,
+            deployment_reference, previous_environment, new_environment,
+            previous_artifact_digest, new_artifact_digest)
+         SELECT updated.id, updated.application_id, 'updated', $7, $8, $9,
+                previous.environment, updated.environment,
+                previous.artifact_digest, updated.artifact_digest
+           FROM updated
+           JOIN previous ON previous.id = updated.id
+       )
+       SELECT * FROM updated`,
+      [
+        input.id,
+        input.applicationId,
+        environment,
+        artifactDigest,
+        expectedEnvironment,
+        expectedArtifactDigest,
+        actor,
+        reason,
+        input.deploymentReference ?? null,
+      ],
+    );
+
+    const row = result.rows[0];
+    if (row) {
+      return parseInstallationRow(row);
+    }
+
+    const conflicting = await this.loadInstallation(input.id);
+    if (!conflicting) {
+      throw new InstallationMismatchError(
+        `Installation ${input.id} is not registered`,
+      );
+    }
+    if (conflicting.applicationId !== input.applicationId) {
+      throw new InstallationMismatchError(
+        `Installation ${input.id} is bound to application '${conflicting.applicationId}', not '${input.applicationId}'`,
+      );
+    }
+    throw new InstallationMismatchError(
+      `Installation ${input.id} is in environment '${conflicting.environment}' with artifact '${conflicting.artifactDigest ?? "none"}', expected '${expectedEnvironment}' with artifact '${expectedArtifactDigest ?? "none"}'`,
+    );
+  }
+
+  async loadInstallation(
     installationId: InstallationId,
   ): Promise<InstallationRegistrationRecord | null> {
     const row = (
@@ -427,6 +601,24 @@ export class PostgresApplicationRegistryStore {
       )
     ).rows[0];
     return row ? parseInstallationRow(row) : null;
+  }
+
+  async listInstallationChanges(
+    installationId: InstallationId,
+  ): Promise<readonly InstallationChangeRecord[]> {
+    const rows = (
+      await this.#client.query<InstallationChangeRow>(
+        `SELECT id, installation_id, application_id, change_kind, actor,
+                reason, deployment_reference, previous_environment,
+                new_environment, previous_artifact_digest, new_artifact_digest,
+                recorded_at
+           FROM platform_installation_changes
+          WHERE installation_id = $1
+          ORDER BY recorded_at, id`,
+        [installationId],
+      )
+    ).rows;
+    return Object.freeze(rows.map(parseInstallationChangeRow));
   }
 
   /**
@@ -549,6 +741,31 @@ function parseInstallationRow(
     artifactDigest: row.artifact_digest,
     createdAt: row.created_at,
   };
+}
+
+function parseInstallationChangeRow(
+  row: InstallationChangeRow,
+): InstallationChangeRecord {
+  if (row.change_kind !== "created" && row.change_kind !== "updated") {
+    throw new ApplicationRegistrationIntegrityError(
+      row.application_id,
+      `unknown installation change kind '${row.change_kind}'`,
+    );
+  }
+  return Object.freeze({
+    id: row.id,
+    installationId: asInstallationId(row.installation_id),
+    applicationId: asApplicationId(row.application_id),
+    changeKind: row.change_kind,
+    actor: row.actor,
+    reason: row.reason,
+    deploymentReference: row.deployment_reference,
+    previousEnvironment: row.previous_environment,
+    newEnvironment: row.new_environment,
+    previousArtifactDigest: row.previous_artifact_digest,
+    newArtifactDigest: row.new_artifact_digest,
+    recordedAt: row.recorded_at,
+  });
 }
 
 function parseRegistryChangeRow(

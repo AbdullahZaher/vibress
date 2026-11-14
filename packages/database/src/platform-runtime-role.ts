@@ -1,4 +1,10 @@
 import type { ClientBase } from "pg";
+import {
+  assertValidRuntimePrivilegeContract,
+  type PlatformRuntimePrivilegeContract,
+  type RuntimeRelationGrant,
+  type RuntimeSequenceGrant,
+} from "./platform-runtime-privilege-contract";
 
 export interface PlatformRuntimeRoleConfig {
   roleName: string;
@@ -27,20 +33,20 @@ export function readPlatformRuntimeRoleConfig(
 /**
  * Creates the least-privilege role that serves platform tenant-owned resources.
  *
- * The role is a non-owner with NOBYPASSRLS. It intentionally has:
- * - DML on `platform_crm_customers` only;
- * - no schema CREATE/ALTER/DROP;
- * - no TRUNCATE or REFERENCES (neither is governed by RLS);
- * - no function EXECUTE grants to the platform tables/infrastructure.
+ * The role is a non-owner with NOBYPASSRLS. Its entire authority comes from the
+ * supplied runtime privilege contract: today's reference profile receives DML on
+ * `platform_crm_customers` only. Historical grants on every other non-system
+ * relation, sequence and function are revoked first, so a previously broader
+ * role cannot keep authority that the contract does not describe.
  *
- * `platform_applications`, `platform_installations`, `platform_tenants` and
- * `platform_application_registrations` are operator-owned registry tables and
- * are not reachable by this role. `platform_memberships` is the principal
- * directory, read before a verified scope exists, so it is denied as well.
+ * The contract never permits schema CREATE, TRUNCATE, REFERENCES, TRIGGER,
+ * sequence ownership or owner-defined function execution. Operator registry and
+ * membership tables are not part of any runtime profile.
  */
 export async function provisionPlatformRuntimeRole(
   client: ClientBase,
   { roleName, password }: PlatformRuntimeRoleConfig,
+  contract: PlatformRuntimePrivilegeContract,
 ): Promise<void> {
   if (typeof roleName !== "string" || !ROLE_NAME_PATTERN.test(roleName)) {
     throw new Error("Invalid platform runtime role name");
@@ -48,6 +54,7 @@ export async function provisionPlatformRuntimeRole(
   if (!password) {
     throw new Error("Platform runtime role password must not be empty");
   }
+  assertValidRuntimePrivilegeContract(contract);
 
   const current = await client.query<{ current_user: string }>(
     "SELECT current_user",
@@ -89,47 +96,125 @@ export async function provisionPlatformRuntimeRole(
   const database = client.escapeIdentifier(databaseName);
 
   await client.query(`GRANT CONNECT ON DATABASE ${database} TO ${role}`);
-  await client.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
-  // Runtime must never create objects, even in its own schema.
-  await client.query(`REVOKE CREATE ON SCHEMA public FROM ${role}`);
+  await client.query(`REVOKE CREATE ON DATABASE ${database} FROM ${role}`);
 
-  await client.query(
-    `REVOKE ALL PRIVILEGES ON TABLE public.platform_crm_customers FROM ${role}`,
-  );
-  await client.query(
-    `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.platform_crm_customers TO ${role}`,
-  );
-  // RLS does not cover TRUNCATE/REFERENCES/TRIGGER; deny them explicitly.
-  await client.query(
-    `REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.platform_crm_customers FROM ${role}`,
-  );
+  const schemas = (
+    await client.query<{ name: string }>(
+      `SELECT nspname AS name
+         FROM pg_namespace
+        WHERE nspname NOT IN ('pg_catalog', 'information_schema')
+          AND nspname NOT LIKE 'pg_toast%'
+        ORDER BY nspname`,
+    )
+  ).rows;
+  const allowedSchemas = new Set(contract.schemas);
 
-  await client.query(
-    `REVOKE ALL PRIVILEGES ON TABLE public.platform_applications FROM ${role}`,
-  );
-  await client.query(
-    `REVOKE ALL PRIVILEGES ON TABLE public.platform_installations FROM ${role}`,
-  );
-  await client.query(
-    `REVOKE ALL PRIVILEGES ON TABLE public.platform_tenants FROM ${role}`,
-  );
-  for (const table of [
-    "platform_application_registrations",
-    "platform_application_registry_changes",
-    "platform_memberships",
-  ]) {
-    const exists = await client.query<{ present: boolean }>(
-      "SELECT to_regclass($1) IS NOT NULL AS present",
-      [`public.${table}`],
-    );
-    if (!exists.rows[0]?.present) continue;
+  // Revoke everything first: a role provisioned under an older, broader policy
+  // must not retain authority that the current contract does not describe.
+  for (const schemaRow of schemas) {
+    const schema = client.escapeIdentifier(schemaRow.name);
     await client.query(
-      `REVOKE ALL PRIVILEGES ON TABLE public.${table} FROM ${role}`,
+      `REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA ${schema} FROM ${role}`,
+    );
+    await client.query(
+      `REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA ${schema} FROM ${role}`,
+    );
+    await client.query(
+      `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA ${schema} FROM ${role}`,
+    );
+    await client.query(`REVOKE ALL PRIVILEGES ON SCHEMA ${schema} FROM ${role}`);
+    if (allowedSchemas.has(schemaRow.name)) {
+      await client.query(`GRANT USAGE ON SCHEMA ${schema} TO ${role}`);
+    }
+  }
+
+  for (const grant of contract.relations) {
+    await assertContractRelation(client, grant);
+    await client.query(
+      `GRANT ${grant.privileges.join(", ")} ON TABLE ${client.escapeIdentifier(grant.schema)}.${client.escapeIdentifier(grant.relation)} TO ${role}`,
     );
   }
-  await client.query(
-    `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM ${role}`,
-  );
+  for (const grant of contract.sequences) {
+    await assertContractSequence(client, grant);
+    await client.query(
+      `GRANT ${grant.privileges.join(", ")} ON SEQUENCE ${client.escapeIdentifier(grant.schema)}.${client.escapeIdentifier(grant.sequence)} TO ${role}`,
+    );
+  }
+  for (const grant of contract.functions) {
+    const signatures = (
+      await client.query<{ signature: string }>(
+        `SELECT DISTINCT p.oid::regprocedure::text AS signature
+           FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = $1
+            AND p.proname = $2
+            AND p.prokind IN ('f', 'p')`,
+        [grant.schema, grant.name],
+      )
+    ).rows.map((row) => row.signature);
+    if (signatures.length !== 1) {
+      throw new Error(
+        `Runtime privilege contract references function '${grant.schema}.${grant.name}' but found ${signatures.length} definitions`,
+      );
+    }
+    await client.query(
+      `GRANT EXECUTE ON FUNCTION ${signatures[0]} TO ${role}`,
+    );
+  }
+}
+
+const RELKIND_TO_CONTRACT: Readonly<Record<string, RuntimeRelationGrant["kind"]>> =
+  Object.freeze({
+    r: "table",
+    p: "table",
+    v: "view",
+    m: "materialized_view",
+    f: "foreign_table",
+  });
+
+async function assertContractRelation(
+  client: ClientBase,
+  grant: RuntimeRelationGrant,
+): Promise<void> {
+  const row = (
+    await client.query<{ kind: string }>(
+      `SELECT c.relkind::text AS kind
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2`,
+      [grant.schema, grant.relation],
+    )
+  ).rows[0];
+  if (!row) {
+    throw new Error(
+      `Runtime privilege contract references missing relation '${grant.schema}.${grant.relation}'`,
+    );
+  }
+  if (RELKIND_TO_CONTRACT[row.kind] !== grant.kind) {
+    throw new Error(
+      `Runtime privilege contract declares '${grant.schema}.${grant.relation}' as ${grant.kind}, but the database has relkind '${row.kind}'`,
+    );
+  }
+}
+
+async function assertContractSequence(
+  client: ClientBase,
+  grant: RuntimeSequenceGrant,
+): Promise<void> {
+  const row = (
+    await client.query<{ kind: string }>(
+      `SELECT c.relkind::text AS kind
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $1 AND c.relname = $2`,
+      [grant.schema, grant.sequence],
+    )
+  ).rows[0];
+  if (row?.kind !== "S") {
+    throw new Error(
+      `Runtime privilege contract references missing sequence '${grant.schema}.${grant.sequence}'`,
+    );
+  }
 }
 
 export interface RuntimeRoleAttributes {
@@ -162,7 +247,13 @@ export type PlatformRuntimeRoleViolationCode =
   | "security_definer_execute"
   | "membership_read_missing"
   | "membership_write_privilege"
-  | "unexpected_relation_privilege";
+  | "unexpected_relation_privilege"
+  | "unexpected_column_privilege"
+  | "unexpected_sequence_privilege"
+  | "unexpected_schema_privilege"
+  | "unexpected_function_execute"
+  | "privilege_contract_missing"
+  | "privilege_contract_invalid";
 
 export interface PlatformRuntimeRoleViolation {
   readonly code: PlatformRuntimeRoleViolationCode;
@@ -245,6 +336,13 @@ export interface PlatformRoleAssertionOptions {
    * and no mutation privilege or access to any other relation.
    */
   readonly profile?: PlatformRoleProfile;
+  /**
+   * Required for the `runtime` profile. Provisioning grants exactly this
+   * contract and boot rejects every effective privilege outside it. A missing
+   * or malformed contract fails closed rather than falling back to a fixed
+   * reference policy.
+   */
+  readonly privilegeContract?: PlatformRuntimePrivilegeContract;
 }
 
 /**
@@ -273,6 +371,13 @@ export interface PlatformRoleAssertionOptions {
  * The `deployment_verifier` profile applies them to the read-only boot
  * verifier, which must hold SELECT on `platform_installations` and
  * `platform_application_registrations` and no privilege on any other relation.
+ *
+ * The `runtime` profile additionally requires a
+ * {@link PlatformRuntimePrivilegeContract}. Every effective privilege on every
+ * non-system table, view, materialized view, foreign table, sequence and
+ * owner-defined function must be described by that contract. Privileges that
+ * arrive through PUBLIC or role inheritance are visible to the same check,
+ * because it asks PostgreSQL for effective privileges.
  */
 export async function assertSafePlatformRuntimeRole(
   client: { query: <TRow = unknown>(sql: string, params?: readonly unknown[]) => Promise<{ rows: TRow[] }> },
@@ -729,6 +834,32 @@ export async function assertSafePlatformRuntimeRole(
     );
   }
 
+  if (!isReader && !isVerifier) {
+    if (!options.privilegeContract) {
+      addViolation(
+        "privilege_contract_missing",
+        "the runtime profile requires an explicit PlatformRuntimePrivilegeContract; no implicit allowlist is used",
+      );
+    } else {
+      try {
+        assertValidRuntimePrivilegeContract(options.privilegeContract);
+        await inspectRuntimePrivilegeContract(
+          client,
+          roleRow,
+          addViolation,
+          options.privilegeContract,
+        );
+      } catch (error) {
+        addViolation(
+          "privilege_contract_invalid",
+          error instanceof Error
+            ? error.message
+            : "runtime privilege contract is invalid",
+        );
+      }
+    }
+  }
+
   if (violations.length > 0) {
     throw new UnsafePlatformRuntimeRoleError(
       violations.map((violation) => violation.detail).join("; "),
@@ -951,3 +1082,237 @@ async function inspectReadOnlyRelationAccess(
   }
 }
 
+const CONTRACT_TABLE_PRIVILEGES = [
+  "SELECT",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "TRUNCATE",
+  "REFERENCES",
+  "TRIGGER",
+] as const;
+
+const NON_SYSTEM_SCHEMA_PREDICATE = `n.nspname NOT IN ('pg_catalog', 'information_schema')
+        AND n.nspname NOT LIKE 'pg_toast%'`;
+
+/**
+ * Enforces the versioned runtime privilege contract against effective
+ * privileges. The queries ask PostgreSQL per identity, so direct grants,
+ * grants through PUBLIC, grants inherited from a role and grants made on a
+ * view that executes with its owner's rights are all visible.
+ *
+ * Trigger functions are excluded from the executable-function check: they
+ * cannot be called as ordinary functions. Their PUBLIC EXECUTE grants remain
+ * part of the separately tracked R26 remediation.
+ */
+async function inspectRuntimePrivilegeContract(
+  client: {
+    query: <TRow = unknown>(
+      sql: string,
+      params?: readonly unknown[],
+    ) => Promise<{ rows: TRow[] }>;
+  },
+  roleRow: RuntimeIdentityRow,
+  addViolation: AddViolation,
+  contract: PlatformRuntimePrivilegeContract,
+): Promise<void> {
+  const allowedRelations = new Map(
+    contract.relations.map((grant) => [
+      `${grant.schema}.${grant.relation}`,
+      grant,
+    ]),
+  );
+  const allowedSequences = new Map(
+    contract.sequences.map((grant) => [
+      `${grant.schema}.${grant.sequence}`,
+      grant,
+    ]),
+  );
+  const allowedFunctions = new Set(
+    contract.functions.map((grant) => `${grant.schema}.${grant.name}`),
+  );
+  const allowedSchemas = new Set(contract.schemas);
+
+  const relationPrivileges = (
+    await client.query<{
+      identity: string;
+      schemaName: string;
+      relationName: string;
+      kind: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              n.nspname AS "schemaName",
+              c.relname AS "relationName",
+              c.relkind::text AS kind,
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest($1::text[]) AS p(privilege)
+        WHERE ${NON_SYSTEM_SCHEMA_PREDICATE}
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND has_table_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname, c.relkind`,
+      [CONTRACT_TABLE_PRIVILEGES],
+    )
+  ).rows;
+  for (const row of relationPrivileges) {
+    const key = `${row.schemaName}.${row.relationName}`;
+    const grant = allowedRelations.get(key);
+    if (!grant) {
+      addViolation(
+        "unexpected_relation_privilege",
+        `'${row.identity}' has ${row.privileges.join(", ")} on relation '${key}', which the runtime privilege contract does not describe`,
+      );
+      continue;
+    }
+    if (RELKIND_TO_CONTRACT[row.kind] !== grant.kind) {
+      addViolation(
+        "unexpected_relation_privilege",
+        `relation '${key}' is a ${RELKIND_TO_CONTRACT[row.kind] ?? row.kind}, but the runtime privilege contract declares ${grant.kind}`,
+      );
+      continue;
+    }
+    const extra = row.privileges.filter(
+      (privilege) =>
+        !grant.privileges.includes(
+          privilege as (typeof grant.privileges)[number],
+        ),
+    );
+    if (extra.length > 0) {
+      addViolation(
+        "unexpected_relation_privilege",
+        `'${row.identity}' has ${extra.join(", ")} on relation '${key}' beyond the runtime privilege contract`,
+      );
+    }
+  }
+
+  const columnPrivileges = (
+    await client.query<{
+      identity: string;
+      schemaName: string;
+      relationName: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              n.nspname AS "schemaName",
+              c.relname AS "relationName",
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']::text[]) AS p(privilege)
+        WHERE ${NON_SYSTEM_SCHEMA_PREDICATE}
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND has_any_column_privilege(i.identity, c.oid, p.privilege)
+          AND NOT has_table_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname`,
+    )
+  ).rows;
+  for (const row of columnPrivileges) {
+    addViolation(
+      "unexpected_column_privilege",
+      `'${row.identity}' has column-level ${row.privileges.join(", ")} on relation '${row.schemaName}.${row.relationName}'; the runtime privilege contract does not support column grants`,
+    );
+  }
+
+  const sequencePrivileges = (
+    await client.query<{
+      identity: string;
+      schemaName: string;
+      relationName: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              n.nspname AS "schemaName",
+              c.relname AS "relationName",
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest(ARRAY['USAGE', 'SELECT', 'UPDATE']::text[]) AS p(privilege)
+        WHERE ${NON_SYSTEM_SCHEMA_PREDICATE}
+          AND c.relkind = 'S'
+          AND has_sequence_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname`,
+    )
+  ).rows;
+  for (const row of sequencePrivileges) {
+    const key = `${row.schemaName}.${row.relationName}`;
+    const grant = allowedSequences.get(key);
+    if (!grant) {
+      addViolation(
+        "unexpected_sequence_privilege",
+        `'${row.identity}' has ${row.privileges.join(", ")} on sequence '${key}', which the runtime privilege contract does not describe`,
+      );
+      continue;
+    }
+    const extra = row.privileges.filter(
+      (privilege) =>
+        !grant.privileges.includes(
+          privilege as (typeof grant.privileges)[number],
+        ),
+    );
+    if (extra.length > 0) {
+      addViolation(
+        "unexpected_sequence_privilege",
+        `'${row.identity}' has ${extra.join(", ")} on sequence '${key}' beyond the runtime privilege contract`,
+      );
+    }
+  }
+
+  const schemaUsages = (
+    await client.query<{ identity: string; schemaName: string }>(
+      `SELECT i.identity::text AS identity, n.nspname AS "schemaName"
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_namespace n
+        WHERE ${NON_SYSTEM_SCHEMA_PREDICATE}
+          AND has_schema_privilege(i.identity, n.oid, 'USAGE')`,
+    )
+  ).rows;
+  for (const usage of schemaUsages) {
+    if (!allowedSchemas.has(usage.schemaName)) {
+      addViolation(
+        "unexpected_schema_privilege",
+        `'${usage.identity}' has USAGE on schema '${usage.schemaName}', which the runtime privilege contract does not describe`,
+      );
+    }
+  }
+
+  const executableFunctions = (
+    await client.query<{
+      identity: string;
+      schemaName: string;
+      functionName: string;
+    }>(
+      `SELECT i.identity::text AS identity,
+              n.nspname AS "schemaName",
+              p.proname AS "functionName"
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE ${NON_SYSTEM_SCHEMA_PREDICATE}
+          AND p.prokind IN ('f', 'p')
+          AND p.prorettype <> 'trigger'::regtype
+          AND NOT EXISTS (
+            SELECT 1
+              FROM pg_depend d
+             WHERE d.classid = 'pg_proc'::regclass
+               AND d.objid = p.oid
+               AND d.deptype = 'e'
+          )
+          AND has_function_privilege(i.identity, p.oid, 'EXECUTE')
+        GROUP BY i.identity, n.nspname, p.proname`,
+    )
+  ).rows;
+  for (const executable of executableFunctions) {
+    const key = `${executable.schemaName}.${executable.functionName}`;
+    if (!allowedFunctions.has(key)) {
+      addViolation(
+        "unexpected_function_execute",
+        `'${executable.identity}' can execute '${key}', which the runtime privilege contract does not describe`,
+      );
+    }
+  }
+}

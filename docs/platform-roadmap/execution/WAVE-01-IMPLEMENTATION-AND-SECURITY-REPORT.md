@@ -18,7 +18,7 @@
 | Item | Status |
 | --- | --- |
 | M00 baseline | **PARTIAL** — baseline, ownership map, ADR blockers, docs-link validator and CI wiring recorded, legacy docs links cleaned and a digest-pinned CMS/Studio fixture pack added; named owners remain |
-| M01 kernel | **IMPLEMENTED, UNREVIEWED** — public contracts, in-memory registry, persisted registry with manifest digests, atomic installation binding (conflicting binds mutate nothing; compare-and-swap guards for authorized updates), a **separate operator provisioning executable** (owner credentials) and a **request-serving process that refuses `DATABASE_URL` and holds no provisioning authority**, pinned read-only boot verification through a dedicated SELECT-only verifier role, hardened runtime-role boot verification (both identities, **all SET-able role memberships**, DDL authority, ownership, registry ACLs, SECURITY DEFINER EXECUTE), kernel route execution adapter, and a bootable standalone reference app using a dedicated SELECT-only membership reader; independent review and sign-off remain |
+| M01 kernel | **IMPLEMENTED, UNREVIEWED** — public contracts, in-memory registry, persisted registry with manifest digests, separate installation create/update with mandatory compare-and-swap and an append-only installation audit, a **versioned runtime privilege contract enforced on effective database authority**, **atomic provisioning on one connection and one transaction**, a **separate operator provisioning executable** (owner credentials) and a **request-serving process that refuses `DATABASE_URL` and holds no provisioning authority**, pinned read-only boot verification through a dedicated SELECT-only verifier role, hardened runtime-role boot verification (both identities, **all SET-able role memberships**, DDL authority, ownership, registry ACLs, SECURITY DEFINER EXECUTE, contract-scoped relations/columns/sequences/schemas/functions), kernel route execution adapter, and a bootable standalone reference app using a dedicated SELECT-only membership reader; independent review and sign-off remain |
 | M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work with scope-mutation and role-switch detection, async-escape rejection, connection destruction on unknown session state and a pre-commit role identity probe, additive RLS migration, least-privilege role, real PostgreSQL deny matrix, non-superuser owner proof and two-database installation boundary exist; R26 revocation approval, deployment owner change, views policy, Redis/S3 boundary, production IdP and independent review remain |
 | Independent security review | **NOT PERFORMED** |
 | Gate | **NO-GO** |
@@ -35,11 +35,13 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 - Studio reference: `eda4c52e` (read-only; nothing in the Studio repo was modified).
 - No existing tag, migration, audit record or issue status was rewritten.
 - Migration `0054` is additive and appended to the journal; `0053` and earlier are untouched.
-- Migration `0056` (persisted registry and membership directory) is additive and
+- Migration `0056` (persisted registry and membership directory), `0057`
+  (registry change audit) and `0058` (installation change audit) are additive and
   appended; `0055` stays reserved for the unapplied R26 proposal file.
-- Current reviewed baseline: `b62ffdf5` (PR #166 head). The P0-A/P0-B/P1 increment
-  in this report is an uncommitted working tree on top of that commit. It adds **no
-  migration**; the new deployment verifier is a provisioned role, not a schema change.
+- Current reviewed baseline: `b62ffdf5` (PR #166 head). The current increment
+  (P0-A/P0-B/P1 plus the strict runtime privilege contract, atomic provisioning
+  and installation audit) is an uncommitted working tree on top of that commit.
+  It adds migration `0058` (append-only installation audit) and no grant change.
 
 ## 3. Implemented code (real, compiled, tested)
 
@@ -50,15 +52,16 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 | Definition helpers | `packages/platform-kernel/src/application.ts` | `defineAction`/`defineRoute`/`defineModule`/`defineApplication`, route and action validation, kernel range check |
 | Registry | `packages/platform-kernel/src/registry.ts` | In-memory application registry, duplicate protection, action/route resolution with path params |
 | Application manifest | `packages/platform-kernel/src/manifest.ts` | Serializable manifest (no handler code), canonical SHA-256 digest, strict parser for manifests read back from storage |
-| Persisted registry | `packages/database/src/platform-application-registry.ts` | Idempotent sync, drift refusal without an explicit update, race-safe CAS update, integrity check on load, two-way deployed/persisted verification, atomic installation binding (guarded upsert; a conflicting bind changes no row, concurrent conflicts have one winner, unregistered applications create nothing), and optional `expectedEnvironment`/`expectedArtifactDigest` compare-and-swap guards for authorized installation updates |
-| Operator provisioning | `apps/platform-reference/src/registration.ts`, `scripts/provision-platform-reference.ts` | Owner-only executable: requires owner `DATABASE_URL`, `PLATFORM_ENVIRONMENT`, `PLATFORM_ARTIFACT_DIGEST` and an actor; syncs the manifest, verifies definitions, binds the installation with optional CAS guards, and proves the persisted identity. Never imported by the serving sources (architecture test) |
+| Persisted registry | `packages/database/src/platform-application-registry.ts` | Idempotent sync, drift refusal without an explicit update, race-safe CAS update, integrity check on load, two-way deployed/persisted verification, and separate installation create/update operations: `registerInstallation` is one `INSERT ... ON CONFLICT DO NOTHING` with its `created` audit CTE; `updateInstallation` requires actor, non-empty reason, expected environment and expected artifact digest (mandatory CAS, `IS NOT DISTINCT FROM`) and writes its `updated` audit row in the same statement. Identical rows write nothing; conflicting application, missing/stale expectation or missing expected state writes nothing |
+| Operator provisioning | `apps/platform-reference/src/registration.ts`, `scripts/provision-platform-reference.ts` | Owner-only executable: requires owner `DATABASE_URL`, environment, artifact digest, actor and change reason; runs `sync`, `verifyDefinitions`, the create/update installation mutation and the read-only identity proof in **one transaction on one checked-out connection**; an update additionally requires both expected-state values. Never imported by the serving sources (architecture test) |
+| Runtime privilege contract | `packages/database/src/platform-runtime-privilege-contract.ts` | Versioned, extensible allowlist (schema USAGE, relation grants by kind, sequence grants, function grants) with structural validation and unique keys; the reference CRM profile is one instance, not a hardcoded policy. Runtime boot and provisioning verify **effective** authority (direct, inherited, `PUBLIC`) for relations, columns, sequences, schemas and executable functions outside the contract |
 | Deployment verifier | `packages/database/src/platform-deployment-verifier.ts`, `packages/database/src/platform-deployment-verification.ts` | Dedicated `NOBYPASSRLS` login with table-level `SELECT` on `platform_installations` and `platform_application_registrations` only; `verifyDeploymentIdentity` re-reads the installation and registration and fails closed on installation id, application id, environment, artifact digest or manifest digest mismatch. Read-only: it never creates, repairs or updates |
 | Serving entrypoint | `apps/platform-reference/src/main.ts`, `start.ts`, `server.ts` | Refuses to run with `DATABASE_URL`; requires three **distinct** runtime/reader/verifier URLs plus environment and artifact digest; deletes the connection strings from the environment after constructing pools; asserts all three roles; closes the verifier pool after the boot proof; builds Fastify with no owner pool or registry authority |
 | Membership directory | `packages/database/src/platform-application-registry.ts`, `platform-membership-reader.ts` | `PlatformMembershipResolver` reads the operator-owned membership directory before a verified scope exists; the runtime role is denied the table and serving reads use a dedicated reader role with table-level SELECT on `platform_memberships` only |
 | Membership reader role | `packages/database/src/platform-membership-reader.ts` | Provisioner and boot assertion for the non-owner reader: SELECT on `platform_memberships`, no privilege on registry, tenant, CMS or other relations, sequences or SECURITY DEFINER functions; unsafe readers refuse boot |
 | Route executor | `packages/tenancy/src/executor.ts` | Route resolution, route-kind authentication, membership + policy authorization, verified scope, tenant unit of work, input parsing, stable error mapping |
 | Registry migration | `packages/database/migrations/0056_platform_application_registry.sql` | Additive `platform_application_registrations` (digest check) and `platform_memberships` tables |
-| Registry change audit | `packages/database/migrations/0057_platform_registry_change_audit.sql`, `packages/database/src/platform-application-registry.ts` | Append-only `platform_application_registry_changes` (FK `ON DELETE RESTRICT`, shape/format checks); `sync` writes the `created`/`updated` row in the same SQL statement as the mutation, requires an actor for mutations, and writes nothing for `unchanged` or refused drift; `listChanges` reads the history |
+| Registry change audit | `packages/database/migrations/0057_platform_registry_change_audit.sql`, `packages/database/migrations/0058_platform_installation_audit.sql`, `packages/database/src/platform-application-registry.ts` | Append-only `platform_application_registry_changes` and `platform_installation_changes` (both FKs `ON DELETE RESTRICT`, shape/format checks). Registry `created`/`updated` rows are written in the same SQL statement as the mutation. Installation mutations likewise write `created`/`updated` rows atomically with actor, reason, optional deployment reference, and previous/new environment and artifact digest. `unchanged` and refused mutations write nothing; `listChanges`/`listInstallationChanges` read the history |
 | Operator scripts | `scripts/provision-platform-roles.ts`, `scripts/provision-platform-reference.ts`, `scripts/start-platform-reference-e2e.ts` | Idempotent provisioning of three distinct non-owner roles (runtime, reader, verifier) with post-provision attribute verification; separate installation/manifest provisioning executable; reference-app E2E lifecycle over real PostgreSQL with per-run roles and cleanup |
 | Reference app | `apps/platform-reference` | Bootable Fastify app: runtime, reader and verifier safety assertions at boot, pinned read-only deployment verification, bearer-token principal directory, real CRM read/write actions over the tenant unit of work, operator provisioning and bootstrap scripts; the request server never receives owner credentials |
 | Verified scope | `packages/tenancy/src/scope.ts` | `verifyTenantScope`, `resolveVerifiedScope`, `assertVerifiedScope`; scope can only be produced by verification |
@@ -66,12 +69,22 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 | Unit of work | `packages/tenancy/src/unit-of-work.ts` | Single-connection transaction, transaction-local context set and read back, nested scope-switch rejection, rollback-only marking, error/identity probe before `COMMIT`, rejection of role switching and post-settlement queries, connection destruction when `ROLLBACK`/`COMMIT` fails, the transaction is aborted with work in flight, or the role changed |
 | Schema | `packages/database/src/schema/platform-kernel.ts` | Application/installation/tenant tables and a tenant-owned CRM customers table with a composite `(tenant_id, application_id)` FK |
 | Migration | `packages/database/migrations/0054_platform_tenant_rls.sql` | Additive tables and indexes, `ENABLE` + `FORCE` RLS, fail-closed `USING` and `WITH CHECK` policy |
-| Runtime role | `packages/database/src/platform-runtime-role.ts` | Non-owner `NOBYPASSRLS` role: DML only on tenant table, no CREATE, no TRUNCATE/REFERENCES/TRIGGER, no registry access, role-level EXECUTE revoked; boot assertion fails closed on unsafe `current_user`/`session_user`, **any SET-able role membership** (privileged, ordinary, indirect or `NOINHERIT`), schema/database CREATE, ownership, registry table/column ACLs and executable SECURITY DEFINER functions |
+| Runtime role | `packages/database/src/platform-runtime-role.ts` | Non-owner `NOBYPASSRLS` role: DML only on tenant table, no CREATE, no TRUNCATE/REFERENCES/TRIGGER, no registry access, role-level EXECUTE revoked; boot assertion fails closed on unsafe `current_user`/`session_user`, **any SET-able role membership** (privileged, ordinary, indirect or `NOINHERIT`), schema/database CREATE, ownership, registry table/column ACLs and executable SECURITY DEFINER functions. It then enforces the versioned privilege contract on **effective** privileges: unexpected relation/view/foreign-table, column, sequence, schema or function authority fails, and provisioning revokes pre-existing grants outside the contract before re-granting |
 | Boundary test | `tests/architecture/platform-boundaries.test.ts` | Kernel must not import outside itself; tenancy may import only the kernel plus Node/relative; relative imports that escape a package root are violations; a missing or empty source directory fails instead of passing silently; request-serving sources must not import the provisioning module or reference owner pools/registry stores |
-| Deployment verification test | `tests/integration/platform-reference-app.test.ts` | Matching installation boots; environment/artifact/application-id/manifest drift fails before serving without mutation; the verifier is SELECT-only on the two registry tables and denied every other relation/write; the reader and verifier reject unexpected (including indirect/NOINHERIT) memberships; CAS-guarded provisioning leaves rows unchanged on mismatch |
+| Deployment verification test | `tests/integration/platform-reference-app.test.ts` | Matching installation boots; environment/artifact/application-id/manifest drift fails before serving without mutation; the verifier is SELECT-only on the two registry tables and denied every other relation/write; the reader and verifier reject unexpected (including indirect/NOINHERIT) memberships; CAS-guarded provisioning leaves rows unchanged on mismatch; ten contract negatives reject unrelated table SELECT/UPDATE, column grants, `PUBLIC` grants, sequences, views (including an owner-context view), inherited role privileges, function `EXECUTE` and schema `USAGE`; re-provisioning revokes a pre-existing unrelated grant |
+| Installation audit test | `tests/integration/platform-reference-app.test.ts` | Installation creation and update write attributed audit rows; registration/update are idempotent; missing actor/reason/expected state and wrong-application updates are refused without mutation; concurrent CAS updates have one winner and two audit rows |
 | Installation isolation test | `tests/integration/platform-installation-isolation.test.ts` | Two databases, each with its own non-superuser owner and runtime role, `CONNECT` revoked from `PUBLIC`, independent tenant rows |
 | Platform test config | `vitest.platform.config.ts` | Isolated node-environment run without the CMS global setup |
 | Reference app integration test | `tests/integration/platform-reference-app.test.ts` | Real PostgreSQL, runtime/reader/verifier roles, and RLS through HTTP: registry drift/integrity, conflicting installation binds that mutate nothing, one-winner conflict races, CAS-guarded operator updates, auth deny matrix, tenant-isolated create/list, registry/membership/installation tables unreachable by the runtime role, ten real-role privilege/membership refusals, owner-free serving start with byte-identical registry/installation rows, pinned environment/artifact/application/manifest drift failures before serving, verifier SELECT-only and denied writes/other relations, reader denied writes and every other relation, unsafe-reader boot refusal, and child-process refusal of `DATABASE_URL` / non-distinct credentials |
+
+### Atomic provisioning tests
+
+`provisionReferenceApplication` is exercised on one real PostgreSQL database:
+
+- **Critical CAS rollback:** a manifest update and an installation update are issued together with a stale expected artifact digest. The command fails with `InstallationMismatchError`, and a before/after snapshot proves the registration digest/version, installation environment/artifact, installation audit count and registry audit count are all unchanged.
+- **Audit failure rollback:** a temporary trigger forces the installation audit insert to fail. The command fails, no installation row or audit row exists, and the registration/registry audit snapshot is unchanged.
+- **Idempotent retry:** provisioning the same deployment twice writes no second audit row and leaves the snapshot identical.
+- **Concurrency:** two updates started from the same observed state produce exactly one CAS winner and two audit rows (create + one update); the loser's transaction writes nothing.
 
 No placeholder handlers, no skipped tests, no lowered thresholds. `packages/platform-kernel`
 and `packages/tenancy` are workspace packages at `1.2.0` and are **private**, matching
@@ -84,6 +97,9 @@ the existing SDK reality rather than implying a published release.
 | P0-A — privileged DB/provisioning authority inside the long-lived server | P0 | Separate operator provisioning executable; server runs without `DATABASE_URL`; fail closed on bad installation/application/environment/artifact; privileged authority absent, not merely disconnected | `main.ts` refuses `DATABASE_URL`; `start.ts` has no owner pool and only runtime/reader/verifier; `registration.ts` + `provision-platform-reference.ts` are the operator-only path; architecture test rejects provisioning imports in serving sources; child-process tests exit 1 on `DATABASE_URL` and non-distinct URLs; read-only start leaves rows byte-identical | **Fixed in code; unreviewed** |
 | P0-B — SET ROLE / inherited privilege closure | P0 | Reject full membership closure (direct, indirect, `NOINHERIT`), ownership, ACLs, column grants, SECURITY DEFINER, CREATE/TRUNCATE/REFERENCES; explicit no-unexpected-membership allowlist; reject before serving | `assertSafePlatformRuntimeRole`/reader/verifier inspect `current_user` and `session_user` with `pg_has_role(..., 'MEMBER')`; any non-self role yields `unexpected_role_membership`; real-PostgreSQL tests cover NOINHERIT, indirect and reader NOINHERIT memberships plus ownership/ACL/DEFINER negatives | **Fixed in code; unreviewed** |
 | P1 — separate installation provisioning from runtime verification | P1 | Operator provisioning (CAS, audit); read-only verification that never creates/repairs; matching boot, conflicting app, env drift, artifact mismatch, concurrency, unauthorized update, read-only verification, audit accuracy | `provisionReferenceApplication` requires owner/actor/digest and applies CAS; `verifyDeploymentIdentity` is SELECT-only through the verifier; tests cover matching boot, environment/artifact/application/manifest drift without mutation, one-winner concurrent bind, CAS refusal leaving the row unchanged, unauthorized manifest update refusal, and registry audit attribution | **Fixed in code; unreviewed** |
+| P1 — no unexpected effective database authority (runtime allowlist) | P1 | A versioned, extensible runtime privilege contract; boot and provisioning fail on any table, view, materialized view, foreign table, column, sequence, schema or function authority outside it, including authority inherited from `PUBLIC` or roles; no hardcoded CRM policy | `platform-runtime-privilege-contract.ts` (validated, versioned) plus effective-privilege inspection in `assertSafePlatformRuntimeRole`/`provisionPlatformRuntimeRole`; ten real-PostgreSQL negatives (unrelated CMS table SELECT and UPDATE, column grant, `PUBLIC` grant, sequence, view, owner-context view, inherited role privilege, function `EXECUTE`, schema `USAGE`) and a provisioning test that revokes a pre-existing unrelated grant | **Fixed in code; unreviewed** |
+| P1 — provisioning transaction escape | P1 | One transaction on one connection; a failure after the manifest write must roll back manifest, installation and both audit streams; no independent pool queries inside the transaction | `provisionReferenceApplication` checks out one client, uses `BEGIN`/`COMMIT`/`ROLLBACK` and passes it to the store, `verifyDeploymentIdentity` and the installation mutations. Four integration tests: stale-CAS rollback (all snapshots identical), forced audit-insert failure (no rows), idempotent retry, and one-winner concurrent updates | **Fixed in code; unreviewed** |
+| P1 — implicit installation updates / missing audit | P1 | Separate create and update; updates must prove the previous environment and artifact digest, name the operator, give a reason, and write an immutable transactional audit row | `registerInstallation`/`updateInstallation` split; mandatory CAS (`IS NOT DISTINCT FROM`), `InstallationChangeInputError` for missing/blank expected state or reason, `InstallationUpdateRequiredError` without the update flag; migration `0058` `platform_installation_changes` written in the same statement as the mutation | **Fixed in code; unreviewed** |
 | R26 — `PUBLIC` function EXECUTE | P0 | Apply an approved revocation and verify | Read-only inventory + [approval request](R26-REVOCATION-APPROVAL-REQUEST.md); proposal 0055 remains unapplied | **Blocked: owner approval required** |
 | F-012 — CMS tables not RLS-protected | P1 | Owner decision | [Decision record](F-012-CMS-RLS-DECISION.md) proposes option B; nothing changed | **Open: owner decision required** |
 | Production-shaped Redis/S3/queue/secrets isolation | P1 | Cross-installation denial proof | No production-shaped infrastructure authorized | **Blocked: infrastructure authorization** |
@@ -207,12 +223,12 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **P0-A/P0-B/P1 tree**) | **11 files / 154 tests passed**, 4.54 s, exit 0 |
-| `… tests/integration/platform-reference-app.test.ts` (**P0-A/P0-B/P1 tree**) | **49 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **final remediation tree**) | **11 files / 174 tests passed**, 7.02 s, exit 0 |
+| `… tests/integration/platform-reference-app.test.ts` (**final remediation tree**) | **69 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources; 11 contract/provisioning negatives (unexpected relation/column/sequence/schema/function authority, pre-existing grant revocation, missing/invalid contract) and 4 atomic-provisioning tests (manifest-update + forced CAS failure rolls back manifest, installation and both audits; forced audit failure rolls back; idempotent retry; single concurrent winner) |
 | `… tests/architecture/platform-boundaries.test.ts` | **6 tests passed**, including the serving-process provisioning-authority boundary |
-| `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` + `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` (**P0-A/P0-B/P1 tree**) | both passed |
-| `pnpm exec eslint` on all changed sources, scripts and tests (**P0-A/P0-B/P1 tree**) | passed, no output |
-| `DATABASE_URL=… pnpm test:e2e:platform-reference` (**P0-A/P0-B/P1 tree**) | **8/8 passed**, 2.3 s |
+| `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` + `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` (**final remediation tree**) | both passed |
+| `pnpm exec eslint` on all changed sources, scripts and tests (**final remediation tree**) | passed, no output |
+| `DATABASE_URL=… pnpm test:e2e:platform-reference` (**final remediation tree**) | **8/8 passed**, 2.3 s |
 | `… tests/integration/platform-installation-isolation.test.ts` | **8 tests passed**: cross-database `CONNECT` denied `42501`, same tenant id independent |
 | `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **7 files / 70 tests passed** |
 | `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 24 tests passed** against PostgreSQL 16 (22 deny-matrix tests + 2 W1-T04 escape/role-switch tests) |
@@ -226,8 +242,8 @@ non-superuser owner and re-verify there. Open blocker.
 | CMS compatibility subset (`runtime-multi-publication-isolation`, `content-database`, `transactions`, `studio-persistence-roundtrip`, `outbox`) | **5 files / 79 tests passed** in 14.45 s, including migration + seed global setup |
 | `pnpm exec vitest run tests/unit/cms-studio-fixture-pack.test.ts` | **4 tests passed** — pinned digest, drift refusal, deterministic encoding |
 | `pnpm exec vitest run tests/integration/platform-cms-studio-fixture-pack.test.ts` | **3 tests passed** over HTTP + PostgreSQL — per-publication pinned documents, non-disclosing cross-publication read/write, Studio round-trip and pinned restore |
-| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`) | **362 files / 2585 tests passed**, exit 0, 219.75 s |
-| **Full integration suite** (`vitest.config.ts tests/integration`, also via `pnpm test:integration`) | **46 files / 558 tests passed**, exit 0, 86.50 s wall (57.42 s of test execution), run sequentially |
+| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`) | **362 files / 2585 tests passed**, exit 0, 317.19 s |
+| **Full integration suite** (`vitest.config.ts tests/integration`, also via `pnpm test:integration`) | **46 files / 578 tests passed**, exit 0, 127.31 s wall, run sequentially |
 | `pnpm docs:validate-links` (docs validator, program docs) | **89 relative links across 12 files resolve** |
 | `node scripts/validate-docs-links.mjs docs` (full tree) | **661 relative links across 300 files resolve** |
 | `DATABASE_URL=… pnpm test:e2e:platform-reference` (Playwright, API request context) | **8 tests passed**: public health, missing/unknown principal 401, missing tenant 400, member-on-staff 403, invalid input 400, tenant-scoped create/list, cross-tenant 403, second tenant empty through RLS; harness created and dropped its roles and rows |
@@ -236,12 +252,12 @@ non-superuser owner and re-verify there. Open blocker.
 | `node scripts/audit-function-privileges.mjs <url>` (read-only session) | 33 public functions, 0 `SECURITY DEFINER`, 33 `PUBLIC` EXECUTE, 0 default-ACL entries |
 | `tsc` (workspace options) + ESLint on the W1-T09 scripts, Playwright config and spec | passed, no output |
 
-Rows labelled **P0-A/P0-B/P1 tree** were measured on the uncommitted working tree on
-top of `b62ffdf5`. The full unit suite (362 files / 2585 tests), full integration
-suite (46 files / 558 tests), workspace typecheck (74/74) and Playwright reference
-suite (8/8) were then re-run on this exact tree, all exit 0. No CI run exists for this
-content yet, so these are local results; old CI runs are not evidence for new source
-changes.
+Rows labelled **final remediation tree** were measured on the uncommitted working tree
+on top of `6b31320d`. That tree was re-run end to end: platform suite (11 files /
+174 tests), full integration suite (46 files / 578 tests), full unit suite (362 files /
+2585 tests), workspace typecheck (74/74), reference-app Playwright suite (8/8), ESLint
+and both docs link validators, all exit 0. No CI run exists for this content yet, so
+these are local results; old CI runs are not evidence for new source changes.
 
 The full unit run exposed one test-suite hygiene defect: the Playwright
 `tests/e2e-platform/reference-app.spec.ts` was discovered by Vitest without its
@@ -533,10 +549,57 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
   digest must match. Nothing is created or repaired; tests compare rows before/after
   a successful boot and before/after each refused boot and find them identical.
   Provisioning remains an atomic CAS upsert with an actor and audit row.
-- Evidence: platform suite **11 files / 154 tests** (49 reference-app tests),
+- Evidence: platform suite **11 files / 174 tests** (69 reference-app tests),
   Playwright **8/8**, full unit **362 files / 2585 tests**, full integration
-  **46 files / 558 tests**, workspace typecheck **74/74**, ESLint clean on all changed
+  **46 files / 578 tests**, workspace typecheck **74/74**, ESLint clean on all changed
   files. No CI run exists for this content yet; these are local results.
+
+**Wave 1 final remediation (2026-11-15, uncommitted, on top of `6b31320d`,
+current tree):**
+
+- **Strict runtime privilege contract:** `PlatformRuntimePrivilegeContract` (version
+  1) describes the only authority a runtime profile may hold — non-system schemas
+  with `USAGE`, relations by kind (table, view, materialized view, foreign table)
+  with explicit privileges, sequences, and owner-defined function `EXECUTE`. It is a
+  generic mechanism; the reference CRM profile is one contract instance, not a
+  hardcoded policy. Provisioning grants exactly the contract after revoking all
+  prior authority in every non-system schema; boot inspects **effective** authority
+  (including PUBLIC and inherited grants, `has_table_privilege`/`has_any_column_privilege`/
+  `has_sequence_privilege`/`has_schema_privilege`/`has_function_privilege` for both
+  `current_user` and `session_user`) and fails closed with
+  `unexpected_relation_privilege`, `unexpected_column_privilege`,
+  `unexpected_sequence_privilege`, `unexpected_schema_privilege` or
+  `unexpected_function_execute`. A missing or invalid contract fails boot with
+  `privilege_contract_missing`/`privilege_contract_invalid`. Real-PostgreSQL tests
+  cover a pre-existing unexpected grant being revoked, views/foreign tables, column
+  grants, matviews, sequences, schema `CREATE`, function `EXECUTE`, PUBLIC defaults
+  and role membership.
+- **Atomic provisioning:** `provisionReferenceApplication` checks out one client,
+  opens one transaction, and performs manifest sync, definition verification,
+  installation read, registration or CAS update, and the read-only deployment proof
+  on that same client; any failure rolls back everything. The critical acceptance
+  test updates a manifest, then intentionally fails installation CAS verification
+  and verifies that the previously committed manifest, installation, registry-audit
+  and installation-audit rows are byte-identical to the pre-run snapshot. Further
+  tests force an audit-insert failure, retry idempotently, and prove a single winner
+  under concurrency.
+- **Mandatory CAS and installation audit:** `registerInstallation` (create) and
+  `updateInstallation` (change) are separate operations. An update requires the
+  actor, a reason, the new environment, and **both** the expected previous
+  environment and expected previous artifact digest, and is applied in one statement
+  guarded by them; missing, mismatched, wrong-application and unauthorized changes
+  are rejected with no mutation. Migration `0058` adds
+  `platform_installation_changes` (RESTRICT foreign keys, shape/actor/reason checks)
+  and each create or update writes its audit row in the same statement as the
+  mutation, so an accepted change is always attributable and the recorded
+  before/after values are the database's own.
+- Evidence: platform suite **11 files / 174 tests** (69 reference-app tests: 11 new
+  contract/provisioning negatives and 4 atomic-provisioning tests), Playwright
+  **8/8** with verified teardown, full unit **362 files / 2585 tests**, full
+  integration **46 files / 578 tests** (sequential, shared dev database), workspace
+  typecheck **74/74**, ESLint clean on all changed files, docs links **89/12** and
+  **661/300**. Artifact provenance remains unclaimed: the digest is still
+  caller-supplied and no mechanism proves executable code matches it.
 
 ## 10. Open blockers and risk register deltas
 
@@ -572,12 +635,12 @@ Scores are for this increment only and are not a certification. A critical defec
 
 | Dimension | Score | Basis |
 | --- | --- | --- |
-| Privilege separation (P0-A/P0-B) | 8.5/10 | Owner authority removed from serving sources and refused at runtime; full SET-able membership closure proven with real PostgreSQL. Deducted because provisioning and serving are not yet exercised as separate deployment units on a real orchestrator. |
-| Verification correctness (P1) | 8.5/10 | Pinned, read-only checks cover application, installation, environment, artifact and manifest; CAS guards and concurrency are tested. Deducted because the artifact digest is still operator-supplied, not derived from CI provenance. |
-| Test evidence | 8.5/10 | 154 platform tests (49 reference-app), full unit 2585, full integration 558, 8 Playwright tests, 74/74 typecheck and lint all green locally. Deducted because no CI run exists on this exact uncommitted content and no local test can prove the production topology. |
-| Compatibility and maintainability | 8.5/10 | Additive schema/exports; full CMS/Studio unit and integration suites green; the change adds one verifier role and one operator CLI. Deducted because browser-level CMS acceptance suites and CI remain outstanding. |
-| Operational readiness | 6.5/10 | Runbook updated for two executables and three roles. Missing: production-shaped Redis/S3/queue/secrets isolation, production IdP, non-superuser deployment owner, external secret-manager wiring. |
-| Auditability and governance | 8.5/10 | Registry audit rows, runbook, finding table and explicit non-claims. Deducted because ADRs and A1–A8/G0 remain unsigned and no independent reviewer has examined this increment. |
+| Privilege separation (P0-A/P0-B, contract) | 8.5/10 | Owner authority removed from serving sources and refused at runtime; full SET-able membership closure proven with real PostgreSQL; the versioned runtime privilege contract now constrains relations by kind, columns, sequences, schemas and function `EXECUTE` against effective authority including PUBLIC and inherited grants, and provisioning revokes prior authority before granting. Deducted because provisioning and serving are not yet exercised as separate deployment units on a real orchestrator, and R26 `PUBLIC` function grants remain unrevoked. |
+| Verification correctness (P1, atomicity) | 8.5/10 | Pinned, read-only checks cover application, installation, environment, artifact and manifest; installation changes require mandatory CAS on both expected values; the entire provisioning flow runs on one checked-out connection in one transaction, and a forced CAS failure after a manifest update leaves manifest, installation and both audit streams unchanged. Deducted because the artifact digest is still operator-supplied, not derived from CI provenance. |
+| Test evidence | 8.5/10 | 174 platform tests (69 reference-app), full unit 2585, full integration 578, 8 Playwright tests, 74/74 typecheck and lint all green locally. Deducted because no CI run exists on this exact uncommitted content and no local test can prove the production topology. |
+| Compatibility and maintainability | 8.5/10 | Additive schema/exports; full CMS/Studio unit and integration suites green; the change adds one verifier role, one operator CLI, one migration and one generic contract type. Deducted because browser-level CMS acceptance suites and CI remain outstanding. |
+| Operational readiness | 6.5/10 | Runbook updated for two executables, three roles, mandatory CAS variables and both audit queries. Missing: production-shaped Redis/S3/queue/secrets isolation, production IdP, non-superuser deployment owner, external secret-manager wiring. |
+| Auditability and governance | 8.5/10 | Registry audit (0057) and installation audit (0058) rows are written in the same statement as each mutation, with actor, reason and observed before/after values; runbook, finding table and explicit non-claims. Deducted because ADRs and A1–A8/G0 remain unsigned and no independent reviewer has examined this increment. |
 | **Average** | **8.3/10** | **Target 9.0 not met; critical external blockers remain.** |
 
 ## 12. Certification and sign-off status
@@ -604,7 +667,10 @@ Passing evidence on this branch: kernel/tenancy unit and boundary tests, a real
 PostgreSQL tenant-isolation matrix through a least-privilege role, `FORCE RLS`
 against a non-superuser owner, a two-database installation boundary, a persisted
 registry with drift/integrity refusal, side-effect-free installation binding, hardened
-runtime-role privilege assertions, a bootable reference app serving tenant-isolated
+runtime-role privilege assertions tightened to a versioned effective-authority
+contract, single-transaction provisioning with a proven rollback on forced CAS
+failure, mandatory-CAS installation updates with transactional audit `0058`, a
+bootable reference app serving tenant-isolated
 reads and writes through the kernel executor, **a request-serving process with no
 owner/provisioning authority at all** (it refuses `DATABASE_URL`), a SELECT-only
 membership reader, a SELECT-only deployment verifier with pinned read-only boot

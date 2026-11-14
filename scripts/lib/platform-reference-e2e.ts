@@ -69,6 +69,10 @@ export async function cleanupPlatformReferenceE2e(
       state.applicationId,
     ]);
     await client.query(
+      "DELETE FROM platform_installation_changes WHERE application_id = $1",
+      [state.applicationId],
+    );
+    await client.query(
       "DELETE FROM platform_installations WHERE application_id = $1",
       [state.applicationId],
     );

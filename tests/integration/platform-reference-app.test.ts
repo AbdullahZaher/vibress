@@ -16,12 +16,16 @@ import {
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,
   InstallationApplicationMissingError,
+  InstallationChangeInputError,
   InstallationMismatchError,
+  InstallationUpdateRequiredError,
   PostgresApplicationRegistryStore,
   RegistryActorRequiredError,
   UnexpectedApplicationRegistrationError,
   type InstallationRegistrationRecord,
+  type InstallationUpdateInput,
 } from "../../packages/database/src/platform-application-registry";
+import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "../../packages/database/src/platform-runtime-privilege-contract";
 import {
   DeploymentVerificationError,
   verifyDeploymentIdentity,
@@ -97,6 +101,7 @@ async function applyPlatformMigrations(client: Client): Promise<void> {
     "0054_platform_tenant_rls.sql",
     "0056_platform_application_registry.sql",
     "0057_platform_registry_change_audit.sql",
+    "0058_platform_installation_audit.sql",
   ]) {
     const migrationPath = path.resolve(
       process.cwd(),
@@ -117,12 +122,29 @@ async function seedTenant(id: string, name: string): Promise<void> {
 
 async function deleteApplications(ids: readonly string[]): Promise<void> {
   await owner.query(
+    "DELETE FROM platform_installation_changes WHERE application_id = ANY($1)",
+    [ids],
+  );
+  await owner.query(
+    "DELETE FROM platform_installations WHERE application_id = ANY($1)",
+    [ids],
+  );
+  await owner.query(
     "DELETE FROM platform_application_registry_changes WHERE application_id = ANY($1)",
     [ids],
   );
   await owner.query("DELETE FROM platform_applications WHERE id = ANY($1)", [
     ids,
   ]);
+}
+
+async function deleteInstallation(id: InstallationRegistrationRecord["id"]): Promise<void> {
+  await owner
+    .query("DELETE FROM platform_installation_changes WHERE installation_id = $1", [id])
+    .catch(() => undefined);
+  await owner
+    .query("DELETE FROM platform_installations WHERE id = $1", [id])
+    .catch(() => undefined);
 }
 
 async function seedMembership(input: {
@@ -218,7 +240,11 @@ async function expectUnsafeRuntimeRole(
   expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
 ): Promise<void> {
   await expectUnsafeRole(
-    () => assertSafePlatformRuntimeRole(client),
+    () =>
+      assertSafePlatformRuntimeRole(client, {
+        profile: "runtime",
+        privilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+      }),
     expectedCodes,
   );
 }
@@ -258,6 +284,31 @@ async function expectUnsafeRole(
   );
 }
 
+async function expectUnsafeRuntimeContractGrant(
+  setup: (login: string) => Promise<void>,
+  cleanup: (login: string) => Promise<void>,
+  expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
+): Promise<void> {
+  const login = ephemeralRoleName("contract");
+  const password = `${login}_pw`;
+  try {
+    await createEphemeralLogin(login, password);
+    await setup(login);
+    const client = new Client({
+      connectionString: roleConnectionString(login, password),
+    });
+    await client.connect();
+    try {
+      await expectUnsafeRuntimeRole(client, expectedCodes);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  } finally {
+    await cleanup(login).catch(() => undefined);
+    await dropEphemeralRoles([login]);
+  }
+}
+
 beforeAll(async () => {
   owner = new Client({ connectionString: DATABASE_URL });
   await owner.connect();
@@ -265,10 +316,14 @@ beforeAll(async () => {
     await owner.query<{ name: string }>("SELECT current_database() AS name")
   ).rows[0]!.name;
   await applyPlatformMigrations(owner);
-  await provisionPlatformRuntimeRole(owner, {
-    roleName,
-    password: rolePassword,
-  });
+  await provisionPlatformRuntimeRole(
+    owner,
+    {
+      roleName,
+      password: rolePassword,
+    },
+    REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+  );
   await provisionPlatformMembershipReaderRole(owner, {
     roleName: readerRoleName,
     password: readerRolePassword,
@@ -335,6 +390,7 @@ beforeAll(async () => {
     environment: "integration-test",
     artifactDigest,
     actor: "integration-test",
+    changeReason: "integration-test boot",
   });
 
   server = await startReferenceApplication({
@@ -346,6 +402,7 @@ beforeAll(async () => {
     runtimePool,
     environment: "integration-test",
     artifactDigest,
+    runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
     host: "127.0.0.1",
     port: 0,
     policyVersion: "reference-crm-integration",
@@ -430,22 +487,93 @@ describe("persisted application registry", () => {
     await store.verifyDefinitions([application]);
   });
 
-  it("persists and verifies installation binding and detects application mismatch", async () => {
+  it("creates an installation, audits it and detects application mismatch", async () => {
     const instId = asInstallationId("test-installation-crm");
-    const record = await store.syncInstallation({
-      id: instId,
-      applicationId: application.id,
-      environment: "test",
-    });
-    expect(record.id).toBe(instId);
-    expect(record.applicationId).toBe(application.id);
+    try {
+      const record = await store.registerInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: "digest-original",
+        actor: "integration-test",
+        reason: "create installation",
+        deploymentReference: "release-1",
+      });
+      expect(record.id).toBe(instId);
+      expect(record.applicationId).toBe(application.id);
 
-    const verified = await store.verifyInstallation(instId, application.id);
-    expect(verified.id).toBe(instId);
+      const verified = await store.verifyInstallation(instId, application.id);
+      expect(verified.id).toBe(instId);
 
-    await expect(
-      store.verifyInstallation(instId, asInstallationId("other-app") as any),
-    ).rejects.toThrow(InstallationMismatchError);
+      await expect(
+        store.verifyInstallation(instId, asInstallationId("other-app") as any),
+      ).rejects.toThrow(InstallationMismatchError);
+
+      const changes = await store.listInstallationChanges(instId);
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({
+        changeKind: "created",
+        actor: "integration-test",
+        reason: "create installation",
+        deploymentReference: "release-1",
+        previousEnvironment: null,
+        newEnvironment: "test",
+        previousArtifactDigest: null,
+        newArtifactDigest: "digest-original",
+      });
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+
+  it("is idempotent for an identical registration and writes one audit row", async () => {
+    const instId = asInstallationId("test-installation-idempotent");
+    try {
+      const input = {
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: "digest-original",
+        actor: "integration-test",
+        reason: "create installation",
+      } as const;
+      await store.registerInstallation(input);
+      await store.registerInstallation(input);
+      expect(await store.listInstallationChanges(instId)).toHaveLength(1);
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+
+  it("requires an update instead of rewriting existing installation metadata", async () => {
+    const instId = asInstallationId("test-installation-update-required");
+    try {
+      await store.registerInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: "digest-original",
+        actor: "integration-test",
+        reason: "create installation",
+      });
+
+      await expect(
+        store.registerInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "production",
+          artifactDigest: "digest-new",
+          actor: "integration-test",
+          reason: "silent rewrite",
+        }),
+      ).rejects.toThrow(InstallationUpdateRequiredError);
+
+      const persisted = await store.loadInstallation(instId);
+      expect(persisted?.environment).toBe("test");
+      expect(persisted?.artifactDigest).toBe("digest-original");
+    } finally {
+      await deleteInstallation(instId);
+    }
   });
 
   it("rejects a conflicting installation bind without mutating the persisted record", async () => {
@@ -453,29 +581,32 @@ describe("persisted application registry", () => {
     const other = createReferenceApplication({ id: otherApplicationId });
     await store.sync(other, { actor: "integration-test" });
     try {
-      await store.syncInstallation({
+      await store.registerInstallation({
         id: instId,
         applicationId: application.id,
         environment: "test",
         artifactDigest: "digest-original",
+        actor: "integration-test",
+        reason: "create installation",
       });
 
       await expect(
-        store.syncInstallation({
+        store.registerInstallation({
           id: instId,
           applicationId: other.id,
           environment: "production",
           artifactDigest: "digest-forged",
+          actor: "integration-test",
+          reason: "conflicting bind",
         }),
       ).rejects.toThrow(InstallationMismatchError);
 
       const persisted = await store.verifyInstallation(instId, application.id);
       expect(persisted.environment).toBe("test");
       expect(persisted.artifactDigest).toBe("digest-original");
+      expect(await store.listInstallationChanges(instId)).toHaveLength(1);
     } finally {
-      await owner
-        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
-        .catch(() => undefined);
+      await deleteInstallation(instId);
       await deleteApplications([otherApplicationId]).catch(() => undefined);
     }
   });
@@ -485,7 +616,14 @@ describe("persisted application registry", () => {
     const missing = asApplicationId("reference-crm-unregistered");
 
     await expect(
-      store.syncInstallation({ id: instId, applicationId: missing }),
+      store.registerInstallation({
+        id: instId,
+        applicationId: missing,
+        environment: "test",
+        artifactDigest: null,
+        actor: "integration-test",
+        reason: "orphan bind",
+      }),
     ).rejects.toThrow(InstallationApplicationMissingError);
 
     const installations = await owner.query(
@@ -500,23 +638,27 @@ describe("persisted application registry", () => {
     expect(applications.rowCount).toBe(0);
   });
 
-  it("lets exactly one of two concurrent conflicting binds win without overwriting it", async () => {
+  it("lets exactly one of two concurrent conflicting creates win without overwriting it", async () => {
     const instId = asInstallationId("test-installation-race");
     const other = createReferenceApplication({ id: otherApplicationId });
     await store.sync(other, { actor: "integration-test" });
     try {
       const results = await Promise.allSettled([
-        store.syncInstallation({
+        store.registerInstallation({
           id: instId,
           applicationId: application.id,
           environment: "env-a",
           artifactDigest: "digest-a",
+          actor: "integration-test",
+          reason: "race a",
         }),
-        store.syncInstallation({
+        store.registerInstallation({
           id: instId,
           applicationId: other.id,
           environment: "env-b",
           artifactDigest: "digest-b",
+          actor: "integration-test",
+          reason: "race b",
         }),
       ]);
 
@@ -545,28 +687,31 @@ describe("persisted application registry", () => {
         wonByPrimary ? "digest-a" : "digest-b",
       );
     } finally {
-      await owner
-        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
-        .catch(() => undefined);
+      await deleteInstallation(instId);
       await deleteApplications([otherApplicationId]).catch(() => undefined);
     }
   });
 
-  it("applies compare-and-swap guards to operator installation updates", async () => {
+  it("applies mandatory compare-and-swap to installation updates and audits them", async () => {
     const instId = asInstallationId("test-installation-cas");
     try {
-      await store.syncInstallation({
+      await store.registerInstallation({
         id: instId,
         applicationId: application.id,
         environment: "staging",
         artifactDigest: "digest-a",
+        actor: "integration-test",
+        reason: "initial staging deploy",
       });
 
-      const updated = await store.syncInstallation({
+      const updated = await store.updateInstallation({
         id: instId,
         applicationId: application.id,
         environment: "production",
         artifactDigest: "digest-b",
+        actor: "release-operator",
+        reason: "promote to production",
+        deploymentReference: "release-42",
         expectedEnvironment: "staging",
         expectedArtifactDigest: "digest-a",
       });
@@ -574,11 +719,13 @@ describe("persisted application registry", () => {
       expect(updated.artifactDigest).toBe("digest-b");
 
       await expect(
-        store.syncInstallation({
+        store.updateInstallation({
           id: instId,
           applicationId: application.id,
           environment: "staging",
           artifactDigest: "digest-c",
+          actor: "release-operator",
+          reason: "stale rollback",
           expectedEnvironment: "staging",
           expectedArtifactDigest: "digest-a",
         }),
@@ -595,10 +742,354 @@ describe("persisted application registry", () => {
         environment: "production",
         artifact_digest: "digest-b",
       });
+
+      const changes = await store.listInstallationChanges(instId);
+      expect(
+        changes.map((change) => [change.changeKind, change.actor]),
+      ).toEqual([
+        ["created", "integration-test"],
+        ["updated", "release-operator"],
+      ]);
+      expect(changes[1]).toMatchObject({
+        previousEnvironment: "staging",
+        newEnvironment: "production",
+        previousArtifactDigest: "digest-a",
+        newArtifactDigest: "digest-b",
+        reason: "promote to production",
+        deploymentReference: "release-42",
+      });
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+
+  it("rejects installation changes without actor, reason or expected state", async () => {
+    const instId = asInstallationId("test-installation-validation");
+    try {
+      await expect(
+        store.registerInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "test",
+          artifactDigest: null,
+          actor: "   ",
+          reason: "create installation",
+        }),
+      ).rejects.toThrow(InstallationChangeInputError);
+      await expect(
+        store.registerInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "test",
+          artifactDigest: null,
+          actor: "integration-test",
+          reason: "",
+        }),
+      ).rejects.toThrow(InstallationChangeInputError);
+
+      await store.registerInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: null,
+        actor: "integration-test",
+        reason: "create installation",
+      });
+
+      const missingExpectedDigest: Omit<
+        InstallationUpdateInput,
+        "expectedArtifactDigest"
+      > = {
+        id: instId,
+        applicationId: application.id,
+        environment: "production",
+        artifactDigest: "digest-new",
+        actor: "integration-test",
+        reason: "missing expected artifact",
+        expectedEnvironment: "test",
+      };
+      await expect(
+        store.updateInstallation(
+          missingExpectedDigest as InstallationUpdateInput,
+        ),
+      ).rejects.toThrow(InstallationChangeInputError);
+      await expect(
+        store.updateInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "production",
+          artifactDigest: "digest-new",
+          actor: "integration-test",
+          reason: "empty expected environment",
+          expectedEnvironment: " ",
+          expectedArtifactDigest: null,
+        }),
+      ).rejects.toThrow(InstallationChangeInputError);
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+
+  it("rejects an installation update against another application", async () => {
+    const instId = asInstallationId("test-installation-owner");
+    try {
+      await store.registerInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: "digest-a",
+        actor: "integration-test",
+        reason: "create installation",
+      });
+      await expect(
+        store.updateInstallation({
+          id: instId,
+          applicationId: otherApplicationId,
+          environment: "production",
+          artifactDigest: "digest-b",
+          actor: "integration-test",
+          reason: "wrong owner",
+          expectedEnvironment: "test",
+          expectedArtifactDigest: "digest-a",
+        }),
+      ).rejects.toThrow(InstallationMismatchError);
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+
+  it("lets exactly one of two concurrent CAS updates win", async () => {
+    const instId = asInstallationId("test-installation-update-race");
+    try {
+      await store.registerInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "env-a",
+        artifactDigest: "digest-a",
+        actor: "integration-test",
+        reason: "create installation",
+      });
+
+      const results = await Promise.allSettled([
+        store.updateInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "env-b",
+          artifactDigest: "digest-b",
+          actor: "release-a",
+          reason: "race update a",
+          expectedEnvironment: "env-a",
+          expectedArtifactDigest: "digest-a",
+        }),
+        store.updateInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "env-c",
+          artifactDigest: "digest-c",
+          actor: "release-b",
+          reason: "race update b",
+          expectedEnvironment: "env-a",
+          expectedArtifactDigest: "digest-a",
+        }),
+      ]);
+
+      const fulfilled = results.filter(
+        (
+          result,
+        ): result is PromiseFulfilledResult<InstallationRegistrationRecord> =>
+          result.status === "fulfilled",
+      );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.reason).toBeInstanceOf(InstallationMismatchError);
+
+      const winner = fulfilled[0]!.value;
+      const persisted = await store.loadInstallation(instId);
+      expect(persisted?.environment).toBe(winner.environment);
+      expect(persisted?.artifactDigest).toBe(winner.artifactDigest);
+      expect(await store.listInstallationChanges(instId)).toHaveLength(2);
+    } finally {
+      await deleteInstallation(instId);
+    }
+  });
+});
+
+describe("atomic provisioning transaction", () => {
+  const atomicInstallationId = asInstallationId("reference-atomic-install");
+  const initialDigest = "1".repeat(64);
+  const nextDigest = "2".repeat(64);
+
+  async function snapshot(): Promise<Record<string, unknown>> {
+    const result = await owner.query<Record<string, unknown>>(
+      `SELECT
+         (SELECT r.version || ':' || r.manifest_digest
+            FROM platform_application_registrations r
+           WHERE r.application_id = $1) AS registration,
+         (SELECT i.environment || ':' || coalesce(i.artifact_digest, '')
+            FROM platform_installations i
+           WHERE i.id = $2) AS installation,
+         (SELECT count(*)::text FROM platform_installation_changes
+           WHERE installation_id = $2) AS installation_changes,
+         (SELECT count(*)::text FROM platform_application_registry_changes
+           WHERE application_id = $1) AS registry_changes`,
+      [applicationId, atomicInstallationId],
+    );
+    return result.rows[0]!;
+  }
+
+  async function provision(
+    overrides: Partial<Parameters<typeof provisionReferenceApplication>[0]> = {},
+  ): Promise<void> {
+    await provisionReferenceApplication({
+      ownerPool,
+      application: createReferenceApplication({ id: applicationId }),
+      installationId: atomicInstallationId,
+      environment: "staging",
+      artifactDigest: initialDigest,
+      actor: "release-operator",
+      changeReason: "atomic provisioning test",
+      ...overrides,
+    });
+  }
+
+  it("rolls back manifest, installation and both audit streams when the installation CAS fails", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      expect(before).toMatchObject({ installation_changes: "1" });
+
+      await expect(
+        provision({
+          application: withVersion(
+            createReferenceApplication({ id: applicationId }),
+            "1.0.1",
+          ),
+          environment: "production",
+          artifactDigest: nextDigest,
+          allowRegistryUpdate: true,
+          allowInstallationUpdate: true,
+          expectedEnvironment: "staging",
+          expectedArtifactDigest: "3".repeat(64),
+        }),
+      ).rejects.toThrow(InstallationMismatchError);
+
+      expect(await snapshot()).toEqual(before);
+      const persisted = await store.loadInstallation(atomicInstallationId);
+      expect(persisted).toMatchObject({
+        environment: "staging",
+        artifactDigest: initialDigest,
+      });
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("rolls back the installation and manifest when the installation audit insert fails", async () => {
+    await deleteInstallation(atomicInstallationId);
+    const triggerFunction = ephemeralRoleName("auditfail");
+    const triggerName = ephemeralRoleName("auditfail_trg");
+    const fn = `public.${owner.escapeIdentifier(triggerFunction)}()`;
+    try {
+      const before = await snapshot();
+      await owner.query(
+        `CREATE FUNCTION ${fn} RETURNS trigger LANGUAGE plpgsql AS $$
+           BEGIN RAISE EXCEPTION 'forced installation audit failure'; END $$`,
+      );
+      await owner.query(
+        `CREATE TRIGGER ${owner.escapeIdentifier(triggerName)}
+           BEFORE INSERT ON platform_installation_changes
+           FOR EACH ROW EXECUTE FUNCTION ${fn}`,
+      );
+
+      await expect(provision()).rejects.toThrow(
+        /forced installation audit failure/,
+      );
+
+      expect(await snapshot()).toEqual(before);
+      const counts = await owner.query<Record<string, string>>(
+        `SELECT
+           (SELECT count(*)::text FROM platform_installations WHERE id = $1) AS installations,
+           (SELECT count(*)::text FROM platform_installation_changes WHERE installation_id = $1) AS installation_changes`,
+        [atomicInstallationId],
+      );
+      expect(counts.rows[0]).toEqual({
+        installations: "0",
+        installation_changes: "0",
+      });
     } finally {
       await owner
-        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
+        .query(
+          `DROP TRIGGER IF EXISTS ${owner.escapeIdentifier(triggerName)} ON platform_installation_changes`,
+        )
         .catch(() => undefined);
+      await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("is idempotent when the same deployment is provisioned twice", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      await provision();
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("serializes concurrent installations updates so only one CAS wins", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      const outcomes = await Promise.allSettled([
+        provision({
+          environment: "production",
+          artifactDigest: nextDigest,
+          allowInstallationUpdate: true,
+          expectedEnvironment: "staging",
+          expectedArtifactDigest: initialDigest,
+        }),
+        provision({
+          environment: "canary",
+          artifactDigest: "4".repeat(64),
+          allowInstallationUpdate: true,
+          expectedEnvironment: "staging",
+          expectedArtifactDigest: initialDigest,
+        }),
+      ]);
+
+      const fulfilled = outcomes.filter(
+        (outcome): outcome is PromiseFulfilledResult<void> =>
+          outcome.status === "fulfilled",
+      );
+      const rejected = outcomes.filter(
+        (outcome): outcome is PromiseRejectedResult =>
+          outcome.status === "rejected",
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.reason).toBeInstanceOf(InstallationMismatchError);
+
+      const persisted = await store.loadInstallation(atomicInstallationId);
+      expect(["production:2", "canary:4"]).toContain(
+        `${persisted?.environment}:${persisted?.artifactDigest?.slice(0, 1)}`,
+      );
+      expect(
+        await store.listInstallationChanges(atomicInstallationId),
+      ).toHaveLength(2);
+      const after = await snapshot();
+      expect(after.registry_changes).toBe(before.registry_changes);
+      expect(after.registration).toBe(before.registration);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
     }
   });
 });
@@ -693,7 +1184,10 @@ describe("registry change audit", () => {
 
 describe("runtime role verification", () => {
   it("proves the runtime role is least-privilege and owns no platform objects", async () => {
-    const roleAttrs = await assertSafePlatformRuntimeRole(runtimePool);
+    const roleAttrs = await assertSafePlatformRuntimeRole(runtimePool, {
+      profile: "runtime",
+      privilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+    });
     expect(roleAttrs.currentUser).toBe(roleName);
     expect(roleAttrs.sessionUser).toBe(roleName);
     expect(roleAttrs.isSuperuser).toBe(false);
@@ -710,9 +1204,12 @@ describe("runtime role verification", () => {
       )
     ).rows[0];
     if (ownerAttrs?.rolsuper) {
-      await expect(assertSafePlatformRuntimeRole(ownerPool)).rejects.toThrow(
-        UnsafePlatformRuntimeRoleError,
-      );
+      await expect(
+        assertSafePlatformRuntimeRole(ownerPool, {
+          profile: "runtime",
+          privilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+        }),
+      ).rejects.toThrow(UnsafePlatformRuntimeRoleError);
     }
   });
 
@@ -946,6 +1443,247 @@ describe("runtime role verification", () => {
         await dropEphemeralRoles([sessionLogin, setRoleName]);
       }
     });
+
+    it("rejects SELECT on an unrelated CMS table", async () => {
+      const table = ephemeralRoleName("cms_table");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(`CREATE TABLE ${relation} (id integer)`);
+          await owner.query(
+            `GRANT SELECT ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP TABLE IF EXISTS ${relation}`);
+        },
+        ["unexpected_relation_privilege"],
+      );
+    });
+
+    it("rejects UPDATE on an unrelated application table", async () => {
+      const table = ephemeralRoleName("app_table");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(`CREATE TABLE ${relation} (id integer)`);
+          await owner.query(
+            `GRANT UPDATE ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP TABLE IF EXISTS ${relation}`);
+        },
+        ["unexpected_relation_privilege"],
+      );
+    });
+
+    it("rejects column-level grants outside the contract", async () => {
+      const table = ephemeralRoleName("column_grant");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(
+            `CREATE TABLE ${relation} (id integer, secret text)`,
+          );
+          await owner.query(
+            `GRANT SELECT (secret) ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP TABLE IF EXISTS ${relation}`);
+        },
+        ["unexpected_column_privilege"],
+      );
+    });
+
+    it("rejects privileges inherited through PUBLIC", async () => {
+      const table = ephemeralRoleName("public_grant");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async () => {
+          await owner.query(`CREATE TABLE ${relation} (id integer)`);
+          await owner.query(`GRANT SELECT ON TABLE ${relation} TO PUBLIC`);
+        },
+        async () => {
+          await owner.query(`DROP TABLE IF EXISTS ${relation}`);
+        },
+        ["unexpected_relation_privilege"],
+      );
+    });
+
+    it("rejects USAGE on an unauthorized sequence", async () => {
+      const sequence = ephemeralRoleName("seq");
+      const relation = `public.${owner.escapeIdentifier(sequence)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(`CREATE SEQUENCE ${relation}`);
+          await owner.query(
+            `GRANT USAGE ON SEQUENCE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP SEQUENCE IF EXISTS ${relation}`);
+        },
+        ["unexpected_sequence_privilege"],
+      );
+    });
+
+    it("rejects SELECT on a view outside the contract", async () => {
+      const view = ephemeralRoleName("view");
+      const relation = `public.${owner.escapeIdentifier(view)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(
+            `CREATE VIEW ${relation} AS SELECT id FROM public.platform_crm_customers`,
+          );
+          await owner.query(
+            `GRANT SELECT ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP VIEW IF EXISTS ${relation}`);
+        },
+        ["unexpected_relation_privilege"],
+      );
+    });
+
+    it("rejects a view that executes with its owner's privileges", async () => {
+      const view = ephemeralRoleName("owner_view");
+      const relation = `public.${owner.escapeIdentifier(view)}`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(
+            `CREATE VIEW ${relation} AS
+               SELECT id, application_id, environment, artifact_digest
+               FROM public.platform_installations`,
+          );
+          await owner.query(
+            `GRANT SELECT ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP VIEW IF EXISTS ${relation}`);
+        },
+        ["unexpected_relation_privilege"],
+      );
+    });
+
+    it("rejects privileges inherited through role membership", async () => {
+      const grantor = ephemeralRoleName("grantor");
+      const table = ephemeralRoleName("inherited");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      await owner.query(
+        `CREATE ROLE ${owner.escapeIdentifier(grantor)} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION`,
+      );
+      try {
+        await expectUnsafeRuntimeContractGrant(
+          async (login) => {
+            await owner.query(`CREATE TABLE ${relation} (id integer)`);
+            await owner.query(
+              `GRANT SELECT ON TABLE ${relation} TO ${owner.escapeIdentifier(grantor)}`,
+            );
+            await owner.query(
+              `GRANT ${owner.escapeIdentifier(grantor)} TO ${owner.escapeIdentifier(login)}`,
+            );
+          },
+          async () => {
+            await owner.query(`DROP TABLE IF EXISTS ${relation}`);
+          },
+          ["unexpected_role_membership"],
+        );
+      } finally {
+        await dropEphemeralRoles([grantor]);
+      }
+    });
+
+    it("rejects EXECUTE on an unauthorized function", async () => {
+      const functionName = ephemeralRoleName("contractfn");
+      const fn = `public.${owner.escapeIdentifier(functionName)}()`;
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(
+            `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT 1'`,
+          );
+          await owner.query(
+            `GRANT EXECUTE ON FUNCTION ${fn} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(`DROP FUNCTION IF EXISTS ${fn}`);
+        },
+        ["unexpected_function_execute"],
+      );
+    });
+
+    it("rejects USAGE on a schema outside the contract", async () => {
+      const schema = ephemeralRoleName("schema");
+      await expectUnsafeRuntimeContractGrant(
+        async (login) => {
+          await owner.query(
+            `CREATE SCHEMA ${owner.escapeIdentifier(schema)}`,
+          );
+          await owner.query(
+            `GRANT USAGE ON SCHEMA ${owner.escapeIdentifier(schema)} TO ${owner.escapeIdentifier(login)}`,
+          );
+        },
+        async () => {
+          await owner.query(
+            `DROP SCHEMA IF EXISTS ${owner.escapeIdentifier(schema)}`,
+          );
+        },
+        ["unexpected_schema_privilege"],
+      );
+    });
+
+    it("revokes a pre-existing unrelated grant during provisioning", async () => {
+      const login = ephemeralRoleName("reprovision");
+      const password = `${login}_pw`;
+      const table = ephemeralRoleName("reprovision_table");
+      const relation = `public.${owner.escapeIdentifier(table)}`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(`CREATE TABLE ${relation} (id integer)`);
+        await owner.query(
+          `GRANT SELECT ON TABLE ${relation} TO ${owner.escapeIdentifier(login)}`,
+        );
+        const before = await owner.query<{ allowed: boolean }>(
+          "SELECT has_table_privilege($1, $2, 'SELECT') AS allowed",
+          [login, relation],
+        );
+        expect(before.rows[0]?.allowed).toBe(true);
+
+        await provisionPlatformRuntimeRole(
+          owner,
+          { roleName: login, password },
+          REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+        );
+
+        const after = await owner.query<{ allowed: boolean }>(
+          "SELECT has_table_privilege($1, $2, 'SELECT') AS allowed",
+          [login, relation],
+        );
+        expect(after.rows[0]?.allowed).toBe(false);
+
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await assertSafePlatformRuntimeRole(client, {
+            profile: "runtime",
+            privilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+          });
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await owner
+          .query(`DROP TABLE IF EXISTS ${relation}`)
+          .catch(() => undefined);
+        await dropEphemeralRoles([login]);
+      }
+    });
   });
 });
 
@@ -1145,6 +1883,7 @@ describe("serving process privilege split", () => {
         runtimePool: secondRuntimePool,
         environment: "integration-test",
         artifactDigest,
+        runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
         host: "127.0.0.1",
         port: 0,
         policyVersion: "reference-crm-readonly-boot",
@@ -1209,6 +1948,7 @@ describe("serving process privilege split", () => {
           runtimePool: badRuntimePool,
           environment: "integration-test",
           artifactDigest: "f".repeat(64),
+          runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
           host: "127.0.0.1",
           port: 0,
           policyVersion: "reference-crm-bad-artifact",
@@ -1448,6 +2188,7 @@ describe("serving process privilege split", () => {
           runtimePool,
           environment: "test",
           artifactDigest,
+          runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
           host: "127.0.0.1",
           port: 0,
           policyVersion: "reference-crm-unsafe-reader",

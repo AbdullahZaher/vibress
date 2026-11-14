@@ -4,6 +4,7 @@ import path from "node:path";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { provisionPlatformRuntimeRole } from "../../packages/database/src/platform-runtime-role";
+import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "../../packages/database/src/platform-runtime-privilege-contract";
 
 /**
  * Two-installation isolation proof for ADR-PLAT-001.
@@ -154,10 +155,14 @@ beforeAll(async () => {
       connectionString: adminUrl(installation.database),
     });
     await adminInDatabase.connect();
-    await provisionPlatformRuntimeRole(adminInDatabase, {
-      roleName: installation.runtimeRole,
-      password: installation.runtimePassword,
-    });
+    await provisionPlatformRuntimeRole(
+      adminInDatabase,
+      {
+        roleName: installation.runtimeRole,
+        password: installation.runtimePassword,
+      },
+      REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+    );
     // PUBLIC CONNECT would let any cluster role reach this database. Revoke it
     // so the installation boundary is credentials + database, not naming.
     await adminInDatabase.query(

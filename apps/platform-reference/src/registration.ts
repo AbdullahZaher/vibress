@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import {
+  InstallationUpdateRequiredError,
   PostgresApplicationRegistryStore,
   verifyDeploymentIdentity,
   type InstallationRegistrationRecord,
@@ -18,12 +19,19 @@ export interface ApplicationProvisioningOptions {
   readonly environment: string;
   /** Digest assigned by the deployment/build pipeline for this artifact. */
   readonly artifactDigest: string;
-  /** Required operator identity for every registry mutation. */
+  /** Required operator identity for every registry and installation mutation. */
   readonly actor: string;
+  /** Why this deployment changes the persisted registry or installation. */
+  readonly changeReason: string;
+  /** Change/deployment ticket recorded with installation changes. */
+  readonly deploymentReference?: string;
   readonly allowRegistryUpdate?: boolean;
-  /** Optional compare-and-swap guards for an authorized update. */
+  /** Authorizes an installation update; still requires both CAS guards. */
+  readonly allowInstallationUpdate?: boolean;
+  /** Expected persisted environment when changing an existing installation. */
   readonly expectedEnvironment?: string;
-  readonly expectedArtifactDigest?: string;
+  /** Expected persisted artifact when changing an installation (`null` = none). */
+  readonly expectedArtifactDigest?: string | null;
 }
 
 export interface ProvisionedApplication {
@@ -33,9 +41,13 @@ export interface ProvisionedApplication {
 
 /**
  * Operator-only provisioning phase: persists the deployed manifest, verifies
- * the registry, binds the installation and proves the persisted result. It is
- * invoked by the deployment/registration executable, never by the long-lived
- * request server.
+ * the registry, creates or CAS-updates the installation and proves the
+ * persisted result, all in one transaction. A failure after the manifest was
+ * written rolls the manifest, installation and both audit streams back
+ * together.
+ *
+ * It is invoked by the deployment/registration executable, never by the
+ * long-lived request server.
  */
 export async function provisionReferenceApplication(
   options: ApplicationProvisioningOptions,
@@ -48,33 +60,78 @@ export async function provisionReferenceApplication(
   if (actor === "") {
     throw new Error("actor is required for provisioning");
   }
+  const reason = options.changeReason.trim();
+  if (reason === "") {
+    throw new Error("changeReason is required for provisioning");
+  }
 
-  const store = new PostgresApplicationRegistryStore(options.ownerPool);
-  const registration = await store.sync(options.application, {
-    actor,
-    ...(options.allowRegistryUpdate ? { allowUpdate: true } : {}),
-  });
-  await store.verifyDefinitions([options.application]);
-  await store.syncInstallation({
-    id: options.installationId,
-    applicationId: options.application.id,
-    environment: options.environment,
-    artifactDigest,
-    ...(options.expectedEnvironment !== undefined
-      ? { expectedEnvironment: options.expectedEnvironment }
-      : {}),
-    ...(options.expectedArtifactDigest !== undefined
-      ? { expectedArtifactDigest: options.expectedArtifactDigest }
-      : {}),
-  });
+  const client = await options.ownerPool.connect();
+  try {
+    await client.query("BEGIN");
+    const store = new PostgresApplicationRegistryStore(client);
 
-  const verified = await verifyDeploymentIdentity({
-    client: options.ownerPool,
-    application: options.application,
-    installationId: options.installationId,
-    environment: options.environment,
-    artifactDigest,
-  });
+    const registration = await store.sync(options.application, {
+      actor,
+      ...(options.allowRegistryUpdate ? { allowUpdate: true } : {}),
+    });
+    await store.verifyDefinitions([options.application]);
 
-  return { registration, installation: verified.installation };
+    const existing = await store.loadInstallation(options.installationId);
+    if (!existing) {
+      await store.registerInstallation({
+        id: options.installationId,
+        applicationId: options.application.id,
+        environment: options.environment,
+        artifactDigest,
+        actor,
+        reason,
+        deploymentReference: options.deploymentReference ?? null,
+      });
+    } else if (
+      existing.applicationId !== options.application.id ||
+      existing.environment !== options.environment ||
+      existing.artifactDigest !== artifactDigest
+    ) {
+      if (!options.allowInstallationUpdate) {
+        throw new InstallationUpdateRequiredError(
+          String(options.installationId),
+        );
+      }
+      if (
+        options.expectedEnvironment === undefined ||
+        options.expectedArtifactDigest === undefined
+      ) {
+        throw new Error(
+          "an installation update requires both expectedEnvironment and expectedArtifactDigest (use null when no artifact is pinned)",
+        );
+      }
+      await store.updateInstallation({
+        id: options.installationId,
+        applicationId: options.application.id,
+        environment: options.environment,
+        artifactDigest,
+        actor,
+        reason,
+        deploymentReference: options.deploymentReference ?? null,
+        expectedEnvironment: options.expectedEnvironment,
+        expectedArtifactDigest: options.expectedArtifactDigest,
+      });
+    }
+
+    const verified = await verifyDeploymentIdentity({
+      client,
+      application: options.application,
+      installationId: options.installationId,
+      environment: options.environment,
+      artifactDigest,
+    });
+
+    await client.query("COMMIT");
+    return { registration, installation: verified.installation };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }

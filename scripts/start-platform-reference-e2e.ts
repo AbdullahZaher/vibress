@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import {
-  PostgresApplicationRegistryStore,
   provisionPlatformDeploymentVerifierRole,
   provisionPlatformMembershipReaderRole,
   provisionPlatformRuntimeRole,
+  REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
 } from "@vibress/database";
 import {
   asInstallationId,
@@ -16,6 +16,7 @@ import {
   REFERENCE_PERMISSIONS,
 } from "../apps/platform-reference/src/application";
 import { startReferenceApplication } from "../apps/platform-reference/src/start";
+import { provisionReferenceApplication } from "../apps/platform-reference/src/registration";
 import { ReferenceTokenDirectory } from "../apps/platform-reference/src/token-directory";
 import {
   cleanupPlatformReferenceE2e,
@@ -48,6 +49,7 @@ async function requireMigrated(client: Pool): Promise<void> {
        AND to_regclass('public.platform_crm_customers') IS NOT NULL
        AND to_regclass('public.platform_application_registrations') IS NOT NULL
        AND to_regclass('public.platform_application_registry_changes') IS NOT NULL
+       AND to_regclass('public.platform_installation_changes') IS NOT NULL
        AND to_regclass('public.platform_memberships') IS NOT NULL
        AS present`,
   );
@@ -100,10 +102,14 @@ async function main(): Promise<void> {
 
     const provisioning = await ownerPool.connect();
     try {
-      await provisionPlatformRuntimeRole(provisioning, {
-        roleName: runtimeRole,
-        password: runtimePassword,
-      });
+      await provisionPlatformRuntimeRole(
+        provisioning,
+        {
+          roleName: runtimeRole,
+          password: runtimePassword,
+        },
+        REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+      );
       await provisionPlatformMembershipReaderRole(provisioning, {
         roleName: readerRole,
         password: readerPassword,
@@ -132,14 +138,15 @@ async function main(): Promise<void> {
     });
 
     const application = createReferenceApplication({ id: applicationId });
-    const store = new PostgresApplicationRegistryStore(ownerPool);
-    await store.sync(application, { actor: "playwright-reference-e2e" });
-    await store.verifyDefinitions([application]);
-    await store.syncInstallation({
-      id: installationId,
-      applicationId: application.id,
+    await provisionReferenceApplication({
+      ownerPool,
+      application,
+      installationId,
       environment: "e2e",
       artifactDigest,
+      actor: "playwright-reference-e2e",
+      changeReason: "playwright reference-app harness",
+      deploymentReference: `e2e-${runId}`,
     });
 
     for (const [tenantId, name] of [
@@ -229,6 +236,7 @@ async function main(): Promise<void> {
       runtimePool,
       environment: "e2e",
       artifactDigest,
+      runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
       host: HOST,
       port: PORT,
       policyVersion: "reference-crm-e2e-1.0.0",

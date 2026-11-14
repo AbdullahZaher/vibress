@@ -16,6 +16,7 @@ import {
   readPlatformDeploymentVerifierConfig,
   readPlatformMembershipReaderConfig,
   readPlatformRuntimeRoleConfig,
+  REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
 } from "@vibress/database";
 
 async function main(): Promise<void> {
@@ -60,7 +61,11 @@ async function main(): Promise<void> {
       `Provisioning platform roles as '${identity}' (runtime: ${runtime.roleName}, reader: ${reader.roleName}, verifier: ${verifier.roleName})`,
     );
 
-    await provisionPlatformRuntimeRole(client, runtime);
+    await provisionPlatformRuntimeRole(
+      client,
+      runtime,
+      REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+    );
     await provisionPlatformMembershipReaderRole(client, reader);
     await provisionPlatformDeploymentVerifierRole(client, verifier);
 

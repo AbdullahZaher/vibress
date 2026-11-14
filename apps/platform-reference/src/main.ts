@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import { PolicyEngine } from "@vibress/tenancy";
 import { asInstallationId } from "@vibress/platform-kernel";
+import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "@vibress/database";
 import {
   createReferenceApplication,
   REFERENCE_PERMISSIONS,
@@ -66,6 +67,7 @@ async function main(): Promise<void> {
       runtimePool,
       environment,
       artifactDigest,
+      runtimePrivilegeContract: REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
       host: HOST,
       port: PORT,
       policyVersion: POLICY_VERSION,

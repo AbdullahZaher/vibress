@@ -6,6 +6,7 @@ import {
   assertSafePlatformRuntimeRole,
   PlatformMembershipResolver,
   verifyDeploymentIdentity,
+  type PlatformRuntimePrivilegeContract,
   type VerifiedDeploymentIdentity,
 } from "@vibress/database";
 import type {
@@ -25,6 +26,11 @@ export interface StartReferenceOptions {
   readonly environment: string;
   /** Digest assigned by the deployment/build pipeline for this artifact. */
   readonly artifactDigest: string;
+  /**
+   * Exact database authority this runtime profile may hold. The boot assertion
+   * rejects any effective privilege outside the contract.
+   */
+  readonly runtimePrivilegeContract: PlatformRuntimePrivilegeContract;
   /** Read-only verifier. Closed after the boot proof completes. */
   readonly verifierPool: Pool;
   /** Membership directory reader: SELECT on platform_memberships only. */
@@ -55,7 +61,10 @@ export interface StartedReferenceApplication {
 export async function startReferenceApplication(
   options: StartReferenceOptions,
 ): Promise<StartedReferenceApplication> {
-  const runtimeRole = await assertSafePlatformRuntimeRole(options.runtimePool);
+  const runtimeRole = await assertSafePlatformRuntimeRole(options.runtimePool, {
+    profile: "runtime",
+    privilegeContract: options.runtimePrivilegeContract,
+  });
   const readerRole = await assertSafePlatformMembershipReaderRole(
     options.readerPool,
   );

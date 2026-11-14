@@ -30,20 +30,21 @@
 
 ## Evidence executed on this branch
 
-Suites and typecheck were re-measured on 2026-11-14 for the P0-A/P0-B/P1
-increment: platform suite, reference-app integration, architecture, full unit,
-full integration, workspace typecheck, lint and Playwright all passed on the
-uncommitted tree. CI has **not** run on this content. The R26 read-only audit was
-last re-run on 2026-11-14T19:12:39.618Z with identical totals; the CMS-subset
-audit was run earlier on this branch.
+Suites and typecheck were re-measured on 2026-11-15 for the final remediation
+increment on top of `6b31320d`: platform suite, reference-app integration,
+architecture, full unit, full integration, workspace typecheck, lint, Playwright and
+both docs link validators all passed on the uncommitted tree. CI has **not** run on
+this content. The R26 read-only audit was last re-run on
+2026-11-14T19:12:39.618Z with identical totals; the CMS-subset audit was run earlier
+on this branch.
 
 | Suite | Result |
 | --- | --- |
-| **Full platform suite, P0-A/P0-B/P1 tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 154 tests passed**, exit 0 |
-| **Reference app, P0-A/P0-B/P1 tree** (`tests/integration/platform-reference-app.test.ts`) | **49/49 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch |
+| **Full platform suite, final remediation tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 174 tests passed**, exit 0 |
+| **Reference app, final remediation tree** (`tests/integration/platform-reference-app.test.ts`) | **69/69 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; 11 runtime-privilege-contract/provisioning negatives and 4 atomic-provisioning tests (manifest update + forced CAS failure leaves manifest, installation and both audit streams unchanged; forced audit failure rolls back; idempotent retry; single concurrent winner) |
 | Architecture boundary (`tests/architecture/platform-boundaries.test.ts`) | 6/6 passed, including no provisioning imports/owner identifiers in `server.ts`/`start.ts` |
-| Typecheck + lint, P0-A/P0-B/P1 tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
-| Reference-app Playwright, P0-A/P0-B/P1 tree | 8/8 passed |
+| Typecheck + lint, final remediation tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
+| Reference-app Playwright, final remediation tree | 8/8 passed |
 | Kernel + tenancy unit tests + architecture boundary (prior commit content) | 70 tests passed (7 files) |
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 24/24 passed |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
@@ -52,17 +53,17 @@ audit was run earlier on this branch.
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
 | Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-14 after the W1-T09 E2E/usability increment: 661 links across 300 files resolve (657/300 after the W1-T09 E2E section; 652/300 after the W1-T09 runbook; 629/298 after W1-T09 #27/#28; 626/297 after W1-T05; 612/296 at W1-T08; 76 legacy links rewritten; `/vibress/<path>` legacy prefix supported) |
-| Unit/boundary/component suite (`pnpm test:unit`) | 362 files / 2584 tests passed, exit 0 |
-| Full integration suite (`vitest.config.ts tests/integration`) | 46 files / 542 tests passed, exit 0 |
-| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`) | 46 files / 542 tests passed, exit 0, run sequentially, 95.35 s wall (59.92 s test execution) |
+| Unit/boundary/component suite (`pnpm test:unit`, earlier split-suite increment) | 362 files / 2584 tests passed, exit 0 |
+| Full integration suite (`vitest.config.ts tests/integration`, earlier split-suite increment) | 46 files / 542 tests passed, exit 0 |
+| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`, earlier increment) | 46 files / 542 tests passed, exit 0, run sequentially, 95.35 s wall (59.92 s test execution) |
 | `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-14: 89 links across 12 files resolve (85/12 after the W1-T09 E2E section; 80/12 after the W1-T09 runbook; 57/10 after W1-T09 #27/#28; 54/9 after W1-T05; 40/8 before it) |
 | Full platform suite (prior commit content) | 11 files / 137 tests passed |
 | Targeted typecheck (kernel, tenancy, database, reference app) | passed |
 | Targeted ESLint (new packages, executor, registry store, reference app, boundary test, integration tests) | passed |
-| Full unit suite on the P0-A/P0-B/P1 tree (`pnpm test:unit`) | 362 files / 2585 tests passed, exit 0, 219.75 s |
-| Full integration suite on the P0-A/P0-B/P1 tree (`pnpm test:integration`) | 46 files / 558 tests passed, exit 0, 86.50 s, sequential |
-| Workspace typecheck on the P0-A/P0-B/P1 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
-| CI on the P0-A/P0-B/P1 source SHA | **Not run** (uncommitted tree) |
+| Full unit suite on the final remediation tree (`pnpm test:unit`) | 362 files / 2585 tests passed, exit 0, 317.19 s |
+| Full integration suite on the final remediation tree (`pnpm test:integration`) | 46 files / 578 tests passed, exit 0, 127.31 s, sequential |
+| Workspace typecheck on the final remediation tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
+| CI on the final remediation source SHA | **Not run** (uncommitted tree) |
 | Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |
 
 Integration suites share the dev database and must run sequentially. One run that
@@ -75,18 +76,21 @@ runs passed.
 
 | ID | Priority | Status |
 | --- | --- | --- |
-| W1-T01 runtime-role privilege assertions | P0 | **Done** — boot fails closed on unsafe `current_user`/`session_user` attributes, privileged membership, schema/database CREATE, ownership, registry ACLs and SECURITY DEFINER EXECUTE; six real-PostgreSQL negative tests |
+| W1-T01 runtime-role privilege assertions | P0 | **Done, extended** — boot fails closed on unsafe `current_user`/`session_user` attributes, privileged membership, schema/database CREATE, ownership, registry ACLs and SECURITY DEFINER EXECUTE; real-PostgreSQL negative tests. Now also enforces the versioned runtime privilege contract on effective table/view/column/sequence/schema/function authority |
 | W1-T02 split owner/registry access from serving | P0 | **Superseded by P0-A/P1** — the owner pool was removed from the serving process entirely; provisioning is a separate executable |
-| W1-T03 atomic installation binding | P0 | **Done** — guarded upsert mutates nothing on mismatch; concurrent conflicting binds have one winner; unregistered applications create no rows |
+| W1-T03 atomic installation binding | P0 | **Superseded by the P1 create/update split** — creation is one statement with its audit row; installation changes are a separate mandatory-CAS operation with a transactional audit row |
 | W1-T04 transaction trust boundary | P0 | **Done** — scoped handle sealed at settlement, escaped in-flight work fails the unit closed and destroys the connection, role switching rejected and re-verified against the identity captured at `BEGIN`, failed `ROLLBACK`/`COMMIT` destroys the connection; six unit and two real-PostgreSQL negative tests |
 | W1-T05 R26 PUBLIC EXECUTE revocation | P0 | Blocked — requires DB-owner authorization; [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared and proposal 0055 hardened (fail-closed checks, verification, rollback), **not applied**; Scope B legacy-role grant decision also required |
 | W1-T06 Redis/S3/queue isolation proof | P1 | Pending — requires production-shaped infrastructure authorization |
 | W1-T07 production identity provider | P1 | Pending — static bearer-token directory remains reference-only |
 | W1-T08 CMS/Studio fixture pack; F-012 decision; legacy docs links | P1 | **Done** — digest-pinned two-publication CMS/Studio pack with run-scoped provisioning and teardown, 4 pack unit tests and 3 real HTTP+PostgreSQL compatibility tests (per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and restore); 76 legacy docs links rewritten and the full docs tree validates (612/296); F-012 decision record proposed (option B), **not accepted** |
-| W1-T09 runbooks, registry change audit, reference-app Playwright, R40, ownership | P2 | **Done** — [registry change audit](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md) with migration 0057 and real-PostgreSQL tests (49 reference-app tests on the current tree); [boot/registry/deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md) and `pnpm platform:provision-roles`; [reference-app Playwright](PLATFORM-BOOT-REGISTRY-RUNBOOK.md#9-reference-app-playwright-harness) **8/8 passed** with per-run roles/rows cleaned; [R40 decision record](R40-VERSION-IDENTITY-DECISION.md) and [ownership assignment request](OWNERSHIP-ASSIGNMENT-REQUEST.md) prepared but unresolved/unsigned |
+| W1-T09 runbooks, registry change audit, reference-app Playwright, R40, ownership | P2 | **Done** — [registry change audit](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md) with migration 0057 and real-PostgreSQL tests (69 reference-app tests on the final tree); [boot/registry/deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md) and `pnpm platform:provision-roles`; [reference-app Playwright](PLATFORM-BOOT-REGISTRY-RUNBOOK.md#9-reference-app-playwright-harness) **8/8 passed** with per-run roles/rows cleaned; [R40 decision record](R40-VERSION-IDENTITY-DECISION.md) and [ownership assignment request](OWNERSHIP-ASSIGNMENT-REQUEST.md) prepared but unresolved/unsigned |
 | P0-A privileged provisioning authority out of the serving process | P0 | **Done in code, unreviewed** — separate `pnpm platform:provision-reference` executable; serving refuses `DATABASE_URL`, holds no owner pool/registry store, and a source-boundary test enforces it; child-process negative tests |
 | P0-B full SET-able membership closure | P0 | **Done in code, unreviewed** — runtime/reader/verifier reject any non-self membership, including indirect and `NOINHERIT`; real-PostgreSQL tests |
 | P1 separate provisioning and pinned read-only verification | P1 | **Done in code, unreviewed** — CAS-guarded operator provisioning; dedicated SELECT-only verifier role; environment/artifact/application/manifest drift fails before serving without mutation; audit attribution |
+| P1 strict runtime privilege contract | P1 | **Done in code, unreviewed** — versioned, extensible allowlist (schemas, relations by kind, sequences, functions) enforced on effective authority at boot and provisioning; eleven real-PostgreSQL negatives plus a pre-existing-grant revocation test; reference CRM profile is one contract instance |
+| P1 atomic provisioning transaction | P1 | **Done in code, unreviewed** — one checked-out connection and one transaction for manifest, installation, both audit streams and the read-only proof; stale-CAS, forced-audit-failure, idempotent-retry and one-winner-concurrency tests |
+| P1 mandatory CAS + installation audit | P1 | **Done in code, unreviewed** — `registerInstallation`/`updateInstallation` split; actor, reason and both expected-state values required for updates; migration `0058` audit row written in the same statement |
 
 ## Known residual risks carried forward
 

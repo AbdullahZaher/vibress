@@ -30,11 +30,17 @@ strings. Startup fails before any network bind if they are equal.
 
 Order inside `startReferenceApplication`:
 
-1. `assertSafePlatformRuntimeRole(runtimePool)` — refuses a superuser,
-   `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, **any** SET-able role
-   membership (privileged, ordinary, indirect or `NOINHERIT`), schema/database
-   CREATE, ownership, registry/membership privileges and SECURITY DEFINER
-   EXECUTE.
+1. `assertSafePlatformRuntimeRole(runtimePool, { profile: "runtime",
+   privilegeContract })` — refuses a superuser, `BYPASSRLS`, `CREATEROLE`,
+   `CREATEDB`, `REPLICATION`, **any** SET-able role membership (privileged,
+   ordinary, indirect or `NOINHERIT`), schema/database CREATE, ownership,
+   registry/membership privileges and SECURITY DEFINER EXECUTE. It then verifies
+   **effective** privilege against the versioned runtime privilege contract:
+   relations, columns, sequences, schemas and executable functions outside the
+   contract fail boot (`unexpected_relation_privilege`,
+   `unexpected_column_privilege`, `unexpected_sequence_privilege`,
+   `unexpected_schema_privilege`, `unexpected_function_execute`). A missing or
+   invalid contract fails boot as well; there is no implicit allowlist.
 2. `assertSafePlatformMembershipReaderRole(readerPool)` — refuses a reader that
    can do anything beyond `SELECT` on `platform_memberships`, including column
    grants, ownership, sequence or function privileges, or any role membership.
@@ -90,9 +96,12 @@ The three connection strings must be distinct and are deleted from
 | `POSTGRES_PLATFORM_VERIFIER_USER` / `POSTGRES_PLATFORM_VERIFIER_PASSWORD` | role provisioning | deployment verifier role name/password |
 | `PLATFORM_ENVIRONMENT` | provisioning | environment stored in the installation row |
 | `PLATFORM_ARTIFACT_DIGEST` | provisioning | digest assigned by the deployment pipeline |
-| `PLATFORM_REGISTRY_ACTOR` | required for `created`/`updated` | operator identity written to the audit table |
+| `PLATFORM_REGISTRY_ACTOR` | yes for registry `created`/`updated`, and for installation create/update | operator identity written to both audit tables |
+| `PLATFORM_CHANGE_REASON` | yes for `platform:provision-reference` | non-empty reason recorded with a created/updated installation |
 | `PLATFORM_REGISTRY_UPDATE` | no | must be exactly `1` to permit a manifest change |
-| `PLATFORM_EXPECTED_ENVIRONMENT` / `PLATFORM_EXPECTED_ARTIFACT_DIGEST` | no | compare-and-swap guards for an authorized update |
+| `PLATFORM_INSTALLATION_UPDATE` | no | must be exactly `1` to permit an installation change; both expected-state values are then mandatory |
+| `PLATFORM_EXPECTED_ENVIRONMENT` / `PLATFORM_EXPECTED_ARTIFACT_DIGEST` | required for an installation update | exact previously observed state; the update is a compare-and-swap and is rejected when absent, blank or stale. Use the literal `null` only to expect that no artifact was pinned |
+| `PLATFORM_CHANGE_REFERENCE` | no | deployment/ticket reference recorded with the installation change |
 | `PLATFORM_INSTALLATION_ID` | no (default `reference-installation`) | installation to provision |
 | `PLATFORM_TENANT_ID` / `PLATFORM_BOOTSTRAP_PRINCIPALS` | no | standalone bootstrap job only |
 
@@ -101,10 +110,11 @@ The three connection strings must be distinct and are deleted from
 Run each step with the owner/migration credential, not a runtime role.
 
 1. **Apply migrations.** `pnpm db:migrate` (or `pnpm prod:migrate` in the
-   container path). The deployment must reach migration `0057`, which creates
-   `platform_application_registry_changes`. Provisioning before 0057 fails
-   because `sync` writes its audit row in the same statement as the
-   registration.
+   container path). The deployment must reach migration `0058`, which creates
+   `platform_installation_changes`. Provisioning before 0057 fails because
+   `sync` writes its audit row in the same statement as the registration;
+   provisioning before 0058 fails because installation create/update writes the
+   installation audit row in the same statement as the row mutation.
 2. **Provision platform roles.** After migrations:
 
    ```bash
@@ -124,24 +134,29 @@ Run each step with the owner/migration credential, not a runtime role.
    It does not print or store the passwords.
 3. **Provision the installation with owner authority.** On the first
    provisioning run the registry row does not exist, so `sync` returns
-   `created`; without `PLATFORM_REGISTRY_ACTOR` the command fails with
-   `RegistryActorRequiredError` and writes nothing.
+   `created`; without `PLATFORM_REGISTRY_ACTOR` or `PLATFORM_CHANGE_REASON` the
+   command fails before writing anything.
 
    ```bash
    DATABASE_URL=... \
    PLATFORM_ENVIRONMENT=production \
    PLATFORM_ARTIFACT_DIGEST=<digest from the build pipeline> \
    PLATFORM_REGISTRY_ACTOR=release-bot/change-123 \
+   PLATFORM_CHANGE_REASON="first deployment" \
+   PLATFORM_CHANGE_REFERENCE=change-123 \
    pnpm platform:provision-reference
    ```
 
    This runs `sync`, `verifyDefinitions`, the conditional installation bind and
-   a read-only identity proof in one operator-only executable. It never runs in
-   the serving process.
+   a read-only identity proof in one operator-only executable. `sync`, the
+   installation mutation and both audit rows share a **single transaction on a
+   single checked-out connection**; any failure rolls the manifest, installation
+   and both audit streams back together. The command never runs in the serving
+   process.
 4. **Start the service** with the three least-privilege URLs plus
    `PLATFORM_ENVIRONMENT` and the same `PLATFORM_ARTIFACT_DIGEST`, and wait for
    `GET /health`.
-5. **Verify the audit row** (read-only):
+5. **Verify the audit rows** (read-only):
 
    ```sql
    SELECT change_kind, actor, previous_version, new_version,
@@ -150,10 +165,19 @@ Run each step with the owner/migration credential, not a runtime role.
      FROM platform_application_registry_changes
     WHERE application_id = 'reference-crm'
     ORDER BY recorded_at, id;
+
+   SELECT change_kind, actor, reason, deployment_reference,
+          previous_environment, new_environment,
+          left(previous_artifact_digest, 12) AS prev,
+          left(new_artifact_digest, 12) AS new,
+          recorded_at
+     FROM platform_installation_changes
+    WHERE installation_id = 'reference-installation'
+    ORDER BY recorded_at, id;
    ```
 
-   Exactly one `created` row with the operator actor and no previous digest is
-   expected.
+   Exactly one `created` row per table with the operator actor and no previous
+   values is expected.
 
 ## 4. Routine redeploy (unchanged manifest)
 
@@ -163,14 +187,25 @@ if the application id, environment, artifact digest or persisted manifest digest
 differs from the deployed code.
 
 Routine provisioning is a separate operator step. `sync` reloads the existing
-row, compares digests, returns `unchanged`, and writes **no** audit row; an actor
-is not required on this path. `syncInstallation` remains an atomic conditional
-upsert guarded by application id and, when supplied, the expected environment
-and artifact digest. A mismatched guard changes no row and fails with
-`InstallationMismatchError`.
+row, compares digests, returns `unchanged`, and writes **no** registry audit row.
+The installation path loads the row and compares application id, environment
+and artifact digest: an identical row is returned without a write and without an
+installation audit row. Creation and update are separate store operations:
 
-The serving process never calls `sync`, `syncInstallation` or any registry
-write; it only verifies what the operator provisioned.
+- `registerInstallation` is a single `INSERT ... ON CONFLICT DO NOTHING` with a
+  data-modifying CTE that writes the `created` audit row in the same statement.
+  A conflicting id bound to another application or different values yields
+  `InstallationMismatchError` / `InstallationUpdateRequiredError` and writes
+  nothing.
+- `updateInstallation` requires an actor, a non-empty reason and **both**
+  expected-state values, and performs a compare-and-swap
+  (`environment = expected AND artifact_digest IS NOT DISTINCT FROM expected`).
+  A missing, blank or stale expectation changes no row and yields
+  `InstallationChangeInputError` / `InstallationMismatchError`. A successful
+  update writes its `updated` audit row in the same statement.
+
+The serving process never calls `sync` or any registry/installation write; it
+only verifies what the operator provisioned.
 
 ## 5. Deliberate manifest change (drift procedure)
 
@@ -196,16 +231,39 @@ To accept a reviewed change:
    temporary flag. The serving process has no update flag and refuses to boot on
    any mismatch.
 
-What the audit table proves and does not prove:
+### Changing the installation (environment or artifact)
 
-- It records **who** accepted each create/update, **when**, and **which
-  digests/versions** were involved.
-- It does not record a reason or approval reference. Put the change ticket in
-  the `actor` value or in the deployment record.
-- Rows cannot be cascaded away: the foreign key to `platform_applications` is
-  `ON DELETE RESTRICT`, so an application with history cannot be deleted.
-- `unchanged` boots and refused drift write nothing, so the table is not a boot
-  log.
+A manifest change and an installation change are separate decisions. An
+existing installation is **not** updated implicitly, even when the same command
+carries a new artifact digest: without `PLATFORM_INSTALLATION_UPDATE=1` the
+command fails with `InstallationUpdateRequiredError` and writes nothing.
+
+1. Read the current row and record its exact `environment` and
+   `artifact_digest` (the latter may be none).
+2. Set `PLATFORM_INSTALLATION_UPDATE=1`,
+   `PLATFORM_EXPECTED_ENVIRONMENT` and `PLATFORM_EXPECTED_ARTIFACT_DIGEST`
+   (leave the digest variable empty when the pinned value is none), plus a
+   non-empty `PLATFORM_CHANGE_REASON` and optionally
+   `PLATFORM_CHANGE_REFERENCE`.
+3. Run `pnpm platform:provision-reference` once. The update is a
+   compare-and-swap: if another deployment changed the row after step 1, it
+   fails with `InstallationMismatchError` and changes nothing.
+4. Verify the new `updated` row in `platform_installation_changes`. Remove
+   `PLATFORM_INSTALLATION_UPDATE` afterwards; it is not intended as a standing
+   flag.
+
+What the audit tables prove and do not prove:
+
+- Together they record **who** accepted each registry or installation create/update,
+  **when**, **which** digests/versions/environments were involved, and for
+  installations the operator's **reason** and optional deployment reference.
+- They do not record an approval decision or a second-person authorization.
+- They do not prove that the artifact digest corresponds to signed code; the
+  digest is still supplied by the deployment pipeline.
+- Rows cannot be cascaded away: both foreign keys are `ON DELETE RESTRICT`, so
+  an application or installation with history cannot be deleted.
+- `unchanged` boots and refused drift write nothing, so the tables are not a
+  boot log.
 
 ## 6. Failure modes and operator action
 
@@ -213,7 +271,9 @@ What the audit table proves and does not prove:
 | --- | --- | --- |
 | `RegistryActorRequiredError` | first provisioning or accepted update without actor | set `PLATFORM_REGISTRY_ACTOR`; nothing was written |
 | `ApplicationRegistrationDriftError` | deployed manifest differs from persisted digest | deploy matching code, or run the documented update procedure |
-| `InstallationMismatchError` | installation id bound to another application, or a compare-and-swap guard did not match | use the installation id belonging to this application; do not rebind implicitly |
+| `InstallationMismatchError` | installation id bound to another application, or a compare-and-swap guard did not match | use the installation id belonging to this application; do not rebind implicitly. For an update, re-read the current environment/artifact and retry with the exact observed state |
+| `InstallationUpdateRequiredError` | the installation exists with different values but `PLATFORM_INSTALLATION_UPDATE=1` was not set | nothing was written; perform the documented installation update with both expected-state values and a reason |
+| `InstallationChangeInputError` | an update was requested without an expected environment, without an expected artifact digest, with a blank environment, or without a reason | supply the exact previously observed state and a non-empty reason; nothing was written |
 | `ApplicationRegistrationMissingError` | deployed application has no persisted registration | provisioning did not complete; check actor/migration state and rerun it |
 | `UnexpectedApplicationRegistrationError` | registry contains an application absent from deployed code | deploy the missing application or perform a reviewed registry cleanup; boot stays closed |
 | `ApplicationRegistrationIntegrityError` | stored manifest malformed or digest does not recompute | treat as data corruption/tampering; do not bypass, investigate the row and restore from a trusted migration/deploy |
@@ -223,10 +283,12 @@ What the audit table proves and does not prove:
 | `unexpected_role_membership` | the login is a SET-able member of any other role, including indirect or `NOINHERIT` grants | remove the membership; dedicated platform logins must have none |
 | `membership_read_missing` | reader lacks table-level `SELECT` on `platform_memberships`, or migrations are absent | re-run `pnpm platform:provision-roles` after migrations |
 | `membership_write_privilege` | reader can write the membership directory | re-provision; the reader must be SELECT-only |
-| `unexpected_relation_privilege` | verifier holds a write, column-only or non-registry privilege | re-provision; the verifier must be table-level SELECT on the two registry tables only |
+| `unexpected_relation_privilege` | the **verifier** holds a write, column-only or non-registry privilege; on the **runtime** login it means effective authority (direct, inherited or via `PUBLIC`) on a relation outside the privilege contract, including a view or foreign table | re-provision; the verifier must be table-level SELECT on the two registry tables only, and the runtime must match the versioned contract exactly |
+| `unexpected_column_privilege` / `unexpected_sequence_privilege` / `unexpected_schema_privilege` / `unexpected_function_execute` | the runtime login has effective column, sequence, schema `USAGE` or non-trigger function `EXECUTE` authority outside the privilege contract | re-provision the runtime role; if the new authority is intentional, version the contract first — there is no bypass flag |
+| `privilege_contract_missing` / `privilege_contract_invalid` | the serving process was started without a runtime privilege contract, or the supplied contract fails validation | pass the deployed contract from `@vibress/database`; boot stays closed |
 | `DATABASE_URL` present in the serving environment | owner credential leaked into the long-lived process | remove it; run `pnpm platform:provision-reference` as the separate operator job |
 | connection URLs not distinct | two pools share a role | use three distinct least-privilege credentials |
-| SQLSTATE `42P01` on `platform_application_registry_changes` | migration `0057` not applied | apply migrations before provisioning |
+| SQLSTATE `42P01` on `platform_application_registry_changes` or `platform_installation_changes` | migration `0057` or `0058` not applied | apply migrations before provisioning |
 | Fastify `EADDRINUSE` | port already bound | stop the old process; verify only one serving process per installation |
 
 ## 7. Standalone bootstrap job (optional)
@@ -245,8 +307,8 @@ long-running serving process; the serving path is `main.ts`.
   refused. Do not disable the check. Either roll forward, or perform a reviewed
   `PLATFORM_REGISTRY_UPDATE=1` boot with an actor so the rollback is recorded as
   an `updated` change. The previous digest remains in the audit row.
-- **Schema:** migration `0057` is additive (new table, index, FK). This runbook
-  does not authorize dropping it or deleting audit rows.
+- **Schema:** migrations `0057` and `0058` are additive (new tables, indexes,
+  FKs). This runbook does not authorize dropping them or deleting audit rows.
 - **Roles:** re-running the provisioner narrows privileges; it never drops a
   role. Dropping platform roles is a destructive, separately approved action.
 
@@ -260,7 +322,7 @@ Playwright's API request context (no browser binary, no staging secrets):
 DATABASE_URL=... pnpm test:e2e:platform-reference
 ```
 
-- Requires a database that already has migrations through `0057`; the harness
+- Requires a database that already has migrations through `0058`; the harness
   fails with an explicit message otherwise.
 - Each run uses a unique application id, installation id, two tenants, three
   platform roles (runtime, reader, verifier) and three bearer tokens. The staff
