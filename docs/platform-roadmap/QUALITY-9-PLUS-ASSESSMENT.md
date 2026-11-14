@@ -50,6 +50,10 @@ The **design** score of 9.1 is a **provisional self-assessment**. An independent
 
 **Additional mandatory *implementation* gates:** real code, database role/RLS integration, external clean consumer, schema upgrades, backup/restore, staging security tests and M08 GO/NO-GO. They are *not* satisfied by a 9.1 planning score.
 
+## Final internationally benchmarked scope
+
+The [Final Design Baseline Review](FINAL-DESIGN-BASELINE-APPROVAL.md) recommends **conditional acceptance of this roadmap for M00 execution planning**, subject to actual architecture/security/product owner sign-off A1–A8. [Standards alignment](INTERNATIONAL-STANDARDS-ALIGNMENT.md) maps selected versions of NIST SSDF, OWASP ASVS, ISO/IEC 27001/25010, SLSA and WCAG; **a crosswalk is not a certification audit**. The provisional self-assessed **9.1/10 score stays unchanged** and does not imply formal independent review or actual production readiness.
+
 ## Remaining limitations
 
 - No signed ADRs, named owners, actual resource capacity, p95 operational SLO or production release manifest.
