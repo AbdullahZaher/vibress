@@ -118,6 +118,8 @@ This documentation defines **Architecture v1** for Vibress.
 
 ## Universal Application Platform — proposed master roadmap (2026-11-14)
 
+**Third-pass review and rating (English canonical):** [R26–R34 and 8.0/10 assessment](platform-roadmap/THIRD-REVIEW-AND-RATING-2026-11-14.md) · [PostgreSQL effective ACL/RLS controls](platform-roadmap/POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md) · [App installation trust and integration](platform-roadmap/APP-INSTALLATION-TRUST-AND-OPERATIONS.md) · [Version-skew/upgrade matrix](platform-roadmap/UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
 **Second-pass review and rating (English canonical):** [8.0/10 roadmap assessment and findings R17–R25](platform-roadmap/SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) · [General code-first app runtime](platform-roadmap/APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) · [Data lifecycle and operations](platform-roadmap/DATA-LIFECYCLE-AND-OPERATIONS.md).
 
 **Security/architecture review:** [2026-11-14 PR #151 findings and revised English program gates](platform-roadmap/REVIEW-FINDINGS-2026-11-14.md) · [Architecture decisions](platform-roadmap/ARCHITECTURE-DECISION-GATES.md) · [RLS and migration authority](platform-roadmap/DATA-ISOLATION-AND-MIGRATIONS.md) · [v1 release cut](platform-roadmap/V1-SCOPE-AND-RELEASE-CRITERIA.md). The English plan is currently authoritative; the older Arabic summary remains informational until translated and reconciled.
