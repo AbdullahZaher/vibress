@@ -14,6 +14,12 @@
 
 **Review status:** historical reviews [R01–R39](FOURTH-PASS-REVIEW-2026-11-14.md) remain traceable; risks have proposed controls, **not guaranteed elimination**. The English roadmap is canonical; earlier Arabic overview is informational.
 
+## Current provisional roadmap quality score — 9.1/10
+
+The [weighted 9.1/10 design-quality reassessment](QUALITY-9-PLUS-ASSESSMENT.md) is **conditional, self-assessed and limited to the English development plan**. The earlier 8.0/10 reports are retained as historical snapshots. This score is **not** a certification of deployed Vibress, a claim of zero defects or proof that security vulnerabilities have been fixed. Independent owner review and real product/database testing remain mandatory.
+
+**Major open finding R40:** the roadmap previously used “Platform v1.0” although the existing Host/Plugin SDK uses 1.2.0 and [ADR-013 unified SemVer](../14-decisions/release-versioning-strategy.md). This is now treated as a **code-first GA program**, with the real product tag and SDK namespace **TBD pending a signed versioning decision**.
+
 ## Vision and strategy
 
 Turn Vibress into a **general-purpose, open-source application development framework**: CRM, SaaS, real estate, commerce, booking, education and publishing must be possible **without modifying platform kernel for each new project**. Preserve Vibress CMS and standalone Vibress Studio. Do not fork Payload or replace the existing TypeScript/Fastify/Drizzle/PostgreSQL/BullMQ stack without proven need.
