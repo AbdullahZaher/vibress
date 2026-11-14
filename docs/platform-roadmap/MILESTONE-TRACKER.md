@@ -2,6 +2,8 @@
 
 > **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Planning on [Draft PR #151](https://github.com/AbdullahZaher/vibress/pull/151). These are **tracking Issues**, not native GitHub Milestone objects. No implementation completion, delivery dates, or production approvals are implied.
 
+**Final standards review:** [Conditional acceptance for M00 design baseline](FINAL-DESIGN-BASELINE-APPROVAL.md) · [six-framework international standards matrix](INTERNATIONAL-STANDARDS-ALIGNMENT.md). Organizational owner sign-off A1–A8 is OPEN; this is not ISO/OWASP/SLSA/WCAG certification or a GA approval. Draft PR #151 remains pending approval.
+
 **Current roadmap-only editorial review:** [9.1/10 conditional score and independent 9+ acceptance gates](QUALITY-9-PLUS-ASSESSMENT.md) · [Runtime/version support matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release evidence and GO/NO-GO ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md). The original 8.0/10 report remains historical. Actual M00–M08 runtime security/compatibility milestones have **not** been completed by documentation changes.
 
 **Fourth-pass review and existing Epic prioritization:** [R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) · [M00–M08 first slice](EXECUTION-FIRST-SLICE.md) · [RLS views/backups and nested transaction tests](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) · [legacy CMS identity mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md). New review acceptance cases are linked to existing Epics: **no additional master Epics or new implementation completion claims**.
