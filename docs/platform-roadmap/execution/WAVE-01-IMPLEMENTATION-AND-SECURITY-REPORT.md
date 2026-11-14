@@ -76,19 +76,25 @@ recorded as an open blocker, not accepted behavior. Closing it requires a full
 function/`SECURITY DEFINER` inventory and a reviewed migration; it was not performed
 blindly because it changes shared database policy.
 
-### Measured limitation: superuser owner
+### Measured: `FORCE RLS` against a non-superuser owner
 
-The dev migration role `vibress` is a **superuser**, so `FORCE ROW LEVEL SECURITY`
-is not exercised against the owner. Production must use a non-superuser owner and
-prove owner reads fail closed without context. Open blocker.
+A dedicated non-superuser owner role now owns a probe table with `ENABLE` +
+`FORCE` RLS. The owner sees **0 rows** without tenant context, gets SQLSTATE
+`42501` under `SET LOCAL row_security = off`, sees only the matching tenant under
+context, and can still run DDL on its own table. `FORCE RLS` is therefore effective
+against the owner, not just against the runtime role.
+
+Residual deployment requirement: the dev/Compose migration role `vibress` is a
+**superuser**, which would bypass `FORCE RLS`. Production topology must use a
+non-superuser owner and re-verify there. Open blocker.
 
 ## 5. Tests and evidence (executed, with results)
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **6 files / 56 tests passed** |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **6 files / 61 tests passed** |
 | `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **5 files / 39 tests passed** |
-| `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 17 tests passed** against PostgreSQL 16 |
+| `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 22 tests passed** against PostgreSQL 16 |
 | `pnpm exec tsc -p packages/platform-kernel/tsconfig.json --noEmit` | passed |
 | `pnpm exec tsc -p packages/tenancy/tsconfig.json --noEmit` | passed |
 | `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` | passed |
@@ -99,8 +105,10 @@ prove owner reads fail closed without context. Open blocker.
 
 The PostgreSQL proof applies migration `0054`, provisions the runtime role, inserts
 two tenants and two customers through the owner, then reconnects **as the runtime
-role** for every assertion. It cleans up its rows, role and owned objects in
-`afterAll`.
+role** for every assertion. A second non-superuser owner role owns a probe table with
+`FORCE RLS` to prove owner fail-closed behavior. It cleans up its rows, both roles,
+its owned objects and the probe table in `afterAll`; the DATABASE was checked
+afterwards for leftover `platform_%` roles and probe relations.
 
 ## 6. Migration, data and rollback
 
@@ -148,7 +156,7 @@ pass, so this is a compatibility subset, not a full regression proof.
 | ID | Blocker | Impact | State |
 | --- | --- | --- | --- |
 | R26 | `PUBLIC` function `EXECUTE` reachable by the platform role | Privileged owner code callable | Measured, open |
-| — | Superuser migration owner in dev; `FORCE RLS` unproven for owners | Owner could bypass if misconfigured | Open |
+| — | Deployment owner (`vibress`) is a superuser, which bypasses `FORCE RLS` | Owner could bypass if left as-is | Test proven; deployment change open |
 | R35 | Views/materialized reports not covered by policy | Potential cross-tenant read if views are exposed | Open (excluded from contract) |
 | R37 | Legacy runner still nests without savepoints | Old code can half-commit semantics | Unchanged, documented |
 | ADR-PLAT-001 | Cross-installation proof with two databases | Installation isolation unproven | Open |
@@ -162,11 +170,13 @@ No finding was closed by documentation. No test was skipped to make the run gree
 
 **NO-GO for Wave 1 exit and NO-GO for Wave 2 start.**
 
-Passing evidence on this branch: kernel/tenancy unit and boundary tests, and a real
-PostgreSQL tenant-isolation matrix through a least-privilege role. Missing evidence:
-R26 remediation, non-superuser owner proof, views policy decision, cross-installation
-negative tests, full CMS/Studio compatibility run, independent review, and named
-human sign-offs. Wave 2 (M03) may not start under this gate.
+Passing evidence on this branch: kernel/tenancy unit and boundary tests, a real
+PostgreSQL tenant-isolation matrix through a least-privilege role, and `FORCE RLS`
+against a non-superuser owner. Missing evidence:
+R26 remediation, non-superuser owner in the deployment topology, views policy
+decision, cross-installation negative tests, full CMS/Studio compatibility run,
+independent review, and named human sign-offs. Wave 2 (M03) may not start under
+this gate.
 
 ## 11. Next steps (ordered)
 
@@ -175,8 +185,8 @@ human sign-offs. Wave 2 (M03) may not start under this gate.
 2. R26: inventory functions, `SECURITY DEFINER` owners and `search_path`; produce a
    reviewed targeted-revocation migration with rollback; re-run the residual test
    expecting denial.
-3. Provision a non-superuser owner role in the test fixture and prove owner reads
-   fail closed with and without context.
+3. Change the deployment owner from the superuser `vibress` role to a non-superuser
+   owner and re-run the owner RLS proof there.
 4. Pin the two-publication CMS fixture (`pub_alpha`, `pub_beta`, `pub_default`) and
    run the full integration suite; record results against this branch SHA.
 5. Decide the views/materialized-report contract (excluded for v1 unless reviewed).

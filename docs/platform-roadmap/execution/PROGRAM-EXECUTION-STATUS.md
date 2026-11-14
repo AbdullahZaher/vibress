@@ -24,14 +24,14 @@
 | --- | --- | --- |
 | M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test | Documentation validator + CI job, pinned two-publication CMS/Studio fixture pack, named owners |
 | M01 Universal kernel | Branded identity, public contracts, definition helpers, registry, action/route/module reference, kernel-only import boundary | Persisted application registry, bootable standalone reference app, kernel route execution adapter |
-| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege runtime role, 17-test PostgreSQL deny matrix | R26 function inventory + revocation, non-superuser owner proof, views/report policy decision, cross-installation and Redis/S3 denial tests, audit/secrets scope |
+| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege runtime role, 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS` | R26 function inventory + revocation, deployment non-superuser owner, views/report policy decision, cross-installation and Redis/S3 denial tests, audit/secrets scope |
 
 ## Evidence executed on this branch
 
 | Suite | Result |
 | --- | --- |
 | Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 39/39 passed |
-| PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 17/17 passed |
+| PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 22/22 passed |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed |
 | Targeted typecheck (kernel, tenancy, database) | passed |
 | Targeted ESLint (new packages, boundary test, integration test, new database files) | passed |

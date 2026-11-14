@@ -68,6 +68,10 @@ Existing runtime paths cannot enforce tenant isolation:
 | Unit of work read | scoped rows only |
 | Nested tenant switch | rejected, outer transaction rolled back |
 | Raw `set_config` through scoped handle | rejected |
+| Non-superuser table owner, no context | 0 rows |
+| Non-superuser table owner, `SET LOCAL row_security = off` | denied, `42501` |
+| Non-superuser table owner, matching context | only that tenant's row |
+| Non-superuser table owner DDL on its own table | allowed (ownership ≠ runtime role) |
 | **Owner function via `PUBLIC` EXECUTE** | **executes — residual R26** |
 
 ## Open blockers before this ADR can be accepted
@@ -75,9 +79,10 @@ Existing runtime paths cannot enforce tenant isolation:
 1. **R26 function inventory:** list `SECURITY DEFINER` functions, owners, effective
    `PUBLIC`/inherited `EXECUTE`, `search_path`, and default privileges; ship a
    reviewed targeted-revocation migration. Not performed here.
-2. **Owner role:** the dev migration role is a superuser, so `FORCE RLS` behavior
-   against a non-superuser owner is unproven. Production must use a non-superuser
-   owner, with a test proving owner reads still fail closed.
+2. **Owner role in deployment:** `FORCE RLS` is now proven in tests against a
+   non-superuser owner. The dev/Compose migration role `vibress` is still a
+   superuser, so the deployment topology must be changed to a non-superuser owner
+   and re-verified there; a superuser owner would bypass RLS silently.
 3. **Views/materialized reports (R35):** no view is covered by this policy; views
    must be excluded from the generated resource contract or reviewed separately.
 4. **Cross-installation proof:** see ADR-PLAT-001.

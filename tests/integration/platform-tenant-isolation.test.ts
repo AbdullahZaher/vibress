@@ -33,6 +33,9 @@ const DATABASE_URL =
 
 const roleName = `platform_rt_${Date.now().toString(36)}`;
 const password = `probe_${Date.now().toString(36)}`;
+const ownerRoleName = `platform_owner_${Date.now().toString(36)}`;
+const ownerPassword = `owner_${Date.now().toString(36)}`;
+const ownerProbeTable = "platform_owner_rls_probe";
 const applicationId = "w1-test-app";
 const tenantAId = "w1-tenant-a";
 const tenantBId = "w1-tenant-b";
@@ -45,6 +48,7 @@ const principalId = asPrincipalId("w1-principal");
 let owner: Client;
 let runtime: Client;
 let runtimePool: Pool;
+let nonSuperOwner: Client;
 
 function membershipFor(tenantId: typeof tenantA): MembershipRecord {
   return {
@@ -113,6 +117,52 @@ beforeAll(async () => {
   await owner.query(fs.readFileSync(migrationPath, "utf8"));
   await provisionPlatformRuntimeRole(owner, { roleName, password });
 
+  // A separate non-superuser owner. The deployment owner role must not be a
+  // superuser, otherwise FORCE ROW LEVEL SECURITY is never exercised.
+  const ownerRole = owner.escapeIdentifier(ownerRoleName);
+  await owner.query(
+    `CREATE ROLE ${ownerRole} LOGIN PASSWORD ${owner.escapeLiteral(ownerPassword)}
+       NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`,
+  );
+  const databaseName = (
+    await owner.query<{ name: string }>("SELECT current_database() AS name")
+  ).rows[0]!.name;
+  await owner.query(
+    `GRANT CONNECT ON DATABASE ${owner.escapeIdentifier(databaseName)} TO ${ownerRole}`,
+  );
+  await owner.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${ownerRole}`);
+
+  const ownerUrl = new URL(DATABASE_URL);
+  ownerUrl.username = ownerRoleName;
+  ownerUrl.password = ownerPassword;
+  nonSuperOwner = new Client({ connectionString: ownerUrl.toString() });
+  await nonSuperOwner.connect();
+
+  await owner.query(`DROP TABLE IF EXISTS public.${ownerProbeTable}`);
+  await nonSuperOwner.query(
+    `CREATE TABLE public.${ownerProbeTable} (
+       tenant_id text NOT NULL,
+       payload text NOT NULL
+     )`,
+  );
+  await nonSuperOwner.query(
+    `INSERT INTO public.${ownerProbeTable} (tenant_id, payload)
+     VALUES ($1, 'tenant-a-row'), ($2, 'tenant-b-row')`,
+    [tenantAId, tenantBId],
+  );
+  await nonSuperOwner.query(
+    `ALTER TABLE public.${ownerProbeTable} ENABLE ROW LEVEL SECURITY`,
+  );
+  await nonSuperOwner.query(
+    `ALTER TABLE public.${ownerProbeTable} FORCE ROW LEVEL SECURITY`,
+  );
+  await nonSuperOwner.query(
+    `CREATE POLICY ${ownerProbeTable}_isolation ON public.${ownerProbeTable}
+       FOR ALL
+       USING (tenant_id = NULLIF(current_setting('vibress.tenant_id', true), ''))
+       WITH CHECK (tenant_id = NULLIF(current_setting('vibress.tenant_id', true), ''))`,
+  );
+
   await owner.query(
     `INSERT INTO platform_applications (id, name) VALUES ($1, $2)
      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
@@ -150,6 +200,12 @@ beforeAll(async () => {
 afterAll(async () => {
   await runtimePool?.end().catch(() => undefined);
   await runtime?.end().catch(() => undefined);
+  if (nonSuperOwner) {
+    await nonSuperOwner
+      .query(`DROP TABLE IF EXISTS public.${ownerProbeTable}`)
+      .catch(() => undefined);
+    await nonSuperOwner.end().catch(() => undefined);
+  }
   if (owner) {
     await owner
       .query("DELETE FROM platform_applications WHERE id = $1", [applicationId])
@@ -157,6 +213,9 @@ afterAll(async () => {
     const role = owner.escapeIdentifier(roleName);
     await owner.query(`DROP OWNED BY ${role}`).catch(() => undefined);
     await owner.query(`DROP ROLE ${role}`).catch(() => undefined);
+    const ownerRole = owner.escapeIdentifier(ownerRoleName);
+    await owner.query(`DROP OWNED BY ${ownerRole}`).catch(() => undefined);
+    await owner.query(`DROP ROLE ${ownerRole}`).catch(() => undefined);
     await owner.end().catch(() => undefined);
   }
 });
@@ -224,6 +283,60 @@ describe("provisioned platform runtime role", () => {
     } finally {
       await owner.query(`DROP FUNCTION IF EXISTS ${functionName}`);
     }
+  });
+});
+
+describe("FORCE RLS with a non-superuser table owner", () => {
+  it("provisions an owner that is not a superuser and cannot bypass RLS", async () => {
+    const result = await owner.query<{
+      rolsuper: boolean;
+      rolbypassrls: boolean;
+    }>(
+      "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = $1",
+      [ownerRoleName],
+    );
+    expect(result.rows[0]).toEqual({ rolsuper: false, rolbypassrls: false });
+  });
+
+  it("returns no rows to the owner without tenant context", async () => {
+    const result = await nonSuperOwner.query(
+      `SELECT payload FROM public.${ownerProbeTable}`,
+    );
+    expect(result.rowCount).toBe(0);
+  });
+
+  it("treats row_security=off as an error for the owner", async () => {
+    await nonSuperOwner.query("BEGIN");
+    try {
+      await nonSuperOwner.query("SET LOCAL row_security = off");
+      await expect(
+        nonSuperOwner.query(`SELECT payload FROM public.${ownerProbeTable}`),
+      ).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await nonSuperOwner.query("ROLLBACK");
+    }
+  });
+
+  it("shows the owner only rows matching the tenant context", async () => {
+    await nonSuperOwner.query("BEGIN");
+    try {
+      await nonSuperOwner.query(
+        "SELECT set_config('vibress.tenant_id', $1, true)",
+        [tenantAId],
+      );
+      const result = await nonSuperOwner.query<{ payload: string }>(
+        `SELECT payload FROM public.${ownerProbeTable}`,
+      );
+      expect(result.rows.map((row) => row.payload)).toEqual(["tenant-a-row"]);
+    } finally {
+      await nonSuperOwner.query("ROLLBACK");
+    }
+  });
+
+  it("still allows the owner to run DDL on its own table", async () => {
+    await nonSuperOwner.query(
+      `ALTER TABLE public.${ownerProbeTable} ADD COLUMN IF NOT EXISTS note text`,
+    );
   });
 });
 
