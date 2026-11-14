@@ -79,3 +79,18 @@ Use default-deny permission policies at server and database boundaries. Tenant-a
 - [Dependency rules](../01-architecture/dependency-rules.md)
 - [Plugin trust ADR](../14-decisions/plugin-trust-model.md)
 - [Content Modeler](../../packages/database/src/schema/content-models.ts)
+
+
+## Architecture review correction (2026-11-14): deployment topology is a security decision
+
+**Recommended v1 default:** one general Application per **Installation/Runtime** with separate DB credentials, storage namespace, queues/secrets and deployment identity. Support many *tenants inside that one app* only when explicit PostgreSQL RLS/policy contracts are implemented and tested. Do not assume apps from unrelated developers safely share one privileged Node process or SQL credential. Shared multi-app runtime remains deferred until isolation tests and an ADR prove its safety; see [decision ADR-PLAT-001](ARCHITECTURE-DECISION-GATES.md) and [DB contract](DATA-ISOLATION-AND-MIGRATIONS.md).
+
+**Control plane and runtime authorization:** a control-plane user managing an app is not automatically an authenticated member/operator inside that app. Installation and tenant administration require separate delegated credentials, audited flows and narrow service identities. Environment credentials, network routing and artifact ownership must not cross installations.
+
+**M01 security precondition:** Threat modeling and the proposed topology ADR are accepted in M00 **before** new runtime extraction. M01 prototypes run offline/nonproduction until M02 proves RLS, scoped transactions, database privilege separation and cross-tenant boundaries.
+
+**Existing transaction gap:** current `getDb()` is a pooled unscoped connection outside `runInTransaction()`; the latter propagates a DB transaction using AsyncLocalStorage, but does not itself set a verified app/tenant SQL context. New tenant-owned reads/writes must use a dedicated scoped UoW interface, not reuse raw `getDb()`. A GUC alone is not authentication against arbitrary SQL access.
+
+**DDL and resource compiler trust:** code-first/visual/agent definitions compile to bounded validated IR and *reviewable* migration plans, never directly to unapproved privileged SQL at request time. Migration owners and plugin physical-model provisioners are separate from runtime DML roles. Prefer compatible expand/contract deployment with forward-fix where actual schema downgrade is unsafe.
+
+**Architectural portability limit:** PostgreSQL is the supported v1 RLS reference implementation. Other database engines are future adapters without claimed equivalent row isolation or migration guarantees.

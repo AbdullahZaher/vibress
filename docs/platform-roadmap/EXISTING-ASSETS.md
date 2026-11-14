@@ -28,3 +28,15 @@ The master roadmap must reuse *actual* existing work and preserve *historical* p
 - [Studio readiness source](https://github.com/AbdullahZaher/vibress-studio/blob/main/docs/production-readiness.md).
 
 This plan adds master milestones M00–M12; legacy Plugin Platform M0–M6 stays unchanged. PRs crossing repositories must pin both host and Studio candidate SHAs and validate real host persistence and rendering.
+
+
+## Additional code findings affecting implementation sequencing
+
+1. **Database transaction context:** [`getDb()`](../../packages/database/src/connection.ts) uses a pooled connection except within an [ALS transaction](../../packages/database/src/transaction/transaction-context.ts); a validated tenant-aware transaction port is **new work**. Do not treat existing Drizzle transactions as a complete RLS solution.
+2. **Runtime privileges:** [`runtime-role.ts`](../../packages/database/src/runtime-role.ts) grants `CREATE` on `public` and `EXECUTE` on all functions there; a separate migration/plugin provisioner is required before general app isolation claims.
+3. **Legacy model identity:** [Content Modeler](../../packages/domains/content-modeler/src/application/content-modeler-service.ts) defaults several operations to `pub_default`; new app schema must use a separate identity/adapter instead of a global publication fallback.
+4. **Plugin distribution:** [`@vibress/plugin-sdk` package metadata](../../packages/plugin-sdk/package.json) has `private: true`; it cannot be described as an independently released package. Plugin Platform v3 also distinguishes package version from runtime SDK ABI.
+5. **Plugin execution:** [`ExtensionHost`](../../packages/plugin-core/src/extension-host.ts) returns a synthetic hook result; independently evaluate or retire this route. [Trusted ESM host](../../packages/domains/plugins/src/application/trusted-external-plugin-host.ts) does load approved code but **does not isolate it from Node process privileges**.
+6. **Legacy security report:** security review records a conditional launch and RLS disabled; keep this in the release register until new test evidence exists.
+
+These are code-informed *review observations*, not a complete security audit or a statement that a vulnerability is exploitable without further tests.

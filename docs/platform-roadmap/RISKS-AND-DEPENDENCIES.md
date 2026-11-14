@@ -45,3 +45,27 @@ Are app and tenant identities separate across single/multi tenant installations?
 ## Relative complexity only
 
 M/L/XL/XXL are qualitative. Team capacity, dates, sprint plans and implementation costs require separate approval; this document contains no promised dates.
+
+
+## New blockers and risk ownership from PR review
+
+| ID | Risk / design gap | Severity | Gate / required proof | Lead role |
+| --- | --- | --- | --- | --- |
+| R01 | Unscoped pooled `getDb()` bypasses tenant UoW expectations | Critical | M02 real PG isolation, same connection and pool-reuse matrix | DB + Security |
+| R02 | Shared multi-app runtime not isolated by app boundary | Critical design | M00 deployment topology ADR; v1 isolated app installs default | Architecture + Security |
+| R03 | Runtime role holds `CREATE public` and broad function grants | Critical | M02 approved staged grants/provisioner migration | DB |
+| R04 | Schema compiler produces unapproved SQL/DDL | High | M03 bounded IR, installer policy, destructive-change review | Data platform + Security |
+| R05 | CMS `pub_default` copied into new app context | High | M01 additive CMS adapter + no publishing import regression | Platform |
+| R06 | Plugin SDK is private and ABI/public SemVer not certified | High | M05/07 packed independent consumer, version matrix | Plugin + Release |
+| R07 | Five full Golden Apps inflate v1 scope | High | M00/07 explicit minimum CMS+CRM; others staged | Product |
+| R08/R09 | Automatic certification or lossless DB downgrade claimed | High | M08 real decision, RPO/RTO and forward-fix | Release + DB |
+| R10/R14 | Control-plane and agent authority confusion | High | M10/11 scoped auth and threat model | Security |
+| R16 | Documentation validation and English normativity not defined | Medium | M00 CI docs checks, English authoritative edition | Docs + Release |
+
+For complete evidence and caveats see [PR review findings](REVIEW-FINDINGS-2026-11-14.md). Treat the English master and supporting documents as the **current normative proposed plan**. Earlier translations are informational until synchronized. Existing code fixes are not included in this documentation PR.
+
+## Critical path correction
+
+- **Design-before-build:** M00 ADR-PLAT-001/002/003 must precede M01 runtime deployment; M02 security prototype begins during M00.
+- **Minimum GA:** M05 trusted module/runtime subset and M06 transactional event/job subset, not complete marketplace/workflow/billing platforms. M07 requires CMS+CRM mandatory; Real Estate/Booking/Commerce expand later.
+- **Separate stop/go:** M08 security/release approval may block v1 even if all Issues are closed. M09–M12 retain independent later security reviews.

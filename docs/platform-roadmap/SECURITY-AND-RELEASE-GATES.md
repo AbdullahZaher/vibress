@@ -36,3 +36,27 @@ The [2026-11-13 Vibress Security Review](../../SECURITY-REVIEW.md) recommends **
 ## GA acceptance
 
 No known unresolved Critical/High findings inside the independently audited scope; if not satisfied, block GA. Benchmark results and recovery measurements include exact release SHAs, environment, fixture, p50/p95/p99, measured RPO/RTO and limitations. Explicit approved final release decision is necessary.
+
+
+## Security review correction: stricter scoped execution gates
+
+**G0 (before new runtime work):** ADR for **application-per-installation v1 topology**, trusted principal/tenant model, database role boundary and CMS compatibility signed by owners. Prototypes remain isolated until G1 passes.
+
+**G1 (before public tenant data):** Under actual Postgres and normal runtime credentials, demonstrate server-verified app+tenant context; transaction-local session setting on the **same** connection; fail closed without context; block every tenant-owned query via generic `getDb()`; reject tenant switches in nested transactions; test pool reuse and long-lived workers. Use `USING`/`WITH CHECK`, app+tenant identity and composite constraints. Session variables are **defense-in-depth, not authentication** for arbitrary SQL-capable code.
+
+**G2 (before code generation/CLI use beyond staging):** Validate canonical schema input, allowed identifiers/types, generated SQL ownership, migration preview/approval and installer isolation. Deny arbitrary DDL and unsafe default expressions; test relation/filter/aggregate/count/search/export side channels and SSR cache keys.
+
+**G3 (before extensions):** Public Plugin SDK compatibility evidence; signed immutable trusted release checks; no untrusted in-process module. Separate plugin provisioner/owner from HTTP runtime, with audited grant migrations.
+
+**G4 (before GA):** CMS+CRM Golden Apps, reproducible external clean install, cross-repo Studio fixtures, authenticated staging, restore rehearsal, independent security assessment and explicit approval. No automatic certification and no arbitrary zero-loss downgrade claim.
+
+See [DB/RLS authority](DATA-ISOLATION-AND-MIGRATIONS.md), [architecture decisions](ARCHITECTURE-DECISION-GATES.md), and [v1 mandatory scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+## Additional negative tests
+
+- Generated data: bulk mutations, aggregation/count/filter side channels, nested relation traversal, privileged field projections, unbounded sorting/pagination, SSR/service cache leakage.
+- RLS and privileges: app A/B deployments, tenant X/Y, missing context, attempted client context spoof, nested transaction identity switch, SQL injection/raw access path, pool reuse, owner/BYPASSRLS tests, unauthorized `CREATE` and unsafe function execution.
+- Migrations: malicious model/default, namespace collision, checksum drift, concurrent deployment race, partial backfill, timeout and documented forward-fix.
+- AI/cloud: cross-app tool delegation, prompt-injection source, stale approval, secrets exposure, tenant misrouting, quota/runaway costs and deployment identity escalation.
+
+**Release condition:** The v1 release candidate may be rejected by reviewers. Record accepted audit scope, owner, immutable artifact digest, exceptions, observed RPO/RTO and support limits. A passing CI run is insufficient.

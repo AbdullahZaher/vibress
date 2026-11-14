@@ -40,3 +40,22 @@ Every mandatory epic closed with direct evidence, immutable CI links, pinned DB/
 ## Working rules
 
 Keep plan on a separate documentation branch and Draft PR until reviewed. Make small implementation PRs on focused branches; never rewrite old evidence ledgers or deploy automatically from roadmap merge. Do not invent calendars, budgets, teams, claimed quality scores or a completion percentage. Deliver runnable code-first application framework before building Wix-style editor or PaaS.
+
+
+## Review-driven mandatory gates (addition)
+
+- **G0 design:** ADR-PLAT-001..008 approved by relevant architecture/security/DB/plugin/release reviewers. Any unresolved decision blocks affected implementation; an ADR is not runtime evidence.
+- **G1 early security:** before M01 is enabled for external consumers, topology and identity are accepted; prototypes use isolated dev environments. M02 requires a real Postgres RLS/transaction proof before any tenant production onboarding.
+- **G2 compiler:** M03/M04 cannot release generated SQL/endpoints without schema input trust policy, scoped execution, negative policy tests, unsafe migration denial and independent consumer fixtures.
+- **G3 v1 cut:** M07/M08 require **CMS + CRM** as mandatory Golden Apps; the three other full Golden Apps are later product acceptance tracks. MVP minimum event/workflow/Module SDK is specified in [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+- **G4 release:** M08 is a GA GO/NO-GO decision with independently reviewed evidence and no automatic certificate; rollback is only promised for tested reversible/compatible changes.
+
+## Evidence schema (required per ticket)
+
+`{ requirementId, issue, PR, codeCommitSHA, testName, testRunURL, environment, postgresVersion, fixtureSHA, negativeCase, migrationPlanSHA?, runtimeArtifactDigest?, reviewer, reviewedAt, decision, exceptions? }`.
+
+Review high-risk findings in [PR review register](REVIEW-FINDINGS-2026-11-14.md). A docs-only PR does not satisfy code/testing gates. Assign a DR/security owner and a durable evidence location before closing M00.
+
+## Documentation CI requirement
+
+M00 must add automated Markdown relative-link/anchor verification, duplicate milestone/epic-ID checks, orphaned-document detection and Issue link integrity checks. Run on immutable PR commit and pin the checker version; do not claim this already runs.

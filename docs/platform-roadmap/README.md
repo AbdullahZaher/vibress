@@ -10,6 +10,12 @@ Turn Vibress into a **general-purpose, open-source application development frame
 
 Three coherent products: **Vibress Framework** (public code-first kernel + SDK), **Vibress Studio / App Builder** (independent Lexical editor and future schema-driven visual app builder), and **optional Vibress Cloud** (deployment control plane, never a dependency for self-hosted runtime).
 
+## Review and decision status
+
+**Review result:** [PR #151 architecture/security findings (2026-11-14)](REVIEW-FINDINGS-2026-11-14.md) identifies high-impact planning gaps; the documentation has been revised, **not the runtime**. The review is advisory pending owner approval. [Mandatory ADR decisions](ARCHITECTURE-DECISION-GATES.md), [isolation and schema migration contract](DATA-ISOLATION-AND-MIGRATIONS.md), and the [explicit v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md) must be approved before implementation is treated as ready. This English set is the **normative current plan**; the earlier Arabic overview is informational and may lag behind new gates.
+
+**Recommended v1 deployment mode:** one Application per Installation; each application may host several isolated tenants in PostgreSQL when explicitly supported. Shared execution of unrelated customer apps in a privileged process is *not* an assumed v1 guarantee; see ADR-PLAT-001.
+
 ## Core principles
 
 1. Modular monolith before microservices; clear public contracts and dependency boundaries.
@@ -51,13 +57,17 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 | [M11](milestones/M11-cloud-control-plane.md) | Vibress Cloud & Deployment Control Plane | XXL | M07,M08 | **Proposed** |
 | [M12](milestones/M12-marketplace-ecosystem.md) | Marketplace, Ecosystem & Platform 2.0 | XL | M05,M08; M11 for cloud flows | **Proposed** |
 
+## v1 minimum and expansion boundaries
+
+The first general-purpose release is **not** blocked on five complete Golden Apps, a Wix-class builder or a complete PaaS. **Mandatory:** existing CMS compatibility plus a newly generated CRM; minimum trusted Module SDK, authenticated REST/OpenAPI/admin, PostgreSQL RLS, CLI, durable job/outbox and independent release review. Real Estate, Booking and Commerce are staged *reference tracks* rather than full GA gates unless a capability is explicitly marketed in GA. See [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
 ## Release boundaries
 
 | Release target | Mandatory milestones | What ships |
 | --- | --- | --- |
-| **Platform Alpha** | M00–M04 | General resource→Postgres→REST/OpenAPI→admin + default-deny policies |
-| **Platform Beta** | M00–M07 | Modules, workflow primitives, SDK, CLI, golden application fixtures |
-| **Platform v1.0 GA** | M00–M08 | Independently assessed, self-hostable, stable code-first product |
+| **Platform Alpha** | M00–M04 | Nonproduction preview of resource→Postgres→REST/OpenAPI→admin; reviewed threat model and tenant gating |
+| **Platform Beta** | M00–M07 | Minimum trusted modules/workflows, external SDK/CLI, CMS + CRM reference fixtures |
+| **Platform v1.0 GA** | M00–M08 | Explicit security/recovery assessment and GO/NO-GO for a self-hosted code-first v1 |
 | **Platform Builder** | M09 | Visual model/forms/tables/page construction atop same IR |
 | **Platform AI** | M10 | Scoped agents, MCP, skills, approvals and evaluation harness |
 | **Vibress Cloud** | M11 | Optional projects and environment deployment control plane |
@@ -71,7 +81,11 @@ Every milestone requires typed public contracts; CI/build/typecheck; integration
 
 ## Related documentation
 
-- [النسخة العربية](README.ar.md)
+- [Review findings and remediation register](REVIEW-FINDINGS-2026-11-14.md)
+- [Mandatory architecture decision gates](ARCHITECTURE-DECISION-GATES.md)
+- [Tenant isolation and migration authority contract](DATA-ISOLATION-AND-MIGRATIONS.md)
+- [Explicit v1 release scope and phased delivery](V1-SCOPE-AND-RELEASE-CRITERIA.md)
+- [Earlier Arabic overview — informational, not authoritative until synchronized](README.ar.md)
 - [Target architecture](PLATFORM-ARCHITECTURE.md)
 - [Governance and Definition of Done](DELIVERY-GOVERNANCE.md)
 - [Security and production gates](SECURITY-AND-RELEASE-GATES.md)
