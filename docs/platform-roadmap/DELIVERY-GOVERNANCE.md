@@ -81,6 +81,14 @@ A deterministic, no-dependency [roadmap validator](../../scripts/verify-platform
 
 **Required evidence and versioning:** use [Release Evidence & GO/NO-GO Ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) and [Runtime Version Matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md). Runtime owner sign-off and actual implementation artifact tests are separate. New Program-level date/owner/status claims must be backed by evidence.
 
+## International design control sign-off (conditional)
+
+The [Final Design Baseline Review](FINAL-DESIGN-BASELINE-APPROVAL.md) recommends approval **only as an M00 implementation-planning baseline**. It lists **A1–A8 OPEN** decisions for topology, release versions, AppSec/ASVS, SSDF vulnerability response, SLSA provenance, accessibility, CMS/Studio compatibility, resourcing and final CI/owner review. An AI-assisted editorial recommendation is not a signed Architecture Review Board decision.
+
+Use the [standards alignment](INTERNATIONAL-STANDARDS-ALIGNMENT.md) as a *traceability and verification plan* for NIST SSDF, OWASP ASVS 5.0.0, ISO 27001/25010, SLSA 1.2 and WCAG 2.2. No ISO certification, ASVS level, SLSA level or WCAG conformance has been established. Existing [SECURITY.md](../../SECURITY.md) remains the live disclosure policy until an authorized maintainer updates its version support.
+
+Do not change PR #151 from Draft or merge it by inference from this review. Record explicit human sign-offs and re-run CI on the final immutable SHA before organizational approval.
+
 ## Documentation CI requirement
 
 The initial automated local-link/heading, milestone/Epic ID, issue-number and score arithmetic checker is implemented in this PR; GitHub Actions must **pass on the final commit**. **Remaining enhancements:** remote GitHub issue-body parity, reference link styles, full orphan-document indexing, signed ADR status and runtime evidence validation need separate work; do not claim the first checker covers these.
