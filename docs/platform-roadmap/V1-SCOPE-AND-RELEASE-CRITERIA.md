@@ -57,6 +57,14 @@ v1 requires a testable authorized tenant export/offboarding policy, retention/au
 
 See [third review](THIRD-REVIEW-AND-RATING-2026-11-14.md), [Postgres rights](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [upgrade matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
 
+## Fourth-pass minimum product exclusions and recovery proof
+
+**Generated SQL views and tenant-owned materialized reporting are not v1 mandatory features.** If included, supported PostgreSQL versions must pass explicit owner-context/`security_invoker`, materialized snapshot and tenant denial tests; otherwise the compiler/API must reject this feature. See [view authorization and backup contract](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
+
+**Full-database backup ≠ tenant export.** A scoped application user may not see all records under RLS; the release must prove complete backup/restore with an independently audited role and per-tenant counts/checksums. Nested transactional action failure and rollback-only behavior must match the real [transaction runner](../../packages/database/src/transaction/transaction-runner.ts).
+
+**Mandatory legacy compatibility scenario:** one upgraded CMS with at least two publications and any `pub_default` data, plus a separate new CRM installation. See [explicit mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md). [First slice](EXECUTION-FIRST-SLICE.md) prioritizes proof and owners without committing to unresourced delivery dates.
+
 ## Product success measurements
 
 Measure time-to-first-working-secure-app on fresh hardware, public SDK usability, edits to kernel needed per independent module (target **zero**), contract migration success, tenant break-out failures (target **zero in defined matrix**), version compatibility, incident recovery and p95 under disclosed load. M00 must set benchmark budgets before calling any system faster/better than Payload, WordPress, Ghost or Wix.
