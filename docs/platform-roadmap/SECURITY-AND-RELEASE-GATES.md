@@ -70,6 +70,17 @@ See [DB/RLS authority](DATA-ISOLATION-AND-MIGRATIONS.md), [architecture decision
 
 See [ACL/RLS test matrix](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling upgrades](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
 
+## Fourth-pass security and recovery acceptance
+
+- **PostgreSQL views (R35):** verify actual view owner vs invoking user RLS behavior, and `security_invoker` on supported versions. If materialized views or reports are supported, ensure copies and export functions cannot expose another tenant. Otherwise document that they are unsupported.
+- **RLS-aware backups (R36):** distinguish tenant-scoped export from full-installation backup, use separately audited backup identity, detect filtered queries, verify row counts/checksums for at least two tenants after restore and measure actual RPO/RTO.
+- **Nested unit-of-work (R37):** current Drizzle transaction runner has no nested savepoints; test swallowed inner errors, rollback-only outer state, prohibited tenant switch, retry and outbox atomicity.
+- **Legacy CMS migration (R38):** use two-publication and `pub_default` fixtures to prove Application/Tenant mapping, Studio document serialization, media links, subscriptions, delayed jobs and safe migrations.
+- **Program delivery (R39):** link the first viable slice to existing M00–M08 Epics, assign named owners and require immutable code/test evidence before accepting milestones.
+
+[Fourth review](FOURTH-PASS-REVIEW-2026-11-14.md) · [RLS/views/backup/transactions](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) · [CMS mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md) · [first slice](EXECUTION-FIRST-SLICE.md). None of these future tests has been executed as part of this documentation change.
+
+
 ## Additional negative tests
 
 - Generated data: bulk mutations, aggregation/count/filter side channels, nested relation traversal, privileged field projections, unbounded sorting/pagination, SSR/service cache leakage.
