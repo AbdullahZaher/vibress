@@ -161,6 +161,16 @@ These tests refine **existing M00-E04, E07, E12 and E13**; they do not create ne
 - [ ] Product, architecture, DB/security, Studio and release roles accept the first P0 vertical-slice order or record a decision with risks; no invented staffing or date.
 - [ ] Baseline tests and results refer to immutable source/fixture SHAs; no claim of completed documentation CI validator without an actual CI job.
 
+## Release identity and automated documentation gate (existing M00-E02/E09)
+
+- [ ] **Reconcile ADR-013 Unified SemVer with current 1.2.0 package manifests and the Compose `VIBRESS_VERSION:1.0.0` fallback**; decide whether "Framework first code-first GA" belongs to existing version stream or uses separately approved, noncolliding tags/package names.
+- [ ] **Pin support candidates:** Node 24, pnpm 11.22.0, PostgreSQL 16, Redis 7 from actual current source; record exact tested Studio/Host/plugin ABI versions, environments and upgrade matrices. Do not imply wider support without tests.
+- [ ] The [automated documentation validator](../../../scripts/verify-platform-roadmap.mjs) passes against the **current** PR SHA and reports milestone, issue map, relative-link/heading and score arithmetic checks. It does not satisfy actual RLS or release security.
+- [ ] Every open security/Migration/Studio gate has an explicitly named future owner role and a [release evidence ledger entry](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md). Human assignment, deployment tests and audit evidence remain open.
+
+[Release support matrix](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release ledger](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md)
+
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
