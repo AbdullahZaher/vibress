@@ -134,7 +134,7 @@ Define per-target audience/scopes, signed or authenticated outbound/inbound API/
 
 ## Fourth-pass acceptance: transaction and outbox failure contract
 
-Apply to **M06-E01/E08** and **M02-E08** using the real [transaction runner's nesting rules](../../../../packages/database/src/transaction/transaction-runner.ts) and [proposed contract](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
+Apply to **M06-E01/E08** and **M02-E08** using the real [transaction runner's nesting rules](../../../packages/database/src/transaction/transaction-runner.ts) and [proposed contract](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
 
 - [ ] Nested transaction calls cannot independently commit or roll back without an approved savepoint design; an inner error caught by the outer action cannot silently commit forbidden partial state.
 - [ ] A nested app/tenant/principal scope switch is denied; retries use a new verified transaction with stable idempotency.
