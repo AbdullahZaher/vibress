@@ -8,7 +8,7 @@
 
 ## Outcome
 
-Release stable, self-hostable, independently assessed code-first Vibress Platform v1.0 with reproducible evidence.
+Release the first stable, self-hostable, code-first Vibress Framework GA **under a separately approved product/artefact SemVer identity**, with independently reviewed security and reproducible evidence; M08 is not itself a `v1.0.0` release tag.
 
 ## Workstreams and Epics
 
@@ -57,7 +57,7 @@ Go/no-go board: immutable SHA, tested artifacts, reproducible commands, independ
 
 ## Deliverables
 
-- v1.0 release candidate and complete support/runbooks
+- Version-approved code-first GA release candidate and complete support/runbooks
 - Independent threat/audit report and remediations
 - Public benchmarks, recovery evidence and QA ledger
 
@@ -155,6 +155,16 @@ Existing **M08-E02/E04/E11/E12** own these requirements. See [fourth review](../
 - [ ] Legacy two-publication CMS content, members/plans, locales, published URLs, Studio documents and delayed jobs migrate/operate compatibly with new Application identity; independent CRM keeps its separate installation boundary.
 - [ ] Tested nested transaction error/rollback-only and outbox state matches v1 business action semantics.
 - [ ] Release owner makes a documented GO/NO-GO decision with actual CI and independent security evidence; checklist completion alone is not certification.
+
+## Framework GA artifact identity and evidence gates (existing M08-E06/E08/E12)
+
+- [ ] **Do not issue a new `v1.0.0` tag by default:** validate existing [ADR-013](../../14-decisions/release-versioning-strategy.md), monorepo/SDK 1.2.0, Compose product-version fallback and any accepted independent Framework namespace without colliding with published history.
+- [ ] Pin release artifact digests, Host/Framework/SDK/ABI/CLI/Studio and Node/PG/Redis versions, API/worker/events/DB schema versions and verified upgrade compatibility.
+- [ ] [Release evidence register](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) reaches `EVIDENCE-VERIFIED` for all mandatory G0–G6 gates, then a named owner independently signs **GA-GO**; otherwise record **GA-NO-GO**.
+- [ ] A successful [docs workflow](../../../.github/workflows/platform-roadmap-docs.yml) is necessary for PR documentation quality, but never used as substitute for CMS/Studio regression, RLS, restore or security test evidence.
+
+[Versioning and support](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [GA decision criteria](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
 
 ## Milestone closure evidence ledger
 
