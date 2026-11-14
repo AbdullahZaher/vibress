@@ -1,6 +1,8 @@
 // @vitest-environment node
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -21,6 +23,10 @@ import {
   type InstallationRegistrationRecord,
 } from "../../packages/database/src/platform-application-registry";
 import {
+  DeploymentVerificationError,
+  verifyDeploymentIdentity,
+} from "../../packages/database/src/platform-deployment-verification";
+import {
   assertSafePlatformRuntimeRole,
   provisionPlatformRuntimeRole,
   UnsafePlatformRuntimeRoleError,
@@ -30,6 +36,10 @@ import {
   assertSafePlatformMembershipReaderRole,
   provisionPlatformMembershipReaderRole,
 } from "../../packages/database/src/platform-membership-reader";
+import {
+  assertSafePlatformDeploymentVerifierRole,
+  provisionPlatformDeploymentVerifierRole,
+} from "../../packages/database/src/platform-deployment-verifier";
 import { PolicyEngine } from "@vibress/tenancy";
 import {
   createReferenceApplication,
@@ -39,6 +49,7 @@ import {
   startReferenceApplication,
   type StartedReferenceApplication,
 } from "../../apps/platform-reference/src/start";
+import { provisionReferenceApplication } from "../../apps/platform-reference/src/registration";
 import { ReferenceTokenDirectory } from "../../apps/platform-reference/src/token-directory";
 
 /**
@@ -61,6 +72,9 @@ const roleName = `reference_rt_${Date.now().toString(36)}`;
 const rolePassword = `reference_${Date.now().toString(36)}`;
 const readerRoleName = `reference_rd_${Date.now().toString(36)}`;
 const readerRolePassword = `reference_rd_${Date.now().toString(36)}`;
+const verifierRoleName = `reference_vf_${Date.now().toString(36)}`;
+const verifierRolePassword = `reference_vf_${Date.now().toString(36)}`;
+const artifactDigest = "b".repeat(64);
 
 const installationId = asInstallationId("reference-installation");
 
@@ -69,7 +83,7 @@ const createPermission = REFERENCE_PERMISSIONS.createCustomer;
 
 let owner: Client;
 let ownerPool: Pool;
-let bootOwnerPool: Pool;
+let verifierPool: Pool;
 let readerPool: Pool;
 let runtimePool: Pool;
 let store: PostgresApplicationRegistryStore;
@@ -219,6 +233,16 @@ async function expectUnsafeReaderRole(
   );
 }
 
+async function expectUnsafeVerifierRole(
+  client: Client,
+  expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
+): Promise<void> {
+  await expectUnsafeRole(
+    () => assertSafePlatformDeploymentVerifierRole(client),
+    expectedCodes,
+  );
+}
+
 async function expectUnsafeRole(
   assertion: () => Promise<unknown>,
   expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
@@ -249,9 +273,12 @@ beforeAll(async () => {
     roleName: readerRoleName,
     password: readerRolePassword,
   });
+  await provisionPlatformDeploymentVerifierRole(owner, {
+    roleName: verifierRoleName,
+    password: verifierRolePassword,
+  });
 
   ownerPool = new Pool({ connectionString: DATABASE_URL, max: 4 });
-  bootOwnerPool = new Pool({ connectionString: DATABASE_URL, max: 2 });
   const runtimeUrl = new URL(DATABASE_URL);
   runtimeUrl.username = roleName;
   runtimeUrl.password = rolePassword;
@@ -260,6 +287,10 @@ beforeAll(async () => {
   readerUrl.username = readerRoleName;
   readerUrl.password = readerRolePassword;
   readerPool = new Pool({ connectionString: readerUrl.toString(), max: 2 });
+  const verifierUrl = new URL(DATABASE_URL);
+  verifierUrl.username = verifierRoleName;
+  verifierUrl.password = verifierRolePassword;
+  verifierPool = new Pool({ connectionString: verifierUrl.toString(), max: 1 });
 
   // A fixed identity keeps repeated runs deterministic; the cascade removes the
   // registration, tenants, memberships and customer rows. Audit rows restrict
@@ -297,14 +328,24 @@ beforeAll(async () => {
     permissions: [readPermission],
   });
 
+  await provisionReferenceApplication({
+    ownerPool,
+    application,
+    installationId,
+    environment: "integration-test",
+    artifactDigest,
+    actor: "integration-test",
+  });
+
   server = await startReferenceApplication({
     application,
     installationId,
     tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
-    ownerPool: bootOwnerPool,
+    verifierPool,
     readerPool,
     runtimePool,
     environment: "integration-test",
+    artifactDigest,
     host: "127.0.0.1",
     port: 0,
     policyVersion: "reference-crm-integration",
@@ -317,7 +358,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server?.app.close().catch(() => undefined);
-  await bootOwnerPool?.end().catch(() => undefined);
+  await verifierPool?.end().catch(() => undefined);
   await readerPool?.end().catch(() => undefined);
   await runtimePool?.end().catch(() => undefined);
   await ownerPool?.end().catch(() => undefined);
@@ -328,7 +369,7 @@ afterAll(async () => {
       auditApplicationId,
       unauditedApplicationId,
     ]).catch(() => undefined);
-    for (const name of [roleName, readerRoleName]) {
+    for (const name of [roleName, readerRoleName, verifierRoleName]) {
       const role = owner.escapeIdentifier(name);
       await owner.query(`DROP OWNED BY ${role}`).catch(() => undefined);
       await owner.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
@@ -510,6 +551,56 @@ describe("persisted application registry", () => {
       await deleteApplications([otherApplicationId]).catch(() => undefined);
     }
   });
+
+  it("applies compare-and-swap guards to operator installation updates", async () => {
+    const instId = asInstallationId("test-installation-cas");
+    try {
+      await store.syncInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "staging",
+        artifactDigest: "digest-a",
+      });
+
+      const updated = await store.syncInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "production",
+        artifactDigest: "digest-b",
+        expectedEnvironment: "staging",
+        expectedArtifactDigest: "digest-a",
+      });
+      expect(updated.environment).toBe("production");
+      expect(updated.artifactDigest).toBe("digest-b");
+
+      await expect(
+        store.syncInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "staging",
+          artifactDigest: "digest-c",
+          expectedEnvironment: "staging",
+          expectedArtifactDigest: "digest-a",
+        }),
+      ).rejects.toThrow(InstallationMismatchError);
+
+      const persisted = await owner.query<{
+        environment: string;
+        artifact_digest: string;
+      }>(
+        `SELECT environment, artifact_digest FROM platform_installations WHERE id = $1`,
+        [instId],
+      );
+      expect(persisted.rows[0]).toEqual({
+        environment: "production",
+        artifact_digest: "digest-b",
+      });
+    } finally {
+      await owner
+        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
+        .catch(() => undefined);
+    }
+  });
 });
 
 describe("registry change audit", () => {
@@ -652,6 +743,74 @@ describe("runtime role verification", () => {
       }
     });
 
+    it("rejects a NOINHERIT membership in an ordinary table-owning role", async () => {
+      const login = ephemeralRoleName("member_noinherit");
+      const tableOwner = ephemeralRoleName("table_owner");
+      const tableName = ephemeralRoleName("owned_table");
+      const password = `${login}_pw`;
+      try {
+        await owner.query(
+          `CREATE ROLE ${owner.escapeIdentifier(tableOwner)} NOLOGIN`,
+        );
+        await owner.query(
+          `CREATE TABLE public.${owner.escapeIdentifier(tableName)} (id integer)`,
+        );
+        await owner.query(
+          `ALTER TABLE public.${owner.escapeIdentifier(tableName)} OWNER TO ${owner.escapeIdentifier(tableOwner)}`,
+        );
+        await createEphemeralLogin(login, password);
+        // NOINHERIT hides the owner privileges from current_user, but the
+        // login can still SET ROLE to the table owner.
+        await owner.query(
+          `GRANT ${owner.escapeIdentifier(tableOwner)} TO ${owner.escapeIdentifier(login)} WITH INHERIT FALSE`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["unexpected_role_membership"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login, tableOwner]);
+      }
+    });
+
+    it("rejects indirect membership in an ordinary role", async () => {
+      const login = ephemeralRoleName("member_indirect");
+      const middle = ephemeralRoleName("middle");
+      const target = ephemeralRoleName("target");
+      const password = `${login}_pw`;
+      try {
+        await owner.query(
+          `CREATE ROLE ${owner.escapeIdentifier(middle)} NOLOGIN`,
+        );
+        await owner.query(
+          `CREATE ROLE ${owner.escapeIdentifier(target)} NOLOGIN`,
+        );
+        await owner.query(
+          `GRANT ${owner.escapeIdentifier(target)} TO ${owner.escapeIdentifier(middle)}`,
+        );
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `GRANT ${owner.escapeIdentifier(middle)} TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["unexpected_role_membership"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login, middle, target]);
+      }
+    });
+
     it("rejects a runtime role with CREATE on schema public", async () => {
       const login = ephemeralRoleName("schema");
       const password = `${login}_pw`;
@@ -791,11 +950,282 @@ describe("runtime role verification", () => {
 });
 
 describe("serving process privilege split", () => {
-  it("closes the owner pool before binding the listening socket", async () => {
+  it("refuses to start the serving process with an owner DATABASE_URL", async () => {
+    const tsx = path.join(process.cwd(), "node_modules", ".bin", "tsx");
+    const failure = (await promisify(execFile)(
+      tsx,
+      ["apps/platform-reference/src/main.ts"],
+      {
+        env: { ...process.env, DATABASE_URL },
+      },
+    ).catch((error: { code?: number; stderr?: string }) => error)) as {
+      code?: number;
+      stderr?: string;
+    };
+    expect(failure.code).toBe(1);
+    expect(failure.stderr).toContain("must not receive DATABASE_URL");
+  });
+
+  it("requires three distinct least-privilege connection identities", async () => {
+    const tsx = path.join(process.cwd(), "node_modules", ".bin", "tsx");
+    const env = { ...process.env };
+    delete env.DATABASE_URL;
+    delete env.PLATFORM_TEST_DATABASE_URL;
+    env.PLATFORM_RUNTIME_DATABASE_URL = "postgresql://app:pw@127.0.0.1/db";
+    env.PLATFORM_MEMBERSHIP_READER_DATABASE_URL =
+      "postgresql://app:pw@127.0.0.1/db";
+    env.PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL =
+      "postgresql://app:pw@127.0.0.1/db";
+
+    const failure = (await promisify(execFile)(
+      tsx,
+      ["apps/platform-reference/src/main.ts"],
+      { env },
+    ).catch((error: { code?: number; stderr?: string }) => error)) as {
+      code?: number;
+      stderr?: string;
+    };
+    expect(failure.code).toBe(1);
+    expect(failure.stderr).toContain("must be distinct");
+  });
+
+  it("closes the verifier pool after the boot proof", async () => {
     expect(server.address).toMatch(/^http:\/\/127\.0\.0\.1:/);
-    await expect(bootOwnerPool.query("SELECT 1")).rejects.toThrow(
+    await expect(verifierPool.query("SELECT 1")).rejects.toThrow(
       /after calling end/i,
     );
+  });
+
+  it("validates the verifier as SELECT-only on deployment registry tables", async () => {
+    const verifierUrl = new URL(DATABASE_URL);
+    verifierUrl.username = verifierRoleName;
+    verifierUrl.password = verifierRolePassword;
+    const pool = new Pool({
+      connectionString: verifierUrl.toString(),
+      max: 1,
+    });
+    try {
+      const attributes = await assertSafePlatformDeploymentVerifierRole(pool);
+      expect(attributes.currentUser).toBe(verifierRoleName);
+      expect(attributes.isSuperuser).toBe(false);
+      expect(attributes.isBypassRls).toBe(false);
+    } finally {
+      await pool.end().catch(() => undefined);
+    }
+  });
+
+  it("fails closed on installation environment, artifact and manifest drift", async () => {
+    const verifierUrl = new URL(DATABASE_URL);
+    verifierUrl.username = verifierRoleName;
+    verifierUrl.password = verifierRolePassword;
+    const pool = new Pool({
+      connectionString: verifierUrl.toString(),
+      max: 1,
+    });
+    try {
+      const base = {
+        client: pool,
+        application,
+        installationId,
+        environment: "integration-test",
+        artifactDigest,
+      };
+
+      await expect(
+        verifyDeploymentIdentity({ ...base, environment: "production" }),
+      ).rejects.toBeInstanceOf(DeploymentVerificationError);
+      await expect(
+        verifyDeploymentIdentity({
+          ...base,
+          artifactDigest: "f".repeat(64),
+        }),
+      ).rejects.toBeInstanceOf(DeploymentVerificationError);
+      await expect(
+        verifyDeploymentIdentity({
+          ...base,
+          application: createReferenceApplication({ id: otherApplicationId }),
+        }),
+      ).rejects.toBeInstanceOf(DeploymentVerificationError);
+      await expect(
+        verifyDeploymentIdentity({
+          ...base,
+          application: withVersion(application, "9.9.9"),
+        }),
+      ).rejects.toBeInstanceOf(DeploymentVerificationError);
+
+      const verified = await verifyDeploymentIdentity(base);
+      expect(verified.installation.environment).toBe("integration-test");
+      expect(verified.installation.artifactDigest).toBe(artifactDigest);
+    } finally {
+      await pool.end().catch(() => undefined);
+    }
+  });
+
+  it("denies the verifier writes and any read outside the deployment registry", async () => {
+    const verifierUrl = new URL(DATABASE_URL);
+    verifierUrl.username = verifierRoleName;
+    verifierUrl.password = verifierRolePassword;
+    const pool = new Pool({
+      connectionString: verifierUrl.toString(),
+      max: 1,
+    });
+    try {
+      for (const statement of [
+        `INSERT INTO platform_installations (id, application_id, environment, artifact_digest)
+           VALUES ('intruder', 'intruder', 'production', 'digest')`,
+        `UPDATE platform_installations SET environment = environment`,
+        `DELETE FROM platform_installations`,
+        `TRUNCATE platform_installations`,
+        `INSERT INTO platform_application_registrations (application_id, manifest_digest, registered_at, updated_at)
+           VALUES ('intruder', 'digest', now(), now())`,
+        `UPDATE platform_application_registrations SET manifest_digest = manifest_digest`,
+        `DELETE FROM platform_application_registrations`,
+      ]) {
+        await expect(pool.query(statement)).rejects.toMatchObject({
+          code: "42501",
+        });
+      }
+
+      for (const relation of [
+        "platform_applications",
+        "platform_application_registry_changes",
+        "platform_memberships",
+        "platform_crm_customers",
+      ]) {
+        await expect(
+          pool.query(`SELECT * FROM ${relation}`),
+        ).rejects.toMatchObject({ code: "42501" });
+      }
+    } finally {
+      await pool.end().catch(() => undefined);
+    }
+  });
+
+  it("starts read-only without mutating the registry or installation", async () => {
+    const beforeInstallation = await ownerPool.query(
+      `SELECT application_id, environment, artifact_digest, created_at
+         FROM platform_installations WHERE id = $1`,
+      [installationId],
+    );
+    const beforeRegistration = await ownerPool.query(
+      `SELECT manifest_digest, registered_at, updated_at
+         FROM platform_application_registrations WHERE application_id = $1`,
+      [applicationId],
+    );
+
+    const runtimeUrl = new URL(DATABASE_URL);
+    runtimeUrl.username = roleName;
+    runtimeUrl.password = rolePassword;
+    const readerUrl = new URL(DATABASE_URL);
+    readerUrl.username = readerRoleName;
+    readerUrl.password = readerRolePassword;
+    const verifierUrl = new URL(DATABASE_URL);
+    verifierUrl.username = verifierRoleName;
+    verifierUrl.password = verifierRolePassword;
+    const secondRuntimePool = new Pool({
+      connectionString: runtimeUrl.toString(),
+      max: 1,
+    });
+    const secondReaderPool = new Pool({
+      connectionString: readerUrl.toString(),
+      max: 1,
+    });
+    const secondVerifierPool = new Pool({
+      connectionString: verifierUrl.toString(),
+      max: 1,
+    });
+
+    try {
+      const started = await startReferenceApplication({
+        application,
+        installationId,
+        tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
+        verifierPool: secondVerifierPool,
+        readerPool: secondReaderPool,
+        runtimePool: secondRuntimePool,
+        environment: "integration-test",
+        artifactDigest,
+        host: "127.0.0.1",
+        port: 0,
+        policyVersion: "reference-crm-readonly-boot",
+        policy: new PolicyEngine([]),
+      });
+      await started.app.close();
+
+      const afterInstallation = await ownerPool.query(
+        `SELECT application_id, environment, artifact_digest, created_at
+           FROM platform_installations WHERE id = $1`,
+        [installationId],
+      );
+      const afterRegistration = await ownerPool.query(
+        `SELECT manifest_digest, registered_at, updated_at
+           FROM platform_application_registrations WHERE application_id = $1`,
+        [applicationId],
+      );
+      expect(afterInstallation.rows).toEqual(beforeInstallation.rows);
+      expect(afterRegistration.rows).toEqual(beforeRegistration.rows);
+    } finally {
+      await secondReaderPool.end().catch(() => undefined);
+      await secondRuntimePool.end().catch(() => undefined);
+      await secondVerifierPool.end().catch(() => undefined);
+    }
+  });
+
+  it("fails closed before serving on an artifact mismatch without mutation", async () => {
+    const before = await ownerPool.query(
+      `SELECT environment, artifact_digest FROM platform_installations WHERE id = $1`,
+      [installationId],
+    );
+    const runtimeUrl = new URL(DATABASE_URL);
+    runtimeUrl.username = roleName;
+    runtimeUrl.password = rolePassword;
+    const readerUrl = new URL(DATABASE_URL);
+    readerUrl.username = readerRoleName;
+    readerUrl.password = readerRolePassword;
+    const verifierUrl = new URL(DATABASE_URL);
+    verifierUrl.username = verifierRoleName;
+    verifierUrl.password = verifierRolePassword;
+    const badRuntimePool = new Pool({
+      connectionString: runtimeUrl.toString(),
+      max: 1,
+    });
+    const badReaderPool = new Pool({
+      connectionString: readerUrl.toString(),
+      max: 1,
+    });
+    const badVerifierPool = new Pool({
+      connectionString: verifierUrl.toString(),
+      max: 1,
+    });
+
+    try {
+      await expect(
+        startReferenceApplication({
+          application,
+          installationId,
+          tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
+          verifierPool: badVerifierPool,
+          readerPool: badReaderPool,
+          runtimePool: badRuntimePool,
+          environment: "integration-test",
+          artifactDigest: "f".repeat(64),
+          host: "127.0.0.1",
+          port: 0,
+          policyVersion: "reference-crm-bad-artifact",
+          policy: new PolicyEngine([]),
+        }),
+      ).rejects.toBeInstanceOf(DeploymentVerificationError);
+
+      const after = await ownerPool.query(
+        `SELECT environment, artifact_digest FROM platform_installations WHERE id = $1`,
+        [installationId],
+      );
+      expect(after.rows).toEqual(before.rows);
+    } finally {
+      await badReaderPool.end().catch(() => undefined);
+      await badRuntimePool.end().catch(() => undefined);
+      await badVerifierPool.end().catch(() => undefined);
+    }
   });
 
   it("validates the reader as SELECT-only on the membership directory", async () => {
@@ -911,14 +1341,101 @@ describe("serving process privilege split", () => {
     }
   });
 
-  it("refuses to boot, before the owner phase, with an unsafe reader role", async () => {
+  it("rejects unexpected SET-able memberships on the reader", async () => {
+    const login = ephemeralRoleName("reader_member");
+    const extra = ephemeralRoleName("reader_extra_role");
+    const password = `${login}_pw`;
+    try {
+      await owner.query(`CREATE ROLE ${owner.escapeIdentifier(extra)} NOLOGIN`);
+      await createEphemeralLogin(login, password);
+      await owner.query(
+        `GRANT SELECT ON TABLE public.platform_memberships TO ${owner.escapeIdentifier(login)}`,
+      );
+      await owner.query(
+        `GRANT ${owner.escapeIdentifier(extra)} TO ${owner.escapeIdentifier(login)} WITH INHERIT FALSE`,
+      );
+      const client = new Client({
+        connectionString: roleConnectionString(login, password),
+      });
+      await client.connect();
+      try {
+        await expectUnsafeReaderRole(client, ["unexpected_role_membership"]);
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    } finally {
+      await dropEphemeralRoles([login, extra]);
+    }
+  });
+
+  it("rejects verifier access to tenant relations and writes", async () => {
+    const login = ephemeralRoleName("verifier_extra");
+    const password = `${login}_pw`;
+    try {
+      await createEphemeralLogin(login, password);
+      await owner.query(
+        `GRANT SELECT ON TABLE public.platform_installations, public.platform_application_registrations TO ${owner.escapeIdentifier(login)}`,
+      );
+      await owner.query(
+        `GRANT SELECT ON TABLE public.platform_crm_customers TO ${owner.escapeIdentifier(login)}`,
+      );
+      const client = new Client({
+        connectionString: roleConnectionString(login, password),
+      });
+      await client.connect();
+      try {
+        await expectUnsafeVerifierRole(client, [
+          "unexpected_relation_privilege",
+        ]);
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    } finally {
+      await dropEphemeralRoles([login]);
+    }
+  });
+
+  it("rejects verifier writes on the installation registry", async () => {
+    const login = ephemeralRoleName("verifier_write");
+    const password = `${login}_pw`;
+    try {
+      await createEphemeralLogin(login, password);
+      await owner.query(
+        `GRANT SELECT, INSERT ON TABLE public.platform_installations TO ${owner.escapeIdentifier(login)}`,
+      );
+      await owner.query(
+        `GRANT SELECT ON TABLE public.platform_application_registrations TO ${owner.escapeIdentifier(login)}`,
+      );
+      const client = new Client({
+        connectionString: roleConnectionString(login, password),
+      });
+      await client.connect();
+      try {
+        await expectUnsafeVerifierRole(client, [
+          "unexpected_relation_privilege",
+        ]);
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    } finally {
+      await dropEphemeralRoles([login]);
+    }
+  });
+
+  it("refuses to boot with an unsafe reader role before verification", async () => {
     const login = ephemeralRoleName("reader_boot");
     const password = `${login}_pw`;
-    const unsafeOwnerPool = new Pool({ connectionString: DATABASE_URL, max: 1 });
     try {
       await createEphemeralLogin(login, password);
       const unsafeReaderPool = new Pool({
         connectionString: roleConnectionString(login, password),
+        max: 1,
+      });
+      const verifierUrl = new URL(DATABASE_URL);
+      verifierUrl.username = verifierRoleName;
+      verifierUrl.password = verifierRolePassword;
+      const unusedVerifierPool = new Pool({
+        connectionString: verifierUrl.toString(),
         max: 1,
       });
       try {
@@ -926,10 +1443,11 @@ describe("serving process privilege split", () => {
           application,
           installationId: asInstallationId("test-installation-unsafe-reader"),
           tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
-          ownerPool: unsafeOwnerPool,
+          verifierPool: unusedVerifierPool,
           readerPool: unsafeReaderPool,
           runtimePool,
           environment: "test",
+          artifactDigest,
           host: "127.0.0.1",
           port: 0,
           policyVersion: "reference-crm-unsafe-reader",
@@ -944,16 +1462,11 @@ describe("serving process privilege split", () => {
             (violation) => violation.code,
           ),
         ).toContain("membership_read_missing");
-
-        const probe = await unsafeOwnerPool.query<{ ok: number }>(
-          "SELECT 1 AS ok",
-        );
-        expect(probe.rows[0]?.ok).toBe(1);
       } finally {
         await unsafeReaderPool.end().catch(() => undefined);
+        await unusedVerifierPool.end().catch(() => undefined);
       }
     } finally {
-      await unsafeOwnerPool.end().catch(() => undefined);
       await dropEphemeralRoles([login]);
     }
   });

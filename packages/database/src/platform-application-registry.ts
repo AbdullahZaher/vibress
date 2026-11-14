@@ -336,6 +336,14 @@ export class PostgresApplicationRegistryStore {
     readonly applicationId: ApplicationId;
     readonly environment?: string;
     readonly artifactDigest?: string | null;
+    /**
+     * Compare-and-swap guard for an operator-driven update. When supplied, an
+     * existing installation with a different environment is rejected instead
+     * of silently rewritten.
+     */
+    readonly expectedEnvironment?: string;
+    /** Compare-and-swap guard for artifact rotation. */
+    readonly expectedArtifactDigest?: string;
   }): Promise<InstallationRegistrationRecord> {
     const environment = installation.environment ?? "production";
     const artifactDigest = installation.artifactDigest ?? null;
@@ -350,8 +358,17 @@ export class PostgresApplicationRegistryStore {
            SET environment = EXCLUDED.environment,
                artifact_digest = COALESCE(EXCLUDED.artifact_digest, platform_installations.artifact_digest)
            WHERE platform_installations.application_id = EXCLUDED.application_id
+             AND ($5::text IS NULL OR platform_installations.environment = $5)
+             AND ($6::text IS NULL OR platform_installations.artifact_digest = $6)
          RETURNING id, application_id, environment, artifact_digest, created_at`,
-        [installation.id, installation.applicationId, environment, artifactDigest],
+        [
+          installation.id,
+          installation.applicationId,
+          environment,
+          artifactDigest,
+          installation.expectedEnvironment ?? null,
+          installation.expectedArtifactDigest ?? null,
+        ],
       );
     } catch (error) {
       if ((error as { code?: string }).code === "23503") {
@@ -377,6 +394,22 @@ export class PostgresApplicationRegistryStore {
     if (conflicting.applicationId !== installation.applicationId) {
       throw new InstallationMismatchError(
         `Installation ${installation.id} is bound to application '${conflicting.applicationId}', but boot requested '${installation.applicationId}'`,
+      );
+    }
+    if (
+      installation.expectedEnvironment !== undefined &&
+      conflicting.environment !== installation.expectedEnvironment
+    ) {
+      throw new InstallationMismatchError(
+        `Installation ${installation.id} is in environment '${conflicting.environment}', expected '${installation.expectedEnvironment}'`,
+      );
+    }
+    if (
+      installation.expectedArtifactDigest !== undefined &&
+      conflicting.artifactDigest !== installation.expectedArtifactDigest
+    ) {
+      throw new InstallationMismatchError(
+        `Installation ${installation.id} is pinned to artifact '${conflicting.artifactDigest ?? "none"}', expected '${installation.expectedArtifactDigest}'`,
       );
     }
     return conflicting;

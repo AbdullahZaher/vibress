@@ -150,6 +150,7 @@ export type PlatformRuntimeRoleViolationCode =
   | "identity_createdb"
   | "identity_replication"
   | "privileged_role_membership"
+  | "unexpected_role_membership"
   | "schema_create_privilege"
   | "database_create_privilege"
   | "owns_database"
@@ -228,13 +229,20 @@ const SEQUENCE_PRIVILEGES = ["USAGE", "SELECT", "UPDATE"] as const;
 
 const COLUMN_PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "REFERENCES"] as const;
 
-export type PlatformRoleProfile = "runtime" | "membership_reader";
+export type PlatformRoleProfile =
+  | "runtime"
+  | "membership_reader"
+  | "deployment_verifier";
 
 export interface PlatformRoleAssertionOptions {
   /**
    * `membership_reader` validates the dedicated membership-directory reader:
    * SELECT on `platform_memberships` only, and no privilege on any other
    * relation, sequence or function.
+   *
+   * `deployment_verifier` validates the read-only boot verifier: SELECT on
+   * `platform_installations` and `platform_application_registrations` only,
+   * and no mutation privilege or access to any other relation.
    */
   readonly profile?: PlatformRoleProfile;
 }
@@ -249,8 +257,10 @@ export interface PlatformRoleAssertionOptions {
  *
  * All checks fail closed. A violation is reported for:
  * - superuser, BYPASSRLS, CREATEROLE, CREATEDB or REPLICATION attributes;
- * - membership in (and therefore SET ROLE to) any such privileged role;
- * - CREATE on the public schema or the current database;
+ * - any unexpected SET-able role membership, including NOINHERIT and indirect
+ *   memberships in otherwise ordinary roles that own objects or hold extra
+ *   ACLs; a dedicated runtime/reader login must not be able to SET ROLE at all;
+ * - CREATE on any non-system schema or the current database;
  * - ownership of the database, any schema, platform tables or functions;
  * - any table/column privilege on operator registry and membership tables;
  * - TRUNCATE/REFERENCES/TRIGGER on the tenant table (not governed by RLS);
@@ -259,12 +269,17 @@ export interface PlatformRoleAssertionOptions {
  * The `membership_reader` profile applies the same identity, ownership and
  * function checks to the membership-directory reader, which must hold SELECT
  * on `platform_memberships` and no privilege on any other relation.
+ *
+ * The `deployment_verifier` profile applies them to the read-only boot
+ * verifier, which must hold SELECT on `platform_installations` and
+ * `platform_application_registrations` and no privilege on any other relation.
  */
 export async function assertSafePlatformRuntimeRole(
   client: { query: <TRow = unknown>(sql: string, params?: readonly unknown[]) => Promise<{ rows: TRow[] }> },
   options: PlatformRoleAssertionOptions = {},
 ): Promise<RuntimeRoleAttributes> {
   const isReader = options.profile === "membership_reader";
+  const isVerifier = options.profile === "deployment_verifier";
   const roleRow = (
     await client.query<RuntimeIdentityRow>(
       `SELECT current_user AS "currentUser",
@@ -379,50 +394,75 @@ export async function assertSafePlatformRuntimeRole(
     }
   }
 
+  // `pg_has_role(..., 'MEMBER')` follows the full transitive membership
+  // closure and returns true for NOINHERIT memberships, which are not usable
+  // implicitly but are still SET-able. A dedicated runtime/reader/verifier
+  // login must have no memberships at all: any SET-able role could own
+  // protected objects or carry ACLs that `current_user` checks never see.
   const memberships = (
-    await client.query<{ identity: string; roleName: string }>(
-      `SELECT i.identity::text AS identity, r.rolname AS "roleName"
+    await client.query<{
+      identity: string;
+      roleName: string;
+      privileged: boolean;
+    }>(
+      `SELECT i.identity::text AS identity,
+              r.rolname AS "roleName",
+              (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole
+               OR r.rolcreatedb OR r.rolreplication) AS privileged
          FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
          JOIN pg_roles r
            ON r.rolname <> i.identity
-          AND (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole
-               OR r.rolcreatedb OR r.rolreplication)
           AND pg_has_role(i.identity, r.oid, 'MEMBER')
         ORDER BY 1, 2`,
     )
   ).rows;
   for (const membership of memberships) {
-    addViolation(
-      "privileged_role_membership",
-      `'${membership.identity}' is a member of privileged role '${membership.roleName}' and can SET ROLE to it`,
-    );
+    if (membership.privileged) {
+      addViolation(
+        "privileged_role_membership",
+        `'${membership.identity}' is a member of privileged role '${membership.roleName}' and can SET ROLE to it`,
+      );
+    } else {
+      addViolation(
+        "unexpected_role_membership",
+        `'${membership.identity}' is a SET-able member of role '${membership.roleName}'; dedicated platform logins must have no role memberships`,
+      );
+    }
   }
 
   const ddlPrivileges = (
     await client.query<{
       identity: string;
-      canCreateInSchema: boolean;
       canCreateDatabase: boolean;
     }>(
       `SELECT i.identity::text AS identity,
-              has_schema_privilege(i.identity, 'public', 'CREATE') AS "canCreateInSchema",
               has_database_privilege(i.identity, current_database(), 'CREATE') AS "canCreateDatabase"
          FROM unnest(ARRAY[current_user, session_user]) AS i(identity)`,
     )
   ).rows;
+  const schemaCreatePrivileges = (
+    await client.query<{ identity: string; schemaName: string }>(
+      `SELECT i.identity::text AS identity, n.nspname AS "schemaName"
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_namespace n
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_toast%'
+          AND has_schema_privilege(i.identity, n.oid, 'CREATE')`,
+    )
+  ).rows;
   for (const privilege of ddlPrivileges) {
-    if (privilege.canCreateInSchema) {
-      addViolation(
-        "schema_create_privilege",
-        `'${privilege.identity}' has CREATE on schema public`,
-      );
-    }
     if (privilege.canCreateDatabase) {
       addViolation(
         "database_create_privilege",
         `'${privilege.identity}' has CREATE on the current database`,
       );
     }
+  }
+  for (const privilege of schemaCreatePrivileges) {
+    addViolation(
+      "schema_create_privilege",
+      `'${privilege.identity}' has CREATE on schema '${privilege.schemaName}'`,
+    );
   }
 
   const ownershipRows = (
@@ -445,7 +485,7 @@ export async function assertSafePlatformRuntimeRole(
     }
   }
 
-  if (!isReader) {
+  if (!isReader && !isVerifier) {
     const ownedTables = (
       await client.query<{ tableName: string }>(
         `SELECT c.relname AS "tableName"
@@ -470,11 +510,39 @@ export async function assertSafePlatformRuntimeRole(
         `runtime identity owns tables: ${ownedTables.map((r) => r.tableName).join(", ")}`,
       );
     }
+
+    const otherOwnedRelations = (
+      await client.query<{ relation: string }>(
+        `SELECT i.identity::text AS identity,
+                format('%I.%I', n.nspname, c.relname) AS relation
+           FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+           CROSS JOIN pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+            AND n.nspname NOT LIKE 'pg_toast%'
+            AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+            AND pg_get_userbyid(c.relowner) = i.identity`,
+      )
+    ).rows;
+    if (otherOwnedRelations.length > 0) {
+      addViolation(
+        "owns_table",
+        `runtime identity owns relations: ${otherOwnedRelations
+          .map((row) => row.relation)
+          .join(", ")}`,
+      );
+    }
   }
 
   const registryTables = isReader
     ? REGISTRY_TABLES.filter((table) => table !== "platform_memberships")
-    : REGISTRY_TABLES;
+    : isVerifier
+      ? REGISTRY_TABLES.filter(
+          (table) =>
+            table !== "platform_installations" &&
+            table !== "platform_application_registrations",
+        )
+      : REGISTRY_TABLES;
 
   const registryPrivileges = (
     await client.query<{
@@ -534,11 +602,32 @@ export async function assertSafePlatformRuntimeRole(
   }
 
   if (isReader) {
-    await inspectMembershipReaderRelationAccess(client, roleRow, addViolation);
+    await inspectReadOnlyRelationAccess(client, roleRow, addViolation, {
+      requiredSelectTables: ["platform_memberships"],
+      allowedSelectTables: ["platform_memberships"],
+      missingRelationCode: "membership_read_missing",
+      missingSelectCode: "membership_read_missing",
+      writeCode: "membership_write_privilege",
+    });
+  } else if (isVerifier) {
+    await inspectReadOnlyRelationAccess(client, roleRow, addViolation, {
+      requiredSelectTables: [
+        "platform_installations",
+        "platform_application_registrations",
+      ],
+      allowedSelectTables: [
+        "platform_installations",
+        "platform_application_registrations",
+      ],
+      missingRelationCode: "unexpected_relation_privilege",
+      missingSelectCode: "unexpected_relation_privilege",
+      writeCode: "unexpected_relation_privilege",
+    });
   }
 
   if (
     !isReader &&
+    !isVerifier &&
     (
       await client.query<{ present: boolean }>(
         "SELECT to_regclass('public.platform_crm_customers') IS NOT NULL AS present",
@@ -656,13 +745,21 @@ type AddViolation = (
   detail: string,
 ) => void;
 
+interface ReadOnlyRoleSpec {
+  readonly requiredSelectTables: readonly string[];
+  readonly allowedSelectTables: readonly string[];
+  readonly missingRelationCode: PlatformRuntimeRoleViolationCode;
+  readonly missingSelectCode: PlatformRuntimeRoleViolationCode;
+  readonly writeCode: PlatformRuntimeRoleViolationCode;
+}
+
 /**
- * Reader profile: the membership directory is read before a verified scope
- * exists, so the reader must hold SELECT on `platform_memberships` and nothing
- * else. It must not reach registry, tenant or CMS relations by any privilege,
- * including column-level grants and sequences.
+ * Read-only profiles (membership reader, deployment verifier) must hold
+ * table-level SELECT on their required registry relations and nothing else.
+ * Any write, column-only grant, sequence privilege, relation ownership or
+ * access to another non-system relation fails closed.
  */
-async function inspectMembershipReaderRelationAccess(
+async function inspectReadOnlyRelationAccess(
   client: {
     query: <TRow = unknown>(
       sql: string,
@@ -671,67 +768,66 @@ async function inspectMembershipReaderRelationAccess(
   },
   roleRow: RuntimeIdentityRow,
   addViolation: AddViolation,
+  spec: ReadOnlyRoleSpec,
 ): Promise<void> {
   const identities = [...new Set([roleRow.currentUser, roleRow.sessionUser])];
-  const membershipPresent = (
-    await client.query<{ present: boolean }>(
-      "SELECT to_regclass('public.platform_memberships') IS NOT NULL AS present",
-    )
-  ).rows[0]?.present;
 
-  if (!membershipPresent) {
-    addViolation(
-      "membership_read_missing",
-      "public.platform_memberships does not exist; apply the platform migrations before boot",
-    );
-  } else {
-    const membershipPrivileges = (
+  for (const table of spec.requiredSelectTables) {
+    const present = (
+      await client.query<{ present: boolean }>(
+        "SELECT to_regclass($1) IS NOT NULL AS present",
+        [`public.${table}`],
+      )
+    ).rows[0]?.present;
+    if (!present) {
+      addViolation(
+        spec.missingRelationCode,
+        `public.${table} does not exist; apply the platform migrations before boot`,
+      );
+      continue;
+    }
+
+    const privileges = (
       await client.query<{ identity: string; privilege: string }>(
         `SELECT i.identity::text AS identity, p.privilege
            FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
            CROSS JOIN unnest($1::text[]) AS p(privilege)
-          WHERE has_table_privilege(
-                  i.identity, 'public.platform_memberships', p.privilege
-                )`,
-        [REGISTRY_TABLE_PRIVILEGES],
+          WHERE has_table_privilege(i.identity, $2, p.privilege)`,
+        [REGISTRY_TABLE_PRIVILEGES, `public.${table}`],
       )
     ).rows;
-    const membershipColumns = (
+    const columnWrites = (
       await client.query<{ identity: string; privilege: string }>(
         `SELECT i.identity::text AS identity, p.privilege
            FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
            CROSS JOIN unnest($1::text[]) AS p(privilege)
-          WHERE has_any_column_privilege(
-                  i.identity, 'public.platform_memberships', p.privilege
-                )
-            AND NOT has_table_privilege(
-                  i.identity, 'public.platform_memberships', p.privilege
-                )`,
-        [COLUMN_PRIVILEGES],
+          WHERE has_any_column_privilege(i.identity, $2, p.privilege)
+            AND NOT has_table_privilege(i.identity, $2, p.privilege)`,
+        [COLUMN_PRIVILEGES, `public.${table}`],
       )
     ).rows;
 
     for (const identity of identities) {
-      const tablePrivileges = membershipPrivileges
+      const tablePrivileges = privileges
         .filter((row) => row.identity === identity)
         .map((row) => row.privilege);
       if (!tablePrivileges.includes("SELECT")) {
         addViolation(
-          "membership_read_missing",
-          `'${identity}' lacks table-level SELECT on membership table 'platform_memberships'`,
+          spec.missingSelectCode,
+          `'${identity}' lacks table-level SELECT on '${table}'`,
         );
       }
       const writes = tablePrivileges.filter(
         (privilege) => privilege !== "SELECT",
       );
-      const columnWrites = membershipColumns
+      const columnWritePrivileges = columnWrites
         .filter((row) => row.identity === identity)
         .map((row) => `${row.privilege} (column)`);
-      const allWrites = [...writes, ...columnWrites];
+      const allWrites = [...writes, ...columnWritePrivileges];
       if (allWrites.length > 0) {
         addViolation(
-          "membership_write_privilege",
-          `'${identity}' has ${allWrites.join(", ")} on membership table 'platform_memberships'`,
+          spec.writeCode,
+          `'${identity}' has ${allWrites.join(", ")} on '${table}'`,
         );
       }
     }
@@ -753,10 +849,14 @@ async function inspectMembershipReaderRelationAccess(
         WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
           AND n.nspname NOT LIKE 'pg_toast%'
           AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
-          AND NOT (n.nspname = 'public' AND c.relname = 'platform_memberships')
+          AND NOT (
+            n.nspname = 'public'
+            AND c.relname = ANY($2::text[])
+            AND p.privilege = 'SELECT'
+          )
           AND has_table_privilege(i.identity, c.oid, p.privilege)
         GROUP BY i.identity, n.nspname, c.relname`,
-      [REGISTRY_TABLE_PRIVILEGES],
+      [REGISTRY_TABLE_PRIVILEGES, spec.allowedSelectTables],
     )
   ).rows;
   for (const privilege of relationPrivileges) {
@@ -782,11 +882,15 @@ async function inspectMembershipReaderRelationAccess(
         WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
           AND n.nspname NOT LIKE 'pg_toast%'
           AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
-          AND NOT (n.nspname = 'public' AND c.relname = 'platform_memberships')
+          AND NOT (
+            n.nspname = 'public'
+            AND c.relname = ANY($2::text[])
+            AND p.privilege = 'SELECT'
+          )
           AND has_any_column_privilege(i.identity, c.oid, p.privilege)
           AND NOT has_table_privilege(i.identity, c.oid, p.privilege)
         GROUP BY i.identity, n.nspname, c.relname`,
-      [COLUMN_PRIVILEGES],
+      [COLUMN_PRIVILEGES, spec.allowedSelectTables],
     )
   ).rows;
   for (const privilege of columnPrivileges) {
@@ -840,7 +944,7 @@ async function inspectMembershipReaderRelationAccess(
   if (ownedRelations.length > 0) {
     addViolation(
       "owns_table",
-      `runtime identity owns relations: ${ownedRelations
+      `'${roleRow.currentUser}' owns relations: ${ownedRelations
         .map((row) => row.relation)
         .join(", ")}`,
     );

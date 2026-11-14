@@ -113,6 +113,20 @@ describe("platform dependency boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps operator provisioning authority out of the request-serving sources", () => {
+    const servingSources = [
+      "apps/platform-reference/src/server.ts",
+      "apps/platform-reference/src/start.ts",
+    ];
+    for (const file of servingSources) {
+      const content = fs.readFileSync(path.join(ROOT, file), "utf8");
+      expect(specifiers(content)).not.toContain("./registration");
+      expect(content).not.toMatch(
+        /PostgresApplicationRegistryStore|provisionReferenceApplication|ApplicationProvisioningOptions|ownerPool/,
+      );
+    }
+  });
+
   it("detects a deliberately forbidden bare import", () => {
     const violations = scan(
       [

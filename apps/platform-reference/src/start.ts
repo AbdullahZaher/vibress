@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import {
+  assertSafePlatformDeploymentVerifierRole,
   assertSafePlatformMembershipReaderRole,
   assertSafePlatformRuntimeRole,
   PlatformMembershipResolver,
-  type RegistrySyncResult,
+  verifyDeploymentIdentity,
+  type VerifiedDeploymentIdentity,
 } from "@vibress/database";
 import type {
   ApplicationDefinition,
@@ -12,7 +14,6 @@ import type {
 } from "@vibress/platform-kernel";
 import { TenantUnitOfWork, type PolicyEngine } from "@vibress/tenancy";
 import { createReferenceServer } from "./server";
-import { registerApplicationInstallation } from "./registration";
 import type { ReferenceTokenDirectory } from "./token-directory";
 
 export interface StartReferenceOptions {
@@ -22,30 +23,34 @@ export interface StartReferenceOptions {
   readonly policy: PolicyEngine;
   readonly policyVersion: string;
   readonly environment: string;
-  /** Owner credentials. Closed by this function before the socket is bound. */
-  readonly ownerPool: Pool;
+  /** Digest assigned by the deployment/build pipeline for this artifact. */
+  readonly artifactDigest: string;
+  /** Read-only verifier. Closed after the boot proof completes. */
+  readonly verifierPool: Pool;
   /** Membership directory reader: SELECT on platform_memberships only. */
   readonly readerPool: Pool;
   /** Tenant runtime role: RLS-bound DML, no registry access. */
   readonly runtimePool: Pool;
   readonly host: string;
   readonly port: number;
-  readonly allowRegistryUpdate?: boolean;
-  /** Operator identity recorded when the registry is created or updated. */
-  readonly registryActor?: string;
   readonly onUnexpectedError?: (error: unknown) => void;
 }
 
 export interface StartedReferenceApplication {
   readonly app: FastifyInstance;
-  readonly registration: RegistrySyncResult;
+  readonly deployment: VerifiedDeploymentIdentity;
   readonly address: string;
 }
 
 /**
- * Runs the owner-only boot phase, closes the owner pool, and only then binds
- * the listening socket. The serving process keeps the reader and runtime pools
- * only, so no owner credential survives into request handling.
+ * Boots the serving process without any owner credential:
+ * 1. asserts the least-privilege runtime, reader and verifier roles;
+ * 2. verifies the provisioned installation, environment, artifact and
+ *    manifest digest read-only;
+ * 3. closes the verifier pool and binds the listener using runtime + reader.
+ *
+ * Registry and installation writes belong to the separate provisioning
+ * executable and cannot occur here.
  */
 export async function startReferenceApplication(
   options: StartReferenceOptions,
@@ -54,45 +59,36 @@ export async function startReferenceApplication(
   const readerRole = await assertSafePlatformMembershipReaderRole(
     options.readerPool,
   );
+  const verifierRole = await assertSafePlatformDeploymentVerifierRole(
+    options.verifierPool,
+  );
 
-  const ownerUser = (
-    await options.ownerPool.query<{ current_user: string }>(
-      "SELECT current_user",
-    )
-  ).rows[0]?.current_user;
-  if (!ownerUser) {
-    throw new Error("Unable to resolve the DATABASE_URL identity");
-  }
-  if (ownerUser === runtimeRole.currentUser) {
+  const identityNames = [
+    runtimeRole.currentUser,
+    readerRole.currentUser,
+    verifierRole.currentUser,
+  ];
+  if (new Set(identityNames).size !== identityNames.length) {
     throw new Error(
-      `DATABASE_URL and PLATFORM_RUNTIME_DATABASE_URL both authenticate as '${ownerUser}'. Runtime role must be a separate, non-owner role.`,
-    );
-  }
-  if (ownerUser === readerRole.currentUser) {
-    throw new Error(
-      `DATABASE_URL and PLATFORM_MEMBERSHIP_READER_DATABASE_URL both authenticate as '${ownerUser}'. Reader role must be a separate, non-owner role.`,
-    );
-  }
-  if (runtimeRole.currentUser === readerRole.currentUser) {
-    throw new Error(
-      "Runtime and membership reader connections must authenticate as different roles",
+      "Runtime, membership reader and deployment verifier connections must authenticate as three different roles",
     );
   }
 
-  const registration = await registerApplicationInstallation({
-    ownerPool: options.ownerPool,
-    application: options.application,
-    installationId: options.installationId,
-    environment: options.environment,
-    ...(options.allowRegistryUpdate ? { allowRegistryUpdate: true } : {}),
-    ...(options.registryActor ? { registryActor: options.registryActor } : {}),
-  });
-
-  await options.ownerPool.end();
+  let deployment: VerifiedDeploymentIdentity;
+  try {
+    deployment = await verifyDeploymentIdentity({
+      client: options.verifierPool,
+      application: options.application,
+      installationId: options.installationId,
+      environment: options.environment,
+      artifactDigest: options.artifactDigest,
+    });
+  } finally {
+    await options.verifierPool.end().catch(() => undefined);
+  }
 
   const server = await createReferenceServer({
     application: options.application,
-    registration,
     membershipResolver: new PlatformMembershipResolver(options.readerPool),
     unitOfWork: new TenantUnitOfWork(options.runtimePool),
     tokens: options.tokens,
@@ -109,5 +105,5 @@ export async function startReferenceApplication(
     port: options.port,
   });
 
-  return { app: server.app, registration, address };
+  return { app: server.app, deployment, address };
 }

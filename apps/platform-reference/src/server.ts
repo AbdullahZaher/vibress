@@ -12,16 +12,11 @@ import {
   type PolicyEngine,
   type TenantUnitOfWorkRunner,
 } from "@vibress/tenancy";
-import type {
-  PlatformMembershipResolver,
-  RegistrySyncResult,
-} from "@vibress/database";
+import type { PlatformMembershipResolver } from "@vibress/database";
 import type { ReferenceTokenDirectory } from "./token-directory";
 
 export interface ReferenceServerOptions {
   readonly application: ApplicationDefinition;
-  /** Result of the owner-only boot phase; see `registration.ts`. */
-  readonly registration: RegistrySyncResult;
   readonly membershipResolver: PlatformMembershipResolver;
   readonly unitOfWork: TenantUnitOfWorkRunner;
   readonly tokens: ReferenceTokenDirectory;
@@ -35,7 +30,6 @@ export interface ReferenceServerOptions {
 export interface ReferenceServer {
   readonly app: FastifyInstance;
   readonly executor: RouteExecutor;
-  readonly registration: RegistrySyncResult;
 }
 
 function bearerToken(header: string | undefined): string | null {
@@ -51,8 +45,8 @@ function bearerToken(header: string | undefined): string | null {
  * 1. build the in-memory registry from deployed code;
  * 2. serve every request through the kernel route executor.
  *
- * Persistence (manifest sync, registry verification, installation binding) is
- * the owner-only boot phase and has already run before this is called.
+ * Persistence is an operator provisioning concern. The serving process only
+ * verifies the provisioned identity read-only before this is called.
  */
 export async function createReferenceServer(
   options: ReferenceServerOptions,
@@ -118,5 +112,5 @@ export async function createReferenceServer(
     });
   });
 
-  return { app, executor, registration: options.registration };
+  return { app, executor };
 }

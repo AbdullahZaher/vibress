@@ -29,6 +29,18 @@ export {
   type PlatformMembershipReaderConfig,
 } from "./platform-membership-reader";
 export {
+  assertSafePlatformDeploymentVerifierRole,
+  provisionPlatformDeploymentVerifierRole,
+  readPlatformDeploymentVerifierConfig,
+  type PlatformDeploymentVerifierConfig,
+} from "./platform-deployment-verifier";
+export {
+  DeploymentVerificationError,
+  verifyDeploymentIdentity,
+  type VerifiedDeploymentIdentity,
+  type VerifyDeploymentIdentityOptions,
+} from "./platform-deployment-verification";
+export {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,

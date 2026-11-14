@@ -12,6 +12,7 @@ export interface PlatformReferenceE2eState {
   readonly tenantBToken: string;
   readonly runtimeRole: string;
   readonly readerRole: string;
+  readonly verifierRole: string;
 }
 
 export function e2eStateFile(): string {
@@ -79,7 +80,11 @@ export async function cleanupPlatformReferenceE2e(
       state.applicationId,
     ]);
 
-    for (const roleName of [state.runtimeRole, state.readerRole]) {
+    for (const roleName of [
+      state.runtimeRole,
+      state.readerRole,
+      state.verifierRole,
+    ]) {
       const exists = await client.query(
         "SELECT 1 FROM pg_roles WHERE rolname = $1",
         [roleName],

@@ -21,12 +21,18 @@ function required(name: string): string {
 }
 
 async function main(): Promise<void> {
-  const ownerUrl = required("DATABASE_URL");
+  if (process.env.DATABASE_URL?.trim()) {
+    throw new Error(
+      "The request-serving process must not receive DATABASE_URL; run the provisioning executable separately",
+    );
+  }
+
   const runtimeUrl = required("PLATFORM_RUNTIME_DATABASE_URL");
   const readerUrl = required("PLATFORM_MEMBERSHIP_READER_DATABASE_URL");
-  if (new Set([ownerUrl, runtimeUrl, readerUrl]).size !== 3) {
+  const verifierUrl = required("PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL");
+  if (new Set([runtimeUrl, readerUrl, verifierUrl]).size !== 3) {
     throw new Error(
-      "DATABASE_URL, PLATFORM_RUNTIME_DATABASE_URL and PLATFORM_MEMBERSHIP_READER_DATABASE_URL must be distinct",
+      "PLATFORM_RUNTIME_DATABASE_URL, PLATFORM_MEMBERSHIP_READER_DATABASE_URL and PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL must be distinct",
     );
   }
 
@@ -34,23 +40,32 @@ async function main(): Promise<void> {
   const installationId = asInstallationId(
     process.env.PLATFORM_INSTALLATION_ID ?? "reference-installation",
   );
+  const environment = required("PLATFORM_ENVIRONMENT");
+  const artifactDigest = required("PLATFORM_ARTIFACT_DIGEST");
   const tokens = ReferenceTokenDirectory.fromJson(
     application.id,
     process.env.PLATFORM_REFERENCE_TOKENS,
   );
-  const ownerPool = new Pool({ connectionString: ownerUrl, max: 4 });
+
   const readerPool = new Pool({ connectionString: readerUrl, max: 4 });
   const runtimePool = new Pool({ connectionString: runtimeUrl, max: 8 });
+  const verifierPool = new Pool({ connectionString: verifierUrl, max: 1 });
+  // The pools own their credentials; do not leave connection strings in the
+  // environment for request handlers or diagnostics to read.
+  delete process.env.PLATFORM_RUNTIME_DATABASE_URL;
+  delete process.env.PLATFORM_MEMBERSHIP_READER_DATABASE_URL;
+  delete process.env.PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL;
 
   try {
-    const { app, registration } = await startReferenceApplication({
+    const { app, deployment } = await startReferenceApplication({
       application,
       installationId,
       tokens,
-      ownerPool,
+      verifierPool,
       readerPool,
       runtimePool,
-      environment: process.env.NODE_ENV ?? "development",
+      environment,
+      artifactDigest,
       host: HOST,
       port: PORT,
       policyVersion: POLICY_VERSION,
@@ -66,19 +81,13 @@ async function main(): Promise<void> {
           effect: "allow",
         },
       ]),
-      ...(process.env.PLATFORM_REGISTRY_UPDATE === "1"
-        ? { allowRegistryUpdate: true }
-        : {}),
-      ...(process.env.PLATFORM_REGISTRY_ACTOR?.trim()
-        ? { registryActor: process.env.PLATFORM_REGISTRY_ACTOR.trim() }
-        : {}),
       onUnexpectedError: (error) => {
         console.error("[platform-reference] action failed", error);
       },
     });
 
     console.log(
-      `[platform-reference] ${application.id} listening on http://${HOST}:${PORT} (registration: ${registration.outcome})`,
+      `[platform-reference] ${application.id} listening on http://${HOST}:${PORT} (installation: ${deployment.installation.id}, environment: ${deployment.installation.environment})`,
     );
 
     const shutdown = async (signal: string): Promise<void> => {
@@ -91,9 +100,9 @@ async function main(): Promise<void> {
     process.once("SIGTERM", () => void shutdown("SIGTERM"));
     process.once("SIGINT", () => void shutdown("SIGINT"));
   } catch (error) {
-    await ownerPool.end().catch(() => undefined);
     await readerPool.end().catch(() => undefined);
     await runtimePool.end().catch(() => undefined);
+    await verifierPool.end().catch(() => undefined);
     throw error;
   }
 }

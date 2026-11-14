@@ -22,6 +22,9 @@ export default defineConfig({
       "references/**",
       "**/references/**",
       "tests/e2e/**",
+      // The reference-app spec is driven by playwright.platform-reference.config.ts,
+      // which starts the harness and writes the E2E state file.
+      "tests/e2e-platform/**",
       // Real Playwright acceptance tests need staging secrets, not Vitest.
       "tests/acceptance/**",
       // LMS is tested by its own node:test runner as a pinned source fixture.

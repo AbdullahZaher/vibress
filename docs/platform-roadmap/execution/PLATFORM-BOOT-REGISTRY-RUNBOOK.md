@@ -14,34 +14,46 @@
 
 ## 1. What the boot actually does
 
-The serving process (`apps/platform-reference/src/main.ts`) opens three pools
-and requires three **distinct** connection strings. Startup fails before any
-network bind if they are equal.
+Owner authority and request serving are **two executables**, not two phases of
+one process. The long-lived serving process (`apps/platform-reference/src/main.ts`)
+never receives `DATABASE_URL`; if the variable is present it exits with an error
+before opening a pool.
+
+The serving process opens three pools and requires three **distinct** connection
+strings. Startup fails before any network bind if they are equal.
 
 | Pool | Credential | Role | Lifetime |
 | --- | --- | --- | --- |
-| Owner | `DATABASE_URL` | migration/owner role (not superuser in production) | owner-only boot phase only; closed before `listen` |
 | Runtime | `PLATFORM_RUNTIME_DATABASE_URL` | `vibress_platform_app` by default | serving process; RLS-bound DML on `platform_crm_customers` only |
 | Reader | `PLATFORM_MEMBERSHIP_READER_DATABASE_URL` | `vibress_platform_reader` by default | serving process; `SELECT` on `platform_memberships` only |
+| Verifier | `PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL` | `vibress_platform_verifier` by default | boot proof only; `SELECT` on `platform_installations` and `platform_application_registrations`; the pool is closed before `listen` |
 
 Order inside `startReferenceApplication`:
 
 1. `assertSafePlatformRuntimeRole(runtimePool)` — refuses a superuser,
-   `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, table-owner, privileged-role member,
-   or a role with registry/membership privileges.
+   `BYPASSRLS`, `CREATEROLE`, `CREATEDB`, `REPLICATION`, **any** SET-able role
+   membership (privileged, ordinary, indirect or `NOINHERIT`), schema/database
+   CREATE, ownership, registry/membership privileges and SECURITY DEFINER
+   EXECUTE.
 2. `assertSafePlatformMembershipReaderRole(readerPool)` — refuses a reader that
-   can do anything beyond `SELECT` on `platform_memberships`.
-3. Resolve the owner identity and refuse if any two pools authenticate as the
-   same role.
-4. `registerApplicationInstallation` on the owner pool: `sync` the deployed
-   manifest, `verifyDefinitions`, then `syncInstallation` for this
-   installation id.
-5. `ownerPool.end()`.
-6. Build Fastify, bind the socket.
+   can do anything beyond `SELECT` on `platform_memberships`, including column
+   grants, ownership, sequence or function privileges, or any role membership.
+3. `assertSafePlatformDeploymentVerifierRole(verifierPool)` — refuses a
+   verifier with any privilege beyond table-level `SELECT` on the two registry
+   tables.
+4. Refuse boot if any two pools authenticate as the same role.
+5. `verifyDeploymentIdentity` (read-only) on the verifier pool: the installation
+   id must exist, be bound to this application, match `PLATFORM_ENVIRONMENT` and
+   `PLATFORM_ARTIFACT_DIGEST`, and the persisted manifest digest must equal the
+   deployed manifest digest.
+6. `verifierPool.end()`.
+7. Build Fastify, bind the socket.
 
-Consequence: **no owner credential survives into request handling.** Once the
-socket is listening, the process cannot write registry rows, memberships or
-tenants.
+Consequence: **no owner credential or provisioning capability exists in the
+request-serving process.** Registry writes can only be performed by the separate
+provisioning executable with `DATABASE_URL`; the serving process can only read
+its own pinned installation through the verifier role and cannot create,
+repair or update it.
 
 `GET /health` is public and is the readiness probe. Requests to other paths are
 executed by the kernel route executor and require a bearer token and a valid
@@ -51,23 +63,38 @@ executed by the kernel route executor and require a bearer token and a valid
 
 Names only; values are secrets and belong in the deployment secret store.
 
+### Serving process (`apps/platform-reference/src/main.ts`)
+
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `DATABASE_URL` | yes | owner/migration connection for boot registration |
+| `DATABASE_URL` | **forbidden** | presence makes the serving process exit; owner authority belongs to provisioning |
 | `PLATFORM_RUNTIME_DATABASE_URL` | yes | runtime role connection |
 | `PLATFORM_MEMBERSHIP_READER_DATABASE_URL` | yes | membership reader connection |
+| `PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL` | yes | read-only deployment verifier connection |
+| `PLATFORM_ENVIRONMENT` | yes | environment pinned in the installation row (e.g. `production`) |
+| `PLATFORM_ARTIFACT_DIGEST` | yes | artifact digest assigned by the deployment pipeline; must equal the provisioned value |
 | `PLATFORM_INSTALLATION_ID` | no (default `reference-installation`) | binds this deployment to the application |
-| `PLATFORM_TENANT_ID` | no (default `reference-tenant`) | tenant seeded by the optional standalone bootstrap |
-| `PLATFORM_BOOTSTRAP_PRINCIPALS` | no | JSON array seeded by the standalone bootstrap job only |
 | `PLATFORM_REFERENCE_TOKENS` | yes for authenticated routes | static bearer-token directory (reference app only) |
 | `PLATFORM_REFERENCE_HOST` / `PLATFORM_REFERENCE_PORT` | no (defaults `127.0.0.1:4100`) | listen address |
-| `PLATFORM_REGISTRY_ACTOR` | required only for `created`/`updated` | operator identity written to the audit table |
-| `PLATFORM_REGISTRY_UPDATE` | no | must be exactly `1` to permit a manifest change |
-| `POSTGRES_PLATFORM_APP_USER` / `POSTGRES_PLATFORM_APP_PASSWORD` | provisioning only | runtime role name/password |
-| `POSTGRES_PLATFORM_READER_USER` / `POSTGRES_PLATFORM_READER_PASSWORD` | provisioning only | reader role name/password |
 
-Beyond `DATABASE_URL`, the provisioner reads only the four `POSTGRES_PLATFORM_*`
-role variables.
+The three connection strings must be distinct and are deleted from
+`process.env` after the pools are constructed.
+
+### Operator provisioning (`scripts/provision-platform-roles.ts`, `scripts/provision-platform-reference.ts`)
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | owner/migration connection; never set for the serving process |
+| `POSTGRES_PLATFORM_APP_USER` / `POSTGRES_PLATFORM_APP_PASSWORD` | role provisioning | runtime role name/password |
+| `POSTGRES_PLATFORM_READER_USER` / `POSTGRES_PLATFORM_READER_PASSWORD` | role provisioning | reader role name/password |
+| `POSTGRES_PLATFORM_VERIFIER_USER` / `POSTGRES_PLATFORM_VERIFIER_PASSWORD` | role provisioning | deployment verifier role name/password |
+| `PLATFORM_ENVIRONMENT` | provisioning | environment stored in the installation row |
+| `PLATFORM_ARTIFACT_DIGEST` | provisioning | digest assigned by the deployment pipeline |
+| `PLATFORM_REGISTRY_ACTOR` | required for `created`/`updated` | operator identity written to the audit table |
+| `PLATFORM_REGISTRY_UPDATE` | no | must be exactly `1` to permit a manifest change |
+| `PLATFORM_EXPECTED_ENVIRONMENT` / `PLATFORM_EXPECTED_ARTIFACT_DIGEST` | no | compare-and-swap guards for an authorized update |
+| `PLATFORM_INSTALLATION_ID` | no (default `reference-installation`) | installation to provision |
+| `PLATFORM_TENANT_ID` / `PLATFORM_BOOTSTRAP_PRINCIPALS` | no | standalone bootstrap job only |
 
 ## 3. First deployment sequence
 
@@ -75,8 +102,9 @@ Run each step with the owner/migration credential, not a runtime role.
 
 1. **Apply migrations.** `pnpm db:migrate` (or `pnpm prod:migrate` in the
    container path). The deployment must reach migration `0057`, which creates
-   `platform_application_registry_changes`. Booting before 0057 fails because
-   `sync` writes its audit row in the same statement as the registration.
+   `platform_application_registry_changes`. Provisioning before 0057 fails
+   because `sync` writes its audit row in the same statement as the
+   registration.
 2. **Provision platform roles.** After migrations:
 
    ```bash
@@ -85,18 +113,34 @@ Run each step with the owner/migration credential, not a runtime role.
    POSTGRES_PLATFORM_APP_PASSWORD=... \
    POSTGRES_PLATFORM_READER_USER=vibress_platform_reader \
    POSTGRES_PLATFORM_READER_PASSWORD=... \
+   POSTGRES_PLATFORM_VERIFIER_USER=vibress_platform_verifier \
+   POSTGRES_PLATFORM_VERIFIER_PASSWORD=... \
    pnpm platform:provision-roles
    ```
 
    The command is idempotent (existing non-superuser roles are altered), refuses
-   to manage a superuser, refuses equal runtime/reader names, and re-verifies in
-   `pg_roles` that neither role is `rolsuper` or `rolbypassrls` after
-   provisioning. It does not print or store the passwords.
-3. **Configure the three URLs and the registry actor.** On the first boot the
-   registry row does not exist, so `sync` returns `created`; without
-   `PLATFORM_REGISTRY_ACTOR` the boot fails with `RegistryActorRequiredError`
-   and writes nothing.
-4. **Start the service** and wait for `GET /health`.
+   to manage a superuser, refuses equal role names, and re-verifies in
+   `pg_roles` that no role is `rolsuper` or `rolbypassrls` after provisioning.
+   It does not print or store the passwords.
+3. **Provision the installation with owner authority.** On the first
+   provisioning run the registry row does not exist, so `sync` returns
+   `created`; without `PLATFORM_REGISTRY_ACTOR` the command fails with
+   `RegistryActorRequiredError` and writes nothing.
+
+   ```bash
+   DATABASE_URL=... \
+   PLATFORM_ENVIRONMENT=production \
+   PLATFORM_ARTIFACT_DIGEST=<digest from the build pipeline> \
+   PLATFORM_REGISTRY_ACTOR=release-bot/change-123 \
+   pnpm platform:provision-reference
+   ```
+
+   This runs `sync`, `verifyDefinitions`, the conditional installation bind and
+   a read-only identity proof in one operator-only executable. It never runs in
+   the serving process.
+4. **Start the service** with the three least-privilege URLs plus
+   `PLATFORM_ENVIRONMENT` and the same `PLATFORM_ARTIFACT_DIGEST`, and wait for
+   `GET /health`.
 5. **Verify the audit row** (read-only):
 
    ```sql
@@ -113,14 +157,20 @@ Run each step with the owner/migration credential, not a runtime role.
 
 ## 4. Routine redeploy (unchanged manifest)
 
-Restart the service with the same code manifest. `sync` reloads the existing
-row, compares digests, returns `unchanged`, and writes **no** audit row. An actor
-is not required on this path. `verifyDefinitions` still runs and fails the boot
-if the persisted digest differs from the deployed code.
+Restart serving with the same environment and artifact digest. The verifier
+re-reads the installation and registration and fails the boot without writing
+if the application id, environment, artifact digest or persisted manifest digest
+differs from the deployed code.
 
-`syncInstallation` is called on every boot. It is an atomic conditional upsert:
-an existing installation keeps its `application_id`; a bind to a different
-application changes no row and fails with `InstallationMismatchError`.
+Routine provisioning is a separate operator step. `sync` reloads the existing
+row, compares digests, returns `unchanged`, and writes **no** audit row; an actor
+is not required on this path. `syncInstallation` remains an atomic conditional
+upsert guarded by application id and, when supplied, the expected environment
+and artifact digest. A mismatched guard changes no row and fails with
+`InstallationMismatchError`.
+
+The serving process never calls `sync`, `syncInstallation` or any registry
+write; it only verifies what the operator provisioned.
 
 ## 5. Deliberate manifest change (drift procedure)
 
@@ -134,15 +184,17 @@ To accept a reviewed change:
 1. Confirm the deployed image is the intended release and note both digests from
    the error message.
 2. Set `PLATFORM_REGISTRY_UPDATE=1` **and** a non-empty `PLATFORM_REGISTRY_ACTOR`
-   identifying the operator or change ticket.
-3. Boot once. The update is a compare-and-swap on the previously observed
-   digest; the same SQL statement inserts one `updated` audit row containing the
-   actor, previous/new digest and previous/new version. If another process won
-   the race and the digest already equals the deployed one, `sync` returns
-   `unchanged` and writes nothing.
+   identifying the operator or change ticket in the **provisioning** environment.
+3. Run `pnpm platform:provision-reference` once with the new artifact digest.
+   The update is a compare-and-swap on the previously observed digest; the same
+   SQL statement inserts one `updated` audit row containing the actor,
+   previous/new digest and previous/new version. If another process won the race
+   and the digest already equals the deployed one, `sync` returns `unchanged` and
+   writes nothing.
 4. Review the audit row before removing `PLATFORM_REGISTRY_UPDATE`. Leaving it
    set is a standing authorization for any future manifest change; treat it as a
-   temporary flag.
+   temporary flag. The serving process has no update flag and refuses to boot on
+   any mismatch.
 
 What the audit table proves and does not prove:
 
@@ -159,19 +211,23 @@ What the audit table proves and does not prove:
 
 | Symptom | Cause | Action |
 | --- | --- | --- |
-| `RegistryActorRequiredError` | first boot or accepted update without actor | set `PLATFORM_REGISTRY_ACTOR`; nothing was written |
+| `RegistryActorRequiredError` | first provisioning or accepted update without actor | set `PLATFORM_REGISTRY_ACTOR`; nothing was written |
 | `ApplicationRegistrationDriftError` | deployed manifest differs from persisted digest | deploy matching code, or run the documented update procedure |
-| `InstallationMismatchError` | installation id already bound to another application | use the installation id belonging to this application; do not rebind implicitly |
-| `ApplicationRegistrationMissingError` | deployed application has no persisted registration | `sync` did not complete; check actor/migration state and rerun boot |
+| `InstallationMismatchError` | installation id bound to another application, or a compare-and-swap guard did not match | use the installation id belonging to this application; do not rebind implicitly |
+| `ApplicationRegistrationMissingError` | deployed application has no persisted registration | provisioning did not complete; check actor/migration state and rerun it |
 | `UnexpectedApplicationRegistrationError` | registry contains an application absent from deployed code | deploy the missing application or perform a reviewed registry cleanup; boot stays closed |
 | `ApplicationRegistrationIntegrityError` | stored manifest malformed or digest does not recompute | treat as data corruption/tampering; do not bypass, investigate the row and restore from a trusted migration/deploy |
-| `InstallationApplicationMissingError` | installation bound before its application registration committed | ordering defect; boot registration always syncs first |
-| role assertion `identity_superuser` / `identity_bypass_rls` / `identity_createrole` | wrong credential for runtime or reader URL | point the URL at the provisioned role; never use the owner here |
+| `InstallationApplicationMissingError` | installation bound before its application registration committed | ordering defect; provisioning always syncs first |
+| `DeploymentVerificationError` (installation, application, environment, artifact or manifest mismatch) | the serving process was started with values that do not match the provisioned installation | correct `PLATFORM_ENVIRONMENT`/`PLATFORM_ARTIFACT_DIGEST`/installation id, or provision the intended artifact; boot is refused read-only and nothing is repaired |
+| role assertion `identity_superuser` / `identity_bypass_rls` / `identity_createrole` / `privileged_role_membership` | wrong credential for runtime, reader or verifier URL, or an unexpected privileged membership | point the URL at the dedicated role and remove the membership; never use the owner here |
+| `unexpected_role_membership` | the login is a SET-able member of any other role, including indirect or `NOINHERIT` grants | remove the membership; dedicated platform logins must have none |
 | `membership_read_missing` | reader lacks table-level `SELECT` on `platform_memberships`, or migrations are absent | re-run `pnpm platform:provision-roles` after migrations |
 | `membership_write_privilege` | reader can write the membership directory | re-provision; the reader must be SELECT-only |
-| `DATABASE_URL and PLATFORM_RUNTIME_DATABASE_URL both authenticate as ...` | URLs not distinct | fix configuration; the process refuses to start |
-| SQLSTATE `42P01` on `platform_application_registry_changes` | migration `0057` not applied | apply migrations before boot |
-| Fastify `EADDRINUSE` | port already bound | stop the old process; verify only one writer owns registration |
+| `unexpected_relation_privilege` | verifier holds a write, column-only or non-registry privilege | re-provision; the verifier must be table-level SELECT on the two registry tables only |
+| `DATABASE_URL` present in the serving environment | owner credential leaked into the long-lived process | remove it; run `pnpm platform:provision-reference` as the separate operator job |
+| connection URLs not distinct | two pools share a role | use three distinct least-privilege credentials |
+| SQLSTATE `42P01` on `platform_application_registry_changes` | migration `0057` not applied | apply migrations before provisioning |
+| Fastify `EADDRINUSE` | port already bound | stop the old process; verify only one serving process per installation |
 
 ## 7. Standalone bootstrap job (optional)
 
@@ -206,10 +262,10 @@ DATABASE_URL=... pnpm test:e2e:platform-reference
 
 - Requires a database that already has migrations through `0057`; the harness
   fails with an explicit message otherwise.
-- Each run uses a unique application id, installation id, two tenants, two
-  platform roles and three bearer tokens. The staff principal can create/list in
-  tenant A, a member principal can only read tenant A, and a separate principal
-  reads tenant B.
+- Each run uses a unique application id, installation id, two tenants, three
+  platform roles (runtime, reader, verifier) and three bearer tokens. The staff
+  principal can create/list in tenant A, a member principal can only read tenant
+  A, and a separate principal reads tenant B.
 - The global teardown (and the harness's own shutdown path) deletes only that
   run's CRM/membership/tenant/installation/registry/audit rows and drops only its
   generated roles. Observed after a run: no `reference-e2e-%` application, no
@@ -237,3 +293,39 @@ DATABASE_URL=... pnpm test:e2e:platform-reference
 - The Playwright reference-app suite passed **8/8** against the same fixture and
   removed every row and role it created.
 - No grant was changed for R26; proposal 0055 remains unapplied.
+
+## 11. P0-A/P0-B/P1 remediation evidence (2026-11-14)
+
+Measured on the working tree on top of `b62ffdf5` against PostgreSQL 16
+(`127.0.0.1:5433/vibress`):
+
+- `pnpm exec vitest run --config vitest.platform.config.ts` — **11 files /
+  154 tests passed**, including **49** in `platform-reference-app.test.ts`.
+- Serving-process owner-authority absence:
+  - child-process start with `DATABASE_URL` set exits **1** with "must not
+    receive DATABASE_URL";
+  - start with three equal connection URLs exits **1** with "must be distinct";
+  - `startReferenceApplication` starts and accepts traffic without any owner
+    pool, and the installation/registration rows are byte-for-byte unchanged
+    (including `created_at`, `registered_at` and `updated_at`).
+- Pinned read-only verification: matching installation boots; environment,
+  artifact, application-id and manifest-digest drift each raise
+  `DeploymentVerificationError` before serving and leave the installation row
+  unchanged. The verifier role is refused writes (`42501` on
+  INSERT/UPDATE/DELETE/TRUNCATE) and any read outside the two registry tables.
+- Unexpected-membership closure: real-PostgreSQL tests reject a `NOINHERIT`
+  membership in an ordinary table-owning role, an indirect membership through a
+  middle role, and a reader with a `NOINHERIT` membership; runtime and reader
+  logins must have **no** role memberships other than themselves.
+- Provisioning isolation: `provisionReferenceApplication` requires an actor and
+  an artifact digest, applies compare-and-swap guards, and is never imported by
+  `server.ts`/`start.ts` (architecture boundary test). A mismatched guard throws
+  `InstallationMismatchError` and leaves the row unchanged.
+- `pnpm test:e2e:platform-reference` (with `DATABASE_URL` for the operator
+  harness) — **8/8 passed**.
+- `pnpm test:unit` — **362 files / 2585 tests passed**, exit 0.
+- `pnpm test:integration` — **46 files / 558 tests passed**, exit 0, sequential.
+- `nx run-many --target=typecheck --all` — **74/74 projects**.
+- `tsc -p packages/database --noEmit` and `tsc -p apps/platform-reference
+  --noEmit` — passed; ESLint on all changed files — clean.
+- CI has not run on this uncommitted content.

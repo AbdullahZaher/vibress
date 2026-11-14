@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import {
   PostgresApplicationRegistryStore,
+  provisionPlatformDeploymentVerifierRole,
   provisionPlatformMembershipReaderRole,
   provisionPlatformRuntimeRole,
 } from "@vibress/database";
@@ -65,8 +66,11 @@ async function main(): Promise<void> {
   const tenantBId = `reference-e2e-b-${runId}` as TenantId;
   const runtimeRole = `reference_e2e_rt_${runId}`;
   const readerRole = `reference_e2e_rd_${runId}`;
+  const verifierRole = `reference_e2e_vf_${runId}`;
   const runtimePassword = randomUUID().replace(/-/g, "");
   const readerPassword = randomUUID().replace(/-/g, "");
+  const verifierPassword = randomUUID().replace(/-/g, "");
+  const artifactDigest = "e".repeat(64);
   const staffToken = `e2e-staff-${runId}`;
   const memberToken = `e2e-member-${runId}`;
   const tenantBToken = `e2e-tenant-b-${runId}`;
@@ -81,11 +85,13 @@ async function main(): Promise<void> {
     tenantBToken,
     runtimeRole,
     readerRole,
+    verifierRole,
   };
 
   const ownerPool = new Pool({ connectionString: DATABASE_URL, max: 4 });
   let runtimePool: Pool | null = null;
   let readerPool: Pool | null = null;
+  let verifierPool: Pool | null = null;
   let app: Awaited<ReturnType<typeof startReferenceApplication>>["app"] | null =
     null;
 
@@ -102,6 +108,10 @@ async function main(): Promise<void> {
         roleName: readerRole,
         password: readerPassword,
       });
+      await provisionPlatformDeploymentVerifierRole(provisioning, {
+        roleName: verifierRole,
+        password: verifierPassword,
+      });
     } finally {
       provisioning.release();
     }
@@ -116,6 +126,10 @@ async function main(): Promise<void> {
       connectionString: roleUrl(readerRole, readerPassword),
       max: 4,
     });
+    verifierPool = new Pool({
+      connectionString: roleUrl(verifierRole, verifierPassword),
+      max: 1,
+    });
 
     const application = createReferenceApplication({ id: applicationId });
     const store = new PostgresApplicationRegistryStore(ownerPool);
@@ -125,6 +139,7 @@ async function main(): Promise<void> {
       id: installationId,
       applicationId: application.id,
       environment: "e2e",
+      artifactDigest,
     });
 
     for (const [tenantId, name] of [
@@ -203,14 +218,17 @@ async function main(): Promise<void> {
       }),
     );
 
+    await ownerPool.end();
+
     const started = await startReferenceApplication({
       application,
       installationId,
       tokens,
-      ownerPool,
+      verifierPool,
       readerPool,
       runtimePool,
       environment: "e2e",
+      artifactDigest,
       host: HOST,
       port: PORT,
       policyVersion: "reference-crm-e2e-1.0.0",
@@ -237,6 +255,7 @@ async function main(): Promise<void> {
         await Promise.allSettled([
           readerPool?.end() ?? Promise.resolve(),
           runtimePool?.end() ?? Promise.resolve(),
+          verifierPool?.end() ?? Promise.resolve(),
         ]);
       }
       try {
@@ -256,6 +275,7 @@ async function main(): Promise<void> {
     await ownerPool.end().catch(() => undefined);
     await readerPool?.end().catch(() => undefined);
     await runtimePool?.end().catch(() => undefined);
+    await verifierPool?.end().catch(() => undefined);
     if (app) await app.close().catch(() => undefined);
     throw error;
   }
