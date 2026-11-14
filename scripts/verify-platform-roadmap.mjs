@@ -118,10 +118,22 @@ const score = rows.reduce((sum, row) => sum + Number(row[2]), 0);
 if (Math.abs(max - 10) > 0.001 || Math.abs(score - 8) > 0.001) {
   fail(path.join(docsRoot, 'SECOND-REVIEW-AND-SCORECARD-2026-11-14.md'), 'historical weighted rubric totals do not equal 10 / 8');
 }
+const qualityText = read('QUALITY-9-PLUS-ASSESSMENT.md');
+const qualityRows = [...qualityText.matchAll(/^\\| (?!\\*\\*TOTAL\\*\\*)(?!Criterion\\b)[^|\\n]+\\| (\\d+(?:\\.\\d+)?) \\| (\\d+(?:\\.\\d+)?) \\| \\*\\*(\\d+(?:\\.\\d+)?)\\*\\* \\|/gm)];
+if (qualityRows.length !== 8) fail(path.join(docsRoot, 'QUALITY-9-PLUS-ASSESSMENT.md'), 'expected eight current quality rubric rows');
+const qualityMax = qualityRows.reduce((sum, row) => sum + Number(row[1]), 0);
+const previousScore = qualityRows.reduce((sum, row) => sum + Number(row[2]), 0);
+const currentScore = qualityRows.reduce((sum, row) => sum + Number(row[3]), 0);
+if (Math.abs(qualityMax - 10) > 0.001 || Math.abs(previousScore - 8) > 0.001 || Math.abs(currentScore - 9.1) > 0.001) {
+  fail(path.join(docsRoot, 'QUALITY-9-PLUS-ASSESSMENT.md'), 'weighted current rubric must total max 10, historical 8 and proposed 9.1');
+}
+if (!qualityText.includes('provisional') && !qualityText.includes('Provisional')) {
+  fail(path.join(docsRoot, 'QUALITY-9-PLUS-ASSESSMENT.md'), 'score must prominently state provisional nature');
+}
 if (issues.length) {
   console.error('Roadmap documentation validation FAILED (' + issues.length + ' issue(s)):');
   for (const issue of issues) console.error(' - ' + issue);
   process.exit(1);
 }
 console.log('Roadmap documentation validation PASSED');
-console.log(JSON.stringify({ markdownFiles: mdFiles.length, milestones: milestoneFiles.length, uniqueEpics: epicCount, acceptanceChecks, historicalRubric: score + '/' + max }, null, 2));
+console.log(JSON.stringify({ markdownFiles: mdFiles.length, milestones: milestoneFiles.length, uniqueEpics: epicCount, acceptanceChecks, historicalRubric: score + '/' + max, provisionalRoadmapDesignRubric: currentScore.toFixed(2) + '/' + qualityMax.toFixed(2) }, null, 2));
