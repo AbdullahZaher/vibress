@@ -63,6 +63,11 @@ export async function createReferenceServer(
     options.allowRegistryUpdate ? { allowUpdate: true } : {},
   );
   await options.registryStore.verifyDefinitions([options.application]);
+  await options.registryStore.syncInstallation({
+    id: options.installationId,
+    applicationId: options.application.id,
+    environment: process.env.NODE_ENV ?? "development",
+  });
 
   const registry = new InMemoryApplicationRegistry(
     [options.application],

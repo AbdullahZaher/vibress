@@ -11,18 +11,23 @@ export {
   type RuntimeRoleConfig,
 } from "./runtime-role";
 export {
+  assertSafePlatformRuntimeRole,
   provisionPlatformRuntimeRole,
   readPlatformRuntimeRoleConfig,
+  UnsafePlatformRuntimeRoleError,
   type PlatformRuntimeRoleConfig,
+  type RuntimeRoleAttributes,
 } from "./platform-runtime-role";
 export {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,
+  InstallationMismatchError,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
   UnexpectedApplicationRegistrationError,
   type ApplicationRegistrationRecord,
+  type InstallationRegistrationRecord,
   type RegistryQueryable,
   type RegistrySyncOptions,
   type RegistrySyncOutcome,

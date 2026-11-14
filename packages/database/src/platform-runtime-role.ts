@@ -130,3 +130,90 @@ export async function provisionPlatformRuntimeRole(
     `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM ${role}`,
   );
 }
+
+export interface RuntimeRoleAttributes {
+  readonly currentUser: string;
+  readonly sessionUser: string;
+  readonly isSuperuser: boolean;
+  readonly isBypassRls: boolean;
+}
+
+export class UnsafePlatformRuntimeRoleError extends Error {
+  readonly attributes: Partial<RuntimeRoleAttributes> | undefined;
+
+  constructor(reason: string, attributes?: Partial<RuntimeRoleAttributes>) {
+    super(`Unsafe platform runtime role: ${reason}`);
+    this.name = "UnsafePlatformRuntimeRoleError";
+    this.attributes = attributes;
+  }
+}
+
+/**
+ * Validates that the active PostgreSQL connection has verified non-owner,
+ * least-privilege runtime credentials suitable for serving tenant-bound traffic:
+ * - not a superuser (rolsuper = false);
+ * - cannot bypass row-level security (rolbypassrls = false);
+ * - does not own tenant-isolated or registry tables.
+ */
+export async function assertSafePlatformRuntimeRole(
+  client: { query: <TRow = unknown>(sql: string, params?: readonly unknown[]) => Promise<{ rows: TRow[] }> },
+): Promise<RuntimeRoleAttributes> {
+  const roleRow = (
+    await client.query<RuntimeRoleAttributes>(
+      `SELECT current_user AS "currentUser",
+              session_user AS "sessionUser",
+              r.rolsuper AS "isSuperuser",
+              r.rolbypassrls AS "isBypassRls"
+         FROM pg_roles r
+        WHERE r.rolname = current_user`,
+    )
+  ).rows[0];
+
+  if (!roleRow) {
+    throw new UnsafePlatformRuntimeRoleError("unable to resolve current_user in pg_roles");
+  }
+
+  if (roleRow.isSuperuser) {
+    throw new UnsafePlatformRuntimeRoleError(
+      `role '${roleRow.currentUser}' has superuser privileges (rolsuper=true)`,
+      roleRow,
+    );
+  }
+
+  if (roleRow.isBypassRls) {
+    throw new UnsafePlatformRuntimeRoleError(
+      `role '${roleRow.currentUser}' has bypassrls privilege (rolbypassrls=true)`,
+      roleRow,
+    );
+  }
+
+  // Ensure runtime role does not own any tenant or registry tables
+  const ownershipRows = (
+    await client.query<{ tableName: string }>(
+      `SELECT c.relname AS "tableName"
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname IN (
+            'platform_crm_customers',
+            'platform_application_registrations',
+            'platform_memberships',
+            'platform_installations',
+            'platform_tenants',
+            'platform_applications'
+          )
+          AND pg_get_userbyid(c.relowner) = current_user`,
+    )
+  ).rows;
+
+  if (ownershipRows.length > 0) {
+    const tableNames = ownershipRows.map((r) => r.tableName).join(", ");
+    throw new UnsafePlatformRuntimeRoleError(
+      `role '${roleRow.currentUser}' owns tables: ${tableNames}`,
+      roleRow,
+    );
+  }
+
+  return roleRow;
+}
+

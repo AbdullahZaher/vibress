@@ -1,6 +1,7 @@
 import {
   applicationManifestDigest,
   asApplicationId,
+  asInstallationId,
   asPrincipalId,
   asTenantId,
   parseApplicationManifest,
@@ -8,6 +9,7 @@ import {
   type ApplicationDefinition,
   type ApplicationId,
   type ApplicationManifest,
+  type InstallationId,
   type PrincipalId,
   type TenantId,
 } from "@vibress/platform-kernel";
@@ -27,6 +29,21 @@ export interface ApplicationRegistrationRecord {
   readonly manifestDigest: string;
   readonly registeredAt: Date;
   readonly updatedAt: Date;
+}
+
+export interface InstallationRegistrationRecord {
+  readonly id: InstallationId;
+  readonly applicationId: ApplicationId;
+  readonly environment: string;
+  readonly artifactDigest: string | null;
+  readonly createdAt: Date;
+}
+
+export class InstallationMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InstallationMismatchError";
+  }
 }
 
 export type RegistrySyncOutcome = "created" | "unchanged" | "updated";
@@ -113,6 +130,13 @@ export class PostgresApplicationRegistryStore {
   ): Promise<RegistrySyncResult> {
     const manifest = toApplicationManifest(application);
     const digest = applicationManifestDigest(manifest);
+
+    await this.#client.query(
+      `INSERT INTO platform_applications (id, name) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+      [application.id, application.name],
+    );
+
     const existing = await this.load(application.id);
 
     if (existing) {
@@ -126,12 +150,156 @@ export class PostgresApplicationRegistryStore {
           digest,
         );
       }
-      await this.#write(application, manifest, digest);
+      // Concurrency-safe CAS update: only update if registered digest has not shifted
+      const updateResult = await this.#client.query(
+        `UPDATE platform_application_registrations
+            SET version = $1,
+                manifest = $2::jsonb,
+                manifest_digest = $3,
+                updated_at = now()
+          WHERE application_id = $4 AND manifest_digest = $5
+          RETURNING application_id`,
+        [
+          application.version,
+          JSON.stringify(manifest),
+          digest,
+          application.id,
+          existing.manifestDigest,
+        ],
+      );
+      if (updateResult.rowCount === 0) {
+        const reloaded = await this.load(application.id);
+        if (reloaded && reloaded.manifestDigest === digest) {
+          return { outcome: "unchanged", digest };
+        }
+        throw new ApplicationRegistrationDriftError(
+          application.id,
+          reloaded?.manifestDigest ?? "unknown",
+          digest,
+        );
+      }
       return { outcome: "updated", digest };
     }
 
-    await this.#write(application, manifest, digest);
+    // Atomic insert: fail gracefully into reload if another process won the race
+    const insertResult = await this.#client.query(
+      `INSERT INTO platform_application_registrations
+         (application_id, version, manifest, manifest_digest, registered_at, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, now(), now())
+       ON CONFLICT (application_id) DO NOTHING
+       RETURNING application_id`,
+      [application.id, application.version, JSON.stringify(manifest), digest],
+    );
+
+    if (insertResult.rowCount === 0) {
+      const concurrent = await this.load(application.id);
+      if (!concurrent) {
+        throw new ApplicationRegistrationMissingError(application.id);
+      }
+      if (concurrent.manifestDigest === digest) {
+        return { outcome: "unchanged", digest };
+      }
+      throw new ApplicationRegistrationDriftError(
+        application.id,
+        concurrent.manifestDigest,
+        digest,
+      );
+    }
+
     return { outcome: "created", digest };
+  }
+
+  /**
+   * Persists and binds an installation record to its application.
+   */
+  async syncInstallation(installation: {
+    readonly id: InstallationId;
+    readonly applicationId: ApplicationId;
+    readonly environment?: string;
+    readonly artifactDigest?: string | null;
+  }): Promise<InstallationRegistrationRecord> {
+    const environment = installation.environment ?? "production";
+    const artifactDigest = installation.artifactDigest ?? null;
+
+    await this.#client.query(
+      `INSERT INTO platform_applications (id, name)
+       VALUES ($1, $1)
+       ON CONFLICT (id) DO NOTHING`,
+      [installation.applicationId],
+    );
+
+    const row = (
+      await this.#client.query<{
+        id: string;
+        application_id: string;
+        environment: string;
+        artifact_digest: string | null;
+        created_at: Date;
+      }>(
+        `INSERT INTO platform_installations (id, application_id, environment, artifact_digest, created_at)
+         VALUES ($1, $2, $3, $4, now())
+         ON CONFLICT (id) DO UPDATE
+           SET environment = EXCLUDED.environment,
+               artifact_digest = COALESCE(EXCLUDED.artifact_digest, platform_installations.artifact_digest)
+         RETURNING id, application_id, environment, artifact_digest, created_at`,
+        [installation.id, installation.applicationId, environment, artifactDigest],
+      )
+    ).rows[0]!;
+
+    if (row.application_id !== installation.applicationId) {
+      throw new InstallationMismatchError(
+        `Installation ${installation.id} is bound to application '${row.application_id}', but boot requested '${installation.applicationId}'`,
+      );
+    }
+
+    return {
+      id: asInstallationId(row.id),
+      applicationId: asApplicationId(row.application_id),
+      environment: row.environment,
+      artifactDigest: row.artifact_digest,
+      createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * Proves that an installation exists and is bound to the expected application.
+   */
+  async verifyInstallation(
+    installationId: InstallationId,
+    expectedApplicationId: ApplicationId,
+  ): Promise<InstallationRegistrationRecord> {
+    const row = (
+      await this.#client.query<{
+        id: string;
+        application_id: string;
+        environment: string;
+        artifact_digest: string | null;
+        created_at: Date;
+      }>(
+        `SELECT id, application_id, environment, artifact_digest, created_at
+           FROM platform_installations
+          WHERE id = $1`,
+        [installationId],
+      )
+    ).rows[0];
+
+    if (!row) {
+      throw new Error(`Installation ${installationId} is not registered`);
+    }
+
+    if (row.application_id !== expectedApplicationId) {
+      throw new InstallationMismatchError(
+        `Installation ${installationId} is bound to application '${row.application_id}', expected '${expectedApplicationId}'`,
+      );
+    }
+
+    return {
+      id: asInstallationId(row.id),
+      applicationId: asApplicationId(row.application_id),
+      environment: row.environment,
+      artifactDigest: row.artifact_digest,
+      createdAt: row.created_at,
+    };
   }
 
   async load(
@@ -196,29 +364,6 @@ export class PostgresApplicationRegistryStore {
         throw new UnexpectedApplicationRegistrationError(applicationId);
       }
     }
-  }
-
-  async #write(
-    application: ApplicationDefinition,
-    manifest: ApplicationManifest,
-    digest: string,
-  ): Promise<void> {
-    await this.#client.query(
-      `INSERT INTO platform_applications (id, name) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-      [application.id, application.name],
-    );
-    await this.#client.query(
-      `INSERT INTO platform_application_registrations
-         (application_id, version, manifest, manifest_digest, registered_at, updated_at)
-       VALUES ($1, $2, $3::jsonb, $4, now(), now())
-       ON CONFLICT (application_id) DO UPDATE
-         SET version = EXCLUDED.version,
-             manifest = EXCLUDED.manifest,
-             manifest_digest = EXCLUDED.manifest_digest,
-             updated_at = now()`,
-      [application.id, application.version, JSON.stringify(manifest), digest],
-    );
   }
 }
 

@@ -12,11 +12,16 @@ import {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,
+  InstallationMismatchError,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
   UnexpectedApplicationRegistrationError,
 } from "../../packages/database/src/platform-application-registry";
-import { provisionPlatformRuntimeRole } from "../../packages/database/src/platform-runtime-role";
+import {
+  assertSafePlatformRuntimeRole,
+  provisionPlatformRuntimeRole,
+  UnsafePlatformRuntimeRoleError,
+} from "../../packages/database/src/platform-runtime-role";
 import { PolicyEngine, TenantUnitOfWork } from "@vibress/tenancy";
 import {
   createReferenceApplication,
@@ -257,6 +262,46 @@ describe("persisted application registry", () => {
     );
     await store.sync(application);
     await store.verifyDefinitions([application]);
+  });
+
+  it("persists and verifies installation binding and detects application mismatch", async () => {
+    const instId = asInstallationId("test-installation-crm");
+    const record = await store.syncInstallation({
+      id: instId,
+      applicationId: application.id,
+      environment: "test",
+    });
+    expect(record.id).toBe(instId);
+    expect(record.applicationId).toBe(application.id);
+
+    const verified = await store.verifyInstallation(instId, application.id);
+    expect(verified.id).toBe(instId);
+
+    await expect(
+      store.verifyInstallation(instId, asInstallationId("other-app") as any),
+    ).rejects.toThrow(InstallationMismatchError);
+  });
+});
+
+describe("runtime role verification", () => {
+  it("proves the runtime role is non-superuser, no-bypassrls and owns no platform tables", async () => {
+    const roleAttrs = await assertSafePlatformRuntimeRole(runtimePool);
+    expect(roleAttrs.currentUser).toBe(roleName);
+    expect(roleAttrs.isSuperuser).toBe(false);
+    expect(roleAttrs.isBypassRls).toBe(false);
+  });
+
+  it("fails closed when run against a superuser or table-owning database role", async () => {
+    const ownerAttrs = (
+      await ownerPool.query<{ rolsuper: boolean }>(
+        "SELECT rolsuper FROM pg_roles WHERE rolname = current_user",
+      )
+    ).rows[0];
+    if (ownerAttrs?.rolsuper) {
+      await expect(assertSafePlatformRuntimeRole(ownerPool)).rejects.toThrow(
+        UnsafePlatformRuntimeRoleError,
+      );
+    }
   });
 });
 

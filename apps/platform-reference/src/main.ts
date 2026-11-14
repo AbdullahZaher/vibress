@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import {
+  assertSafePlatformRuntimeRole,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
 } from "@vibress/database";
@@ -45,6 +46,15 @@ async function main(): Promise<void> {
   const runtimePool = new Pool({ connectionString: runtimeUrl, max: 8 });
 
   try {
+    const runtimeRole = await assertSafePlatformRuntimeRole(runtimePool);
+    const ownerUser = (
+      await ownerPool.query<{ current_user: string }>("SELECT current_user")
+    ).rows[0]?.current_user;
+    if (ownerUser === runtimeRole.currentUser) {
+      throw new Error(
+        `DATABASE_URL and PLATFORM_RUNTIME_DATABASE_URL both authenticate as '${ownerUser}'. Runtime role must be a separate, non-owner role.`,
+      );
+    }
     const server = await createReferenceServer({
       application,
       registryStore: new PostgresApplicationRegistryStore(ownerPool),

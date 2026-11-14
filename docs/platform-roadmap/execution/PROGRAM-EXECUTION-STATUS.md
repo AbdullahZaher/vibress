@@ -22,25 +22,25 @@
 
 | Milestone | Done on branch | Missing before exit |
 | --- | --- | --- |
-| M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test, docs-link validator wired into CI, unit/integration split in CI | Legacy docs link cleanup, pinned two-publication CMS/Studio fixture pack, named owners |
-| M01 Universal kernel | Branded identity, public contracts, definition helpers, in-memory registry, serializable manifest with digest, persisted registry (drift/integrity refusal, two-way verification), kernel route execution adapter, bootable standalone reference app, kernel-only import boundary | Independent review and named sign-off; production identity-provider adapter and deployment runbook |
-| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege runtime role (registry and membership tables denied), 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope |
+| M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test with relative escape detection and missing dir failure, docs-link validator wired into CI, unit/integration split in CI | Legacy docs link cleanup, pinned two-publication CMS/Studio fixture pack, named owners |
+| M01 Universal kernel | Branded identity, public contracts, definition helpers, in-memory registry, serializable manifest with digest, persisted registry (drift/integrity refusal, CAS update, two-way verification, installation binding), kernel route execution adapter, bootable standalone reference app with runtime role verification, kernel-only import boundary | Independent review and named sign-off; production identity-provider adapter and deployment runbook |
+| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work with hardened comment/schema-qualification scope mutation detection, additive RLS migration, least-privilege runtime role (registry and membership tables denied, direct PostgreSQL rolsuper/rolbypassrls/ownership verification), 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope |
 
 ## Evidence executed on this branch
 
 | Suite | Result |
 | --- | --- |
-| Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 61 tests passed (7 files) |
+| Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 67 tests passed (7 files) |
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 22/22 passed |
-| Persisted registry + reference app over HTTP/PostgreSQL (`tests/integration/platform-reference-app.test.ts`) | 14/14 passed; runtime role denied registry and membership tables (`42501`) |
+| Persisted registry + reference app over HTTP/PostgreSQL (`tests/integration/platform-reference-app.test.ts`) | 17/17 passed; runtime role verified (non-superuser, no-bypassrls, non-owner) and denied registry and membership tables (`42501`) |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
 | R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | 33 public functions, 0 `SECURITY DEFINER`, 0 default-ACL entries |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed |
 | Unit/boundary/component suite (`pnpm test:unit`) | 361 files / 2571 tests passed, exit 0 |
 | Full integration suite (`vitest.config.ts tests/integration`) | 45 files / 518 tests passed, exit 0 |
 | `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`) | 45 files / 518 tests passed, exit 0, two consecutive runs |
-| `pnpm docs:validate-links` (`docs/platform-roadmap`) | 25 links across 7 files resolve |
-| Full platform suite (`vitest.platform.config.ts`) | 11 files / 107 tests passed |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | 26 links across 7 files resolve |
+| Full platform suite (`vitest.platform.config.ts`) | 11 files / 113 tests passed |
 | Targeted typecheck (kernel, tenancy, database, reference app) | passed |
 | Targeted ESLint (new packages, executor, registry store, reference app, boundary test, integration tests) | passed |
 | Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |

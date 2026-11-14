@@ -216,6 +216,36 @@ describe("TenantUnitOfWork", () => {
     expect(pool.client.statements).toContain("ROLLBACK");
   });
 
+  it("detects schema-qualified and comment-obfuscated scope mutations and marks rollback-only", async () => {
+    const pool = new FakePool();
+    const uow = new TenantUnitOfWork(pool);
+
+    await expect(
+      uow.run(scopeFor(), async (tx) => {
+        await tx.query(
+          "SELECT /* comment */ pg_catalog.set_config('vibress.tenant_id', 'tenant-b', true)",
+        );
+      }),
+    ).rejects.toThrow(TenantScopeMutationError);
+
+    expect(pool.client.statements).toContain("ROLLBACK");
+
+    // Also assert that if an attacker catches TenantScopeMutationError, commit is denied
+    await expect(
+      uow.run(scopeFor(), async (tx) => {
+        try {
+          await tx.query(
+            "SET LOCAL /* evasion */ \"vibress.tenant_id\" = 'malicious'",
+          );
+        } catch {
+          // Swallowed attempt
+        }
+      }),
+    ).rejects.toThrow(TenantTransactionRollbackOnlyError);
+
+    expect(pool.client.statements).toContain("ROLLBACK");
+  });
+
   it("always releases the connection", async () => {
     const pool = new FakePool();
     const uow = new TenantUnitOfWork(pool);

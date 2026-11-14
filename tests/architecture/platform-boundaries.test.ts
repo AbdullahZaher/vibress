@@ -6,19 +6,21 @@ const ROOT = process.cwd();
 const IMPORT_PATTERN =
   /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["']([^"']+)["']/g;
 
-interface SourceFile {
+export interface SourceFile {
   readonly path: string;
   readonly content: string;
 }
 
-interface BoundaryRule {
+export interface BoundaryRule {
   readonly packageDir: string;
   readonly label: string;
   readonly allowedBareSpecifiers: readonly string[];
 }
 
-function listTypeScriptFiles(directory: string): string[] {
-  if (!fs.existsSync(directory)) return [];
+export function listTypeScriptFiles(directory: string): string[] {
+  if (!fs.existsSync(directory)) {
+    throw new Error(`Required source directory does not exist: ${directory}`);
+  }
   const files: string[] = [];
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
@@ -32,20 +34,40 @@ function listTypeScriptFiles(directory: string): string[] {
   return files;
 }
 
-function specifiers(content: string): string[] {
+export function specifiers(content: string): string[] {
   return [...content.matchAll(IMPORT_PATTERN)].map((match) => match[1]!);
 }
 
-function scan(
+export function scan(
   files: readonly SourceFile[],
   rule: BoundaryRule,
 ): string[] {
   const violations: string[] = [];
+  const normalizedPackageDir = path
+    .resolve(ROOT, rule.packageDir)
+    .split(path.sep)
+    .join("/");
+
   for (const file of files) {
+    const filePath = path.resolve(ROOT, file.path);
+    const fileDir = path.dirname(filePath);
+
     for (const specifier of specifiers(file.content)) {
-      if (specifier.startsWith(".") || specifier.startsWith("node:")) {
+      if (specifier.startsWith("node:")) {
         continue;
       }
+
+      if (specifier.startsWith(".")) {
+        // Resolve relative import to ensure it does not escape the package root
+        const resolved = path.resolve(fileDir, specifier).split(path.sep).join("/");
+        if (!resolved.startsWith(normalizedPackageDir + "/") && resolved !== normalizedPackageDir) {
+          violations.push(
+            `${file.path} relative import escapes ${rule.packageDir}: ${specifier}`,
+          );
+        }
+        continue;
+      }
+
       if (rule.allowedBareSpecifiers.includes(specifier)) {
         continue;
       }
@@ -55,8 +77,12 @@ function scan(
   return violations;
 }
 
-function readSources(directory: string): SourceFile[] {
-  return listTypeScriptFiles(directory).map((file) => ({
+export function readSources(directory: string): SourceFile[] {
+  const files = listTypeScriptFiles(directory);
+  if (files.length === 0) {
+    throw new Error(`No TypeScript source files found in: ${directory}`);
+  }
+  return files.map((file) => ({
     path: path.relative(ROOT, file).split(path.sep).join("/"),
     content: fs.readFileSync(file, "utf8"),
   }));
@@ -64,24 +90,30 @@ function readSources(directory: string): SourceFile[] {
 
 describe("platform dependency boundaries", () => {
   it("keeps the kernel free of publishing, database, config and web-framework imports", () => {
-    const violations = scan(readSources(path.join(ROOT, "packages/platform-kernel/src")), {
-      packageDir: "packages/platform-kernel",
-      label: "kernel",
-      allowedBareSpecifiers: [],
-    });
+    const violations = scan(
+      readSources(path.join(ROOT, "packages/platform-kernel/src")),
+      {
+        packageDir: "packages/platform-kernel",
+        label: "kernel",
+        allowedBareSpecifiers: [],
+      },
+    );
     expect(violations).toEqual([]);
   });
 
   it("keeps tenancy dependent only on the kernel", () => {
-    const violations = scan(readSources(path.join(ROOT, "packages/tenancy/src")), {
-      packageDir: "packages/tenancy",
-      label: "tenancy",
-      allowedBareSpecifiers: ["@vibress/platform-kernel"],
-    });
+    const violations = scan(
+      readSources(path.join(ROOT, "packages/tenancy/src")),
+      {
+        packageDir: "packages/tenancy",
+        label: "tenancy",
+        allowedBareSpecifiers: ["@vibress/platform-kernel"],
+      },
+    );
     expect(violations).toEqual([]);
   });
 
-  it("detects a deliberately forbidden import", () => {
+  it("detects a deliberately forbidden bare import", () => {
     const violations = scan(
       [
         {
@@ -98,5 +130,30 @@ describe("platform dependency boundaries", () => {
     expect(violations).toEqual([
       "synthetic/kernel.ts imports @vibress/posts",
     ]);
+  });
+
+  it("detects a relative cross-package import attempting to escape package boundaries", () => {
+    const violations = scan(
+      [
+        {
+          path: "packages/platform-kernel/src/sub/leak.ts",
+          content: 'import { getDb } from "../../../database/src/index";',
+        },
+      ],
+      {
+        packageDir: "packages/platform-kernel",
+        label: "kernel",
+        allowedBareSpecifiers: [],
+      },
+    );
+    expect(violations).toEqual([
+      "packages/platform-kernel/src/sub/leak.ts relative import escapes packages/platform-kernel: ../../../database/src/index",
+    ]);
+  });
+
+  it("fails loudly if a required source directory is missing", () => {
+    expect(() =>
+      listTypeScriptFiles(path.join(ROOT, "packages/non-existent-package/src")),
+    ).toThrow(/Required source directory does not exist/);
   });
 });

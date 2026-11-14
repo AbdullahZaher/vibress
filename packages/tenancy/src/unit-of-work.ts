@@ -104,11 +104,28 @@ function sameScope(left: VerifiedScope, right: VerifiedScope): boolean {
   );
 }
 
+/**
+ * Application code executed via ScopedTransaction is trusted Tier-1 application
+ * logic within the installation. In-process SQL pattern inspection is an
+ * active defense-in-depth safeguard against accidental or subtle GUC tampering,
+ * NOT a sandboxing mechanism for untrusted SQL or malicious third-party code.
+ * Untrusted code must run in an isolated process/container sandbox.
+ *
+ * Any detected attempt to alter or reset `vibress.*` GUCs immediately marks the
+ * transaction as rollback-only so it can never be committed.
+ */
+function stripSqlComments(sql: string): string {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--.*$/gm, " ");
+}
+
 const SCOPE_MUTATION_PATTERN =
-  /(?:set_config\s*\(\s*'vibress\.|set\s+(?:local\s+)?'?vibress\.|reset\s+.*vibress\.)/i;
+  /(?:(?:pg_catalog\.)?set_config\s*\(\s*['"]vibress\.|set\s+(?:(?:session|local)\s+)?['"]?vibress\.|reset\s+(?:all|['"]?vibress\.))/i;
 
 function assertNoScopeMutation(sql: string): void {
-  if (SCOPE_MUTATION_PATTERN.test(sql)) {
+  const stripped = stripSqlComments(sql);
+  if (SCOPE_MUTATION_PATTERN.test(stripped)) {
     throw new TenantScopeMutationError();
   }
 }
@@ -135,7 +152,12 @@ function createScopedTransaction(
           rollback.reason ?? "transaction marked rollback-only",
         );
       }
-      assertNoScopeMutation(sql);
+      try {
+        assertNoScopeMutation(sql);
+      } catch (error) {
+        markRollbackOnly("scope mutation attempt detected");
+        throw error;
+      }
       return client.query<TRow>(sql, parameters);
     },
     markRollbackOnly,
