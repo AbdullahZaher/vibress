@@ -2,6 +2,8 @@
 
 > **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Planning on [Draft PR #151](https://github.com/AbdullahZaher/vibress/pull/151). These are **tracking Issues**, not native GitHub Milestone objects. No implementation completion, delivery dates, or production approvals are implied.
 
+**Fourth-pass review and existing Epic prioritization:** [R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) · [M00–M08 first slice](EXECUTION-FIRST-SLICE.md) · [RLS views/backups and nested transaction tests](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) · [legacy CMS identity mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md). New review acceptance cases are linked to existing Epics: **no additional master Epics or new implementation completion claims**.
+
 **Third-pass review:** [R26–R34 and current 8.0/10 editorial assessment](THIRD-REVIEW-AND-RATING-2026-11-14.md); [PostgreSQL effective privileges](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [per-installation trust](APP-INSTALLATION-TRUST-AND-OPERATIONS.md) and [rolling upgrades](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md) are new required milestone evidence. GitHub Issues will be updated with open checkboxes; docs-only status is not implementation completion.
 
 **Second-pass independent review:** [Scored assessment 8.0/10, R17–R25](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md). New issues and milestones must link the exact milestone exit criteria, runtime product scope and actual evidence; the score is editorial only.
