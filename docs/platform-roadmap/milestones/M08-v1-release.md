@@ -146,6 +146,16 @@ Exercise rolling old/new API+worker+web+database+module+event combinations; requ
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass release gates: views, backups, legacy identity and rollback
+
+Existing **M08-E02/E04/E11/E12** own these requirements. See [fourth review](../FOURTH-PASS-REVIEW-2026-11-14.md), [RLS-aware backup contract](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) and [legacy CMS migration](../LEGACY-CMS-IDENTITY-AND-MIGRATION.md).
+
+- [ ] Actual supported PostgreSQL versions deny tenant data leakage via ordinary owner-context views, invoker views and materialized reports **or** their generation is explicitly unsupported/blocked in v1.
+- [ ] Complete-installation backup is distinguishable from scoped tenant export, using an audited backup identity; two tenant row-count/checksum and media/queue restoration checks pass with measured RPO/RTO.
+- [ ] Legacy two-publication CMS content, members/plans, locales, published URLs, Studio documents and delayed jobs migrate/operate compatibly with new Application identity; independent CRM keeps its separate installation boundary.
+- [ ] Tested nested transaction error/rollback-only and outbox state matches v1 business action semantics.
+- [ ] Release owner makes a documented GO/NO-GO decision with actual CI and independent security evidence; checklist completion alone is not certification.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
