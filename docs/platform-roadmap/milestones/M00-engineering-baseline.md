@@ -81,7 +81,7 @@ Traceability: establish epic→issue→PR→tested evidence→signoff ledger.
 
 ### M00-E07 — Deployment/identity security architecture spike
 
-Approve ADR-PLAT-001..003 before implementing M01 runtime extraction. Compare one-app-per-installation (recommended) with shared multi-app runtime; record database/Redis/storage/secrets topology, runtime principal boundaries and rejected alternatives.
+Approve ADR-PLAT-001 and 002 and independently review the ADR-PLAT-003 PostgreSQL transaction/security prototype before implementing M01 runtime extraction. ADR-PLAT-003 must be fully accepted and operationally verified before any external tenant-owned data access. Compare one-app-per-installation (recommended) with shared multi-app runtime; record database/Redis/storage/secrets topology, runtime principal boundaries and rejected alternatives.
 
 **Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
 
@@ -99,7 +99,7 @@ Add a docs CI checker for Markdown links/headings, missing Mxx-Eyy work IDs, dup
 
 ### Additional milestone exit criteria (blocking)
 
-- [ ] ADR-PLAT-001..003 are accepted by architecture, security and DB owners before M01 runtime changes.
+- [ ] ADR-PLAT-001 and 002 are accepted; the ADR-PLAT-003 security transaction prototype is independently reviewed before M01 runtime changes. Its full implementation and verification block external tenant access, not isolated M01 prototyping.
 - [ ] Source inventory explicitly records getDb()/runInTransaction() behavior, the plugin SDK private flag, runtime CREATE/EXECUTE grants and legacy publication fallbacks.
 - [ ] Risk register R01–R16 is triaged with named owners, actual PR/CI evidence and a documentation-check task.
 

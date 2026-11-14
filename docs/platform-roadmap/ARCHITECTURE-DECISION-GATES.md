@@ -1,4 +1,4 @@
-# Required Architecture Decision Gates — ADR-PLAT-001..008
+# Required Architecture Decision Gates — ADR-PLAT-001..010
 
 > **Status: PROPOSALS — none approved by this document.** M00 owners must review these choices, update existing ADRs or create new accepted ADRs, and record signatures/links before changing the production runtime.
 
