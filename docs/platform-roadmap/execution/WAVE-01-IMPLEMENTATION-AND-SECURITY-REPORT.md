@@ -4,11 +4,12 @@
 > This report records work executed on branch `feat/wave1-platform-kernel-tenant-isolation`
 > cut from `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`, with the unmerged
 > roadmap pinned at PR #151 head `c9997a9353a229a4287256f5ba3b94d718e3a5d9`.
-> Measured evidence in §6 is current for the **P0-A/P0-B/P1 security
-> remediation** on 2026-11-14: uncommitted working tree on top of
-> `b62ffdf5` (PR #166 head). That increment removes privileged provisioning
-> authority from the request-serving process, closes role-membership escalation,
-> and makes boot verification pinned and read-only. W1-T05 remains preparation
+> Measured evidence in §6 is current for the **final remediation increment**
+> (commit `0f64936a`, CI run 43641264614 green) on top of `6b31320d` (PR #166).
+> That increment adds the versioned runtime privilege contract, atomic
+> provisioning, mandatory installation CAS with audit `0058`, on top of the
+> earlier removal of privileged provisioning authority from the request-serving
+> process and pinned read-only boot verification. W1-T05 remains preparation
 > only: the read-only inventory was re-run and an approval request plus a
 > hardened proposal exist, but **no grant was applied**.
 > Nothing here authorizes public application hosting, tenant onboarding or production.
@@ -224,7 +225,7 @@ non-superuser owner and re-verify there. Open blocker.
 | Command | Result |
 | --- | --- |
 | `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **final remediation tree**) | **11 files / 174 tests passed**, 7.02 s, exit 0 |
-| `… tests/integration/platform-reference-app.test.ts` (**final remediation tree**) | **69 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources; 11 contract/provisioning negatives (unexpected relation/column/sequence/schema/function authority, pre-existing grant revocation, missing/invalid contract) and 4 atomic-provisioning tests (manifest-update + forced CAS failure rolls back manifest, installation and both audits; forced audit failure rolls back; idempotent retry; single concurrent winner) |
+| `… tests/integration/platform-reference-app.test.ts` (**final remediation tree**) | **69 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources; 11 contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation) and 4 atomic-provisioning tests (manifest-update + forced CAS failure rolls back manifest, installation and both audits; forced audit failure rolls back; idempotent retry; single concurrent winner) |
 | `… tests/architecture/platform-boundaries.test.ts` | **6 tests passed**, including the serving-process provisioning-authority boundary |
 | `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` + `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` (**final remediation tree**) | both passed |
 | `pnpm exec eslint` on all changed sources, scripts and tests (**final remediation tree**) | passed, no output |
@@ -252,12 +253,15 @@ non-superuser owner and re-verify there. Open blocker.
 | `node scripts/audit-function-privileges.mjs <url>` (read-only session) | 33 public functions, 0 `SECURITY DEFINER`, 33 `PUBLIC` EXECUTE, 0 default-ACL entries |
 | `tsc` (workspace options) + ESLint on the W1-T09 scripts, Playwright config and spec | passed, no output |
 
-Rows labelled **final remediation tree** were measured on the uncommitted working tree
-on top of `6b31320d`. That tree was re-run end to end: platform suite (11 files /
+Rows labelled **final remediation tree** were measured on the working tree committed
+as `0f64936a` on top of `6b31320d`. That tree was re-run end to end: platform suite (11 files /
 174 tests), full integration suite (46 files / 578 tests), full unit suite (362 files /
 2585 tests), workspace typecheck (74/74), reference-app Playwright suite (8/8), ESLint
-and both docs link validators, all exit 0. No CI run exists for this content yet, so
-these are local results; old CI runs are not evidence for new source changes.
+and both docs link validators, all exit 0. CI run
+[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on the
+pushed implementation SHA `0f64936a` passed build, container-scan and e2e. Only
+docs-only changes followed that SHA; the local suites above are not reused as proof of
+any later code change.
 
 The full unit run exposed one test-suite hygiene defect: the Playwright
 `tests/e2e-platform/reference-app.spec.ts` was discovered by Vitest without its
@@ -554,8 +558,7 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
   **46 files / 578 tests**, workspace typecheck **74/74**, ESLint clean on all changed
   files. No CI run exists for this content yet; these are local results.
 
-**Wave 1 final remediation (2026-11-15, uncommitted, on top of `6b31320d`,
-current tree):**
+**Wave 1 final remediation (2026-11-15, commit `0f64936a`, on top of `6b31320d`):**
 
 - **Strict runtime privilege contract:** `PlatformRuntimePrivilegeContract` (version
   1) describes the only authority a runtime profile may hold — non-system schemas
@@ -594,11 +597,13 @@ current tree):**
   mutation, so an accepted change is always attributable and the recorded
   before/after values are the database's own.
 - Evidence: platform suite **11 files / 174 tests** (69 reference-app tests: 11 new
-  contract/provisioning negatives and 4 atomic-provisioning tests), Playwright
+  contract/provisioning tests and 4 atomic-provisioning tests), Playwright
   **8/8** with verified teardown, full unit **362 files / 2585 tests**, full
   integration **46 files / 578 tests** (sequential, shared dev database), workspace
-  typecheck **74/74**, ESLint clean on all changed files, docs links **89/12** and
-  **661/300**. Artifact provenance remains unclaimed: the digest is still
+  typecheck **74/74**, eslint clean on all changed files, docs links **89/12** and
+  **661/300**. CI run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
+  on `0f64936a` passed (build, container-scan, e2e; 2026-11-14T21:09:05Z–21:32:16Z).
+  Artifact provenance remains unclaimed: the digest is still
   caller-supplied and no mechanism proves executable code matches it.
 
 ## 10. Open blockers and risk register deltas
@@ -637,11 +642,11 @@ Scores are for this increment only and are not a certification. A critical defec
 | --- | --- | --- |
 | Privilege separation (P0-A/P0-B, contract) | 8.5/10 | Owner authority removed from serving sources and refused at runtime; full SET-able membership closure proven with real PostgreSQL; the versioned runtime privilege contract now constrains relations by kind, columns, sequences, schemas and function `EXECUTE` against effective authority including PUBLIC and inherited grants, and provisioning revokes prior authority before granting. Deducted because provisioning and serving are not yet exercised as separate deployment units on a real orchestrator, and R26 `PUBLIC` function grants remain unrevoked. |
 | Verification correctness (P1, atomicity) | 8.5/10 | Pinned, read-only checks cover application, installation, environment, artifact and manifest; installation changes require mandatory CAS on both expected values; the entire provisioning flow runs on one checked-out connection in one transaction, and a forced CAS failure after a manifest update leaves manifest, installation and both audit streams unchanged. Deducted because the artifact digest is still operator-supplied, not derived from CI provenance. |
-| Test evidence | 8.5/10 | 174 platform tests (69 reference-app), full unit 2585, full integration 578, 8 Playwright tests, 74/74 typecheck and lint all green locally. Deducted because no CI run exists on this exact uncommitted content and no local test can prove the production topology. |
+| Test evidence | 9.0/10 | 174 platform tests (69 reference-app), full unit 2585, full integration 578, 8 Playwright tests, 74/74 typecheck and lint all green locally, and CI run 43641264614 green on the implementation SHA `0f64936a` (build, container-scan, e2e). Deducted because no local test or CI job can prove the production deployment topology. |
 | Compatibility and maintainability | 8.5/10 | Additive schema/exports; full CMS/Studio unit and integration suites green; the change adds one verifier role, one operator CLI, one migration and one generic contract type. Deducted because browser-level CMS acceptance suites and CI remain outstanding. |
 | Operational readiness | 6.5/10 | Runbook updated for two executables, three roles, mandatory CAS variables and both audit queries. Missing: production-shaped Redis/S3/queue/secrets isolation, production IdP, non-superuser deployment owner, external secret-manager wiring. |
 | Auditability and governance | 8.5/10 | Registry audit (0057) and installation audit (0058) rows are written in the same statement as each mutation, with actor, reason and observed before/after values; runbook, finding table and explicit non-claims. Deducted because ADRs and A1–A8/G0 remain unsigned and no independent reviewer has examined this increment. |
-| **Average** | **8.3/10** | **Target 9.0 not met; critical external blockers remain.** |
+| **Average** | **8.3/10** | (8.5 + 8.5 + 9.0 + 8.5 + 6.5 + 8.5) / 6 = 8.25. **Target 9.0 not met; critical external blockers remain.** |
 
 ## 12. Certification and sign-off status
 
@@ -654,7 +659,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **NOT RUN** for this increment (local evidence only) |
+| CI on the final source SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
 
 The author does not sign off on this implementation, does not mark the gate
 passed, and did not fabricate any signature or approval.
@@ -677,21 +682,23 @@ membership reader, a SELECT-only deployment verifier with pinned read-only boot
 verification, full SET-able membership closure, a hardened tenant transaction trust
 boundary (async escape, role-switch rejection, connection destruction), a
 digest-pinned two-publication CMS/Studio compatibility pack proven over HTTP +
-PostgreSQL, a fully validating docs tree, and the full `tests/integration` suite.
+PostgreSQL, a fully validating docs tree, the full `tests/integration` suite, and a
+green CI run ([43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614))
+on the implementation SHA `0f64936a`.
 
 Missing evidence:
 R26 revocation approval/application,
 non-superuser owner in the deployment topology, views policy decision, F-012
 disposition acceptance, Redis/S3 cross-installation denial, production identity
-provider, broader CMS Playwright E2E/acceptance run, CI on this exact source SHA,
+provider, broader CMS Playwright E2E/acceptance run, artifact provenance from CI,
 independent review, and named human sign-offs. Wave 2 (M03) may not start under
 this gate, and a high rubric score cannot override these critical defects.
 
 ## 14. Next steps (ordered)
 
-1. Commit this increment as a focused PR, run the full unit/integration suites and CI
-   on the final source SHA, and attach the URLs/SHAs to this report. Local green runs
-   on an uncommitted tree are not certification.
+1. Independent review of the implementation SHA `0f64936a` and the three ADR
+   proposals by a reviewer who is not the author; record findings as blocking or
+   accepted with rationale. CI and the local suites are green, but they are not review.
 2. Independent review of this branch and the three ADR proposals by a reviewer who is
    not the author; record findings as blocking or accepted with rationale.
 3. R26: run the inventory against a production-shaped role set; answer

@@ -31,17 +31,19 @@
 ## Evidence executed on this branch
 
 Suites and typecheck were re-measured on 2026-11-15 for the final remediation
-increment on top of `6b31320d`: platform suite, reference-app integration,
+increment (commit `0f64936a` on top of `6b31320d`): platform suite, reference-app integration,
 architecture, full unit, full integration, workspace typecheck, lint, Playwright and
-both docs link validators all passed on the uncommitted tree. CI has **not** run on
-this content. The R26 read-only audit was last re-run on
+both docs link validators all passed on that tree. CI run
+[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on
+`0f64936a` passed build, container-scan and e2e; only docs-only edits followed that
+SHA. The R26 read-only audit was last re-run on
 2026-11-14T19:12:39.618Z with identical totals; the CMS-subset audit was run earlier
 on this branch.
 
 | Suite | Result |
 | --- | --- |
 | **Full platform suite, final remediation tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 174 tests passed**, exit 0 |
-| **Reference app, final remediation tree** (`tests/integration/platform-reference-app.test.ts`) | **69/69 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; 11 runtime-privilege-contract/provisioning negatives and 4 atomic-provisioning tests (manifest update + forced CAS failure leaves manifest, installation and both audit streams unchanged; forced audit failure rolls back; idempotent retry; single concurrent winner) |
+| **Reference app, final remediation tree** (`tests/integration/platform-reference-app.test.ts`) | **69/69 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; 11 contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation) and 4 atomic-provisioning tests (manifest update + forced CAS failure leaves manifest, installation and both audit streams unchanged; forced audit failure rolls back; idempotent retry; single concurrent winner) |
 | Architecture boundary (`tests/architecture/platform-boundaries.test.ts`) | 6/6 passed, including no provisioning imports/owner identifiers in `server.ts`/`start.ts` |
 | Typecheck + lint, final remediation tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
 | Reference-app Playwright, final remediation tree | 8/8 passed |
@@ -63,7 +65,7 @@ on this branch.
 | Full unit suite on the final remediation tree (`pnpm test:unit`) | 362 files / 2585 tests passed, exit 0, 317.19 s |
 | Full integration suite on the final remediation tree (`pnpm test:integration`) | 46 files / 578 tests passed, exit 0, 127.31 s, sequential |
 | Workspace typecheck on the final remediation tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
-| CI on the final remediation source SHA | **Not run** (uncommitted tree) |
+| CI on the final remediation source SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
 | Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |
 
 Integration suites share the dev database and must run sequentially. One run that
@@ -88,7 +90,7 @@ runs passed.
 | P0-A privileged provisioning authority out of the serving process | P0 | **Done in code, unreviewed** — separate `pnpm platform:provision-reference` executable; serving refuses `DATABASE_URL`, holds no owner pool/registry store, and a source-boundary test enforces it; child-process negative tests |
 | P0-B full SET-able membership closure | P0 | **Done in code, unreviewed** — runtime/reader/verifier reject any non-self membership, including indirect and `NOINHERIT`; real-PostgreSQL tests |
 | P1 separate provisioning and pinned read-only verification | P1 | **Done in code, unreviewed** — CAS-guarded operator provisioning; dedicated SELECT-only verifier role; environment/artifact/application/manifest drift fails before serving without mutation; audit attribution |
-| P1 strict runtime privilege contract | P1 | **Done in code, unreviewed** — versioned, extensible allowlist (schemas, relations by kind, sequences, functions) enforced on effective authority at boot and provisioning; eleven real-PostgreSQL negatives plus a pre-existing-grant revocation test; reference CRM profile is one contract instance |
+| P1 strict runtime privilege contract | P1 | **Done in code, unreviewed** — versioned, extensible allowlist (schemas, relations by kind, sequences, functions) enforced on effective authority at boot and provisioning; ten real-PostgreSQL negatives plus a pre-existing-grant revocation test; reference CRM profile is one contract instance |
 | P1 atomic provisioning transaction | P1 | **Done in code, unreviewed** — one checked-out connection and one transaction for manifest, installation, both audit streams and the read-only proof; stale-CAS, forced-audit-failure, idempotent-retry and one-winner-concurrency tests |
 | P1 mandatory CAS + installation audit | P1 | **Done in code, unreviewed** — `registerInstallation`/`updateInstallation` split; actor, reason and both expected-state values required for updates; migration `0058` audit row written in the same statement |
 
