@@ -81,6 +81,12 @@ Are app and tenant identities separate across single/multi tenant installations?
 
 [Fourth review R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) provides rationale and links. No source code, actual privilege migration or tenant backup was changed by this documentation-only PR.
 
+## R40 — Unapproved Framework/Host SemVer identity and runtime metadata
+
+The roadmap's previous first Framework release label `v1.0.0` conflicts with existing **1.2.0** source package metadata, unified [ADR-013](../14-decisions/release-versioning-strategy.md) and a `VIBRESS_VERSION:1.0.0` default in production Compose. This is a **plan and release-tag compatibility risk**, not proof that the current deployed application is mislabeled. Avoid reusing `v1.0.0`; decide a unified or separately named Framework version stream before M07 package publication/M08 release approval. [Release matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) and [GO/NO-GO register](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md).
+
+[Provisional roadmap design score: 9.1/10](QUALITY-9-PLUS-ASSESSMENT.md). This rating cannot waive unresolved security tests, ADR approval, Studio compatibility, owner/capacity or measured release acceptance.
+
 ## Relative complexity only
 
 M/L/XL/XXL are qualitative. Team capacity, dates, sprint plans and implementation costs require separate approval; this document contains no promised dates.
