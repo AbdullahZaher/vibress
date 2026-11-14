@@ -4,6 +4,12 @@
 >
 > Planning content only: existence of a document or issue does **not** mean code shipped or production was approved. New `M00–M12` IDs do not replace the existing Plugin Platform `M0–M6` roadmap.
 
+## Requester-adopted implementation mandate — all five Waves
+
+The project requester has [adopted the reviewed M00–M12 roadmap for controlled implementation](ROADMAP-EXECUTION-ADOPTION-2026-11-14.md) and issued a [complete English five-Wave engineering/security team prompt](FIVE-WAVE-ENGINEERING-SECURITY-MASTER-PROMPT.md). **Start Wave 1 (M00–M02), implement/test/report, proceed through Waves 2–5 only after each documented GO**, then run the final cross-wave certification suite. Wave reports must be reproducible, code-backed and independently reviewed; **no wave is claimed completed by this instruction**.
+
+The requester decision **does not automatically sign A1–A8, pass G0–G7, merge this Draft PR or authorize production release**. Human architecture/security approvals and high-risk change consent remain mandatory.
+
 ## Final standards-based design review disposition
 
 **Design-baseline recommendation:** [CONDITIONAL ACCEPTANCE FOR M00 EXECUTION PLANNING](FINAL-DESIGN-BASELINE-APPROVAL.md), not a production/security certificate or an authorized organizational approval. The [international standards mapping](INTERNATIONAL-STANDARDS-ALIGNMENT.md) covers NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001:2022, ISO/IEC 25010:2023, SLSA v1.2 and WCAG 2.2. **Human architecture/security/release sign-offs A1–A8 remain open.** PR #151 stays Draft until owners accept the conditions.
