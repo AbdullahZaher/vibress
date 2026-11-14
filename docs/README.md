@@ -115,3 +115,9 @@ vibress-ecosystem/
 - `13-roadmap/` — recommended implementation phases
 
 This documentation defines **Architecture v1** for Vibress.
+
+## Universal Application Platform — proposed master roadmap (2026-11-14)
+
+The new [Vibress Universal Application Platform master roadmap](platform-roadmap/README.md) proposes **five waves and 13 master milestones (M00–M12)** to evolve Vibress beyond publishing into a general, self-hostable application development platform. See the [Arabic overview](platform-roadmap/README.ar.md), [architecture](platform-roadmap/PLATFORM-ARCHITECTURE.md), [security/release gates](platform-roadmap/SECURITY-AND-RELEASE-GATES.md), [existing-asset traceability](platform-roadmap/EXISTING-ASSETS.md), and [GitHub tracking issues](platform-roadmap/MILESTONE-TRACKER.md).
+
+**Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.
