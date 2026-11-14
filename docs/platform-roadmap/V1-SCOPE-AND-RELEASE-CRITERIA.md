@@ -2,6 +2,12 @@
 
 > **Proposed release cut, not a shipped feature or production approval.** This file explicitly separates universal-platform *v1 mandatory* capability from advanced optional modules and future releases.
 
+## Version and scope authority (mandatory M00/M08 decision)
+
+**The term "v1" below denotes the program's first supported code-first GA feature scope**, **not** an approved Git tag, npm version or Docker image tag. Existing Vibress packages are already v1.2.0 and [ADR-013](../14-decisions/release-versioning-strategy.md) specifies unified SemVer. The new GA's artifact identity, whether unified or independent, must be approved, pinned and verified against runtime manifest. See [Release Version and Support Matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md).
+
+**Compatibility evidence must name actual versions:** current Node 24 engine, PostgreSQL 16 and Redis 7 Compose baselines are candidates, not a claim of indefinite support; independently pin Host/Studio/Plugin SDK/CLI/build/migration SHAs and verify exact supported upgrade combinations. [Release decision ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) records all open mandatory test gates.
+
 ## v1 GA — mandatory capability set
 
 | Domain | Minimum evidence-backed v1 target | Exit proof |
