@@ -171,6 +171,14 @@ These tests refine **existing M00-E04, E07, E12 and E13**; they do not create ne
 [Release support matrix](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release ledger](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md)
 
 
+## International standards design sign-off (existing M00 epics; no new IDs)
+
+- [ ] Review the [final design baseline recommendation and open A1–A8 conditions](../FINAL-DESIGN-BASELINE-APPROVAL.md); record genuine human architecture/security/product owner approval before claiming formal organizational sign-off.
+- [ ] Approve a standards-control register mapping [NIST SSDF v1.1, ASVS v5.0.0, ISO/IEC 27001/25010, SLSA v1.2 and WCAG 2.2](../INTERNATIONAL-STANDARDS-ALIGNMENT.md) to existing M00–M08 Epics, real owners, selected control versions and test artifacts.
+- [ ] Resolve legacy [architecture overview](../../01-architecture/overview.md) single-deployment/multiple-runtime-application wording versus new per-installation topology, without rewriting existing CMS runtime claims.
+- [ ] Reconcile [historical SECURITY.md version support](../../../SECURITY.md) with current Host/SDK 1.2.0 and proposed Framework GA version strategy without fabricating product support dates.
+- [ ] Define SSDF vulnerability intake/triage, selected ASVS verification depth, SLSA target track/level, ISO 25010 product measures and WCAG 2.2 AA testing scope; record decision owners and real resources.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
