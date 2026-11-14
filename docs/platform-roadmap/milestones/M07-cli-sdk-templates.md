@@ -146,6 +146,15 @@ The [first executable slice](../EXECUTION-FIRST-SLICE.md) prioritizes **existing
 - [ ] External CLI/SDK documentation explicitly excludes unsupported materialized tenant reporting and any feature requiring unreviewed privileged SQL views.
 - [ ] First-adopter tasks and an actual owner/capacity decision determine v1 claim scope; no additional full reference application is made a GA blocker by this review.
 
+## CLI and package release identity (existing M07-E09)
+
+- [ ] Verify actual `vibress` binary/package name is available, versioned and scoped by the approved SemVer model, not assumed from a proposed command list.
+- [ ] A clean external Node 24 / pnpm 11.22.0 consumer imports the **published** public SDK, creates CRM, exercises trusted module/custom endpoint/front end, and records immutable build and package provenance.
+- [ ] Upgrade plan reports Host/Framework/Plugin SDK/Studio/DB/event incompatibilities and rejects accidental reuse of `v1.0.0` as a new release of an already-versioned Host product.
+
+[Support matrix](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [GA evidence register](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md).
+
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
