@@ -133,6 +133,14 @@ The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: views, reporting and export
+
+Extend existing **M04-E08/E10**. See [PostgreSQL view and RLS tests](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
+
+- [ ] Generated REST/admin count, search, relation traversal, report and export paths cannot elevate privilege by selecting a view owned by an RLS-exempt role.
+- [ ] A materialized report, if explicitly supported, has separate refresh ownership/SELECT restrictions and tested tenant A/B visibility; otherwise it is excluded from v1 generation.
+- [ ] Client/API OpenAPI contracts disclose unsupported view and reporting features instead of implicitly exposing them.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
