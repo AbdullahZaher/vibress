@@ -76,9 +76,13 @@ Existing runtime paths cannot enforce tenant isolation:
 
 ## Open blockers before this ADR can be accepted
 
-1. **R26 function inventory:** list `SECURITY DEFINER` functions, owners, effective
-   `PUBLIC`/inherited `EXECUTE`, `search_path`, and default privileges; ship a
-   reviewed targeted-revocation migration. Not performed here.
+1. **R26 remediation (inventoried, not applied):** the dev fixture has 33 public
+   functions, **0 `SECURITY DEFINER`**, 31 extension-owned `pg_trgm` functions and
+   2 migration trigger functions, all with default `PUBLIC` EXECUTE; no
+   `pg_default_acl` policy exists. A targeted revocation plus a default-privilege
+   change is proposed but **not applied**, pending a production-shaped inventory
+   and DB/security approval. See
+   [R26 inventory](../R26-FUNCTION-EXECUTE-INVENTORY.md).
 2. **Owner role in deployment:** `FORCE RLS` is now proven in tests against a
    non-superuser owner. The dev/Compose migration role `vibress` is still a
    superuser, so the deployment topology must be changed to a non-superuser owner

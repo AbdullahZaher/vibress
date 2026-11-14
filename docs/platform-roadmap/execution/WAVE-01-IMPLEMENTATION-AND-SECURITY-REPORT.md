@@ -12,7 +12,7 @@
 | --- | --- |
 | M00 baseline | **PARTIAL** — baseline, ownership map and ADR blockers recorded; docs validator and compatibility fixture pinning remain |
 | M01 kernel | **PARTIAL** — public contracts, registry, reference action/route/module exist; persisted registry and a bootable reference app remain |
-| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege role and real PostgreSQL deny matrix exist; R26 function inventory, owner-role proof, views policy and cross-installation proof remain |
+| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege role, real PostgreSQL deny matrix and non-superuser owner proof exist; R26 revocation approval, deployment owner change, views policy and cross-installation proof remain |
 | Independent security review | **NOT PERFORMED** |
 | Gate | **NO-GO** |
 
@@ -71,10 +71,15 @@ The contract and measured PostgreSQL matrix are in
 PostgreSQL grants `EXECUTE` on new functions to `PUBLIC`. A role-specific
 `REVOKE ... FROM <role>` does not remove that effective grant. The integration test
 `still executes owner-owned public functions through PUBLIC (R26 open)` proves the
-platform runtime role **can** execute an owner-created function in `public`. This is
-recorded as an open blocker, not accepted behavior. Closing it requires a full
-function/`SECURITY DEFINER` inventory and a reviewed migration; it was not performed
-blindly because it changes shared database policy.
+platform runtime role **can** execute an owner-created function in `public`.
+
+The read-only inventory is now done: 33 public functions, **0 `SECURITY DEFINER`**,
+31 extension-owned `pg_trgm`, 2 trigger functions, all with default `PUBLIC` EXECUTE,
+and no `pg_default_acl` policy. A targeted revocation and default-privilege change is
+[proposed but not applied](R26-FUNCTION-EXECUTE-INVENTORY.md) — applying it is a
+shared-database policy change that requires a production-shaped inventory and DB owner
+approval. Two read-only regression guards assert no `SECURITY DEFINER` function is
+reachable via `PUBLIC` and no runtime role owns functions.
 
 ### Measured: `FORCE RLS` against a non-superuser owner
 
@@ -92,7 +97,7 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **6 files / 61 tests passed** |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **7 files / 63 tests passed** |
 | `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **5 files / 39 tests passed** |
 | `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 22 tests passed** against PostgreSQL 16 |
 | `pnpm exec tsc -p packages/platform-kernel/tsconfig.json --noEmit` | passed |
@@ -102,6 +107,7 @@ non-superuser owner and re-verify there. Open blocker.
 | `pnpm exec nx run-many --target=typecheck --all --skip-nx-cache` | **73 projects succeeded**, 42.8 s |
 | CMS compatibility subset (`runtime-multi-publication-isolation`, `content-database`, `transactions`, `studio-persistence-roundtrip`, `outbox`) | **5 files / 79 tests passed** in 14.45 s, including migration + seed global setup |
 | Pre-existing `tests/integration/platform-packages.test.ts` under the root config | **26 tests passed** (runs under root aliases, not the platform config) |
+| `node scripts/audit-function-privileges.mjs <url>` (read-only session) | 33 public functions, 0 `SECURITY DEFINER`, 33 `PUBLIC` EXECUTE, 0 default-ACL entries |
 
 The PostgreSQL proof applies migration `0054`, provisions the runtime role, inserts
 two tenants and two customers through the owner, then reconnects **as the runtime
@@ -155,7 +161,7 @@ pass, so this is a compatibility subset, not a full regression proof.
 
 | ID | Blocker | Impact | State |
 | --- | --- | --- | --- |
-| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role | Privileged owner code callable | Measured, open |
+| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role | Privileged owner code callable | Inventoried; revocation proposed, **not applied** |
 | — | Deployment owner (`vibress`) is a superuser, which bypasses `FORCE RLS` | Owner could bypass if left as-is | Test proven; deployment change open |
 | R35 | Views/materialized reports not covered by policy | Potential cross-tenant read if views are exposed | Open (excluded from contract) |
 | R37 | Legacy runner still nests without savepoints | Old code can half-commit semantics | Unchanged, documented |
@@ -173,7 +179,7 @@ No finding was closed by documentation. No test was skipped to make the run gree
 Passing evidence on this branch: kernel/tenancy unit and boundary tests, a real
 PostgreSQL tenant-isolation matrix through a least-privilege role, and `FORCE RLS`
 against a non-superuser owner. Missing evidence:
-R26 remediation, non-superuser owner in the deployment topology, views policy
+R26 revocation approval/application, non-superuser owner in the deployment topology, views policy
 decision, cross-installation negative tests, full CMS/Studio compatibility run,
 independent review, and named human sign-offs. Wave 2 (M03) may not start under
 this gate.
@@ -182,9 +188,9 @@ this gate.
 
 1. Independent review of this branch and the three ADR proposals by a reviewer who is
    not the author; record findings as blocking or accepted with rationale.
-2. R26: inventory functions, `SECURITY DEFINER` owners and `search_path`; produce a
-   reviewed targeted-revocation migration with rollback; re-run the residual test
-   expecting denial.
+2. R26: run the inventory against a production-shaped role set, get DB/security
+   approval, then apply [proposals/0055_revoke_public_execute.sql](proposals/0055_revoke_public_execute.sql)
+   and re-run the residual test expecting denial; keep the documented rollback ready.
 3. Change the deployment owner from the superuser `vibress` role to a non-superuser
    owner and re-run the owner RLS proof there.
 4. Pin the two-publication CMS fixture (`pub_alpha`, `pub_beta`, `pub_default`) and
@@ -200,4 +206,5 @@ this gate.
 - ADR-PLAT-001: [installation topology](adr/ADR-PLAT-001-installation-topology.md)
 - ADR-PLAT-002: [identity vocabulary](adr/ADR-PLAT-002-identity-vocabulary.md)
 - ADR-PLAT-003: [tenant transaction and RLS](adr/ADR-PLAT-003-tenant-transaction-rls.md)
+- R26: [function EXECUTE inventory](R26-FUNCTION-EXECUTE-INVENTORY.md) and [proposed revocation](proposals/0055_revoke_public_execute.sql)
 - Program status: [PROGRAM-EXECUTION-STATUS.md](PROGRAM-EXECUTION-STATUS.md)
