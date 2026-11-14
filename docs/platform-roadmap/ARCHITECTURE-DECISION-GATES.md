@@ -15,6 +15,12 @@
 | **009** | Code-first app frontend/custom runtime boundary | Public route/action extension with authenticated typed SDK and developer-owned web UI; IR for declarative metadata only | Promise 'any project' while delivering only CRUD/Admin or treat arbitrary TS as visual IR | M01/M04/M07 clean CRM test |
 | **010** | Data retention, deletion, export and operations | Lifecycle policy, tenant offboarding, privacy ownership and measured SLO/RPO/RTO with compliance review as applicable | Assume row deletion removes every copy or promise universal legal compliance | M00 ownership; M02/M06 policy; M08 GA |
 
+## ADR-PLAT-007/008 release-version collision (new M00 finding)
+
+The **existing approved source** [ADR-013](../14-decisions/release-versioning-strategy.md) uses **unified SemVer**. The monorepo and Plugin SDK currently declare `1.2.0`, but the new roadmap originally advertised "Platform v1.0 GA"; production Compose also defaults `VIBRESS_VERSION` to `1.0.0`. These values must **not** be treated as an already supported new Framework 1.0 release. Before M07 package publication and M08 candidate selection, choose a unified product-version stream or formally approve a separate noncolliding Framework release namespace. Record package/tag/ABI/Studio compatibility, provenance and operator migration strategy. See [versioning matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md).
+
+**Decision state remains PROPOSED**. M08 is a milestone label, not a SemVer assertion; never silently supersede ADR-013.
+
 ## Security-focused decision refinements (PR review R26–R34)
 
 **ADR-PLAT-001 — installation topology:** the v1 recommended physical boundary is a *dedicated PostgreSQL database and role set for each installed app*, with separately enforceable Redis ACLs/instances, storage bucket/IAM and deployment credentials. **Different role names or prefixes in the same shared public schema do not automatically isolate applications.** Shared-DB alternatives require evidence of equivalent effective ACLs and separate approval.
