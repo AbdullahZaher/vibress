@@ -119,7 +119,7 @@ if (Math.abs(max - 10) > 0.001 || Math.abs(score - 8) > 0.001) {
   fail(path.join(docsRoot, 'SECOND-REVIEW-AND-SCORECARD-2026-11-14.md'), 'historical weighted rubric totals do not equal 10 / 8');
 }
 const qualityText = read('QUALITY-9-PLUS-ASSESSMENT.md');
-const qualityRows = [...qualityText.matchAll(/^\\| (?!\\*\\*TOTAL\\*\\*)(?!Criterion\\b)[^|\\n]+\\| (\\d+(?:\\.\\d+)?) \\| (\\d+(?:\\.\\d+)?) \\| \\*\\*(\\d+(?:\\.\\d+)?)\\*\\* \\|/gm)];
+const qualityRows = [...qualityText.matchAll(/^\| (?!\*\*TOTAL\*\*)(?!Criterion\b)[^|\n]+\| (\d+(?:\.\d+)?) \| (\d+(?:\.\d+)?) \| \*\*(\d+(?:\.\d+)?)\*\* \|/gm)];
 if (qualityRows.length !== 8) fail(path.join(docsRoot, 'QUALITY-9-PLUS-ASSESSMENT.md'), 'expected eight current quality rubric rows');
 const qualityMax = qualityRows.reduce((sum, row) => sum + Number(row[1]), 0);
 const previousScore = qualityRows.reduce((sum, row) => sum + Number(row[2]), 0);
