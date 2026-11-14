@@ -4,6 +4,7 @@ import path from "node:path";
 import { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  asApplicationId,
   asInstallationId,
   defineApplication,
   type ApplicationDefinition,
@@ -12,15 +13,18 @@ import {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,
+  InstallationApplicationMissingError,
   InstallationMismatchError,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
   UnexpectedApplicationRegistrationError,
+  type InstallationRegistrationRecord,
 } from "../../packages/database/src/platform-application-registry";
 import {
   assertSafePlatformRuntimeRole,
   provisionPlatformRuntimeRole,
   UnsafePlatformRuntimeRoleError,
+  type PlatformRuntimeRoleViolationCode,
 } from "../../packages/database/src/platform-runtime-role";
 import { PolicyEngine, TenantUnitOfWork } from "@vibress/tenancy";
 import {
@@ -58,6 +62,8 @@ let runtimePool: Pool;
 let store: PostgresApplicationRegistryStore;
 let application: ApplicationDefinition;
 let server: Awaited<ReturnType<typeof createReferenceServer>>;
+let databaseName: string;
+let roleSequence = 0;
 
 async function applyPlatformMigrations(client: Client): Promise<void> {
   for (const file of [
@@ -135,9 +141,61 @@ function withVersion(
   });
 }
 
+function ephemeralRoleName(kind: string): string {
+  roleSequence += 1;
+  return `w1t01_${kind}_${Date.now().toString(36)}_${roleSequence}`.slice(0, 63);
+}
+
+function roleConnectionString(name: string, password: string): string {
+  const url = new URL(DATABASE_URL);
+  url.username = name;
+  url.password = password;
+  return url.toString();
+}
+
+async function createEphemeralLogin(
+  name: string,
+  password: string,
+  attributes = "NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION",
+): Promise<void> {
+  const role = owner.escapeIdentifier(name);
+  await owner.query(
+    `CREATE ROLE ${role} LOGIN PASSWORD ${owner.escapeLiteral(password)} ${attributes}`,
+  );
+  await owner.query(
+    `GRANT CONNECT ON DATABASE ${owner.escapeIdentifier(databaseName)} TO ${role}`,
+  );
+}
+
+async function dropEphemeralRoles(names: readonly string[]): Promise<void> {
+  for (const name of names) {
+    const role = owner.escapeIdentifier(name);
+    await owner.query(`DROP OWNED BY ${role}`).catch(() => undefined);
+    await owner.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
+  }
+}
+
+async function expectUnsafeRuntimeRole(
+  client: Client,
+  expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
+): Promise<void> {
+  const error = await assertSafePlatformRuntimeRole(client).then(
+    () => null,
+    (caught: unknown) => caught,
+  );
+  expect(error).toBeInstanceOf(UnsafePlatformRuntimeRoleError);
+  const violations = (error as UnsafePlatformRuntimeRoleError).violations;
+  expect(violations.map((violation) => violation.code)).toEqual(
+    expect.arrayContaining([...expectedCodes]),
+  );
+}
+
 beforeAll(async () => {
   owner = new Client({ connectionString: DATABASE_URL });
   await owner.connect();
+  databaseName = (
+    await owner.query<{ name: string }>("SELECT current_database() AS name")
+  ).rows[0]!.name;
   await applyPlatformMigrations(owner);
   await provisionPlatformRuntimeRole(owner, {
     roleName,
@@ -281,14 +339,130 @@ describe("persisted application registry", () => {
       store.verifyInstallation(instId, asInstallationId("other-app") as any),
     ).rejects.toThrow(InstallationMismatchError);
   });
+
+  it("rejects a conflicting installation bind without mutating the persisted record", async () => {
+    const instId = asInstallationId("test-installation-conflict");
+    const other = createReferenceApplication({ id: otherApplicationId });
+    await store.sync(other);
+    try {
+      await store.syncInstallation({
+        id: instId,
+        applicationId: application.id,
+        environment: "test",
+        artifactDigest: "digest-original",
+      });
+
+      await expect(
+        store.syncInstallation({
+          id: instId,
+          applicationId: other.id,
+          environment: "production",
+          artifactDigest: "digest-forged",
+        }),
+      ).rejects.toThrow(InstallationMismatchError);
+
+      const persisted = await store.verifyInstallation(instId, application.id);
+      expect(persisted.environment).toBe("test");
+      expect(persisted.artifactDigest).toBe("digest-original");
+    } finally {
+      await owner
+        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
+        .catch(() => undefined);
+      await owner
+        .query("DELETE FROM platform_applications WHERE id = $1", [
+          otherApplicationId,
+        ])
+        .catch(() => undefined);
+    }
+  });
+
+  it("refuses to bind an installation whose application is not registered", async () => {
+    const instId = asInstallationId("test-installation-orphan");
+    const missing = asApplicationId("reference-crm-unregistered");
+
+    await expect(
+      store.syncInstallation({ id: instId, applicationId: missing }),
+    ).rejects.toThrow(InstallationApplicationMissingError);
+
+    const installations = await owner.query(
+      "SELECT 1 FROM platform_installations WHERE id = $1",
+      [instId],
+    );
+    expect(installations.rowCount).toBe(0);
+    const applications = await owner.query(
+      "SELECT 1 FROM platform_applications WHERE id = $1",
+      [missing],
+    );
+    expect(applications.rowCount).toBe(0);
+  });
+
+  it("lets exactly one of two concurrent conflicting binds win without overwriting it", async () => {
+    const instId = asInstallationId("test-installation-race");
+    const other = createReferenceApplication({ id: otherApplicationId });
+    await store.sync(other);
+    try {
+      const results = await Promise.allSettled([
+        store.syncInstallation({
+          id: instId,
+          applicationId: application.id,
+          environment: "env-a",
+          artifactDigest: "digest-a",
+        }),
+        store.syncInstallation({
+          id: instId,
+          applicationId: other.id,
+          environment: "env-b",
+          artifactDigest: "digest-b",
+        }),
+      ]);
+
+      const fulfilled = results.filter(
+        (
+          result,
+        ): result is PromiseFulfilledResult<InstallationRegistrationRecord> =>
+          result.status === "fulfilled",
+      );
+      const rejected = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect(rejected[0]?.reason).toBeInstanceOf(InstallationMismatchError);
+
+      const winner = fulfilled[0]!.value;
+      const persisted = await store.verifyInstallation(
+        instId,
+        winner.applicationId,
+      );
+      const wonByPrimary = winner.applicationId === application.id;
+      expect(persisted.environment).toBe(wonByPrimary ? "env-a" : "env-b");
+      expect(persisted.artifactDigest).toBe(
+        wonByPrimary ? "digest-a" : "digest-b",
+      );
+    } finally {
+      await owner
+        .query("DELETE FROM platform_installations WHERE id = $1", [instId])
+        .catch(() => undefined);
+      await owner
+        .query("DELETE FROM platform_applications WHERE id = $1", [
+          otherApplicationId,
+        ])
+        .catch(() => undefined);
+    }
+  });
 });
 
 describe("runtime role verification", () => {
-  it("proves the runtime role is non-superuser, no-bypassrls and owns no platform tables", async () => {
+  it("proves the runtime role is least-privilege and owns no platform objects", async () => {
     const roleAttrs = await assertSafePlatformRuntimeRole(runtimePool);
     expect(roleAttrs.currentUser).toBe(roleName);
+    expect(roleAttrs.sessionUser).toBe(roleName);
     expect(roleAttrs.isSuperuser).toBe(false);
     expect(roleAttrs.isBypassRls).toBe(false);
+    expect(roleAttrs.isCreateRole).toBe(false);
+    expect(roleAttrs.isCreateDb).toBe(false);
+    expect(roleAttrs.isReplication).toBe(false);
   });
 
   it("fails closed when run against a superuser or table-owning database role", async () => {
@@ -302,6 +476,170 @@ describe("runtime role verification", () => {
         UnsafePlatformRuntimeRoleError,
       );
     }
+  });
+
+  describe("privilege assertions", () => {
+    it("rejects a role that can SET ROLE to a superuser", async () => {
+      const login = ephemeralRoleName("member");
+      const privileged = ephemeralRoleName("super");
+      const password = `${login}_pw`;
+      await owner.query(
+        `CREATE ROLE ${owner.escapeIdentifier(privileged)} NOLOGIN SUPERUSER`,
+      );
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `GRANT ${owner.escapeIdentifier(privileged)} TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["privileged_role_membership"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login, privileged]);
+      }
+    });
+
+    it("rejects a runtime role with CREATE on schema public", async () => {
+      const login = ephemeralRoleName("schema");
+      const password = `${login}_pw`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `GRANT CREATE ON SCHEMA public TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["schema_create_privilege"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("rejects any effective privilege on operator registry tables", async () => {
+      const login = ephemeralRoleName("registry");
+      const password = `${login}_pw`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `GRANT SELECT ON TABLE public.platform_memberships TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["registry_table_privilege"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("rejects a runtime role that owns a function", async () => {
+      const login = ephemeralRoleName("owner");
+      const functionName = ephemeralRoleName("ownedfn");
+      const password = `${login}_pw`;
+      const fn = `public.${owner.escapeIdentifier(functionName)}()`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT 1'`,
+        );
+        await owner.query(
+          `ALTER FUNCTION ${fn} OWNER TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["owns_function"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+        await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("rejects EXECUTE on a SECURITY DEFINER function", async () => {
+      const login = ephemeralRoleName("definer");
+      const functionName = ephemeralRoleName("definerfn");
+      const password = `${login}_pw`;
+      const fn = `public.${owner.escapeIdentifier(functionName)}()`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql SECURITY DEFINER AS 'SELECT 1'`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeRuntimeRole(client, ["security_definer_execute"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+        await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("rejects an unsafe session_user after SET ROLE to a safe role", async () => {
+      const sessionLogin = ephemeralRoleName("session");
+      const setRoleName = ephemeralRoleName("setrole");
+      const password = `${sessionLogin}_pw`;
+      await owner.query(
+        `CREATE ROLE ${owner.escapeIdentifier(setRoleName)} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB NOREPLICATION`,
+      );
+      try {
+        await createEphemeralLogin(
+          sessionLogin,
+          password,
+          "NOSUPERUSER NOBYPASSRLS CREATEROLE NOCREATEDB NOREPLICATION",
+        );
+        await owner.query(
+          `GRANT ${owner.escapeIdentifier(setRoleName)} TO ${owner.escapeIdentifier(sessionLogin)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(sessionLogin, password),
+        });
+        await client.connect();
+        try {
+          await client.query(
+            `SET ROLE ${owner.escapeIdentifier(setRoleName)}`,
+          );
+          const identity = await client.query<{
+            current_user: string;
+            session_user: string;
+          }>("SELECT current_user, session_user");
+          expect(identity.rows[0]?.current_user).toBe(setRoleName);
+          expect(identity.rows[0]?.session_user).toBe(sessionLogin);
+          await expectUnsafeRuntimeRole(client, ["identity_createrole"]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([sessionLogin, setRoleName]);
+      }
+    });
   });
 });
 

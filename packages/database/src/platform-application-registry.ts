@@ -46,6 +46,15 @@ export class InstallationMismatchError extends Error {
   }
 }
 
+export class InstallationApplicationMissingError extends Error {
+  constructor(installationId: string, applicationId: string) {
+    super(
+      `Installation ${installationId} cannot be registered because application '${applicationId}' is not registered`,
+    );
+    this.name = "InstallationApplicationMissingError";
+  }
+}
+
 export type RegistrySyncOutcome = "created" | "unchanged" | "updated";
 
 export interface RegistrySyncResult {
@@ -111,6 +120,14 @@ interface RegistrationRow {
   manifest_digest: string;
   registered_at: Date;
   updated_at: Date;
+}
+
+interface InstallationRow {
+  id: string;
+  application_id: string;
+  environment: string;
+  artifact_digest: string | null;
+  created_at: Date;
 }
 
 /**
@@ -211,6 +228,12 @@ export class PostgresApplicationRegistryStore {
 
   /**
    * Persists and binds an installation record to its application.
+   *
+   * The application must already be registered (`sync` runs first at boot).
+   * Binding is atomic and side-effect-free on rejection: when the installation
+   * already belongs to another application the conditional upsert changes no
+   * row, so `environment` and `artifact_digest` keep their persisted values and
+   * a concurrent conflicting bind cannot overwrite the winner.
    */
   async syncInstallation(installation: {
     readonly id: InstallationId;
@@ -221,44 +244,60 @@ export class PostgresApplicationRegistryStore {
     const environment = installation.environment ?? "production";
     const artifactDigest = installation.artifactDigest ?? null;
 
-    await this.#client.query(
-      `INSERT INTO platform_applications (id, name)
-       VALUES ($1, $1)
-       ON CONFLICT (id) DO NOTHING`,
-      [installation.applicationId],
-    );
-
-    const row = (
-      await this.#client.query<{
-        id: string;
-        application_id: string;
-        environment: string;
-        artifact_digest: string | null;
-        created_at: Date;
-      }>(
-        `INSERT INTO platform_installations (id, application_id, environment, artifact_digest, created_at)
+    let result;
+    try {
+      result = await this.#client.query<InstallationRow>(
+        `INSERT INTO platform_installations
+           (id, application_id, environment, artifact_digest, created_at)
          VALUES ($1, $2, $3, $4, now())
          ON CONFLICT (id) DO UPDATE
            SET environment = EXCLUDED.environment,
                artifact_digest = COALESCE(EXCLUDED.artifact_digest, platform_installations.artifact_digest)
+           WHERE platform_installations.application_id = EXCLUDED.application_id
          RETURNING id, application_id, environment, artifact_digest, created_at`,
         [installation.id, installation.applicationId, environment, artifactDigest],
-      )
-    ).rows[0]!;
-
-    if (row.application_id !== installation.applicationId) {
-      throw new InstallationMismatchError(
-        `Installation ${installation.id} is bound to application '${row.application_id}', but boot requested '${installation.applicationId}'`,
       );
+    } catch (error) {
+      if ((error as { code?: string }).code === "23503") {
+        throw new InstallationApplicationMissingError(
+          String(installation.id),
+          String(installation.applicationId),
+        );
+      }
+      throw error;
     }
 
-    return {
-      id: asInstallationId(row.id),
-      applicationId: asApplicationId(row.application_id),
-      environment: row.environment,
-      artifactDigest: row.artifact_digest,
-      createdAt: row.created_at,
-    };
+    const row = result.rows[0];
+    if (row) {
+      return parseInstallationRow(row);
+    }
+
+    const conflicting = await this.#loadInstallation(installation.id);
+    if (!conflicting) {
+      throw new Error(
+        `Installation ${installation.id} disappeared while being registered`,
+      );
+    }
+    if (conflicting.applicationId !== installation.applicationId) {
+      throw new InstallationMismatchError(
+        `Installation ${installation.id} is bound to application '${conflicting.applicationId}', but boot requested '${installation.applicationId}'`,
+      );
+    }
+    return conflicting;
+  }
+
+  async #loadInstallation(
+    installationId: InstallationId,
+  ): Promise<InstallationRegistrationRecord | null> {
+    const row = (
+      await this.#client.query<InstallationRow>(
+        `SELECT id, application_id, environment, artifact_digest, created_at
+           FROM platform_installations
+          WHERE id = $1`,
+        [installationId],
+      )
+    ).rows[0];
+    return row ? parseInstallationRow(row) : null;
   }
 
   /**
@@ -269,13 +308,7 @@ export class PostgresApplicationRegistryStore {
     expectedApplicationId: ApplicationId,
   ): Promise<InstallationRegistrationRecord> {
     const row = (
-      await this.#client.query<{
-        id: string;
-        application_id: string;
-        environment: string;
-        artifact_digest: string | null;
-        created_at: Date;
-      }>(
+      await this.#client.query<InstallationRow>(
         `SELECT id, application_id, environment, artifact_digest, created_at
            FROM platform_installations
           WHERE id = $1`,
@@ -293,13 +326,7 @@ export class PostgresApplicationRegistryStore {
       );
     }
 
-    return {
-      id: asInstallationId(row.id),
-      applicationId: asApplicationId(row.application_id),
-      environment: row.environment,
-      artifactDigest: row.artifact_digest,
-      createdAt: row.created_at,
-    };
+    return parseInstallationRow(row);
   }
 
   async load(
@@ -365,6 +392,18 @@ export class PostgresApplicationRegistryStore {
       }
     }
   }
+}
+
+function parseInstallationRow(
+  row: InstallationRow,
+): InstallationRegistrationRecord {
+  return {
+    id: asInstallationId(row.id),
+    applicationId: asApplicationId(row.application_id),
+    environment: row.environment,
+    artifactDigest: row.artifact_digest,
+    createdAt: row.created_at,
+  };
 }
 
 function parseRegistrationRow(

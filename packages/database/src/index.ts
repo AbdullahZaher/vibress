@@ -16,12 +16,15 @@ export {
   readPlatformRuntimeRoleConfig,
   UnsafePlatformRuntimeRoleError,
   type PlatformRuntimeRoleConfig,
+  type PlatformRuntimeRoleViolation,
+  type PlatformRuntimeRoleViolationCode,
   type RuntimeRoleAttributes,
 } from "./platform-runtime-role";
 export {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
   ApplicationRegistrationMissingError,
+  InstallationApplicationMissingError,
   InstallationMismatchError,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,

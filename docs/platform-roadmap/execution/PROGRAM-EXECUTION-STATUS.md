@@ -23,24 +23,27 @@
 | Milestone | Done on branch | Missing before exit |
 | --- | --- | --- |
 | M00 Engineering baseline | Baseline SHAs, dependency/runtime pin, asset inventory, ownership map, ADR blockers, boundary test with relative escape detection and missing dir failure, docs-link validator wired into CI, unit/integration split in CI | Legacy docs link cleanup, pinned two-publication CMS/Studio fixture pack, named owners |
-| M01 Universal kernel | Branded identity, public contracts, definition helpers, in-memory registry, serializable manifest with digest, persisted registry (drift/integrity refusal, CAS update, two-way verification, installation binding), kernel route execution adapter, bootable standalone reference app with runtime role verification, kernel-only import boundary | Independent review and named sign-off; production identity-provider adapter and deployment runbook |
-| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work with hardened comment/schema-qualification scope mutation detection, additive RLS migration, least-privilege runtime role (registry and membership tables denied, direct PostgreSQL rolsuper/rolbypassrls/ownership verification), 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope |
+| M01 Universal kernel | Branded identity, public contracts, definition helpers, in-memory registry, serializable manifest with digest, persisted registry (drift/integrity refusal, CAS update, two-way verification), atomic installation binding that mutates nothing on a conflicting bind, kernel route execution adapter, bootable standalone reference app with runtime-role verification, kernel-only import boundary | Independent review and named sign-off; production identity-provider adapter and deployment runbook; serving-process owner-credential split (W1-T02) |
+| M02 Security/identity/tenancy | Verified scope, default-deny policy, tenant unit of work with hardened comment/schema-qualification scope mutation detection, additive RLS migration, least-privilege runtime role (registry and membership tables denied), boot-time privilege assertions over `current_user` and `session_user`, privileged role membership/SET ROLE, schema/database CREATE, database/schema/table/function ownership, registry table/column ACLs and SECURITY DEFINER EXECUTE, 22-test PostgreSQL deny matrix including non-superuser owner `FORCE RLS`, R26 read-only function inventory, two-database installation boundary | R26 revocation approval/application, deployment non-superuser owner, views/report policy decision, Redis/S3 boundary tests, audit/secrets scope, transaction trust boundary (W1-T04) |
 
 ## Evidence executed on this branch
+
+Suites and typecheck were re-measured on 2026-11-14 after the W1-T01/W1-T03 remediation
+increment; the R26 and CMS-subset audits were run earlier on this branch.
 
 | Suite | Result |
 | --- | --- |
 | Kernel + tenancy unit tests + architecture boundary (`vitest.platform.config.ts`) | 67 tests passed (7 files) |
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 22/22 passed |
-| Persisted registry + reference app over HTTP/PostgreSQL (`tests/integration/platform-reference-app.test.ts`) | 17/17 passed; runtime role verified (non-superuser, no-bypassrls, non-owner) and denied registry and membership tables (`42501`) |
+| Persisted registry + reference app over HTTP/PostgreSQL (`tests/integration/platform-reference-app.test.ts`) | 26/26 passed; conflicting installation binds mutate nothing, unregistered applications create no rows, concurrent conflicting binds have exactly one winner, runtime role is denied registry and membership tables (`42501`), and six real-role assertions reject unsafe attributes, privileged membership, DDL authority, registry ACLs, function ownership and SECURITY DEFINER EXECUTE |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
 | R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | 33 public functions, 0 `SECURITY DEFINER`, 0 default-ACL entries |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed |
-| Unit/boundary/component suite (`pnpm test:unit`) | 361 files / 2571 tests passed, exit 0 |
-| Full integration suite (`vitest.config.ts tests/integration`) | 45 files / 518 tests passed, exit 0 |
-| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`) | 45 files / 518 tests passed, exit 0, two consecutive runs |
+| Unit/boundary/component suite (`pnpm test:unit`) | 361 files / 2574 tests passed, exit 0 |
+| Full integration suite (`vitest.config.ts tests/integration`) | 45 files / 530 tests passed, exit 0 |
+| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`) | 45 files / 530 tests passed, exit 0, run sequentially, 89.94 s |
 | `pnpm docs:validate-links` (`docs/platform-roadmap`) | 26 links across 7 files resolve |
-| Full platform suite (`vitest.platform.config.ts`) | 11 files / 113 tests passed |
+| Full platform suite (`vitest.platform.config.ts`) | 11 files / 122 tests passed |
 | Targeted typecheck (kernel, tenancy, database, reference app) | passed |
 | Targeted ESLint (new packages, executor, registry store, reference app, boundary test, integration tests) | passed |
 | Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |
@@ -51,6 +54,20 @@ truncated mid-test); the cause is recorded in the
 [Wave 1 report](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md). Two later sequential
 runs passed.
 
+## Wave 1 remediation tickets
+
+| ID | Priority | Status |
+| --- | --- | --- |
+| W1-T01 runtime-role privilege assertions | P0 | **Done** — boot fails closed on unsafe `current_user`/`session_user` attributes, privileged membership, schema/database CREATE, ownership, registry ACLs and SECURITY DEFINER EXECUTE; six real-PostgreSQL negative tests |
+| W1-T02 split owner/registry access from serving | P0 | Pending — owner pool still serves registry writes and membership reads in-process (DEPLOY-01) |
+| W1-T03 atomic installation binding | P0 | **Done** — guarded upsert mutates nothing on mismatch; concurrent conflicting binds have one winner; unregistered applications create no rows |
+| W1-T04 transaction trust boundary | P0 | Pending — async escape, rollback-failure connection discard, SET ROLE (R37) |
+| W1-T05 R26 PUBLIC EXECUTE revocation | P0 | Blocked — requires DB-owner authorization; proposal 0055 not applied |
+| W1-T06 Redis/S3/queue isolation proof | P1 | Pending — requires production-shaped infrastructure authorization |
+| W1-T07 production identity provider | P1 | Pending — static bearer-token directory remains reference-only |
+| W1-T08 CMS/Studio fixture pack; F-012 decision; legacy docs links | P1 | Pending |
+| W1-T09 runbooks, registry change audit, reference-app Playwright, R40, ownership | P2 | Pending |
+
 ## Known residual risks carried forward
 
 | ID | Risk | Status |
@@ -59,6 +76,9 @@ runs passed.
 | F-012 | CMS tables are not covered by RLS; security review remains conditional | Unchanged, open |
 | R35 | PostgreSQL views/materialized reports do not inherit caller RLS | Open, feature excluded from contract |
 | R37 | Legacy transaction runner nests without savepoints | Unchanged, documented |
+| — | Serving process still holds owner credentials for registry writes and membership reads (W1-T02) | Open |
+| — | Transaction trust boundary hardening (async escape, rollback-failure connection discard, SET ROLE) pending (W1-T04) | Open |
+| — | Installation `artifact_digest` is caller-supplied; no CI/artifact provenance binding | Open |
 | — | Reference app uses an operator-configured static bearer-token directory, not a production identity provider | Reference only; replace before any shared deployment |
 | — | Membership directory is not RLS-protected (read before a scope exists); runtime role is denied the table | By design; auth-service access model needs review |
 | — | No application/tenant provisioning API; registry drift update needs a deployment runbook and has no change audit | Open |
