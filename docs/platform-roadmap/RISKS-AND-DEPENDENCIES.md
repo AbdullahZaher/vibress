@@ -69,6 +69,18 @@ Are app and tenant identities separate across single/multi tenant installations?
 
 [Third review, findings R26–R34 and 8.0/10 rating](THIRD-REVIEW-AND-RATING-2026-11-14.md). All design corrections remain **implementation and acceptance work**, not completed security fixes.
 
+## Fourth-pass risk register and scope boundary
+
+| IDs | Specific newly identified plan gap | Owner and hard gate |
+| --- | --- | --- |
+| **R35** | Owner-context PostgreSQL views or materialized exports may not respect caller tenant RLS | DB/Security + API owners; M02/M04/M08 view/snapshot negative tests or explicit v1 exclusion |
+| **R36** | RLS-filtered logical backup mistaken for complete installation snapshot | Ops/DB + Release; full A+B fixture backup/restore, scoped export distinction and measured recovery |
+| **R37** | Current nested `runInTransaction()` uses outer transaction without savepoints; swallowed inner exceptions have unspecified rollback | App Runtime/DB; M02/M06 rollback-only and outbox-state tests |
+| **R38** | Missing explicit multi-publication CMS → Application/Tenant mapping and `pub_default` compatibility contract | CMS/Studio/Data; M00/M01/M03/M08 seeded compatibility+restore |
+| **R39** | 140 Epics and 146 acceptance checks have no resourced first execution slice | Product/Engineering/Release; prioritize [existing Epics](EXECUTION-FIRST-SLICE.md), record actual owners and stop/go |
+
+[Fourth review R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) provides rationale and links. No source code, actual privilege migration or tenant backup was changed by this documentation-only PR.
+
 ## Relative complexity only
 
 M/L/XL/XXL are qualitative. Team capacity, dates, sprint plans and implementation costs require separate approval; this document contains no promised dates.
