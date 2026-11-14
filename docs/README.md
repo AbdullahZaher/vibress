@@ -129,6 +129,10 @@ The new [Vibress Universal Application Platform master roadmap](platform-roadmap
 **Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.
 
 
+## Final internationally benchmarked roadmap design review
+
+The [Final Design Baseline Acceptance Record](platform-roadmap/FINAL-DESIGN-BASELINE-APPROVAL.md) **conditionally recommends** the written M00–M12 program as an implementation-planning baseline. The [International Standards Alignment Matrix](platform-roadmap/INTERNATIONAL-STANDARDS-ALIGNMENT.md) maps NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001/25010, SLSA v1.2 and WCAG 2.2 to future verification gates. **No independent organizational certification or production GO is implied**; human A1–A8 approvals and actual runtime G0–G7 evidence remain pending.
+
 ## PR #151 — Conditional 9+ roadmap review and reproducible documentation checks
 
 [Current English roadmap](platform-roadmap/README.md) · [9.1/10 conditional design-quality assessment](platform-roadmap/QUALITY-9-PLUS-ASSESSMENT.md) · [Platform GA versioning / support matrix](platform-roadmap/RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release evidence and GO/NO-GO register](platform-roadmap/RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) · [Offline documentation validator](../scripts/verify-platform-roadmap.mjs).
