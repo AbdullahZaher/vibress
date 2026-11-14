@@ -26,6 +26,17 @@ Security/runtime designs: [PostgreSQL ACL and RLS threat model](POSTGRES-PRIVILE
 
 **Recommended v1 deployment mode:** one Application per Installation; each application may host several isolated tenants in PostgreSQL when explicitly supported. Shared execution of unrelated customer apps in a privileged process is *not* an assumed v1 guarantee; see ADR-PLAT-001.
 
+## Fourth-pass review and executable first slice
+
+The focused [fourth-pass review R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) identifies unverified PostgreSQL **view-owner RLS**, incomplete RLS-scoped backups, nested transaction rollback assumptions, legacy CMS publication-to-application migration mapping, and program execution bloat. These are design findings **not fixes to the deployed code**.
+
+- [PostgreSQL views, complete backups and nested transaction contract](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md)
+- [Legacy CMS multi-publication identity and migration mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md)
+- [Priority P0/P1 first executable vertical slice using existing Epics](EXECUTION-FIRST-SLICE.md)
+
+**Editorial quality score remains 8.0/10**, not a production certification. All 140 existing Epics remain the traceable backlog; these findings add testable criteria **without inventing new Epics or deadlines**.
+
+
 ## Core principles
 
 1. Modular monolith before microservices; clear public contracts and dependency boundaries.
