@@ -81,6 +81,30 @@ Security coupling: every generated tenant-owned resource requires consistent own
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Migration trust and executable schema guarantees
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M03-E08 — DDL trust boundary and namespace reservation
+
+Validate canonical resource IR and identifiers; reserve namespaces per app/module; reject raw untrusted SQL, unsafe expressions and cross-app models. Run generated DDL only through a separate installer with approval.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M03-E09 — Migration drift, concurrency and compatibility
+
+Record checksums; verify live DB drift; lock concurrent migrations; apply lock/statement budgets; preview data backfill; define expand-contract windows and operator-approved forward-fix after irreversible changes.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] A malicious or malformed resource definition cannot cause arbitrary DDL, privilege escalation, unsafe default expression or another app's table alteration.
+- [ ] Concurrent schema updates, drifted migration checksums and interrupted backfills fail safely with a recoverable operator plan.
+- [ ] Dynamic resource and physical table strategies explicitly document tenant/security limits and migration tradeoffs.
+
+**Implementation constraint:** An API user, visual editor or AI agent must never obtain DDL privileges simply by submitting a model descriptor.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

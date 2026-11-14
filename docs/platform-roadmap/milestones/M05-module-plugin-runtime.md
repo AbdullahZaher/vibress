@@ -81,6 +81,30 @@ Trust tiers: privileged reviewed Tier-1 ESM versus future OS-isolated Tier-2 for
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Corrected plugin SDK, executable host and upgrade scope
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M05-E08 — Existing SDK publication and ABI reconciliation
+
+Audit @vibress/plugin-sdk (currently private), runtime SDK_VERSION, semver and old plugin-core consumers; define a published-compatible package boundary without a competing SDK.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M05-E09 — Real plugin execution and crash-safe state
+
+Audit/deprecate synthetic ExtensionHost result path, prove vetted module handler execution and stage/approve/quiesce/migrate/activate/observe/recover transitions across API/Worker replicas.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] Published SDK passes packed install and TypeScript declaration tests independent of the monorepo; ABI/version mismatches are rejected.
+- [ ] Genuine trusted plugin hooks/actions execute and pass negative tests; synthetic execution paths are not claimed as runtime functionality.
+- [ ] Minimal trusted Module SDK + operator-reviewed migration and recovery is sufficient for v1; untrusted marketplace Tier-2 execution is not a prerequisite and stays disabled.
+
+**Implementation constraint:** Existing Plugin Platform M0–M6 documents and statuses are not renumbered; signed ESM still has privileged Node rights.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

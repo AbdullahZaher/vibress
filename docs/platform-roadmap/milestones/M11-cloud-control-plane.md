@@ -81,6 +81,30 @@ Deploy adapters: Docker baseline, optional Kubernetes or external clouds when te
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Control-plane/runtimes trust and safe deployment reversibility
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M11-E08 — Deployment privilege and data recovery contract
+
+Separate platform admin/deployer from application end user and tenant, isolate per-environment secrets/network/DB, promote artifacts by digest, test operator break glass and secret revocation.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M11-E09 — Compatible promotion and forward-fix
+
+Require expand-contract for database upgrades; application rollback supported only within validated schema compatibility window. For destructive change, block automated rollback and use documented forward-fix or restored backup with measured RPO/RTO.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] No app's control-plane actor, release artifact or secret can access another app's runtime without separately approved delegation.
+- [ ] Recovery exercise demonstrates version/DB compatibility and honestly records any write-loss window instead of universal zero-loss promise.
+- [ ] Self-hosted runtime and Golden CRM work without Vibress Cloud token or hosted control-plane dependency.
+
+**Implementation constraint:** Cloud is optional; v1 Framework GA does not require shipping a PaaS or Kubernetes adapter.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

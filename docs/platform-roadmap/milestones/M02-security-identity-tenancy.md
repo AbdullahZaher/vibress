@@ -81,6 +81,36 @@ Audit/secrets: scoped machine credentials, encryption, rotation, denial logging 
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Blocking RLS and privilege evidence
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M02-E08 — Scoped transaction unit of work
+
+Build tenantUnitOfWork that validates server-owned principal/app/tenant context, sets transaction-local scope on the identical Drizzle/PG transaction handle, and forbids tenant-owned access through unscoped getDb(). Reject changes of tenant within a nested transaction.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M02-E09 — RLS policy coverage and maintenance exceptions
+
+Define per-table app+tenant USING/WITH CHECK policies; include composite FK/unique isolation, default-deny missing context, owner/force-RLS decisions and audited service/migration escape hatches, without granting SQL capabilities to plugins.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M02-E10 — Plugin provisioning grant migration
+
+Replace general CREATE public and broad function EXECUTE grants to API/worker with a separately authorized schema installer after staging existing plugin storage and migrations; include safe rollback/forward-fix evidence.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] A tenant-owned read/write performed outside the scoped transaction fails closed, including generated APIs, workers, exports and direct service calls.
+- [ ] PostgreSQL tests cover pool reuse, nested-context switch, app/tenant ID spoofing, INSERT WITH CHECK, owner/BYPASSRLS, FK relations and an audited maintenance principal.
+- [ ] Normal runtime credentials cannot create arbitrary tables or execute arbitrary schema functions; existing CMS/plugin storage still works using authorized migrations.
+
+**Implementation constraint:** SET LOCAL/custom GUC is a row-policy input, not identity proof if the caller has arbitrary SQL access. Authentication and SQL mediation are separate controls.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

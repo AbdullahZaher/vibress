@@ -81,6 +81,30 @@ Golden apps: CMS, CRM, real estate, booking and commerce using only public frame
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Minimum GA template and external consumer gate
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M07-E08 — Staged Golden App conformance
+
+Make existing Vibress CMS + externally created CRM the two mandatory v1 Golden Apps. Keep Real Estate, Booking and Commerce as progressively expanded example tracks; test claimed subset features without requiring full production products.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M07-E09 — SDK packaging/version gate
+
+Ensure the published SDK and module ABI match runtime, CLI commands operate on clean installation, no internal alias is needed and generated zones preserve user code.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] A new CRM is created with minimal/CRM template under a clean checkout and uses only public packages, not private monorepo aliases.
+- [ ] CMS and CRM pass golden acceptance and migration; additional reference apps do not block GA unless their capability is advertised in scope.
+- [ ] CLI upgrade --plan outputs a safe, reviewable migration/compatibility report; it never runs destructive DDL without approval.
+
+**Implementation constraint:** Do not advertise an unimplemented CLI command or the current private plugin SDK as a released consumer API.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

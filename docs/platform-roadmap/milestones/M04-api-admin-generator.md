@@ -81,6 +81,30 @@ Performance guardrails: resource limits, unbounded query prevention, rate limits
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Generated query and response authorization
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M04-E08 — Negative authorization conformance suite
+
+Test read/list/detail/bulk/aggregate/count/filter/sort/search/export, nested relations, hidden/derived fields, generated OpenAPI/typed SDK, SSR/cache variants and service credentials.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M04-E09 — Resource cost and schema exposure budget
+
+Limit relation depth, pagination, sorting indexes, payload sizes, mutation batch sizes and expensive aggregation; hide secrets and private schema metadata from unauthorized client generation.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] Generated APIs reject unauthorized counting/aggregation/filtering that would reveal protected records or field values.
+- [ ] SSR and cache vary by application, tenant, principal/scope and data visibility where required.
+- [ ] Generated CRUD works with independent clean-install consumer and no custom Fastify route, while all queries remain scoped and bounded.
+
+**Implementation constraint:** GraphQL is explicitly excluded from v1 mandatory scope pending its own query complexity/security design.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

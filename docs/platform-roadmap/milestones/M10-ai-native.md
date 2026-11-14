@@ -81,6 +81,30 @@ Visual compatibility: apply changes to same canonical resource IR, not separate 
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Security and governance of agent-generated change
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M10-E08 — Adversarial tool authorization suite
+
+Cover prompt injection from repositories/web pages/tool output, privilege escalation, tenant context spoofing, secrets request, unsupported shell/network commands, token revocation and stale user approvals.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M10-E09 — Agent resource quotas and audit
+
+Cap cost/time/tool calls; show proposal and code/DDL diff, block high-risk changes until signed approval, record actor/installation/tool/release ids and validate generated code before execution.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] Prompt-injected external source cannot grant tool rights or reveal production data, even if the model follows the malicious text.
+- [ ] Agent-generated schema/action updates undergo the exact compiler/policy/migration gates as human code changes.
+- [ ] Cost/rate limits and revocation tests pass across agents with concurrent requests.
+
+**Implementation constraint:** MCP/skills/prompts are not an executable sandbox or substitutes for server-side authorization.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

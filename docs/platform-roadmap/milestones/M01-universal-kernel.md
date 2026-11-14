@@ -75,6 +75,30 @@ Reference consumer: task-manager using only public contracts, without posts/publ
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Revised application runtime boundary
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M01-E07 — Application-per-installation reference runtime
+
+Implement the M00-approved deployment topology. V1 default recommendation is one Application per Installation with independent deployment identity, DB credentials, storage and queue namespaces; a multi-tenant app uses an additional scoped tenant layer.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M01-E08 — Authenticated application context compatibility
+
+Make app identity server-owned and unforgeable, keep the CMS publication resolver only inside a legacy adapter, and require no implicit pub_default fallback for newly generated applications.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] The task-manager can run as an isolated installation with distinct database credentials and no CMS publishing imports.
+- [ ] No new app-owned repository reads or writes unscoped data through generic getDb(); tenant resources use the reviewed M02 transaction prototype.
+- [ ] The application/installation/environment/tenant identities are unambiguous in API contracts and deployment fixtures.
+
+**Implementation constraint:** M01 feature prototyping is **dev/staging only** until M02 independent tenant/security proof is achieved.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

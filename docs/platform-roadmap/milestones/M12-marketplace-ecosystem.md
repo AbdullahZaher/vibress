@@ -81,6 +81,30 @@ Comparative benchmarks: transparent tasks against Payload, WordPress, Wix, Ghost
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Marketplace trust and external safety barriers
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M12-E08 — Publisher and extension isolation admission
+
+Separate discovery/listing/download from operator approval and runtime execution; implement signed identities, provenance, revocation, consent and negative SDK/upgrade tests.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M12-E09 — Truthful interoperability benchmarks
+
+Use matched versioned CRM/editor/visual tasks, publish raw inputs, tested features and unsupported gaps; no claims of being 'better than Payload/Wix/WordPress/Ghost' without benchmark evidence.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] No marketplace listing or external agent may trigger arbitrary ESM execution in a privileged host process.
+- [ ] Signed release and signer revocation are testable in install, upgrade, replacement and recovery scenarios.
+- [ ] All public competitor comparisons include equivalent tasks, hardware/fixtures, versions and known limitations.
+
+**Implementation constraint:** Untrusted Tier-2 marketplace packages must remain blocked until actual process/container isolation is independently validated.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

@@ -81,6 +81,30 @@ Accessibility/RTL/IME and collaboration: real devices and recovery as an accepta
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Visual builder is an authority-restricted client, not a second compiler
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M09-E08 — Canonical IR and code ownership contract
+
+Visual edits compile to the same reviewed resource IR used by TypeScript and agents; preserve handwritten code with explicit generated file ownership and conflict resolution.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M09-E09 — Builder preview threat model
+
+Enforce auth/policy and tenant isolation on preview/serialized UI; prevent script injection, unsafe URL fetching, secrets exposure and data leak through preview users.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] Visual definition import/export preserves resource IDs, migration versions and permissions; conflicts are reported rather than silently overwritten.
+- [ ] Preview cannot fetch another installation/tenant data or run unrestricted script/external requests.
+- [ ] Manual mobile RTL, keyboard, screen-reader and content recovery acceptance is recorded for supported devices.
+
+**Implementation constraint:** The standalone Lexical Studio editor remains document/content oriented and must not be used as the general app schema.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

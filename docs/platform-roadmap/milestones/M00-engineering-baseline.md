@@ -75,6 +75,36 @@ Traceability: establish epic→issue→PR→tested evidence→signoff ledger.
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
 
+## Mandatory decision and evidence gates introduced by PR review
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M00-E07 — Deployment/identity security architecture spike
+
+Approve ADR-PLAT-001..003 before implementing M01 runtime extraction. Compare one-app-per-installation (recommended) with shared multi-app runtime; record database/Redis/storage/secrets topology, runtime principal boundaries and rejected alternatives.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M00-E08 — Public SDK and migration inventory
+
+Record existing @vibress/plugin-sdk private package, ABI vs package semver, existing runtime DDL grants, publication-dependent Content Modeler and Drizzle transaction entry points.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M00-E09 — Documentation and milestone validation
+
+Add a docs CI checker for Markdown links/headings, missing Mxx-Eyy work IDs, duplicate IDs, stale tracker links and translation authority. The checker is future runtime/tooling work, not accomplished by this doc.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] ADR-PLAT-001..003 are accepted by architecture, security and DB owners before M01 runtime changes.
+- [ ] Source inventory explicitly records getDb()/runInTransaction() behavior, the plugin SDK private flag, runtime CREATE/EXECUTE grants and legacy publication fallbacks.
+- [ ] Risk register R01–R16 is triaged with named owners, actual PR/CI evidence and a documentation-check task.
+
+**Implementation constraint:** Do not treat proof-of-concept code in an isolated dev environment as authorization to host external apps or tenants.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

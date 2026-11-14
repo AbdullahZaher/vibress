@@ -1,4 +1,4 @@
-# M08 — v1 Production Certification & Public Release
+# M08 — v1 Production Readiness & GA Decision
 
 > **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Based on `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`.
 >
@@ -80,6 +80,30 @@ Go/no-go board: immutable SHA, tested artifacts, reproducible commands, independ
 3. Feature-specific implementation behind safe defaults and migration/rollout controls.
 4. Postgres/contract/integration/security/E2E/external consumer tests as appropriate.
 5. Review logs, recovery/restore runbooks, docs and independent exit acceptance.
+
+## Corrected terminology: Production Readiness / GO-NO-GO, not an automatic certificate
+
+**Roadmap review correction:** These items were identified in [PR #151 findings](../REVIEW-FINDINGS-2026-11-14.md). They are **proposed implementation and acceptance work**, not completed runtime remediation. Relevant cross-cutting contracts: [ADR gates](../ARCHITECTURE-DECISION-GATES.md), [tenant/DB authority](../DATA-ISOLATION-AND-MIGRATIONS.md), [v1 scope](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
+
+### M08-E08 — Explicit independent audit and release authorization
+
+Record independent reviewer scope, unfixed finding policy, runtime security matrix, exact artifact digest, CMS+CRM fixtures, actual staged migration/restore and named GO/NO-GO decision.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### M08-E09 — Published support and release scope
+
+Publish proven platform capabilities and exclusions (GraphQL, untrusted plugins, full Wix builder, AI, Cloud, other database engines), measured RPO/RTO and compatibility windows.
+
+**Evidence:** immutable implementation PR SHA, relevant negative/contract/migration tests, version fixtures, operator/maintainer review and deployment runbook where applicable.
+
+### Additional milestone exit criteria (blocking)
+
+- [ ] Release owner records an explicit GO or NO-GO after independent security, data restore, tenant isolation and external clean install evidence.
+- [ ] Mandatory v1 CMS+CRM applications pass; Real Estate/Booking/Commerce remain progressive tracks unless specific functionality was committed.
+- [ ] There is no blanket assertion of lossless schema rollback, universal vulnerability absence, full accessibility certification or zero regression risk.
+
+**Implementation constraint:** Rename public deliverable description from 'certified' to 'release-readiness reviewed'. An M08 issue closed without independent evidence is NOT production approval.
 
 ## Milestone closure evidence ledger
 
