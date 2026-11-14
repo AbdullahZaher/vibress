@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../main";
 import { FastifyInstance } from "fastify";
-import { getDb } from "@vibress/database";
+import { getDb, settings } from "@vibress/database";
 import { eq } from "drizzle-orm";
 import crypto from "node:crypto";
 import { hashPassword } from "@vibress/security";
@@ -53,18 +53,35 @@ async function ensureOwner(): Promise<void> {
 describe("Batch 14 — Operations Integration & Security", () => {
   let app: FastifyInstance;
   let staffCookie: string;
+  let settingsBackup: (typeof settings.$inferSelect)[] = [];
 
   beforeAll(async () => {
     process.env.VIBRESS_ENCRYPTION_KEY =
       process.env.VIBRESS_ENCRYPTION_KEY || "test-encryption-key-for-batch-14";
     app = buildApp();
     await app.ready();
+    settingsBackup = await getDb()
+      .select()
+      .from(settings)
+      .where(eq(settings.publicationId, "pub_default"));
     await ensureOwner();
     staffCookie = await loginStaff(app);
   });
 
   afterAll(async () => {
     await app.close();
+    // This suite mutates site/email/security settings for pub_default. Restore
+    // the exact pre-suite rows so later suites do not inherit fixtures such as
+    // "Batch 14 Test Title".
+    const db = getDb();
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(settings)
+        .where(eq(settings.publicationId, "pub_default"));
+      if (settingsBackup.length > 0) {
+        await tx.insert(settings).values(settingsBackup);
+      }
+    });
   });
 
   // ---------------- Settings ----------------

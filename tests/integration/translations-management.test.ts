@@ -27,7 +27,7 @@ async function ensureUserWithRole(email: string, roleName: string, passwordPlain
     await db.update(users).set({ passwordHash: hash }).where(eq(users.id, user.id));
   }
 
-  const [role] = await db.select().from(roles).where(eq(roles.name, roleName));
+  const [role] = await db.select().from(roles).where(eq(roles.key, roleName));
   if (role) {
     const existing = await db
       .select()

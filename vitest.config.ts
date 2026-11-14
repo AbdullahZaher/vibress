@@ -48,6 +48,14 @@ export default defineConfig({
         __dirname,
         "./packages/utils/src/index.ts",
       ),
+      "@vibress/platform-kernel": path.resolve(
+        __dirname,
+        "./packages/platform-kernel/src/index.ts",
+      ),
+      "@vibress/tenancy": path.resolve(
+        __dirname,
+        "./packages/tenancy/src/index.ts",
+      ),
       "@vibress/users": path.resolve(
         __dirname,
         "./packages/domains/users/src/index.ts",

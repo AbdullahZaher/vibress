@@ -68,14 +68,23 @@ jobs:
           npm install
           npm run verify:local
 
-      - name: Test
+      - name: Validate documentation links
+        run: pnpm docs:validate-links
+
+      - name: Test (unit, boundary, component)
         # compose.dev.yml exposes PostgreSQL and Redis on these host ports.
         # Explicit values keep isolated multi-process tests on the CI services,
         # not the local workstation defaults or the production environment.
         env:
           DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
           REDIS_URL: "redis://127.0.0.1:6380"
-        run: pnpm vitest run --no-file-parallelism
+        run: pnpm test:unit
+
+      - name: Test (integration)
+        env:
+          DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
+          REDIS_URL: "redis://127.0.0.1:6380"
+        run: pnpm test:integration
 
       - name: Verify locale migration 0038 replay invariants
         run: pnpm exec tsx packages/database/scripts/verify-migration-0038.ts
