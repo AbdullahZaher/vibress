@@ -70,6 +70,12 @@ A release reviewer must compare the **same immutable commit SHA** across source,
 - Approved risks must identify threat/affected consumers, exact mitigation, owner, expiry and validation. An exception expires or an upgrade reopens it.
 - A CI-success label for documentation does not assert anything about database RLS, plugin isolation or production vulnerabilities.
 
+## International standards evidence mapping (all runtime evidence remains open)
+
+Use the [International Standards Alignment Matrix](INTERNATIONAL-STANDARDS-ALIGNMENT.md) to attach chosen control IDs, version, scope, test proof, acceptance owner and exception status for: NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001:2022, ISO/IEC 25010:2023, SLSA v1.2 and WCAG 2.2 AA target. **Do not claim any SLSA level, ISO certificate, ASVS verified scope or WCAG AA conformance** until genuine independent evidence is recorded.
+
+The [Design Baseline Review](FINAL-DESIGN-BASELINE-APPROVAL.md) distinguishes **conditional M00 planning acceptance** from the **new Framework GA production NO-GO** pending G0–G7. The initial documentary CI success is not a database/Studio security test.
+
 ## Roadmap scoring vs product release evidence
 
 [Roadmap quality scoring](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) and any aspirational 9+ threshold evaluate clarity/completeness of the **plan only**. Production certification is determined solely by the above executable evidence and release decision. No plan can guarantee that unknown bugs or vulnerabilities do not exist.
