@@ -118,6 +118,8 @@ This documentation defines **Architecture v1** for Vibress.
 
 ## Universal Application Platform — proposed master roadmap (2026-11-14)
 
+**Security/architecture review:** [2026-11-14 PR #151 findings and revised English program gates](platform-roadmap/REVIEW-FINDINGS-2026-11-14.md) · [Architecture decisions](platform-roadmap/ARCHITECTURE-DECISION-GATES.md) · [RLS and migration authority](platform-roadmap/DATA-ISOLATION-AND-MIGRATIONS.md) · [v1 release cut](platform-roadmap/V1-SCOPE-AND-RELEASE-CRITERIA.md). The English plan is currently authoritative; the older Arabic summary remains informational until translated and reconciled.
+
 The new [Vibress Universal Application Platform master roadmap](platform-roadmap/README.md) proposes **five waves and 13 master milestones (M00–M12)** to evolve Vibress beyond publishing into a general, self-hostable application development platform. See the [Arabic overview](platform-roadmap/README.ar.md), [architecture](platform-roadmap/PLATFORM-ARCHITECTURE.md), [security/release gates](platform-roadmap/SECURITY-AND-RELEASE-GATES.md), [existing-asset traceability](platform-roadmap/EXISTING-ASSETS.md), and [GitHub tracking issues](platform-roadmap/MILESTONE-TRACKER.md).
 
 **Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.

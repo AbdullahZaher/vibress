@@ -16,7 +16,7 @@
 | M05 | [Modular Runtime & Plugin Platform](milestones/M05-module-plugin-runtime.md) | [#157](https://github.com/AbdullahZaher/vibress/issues/157) |
 | M06 | [Actions, Workflows & Business Services](milestones/M06-actions-workflows.md) | [#158](https://github.com/AbdullahZaher/vibress/issues/158) |
 | M07 | [Developer CLI, SDK & Application Templates](milestones/M07-cli-sdk-templates.md) | [#159](https://github.com/AbdullahZaher/vibress/issues/159) |
-| M08 | [v1 Production Certification & Public Release](milestones/M08-v1-release.md) | [#160](https://github.com/AbdullahZaher/vibress/issues/160) |
+| M08 | [v1 Production Readiness & GA Decision](milestones/M08-v1-release.md) | [#160](https://github.com/AbdullahZaher/vibress/issues/160) |
 | M09 | [Visual Application Builder](milestones/M09-visual-builder.md) | [#161](https://github.com/AbdullahZaher/vibress/issues/161) |
 | M10 | [AI-Native Development Platform](milestones/M10-ai-native.md) | [#162](https://github.com/AbdullahZaher/vibress/issues/162) |
 | M11 | [Vibress Cloud & Deployment Control Plane](milestones/M11-cloud-control-plane.md) | [#163](https://github.com/AbdullahZaher/vibress/issues/163) |
@@ -32,6 +32,6 @@
 
 ## How to track execution
 
-Each Issue is a milestone umbrella. Its Epic checkboxes (`Mxx-Eyy`) should be converted into scoped engineering Issues/PRs after Definition of Ready. Close a milestone issue only after all mandatory exit gates in its Markdown plan are evidenced with immutable PR/commit SHA, CI/test links, migration and recovery verification, domain/security reviewer sign-off and documented accepted exceptions. Do not conflate with historic plugin roadmap `M0–M6` IDs.
+Each Issue is a milestone umbrella. See the [blocking design/implementation review R01–R16](REVIEW-FINDINGS-2026-11-14.md) and the [explicit v1 cut](V1-SCOPE-AND-RELEASE-CRITERIA.md): milestone closure must not be inferred from an updated document. Its Epic checkboxes (`Mxx-Eyy`) should be converted into scoped engineering Issues/PRs after Definition of Ready. Close a milestone issue only after all mandatory exit gates in its Markdown plan are evidenced with immutable PR/commit SHA, CI/test links, migration and recovery verification, domain/security reviewer sign-off and documented accepted exceptions. Do not conflate with historic plugin roadmap `M0–M6` IDs.
 
 [Master plan](README.md) · [النسخة العربية](README.ar.md) · [Governance](DELIVERY-GOVERNANCE.md) · [Security gates](SECURITY-AND-RELEASE-GATES.md).

@@ -1,3 +1,5 @@
+> **English canonical edition / translation status (2026-11-14):** This earlier Arabic roadmap summary does **not yet** incorporate the complete R01–R16 engineering review and updated M00–M12 blocking criteria. For approved planning, use the [English master roadmap](README.md), [review findings](REVIEW-FINDINGS-2026-11-14.md) and [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md). This is an informational translation only; its older statements must not override the English acceptance gates.
+
 # Vibress Platform — خارطة التطوير الكاملة
 
 > **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Based on `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`.

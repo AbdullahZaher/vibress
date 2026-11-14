@@ -51,13 +51,15 @@ Three coherent products: **Vibress Framework** (public code-first kernel + SDK),
 | [M05](milestones/M05-module-plugin-runtime.md) | Modular Runtime & Plugin Platform | XL | M01–M04 | **Proposed** |
 | [M06](milestones/M06-actions-workflows.md) | Actions, Workflows & Business Services | L | M03–M05 | **Proposed** |
 | [M07](milestones/M07-cli-sdk-templates.md) | Developer CLI, SDK & Application Templates | L | M03–M06 | **Proposed** |
-| [M08](milestones/M08-v1-release.md) | v1 Production Certification & Public Release | XL | M00–M07 | **Proposed** |
+| [M08](milestones/M08-v1-release.md) | v1 Production Readiness & GA Decision | XL | M00–M07 | **Proposed** |
 | [M09](milestones/M09-visual-builder.md) | Visual Application Builder | XXL | M03,M04,M07; GA after M08 | **Proposed** |
 | [M10](milestones/M10-ai-native.md) | AI-Native Development Platform | XL | M07; integrations with M09 | **Proposed** |
 | [M11](milestones/M11-cloud-control-plane.md) | Vibress Cloud & Deployment Control Plane | XXL | M07,M08 | **Proposed** |
 | [M12](milestones/M12-marketplace-ecosystem.md) | Marketplace, Ecosystem & Platform 2.0 | XL | M05,M08; M11 for cloud flows | **Proposed** |
 
 ## v1 minimum and expansion boundaries
+
+**Document authority:** revised English master edition after PR #151 security/architecture review; normative review findings [R01–R16](REVIEW-FINDINGS-2026-11-14.md). Baseline SHA in this document is historical, not an assertion about current production branch after these documentation commits.
 
 The first general-purpose release is **not** blocked on five complete Golden Apps, a Wix-class builder or a complete PaaS. **Mandatory:** existing CMS compatibility plus a newly generated CRM; minimum trusted Module SDK, authenticated REST/OpenAPI/admin, PostgreSQL RLS, CLI, durable job/outbox and independent release review. Real Estate, Booking and Commerce are staged *reference tracks* rather than full GA gates unless a capability is explicitly marketed in GA. See [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
 
