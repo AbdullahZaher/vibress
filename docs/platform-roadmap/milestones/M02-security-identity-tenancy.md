@@ -157,6 +157,15 @@ Enforce independent per-app database/credentials, Redis ACL/worker queues, objec
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: views, nested transactions and complete backup scope
+
+These cases extend **M02-E08/E09/E13** and the earlier [RLS permission model](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md). See [test contract](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
+
+- [ ] Ordinary PostgreSQL view owner policy and, for supported versions, `security_invoker` behavior are checked under real runtime roles; views/materialized reports are prohibited in generic v1 if not proven safe.
+- [ ] Tenant-scoped nested transaction mismatch and swallowed child failures cannot leave unintended committed writes; rollback-only or explicitly tested savepoint semantics documented.
+- [ ] `row_security=off` is treated as an error-on-filtering control, **not an RLS bypass**; backup privileges, scope and row-level reconciliation are separately verified.
+- [ ] Two-publication CMS migration is not confused with verified generic Application/Tenant policies, and existing identities are not broadened by default.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
