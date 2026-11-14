@@ -152,6 +152,15 @@ Choose an evidence-based external developer use case, comparator-matched CRM tas
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: baseline, CMS migration and first slice
+
+These tests refine **existing M00-E04, E07, E12 and E13**; they do not create new Epics. See [fourth review](../FOURTH-PASS-REVIEW-2026-11-14.md), [legacy migration mapping](../LEGACY-CMS-IDENTITY-AND-MIGRATION.md) and [P0/P1 first slice](../EXECUTION-FIRST-SLICE.md).
+
+- [ ] Pin and preserve a seeded **two-publication CMS + pub_default** fixture with member/role, Studio saved documents, assets, subscription and delayed-job references.
+- [ ] Baseline inventory includes views/materialized reports, their PostgreSQL owners/security_invoker settings and backup role/restore semantics.
+- [ ] Product, architecture, DB/security, Studio and release roles accept the first P0 vertical-slice order or record a decision with risks; no invented staffing or date.
+- [ ] Baseline tests and results refer to immutable source/fixture SHAs; no claim of completed documentation CI validator without an actual CI job.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
