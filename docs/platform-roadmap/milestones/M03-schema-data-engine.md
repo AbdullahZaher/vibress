@@ -138,6 +138,14 @@ Design old/new API and worker compatible expand/backfill/contract migrations, re
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: safe schema outputs and legacy backfill
+
+Apply these requirements to existing **M03-E04/E08/E09**. See [RLS/views](../RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) and [CMS identity migration](../LEGACY-CMS-IDENTITY-AND-MIGRATION.md).
+
+- [ ] The schema compiler rejects unapproved tenant-owned SQL views/materialized models by default. If supported, schema metadata carries verified view owner/invoker context, supported PG version and test fixtures.
+- [ ] CMS publication-to-application mapping/backfill is additive, idempotent, validated with content/relations and has a forward-fix/restore runbook.
+- [ ] Old/new API/worker compatibility and database migration evidence reconcile record counts and ownership under actual runtime permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
