@@ -81,6 +81,16 @@ See [ACL/RLS test matrix](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installa
 [Fourth review](FOURTH-PASS-REVIEW-2026-11-14.md) · [RLS/views/backup/transactions](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md) · [CMS mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md) · [first slice](EXECUTION-FIRST-SLICE.md). None of these future tests has been executed as part of this documentation change.
 
 
+## International security standard verification scope (design only)
+
+- **NIST SP 800-218 SSDF v1.1 (PO/PS/PW/RV):** explicitly assign security requirement owners, supply-chain source protection and software signing, threat models, code review, testing, vulnerability disclosure/response procedures and incident learning. Current [SECURITY.md](../../SECURITY.md) is a baseline, but version coverage must be reconciled with the eventual Framework release; do not assume an organizational SSDF assessment.
+- **OWASP ASVS v5.0.0:** maintain an exact versioned requirement-to-test matrix for supported Admin, API and external CRM user journeys. Include auth/session, CSRF, injection, SSRF, file handling, generated authorization, tenant RLS, view owner context and privileged SQL functions. **No ASVS verification is yet claimed**; owners select risk-appropriate assurance and independently verify at M08.
+- **SLSA v1.2:** choose Source/Build track and target level explicitly, validate actual signed provenance/attestations and artifact digest, protected workflow/source and SBOM before claiming supply-chain level. A green ordinary CI run alone is insufficient.
+- **ISO/IEC 27001:2022:** manage information assets, risk treatment, access control, incident response, retention, supplier risk and restoration as organizational ISMS work, not a document-level ISO certificate.
+- **ISO/IEC 25010:2023 + WCAG 2.2:** set measured product quality and AA-target accessibility tests for supported Admin/CRM UI; automated assertions **plus manual keyboard/screen-reader/RTL** validation where applicable.
+
+[Standards matrix](INTERNATIONAL-STANDARDS-ALIGNMENT.md) · [conditional design baseline](FINAL-DESIGN-BASELINE-APPROVAL.md) · [open release evidence](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md). **No application security implementation is completed by this text.**
+
 ## Additional negative tests
 
 - Generated data: bulk mutations, aggregation/count/filter side channels, nested relation traversal, privileged field projections, unbounded sorting/pagination, SSR/service cache leakage.
