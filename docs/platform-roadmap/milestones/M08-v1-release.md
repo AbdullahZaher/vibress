@@ -166,6 +166,15 @@ Existing **M08-E02/E04/E11/E12** own these requirements. See [fourth review](../
 [Versioning and support](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [GA decision criteria](../V1-SCOPE-AND-RELEASE-CRITERIA.md).
 
 
+## Standards-based GA gate (additional existing M08 acceptance tests)
+
+- [ ] AppSec verifies a **version-pinned OWASP ASVS 5.0.0 control matrix** for supported runtime web/API flows, including negative tenant/role tests; no whole-product ASVS attainment by inference from the roadmap.
+- [ ] NIST SSDF PO/PS/PW/RV product obligations have named owners, secure source/provenance practices and a live vulnerability response/disclosure path, matched to the actual supported release versions.
+- [ ] SLSA v1.2 Source/Build target and underlying provenance/attestation are independently verified before any level is claimed; immutable digests match the released artifact and SBOM.
+- [ ] ISO/IEC 25010-derived quality metrics and **WCAG 2.2 AA target** for supported Admin/CRM user journeys have measured automated and manual results. No certification beyond recorded scope.
+- [ ] ISO/IEC 27001 organizational risk controls are reviewed as applicable, without falsely claiming a certified ISMS; explicit user/data ownership, recovery and response responsibilities remain open until approved.
+- [ ] [Final design approval A1–A8](../FINAL-DESIGN-BASELINE-APPROVAL.md) and [runtime G0–G7](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) are **distinct**. Only an independent verified GA evidence record can authorize framework production GO.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
