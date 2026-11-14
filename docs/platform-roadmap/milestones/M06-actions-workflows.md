@@ -99,6 +99,22 @@ Deliver one representative tenant-aware action+outbox+worker flow and a minimal 
 
 **Implementation constraint:** No exactly-once end-to-end delivery guarantee and no demand for an entire general-purpose workflow orchestration engine before v1.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M06-E09 — Versioned event envelopes and poison-event handling
+
+Use event ID, schema version, application/tenant context, causation/request IDs and explicit consumer compatibility. Test dead-letter/quarantine, safe replay, duplicate deliveries and retention of sensitive job payloads.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] A v1 producer/consumer version upgrade and replay succeeds or fails explicitly, without silent schema misinterpretation or tenant mixing.
+- [ ] Dead-letter retry and event retention have documented safety bounds, owner and test evidence.
+
+**Scope note:** At-least-once delivery and external provider idempotency require separate policies; a version number alone is not event authorization.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

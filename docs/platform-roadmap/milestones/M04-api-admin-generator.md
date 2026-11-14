@@ -105,6 +105,22 @@ Limit relation depth, pagination, sorting indexes, payload sizes, mutation batch
 
 **Implementation constraint:** GraphQL is explicitly excluded from v1 mandatory scope pending its own query complexity/security design.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M04-E10 — Typed custom endpoint and user-facing client security
+
+Expose an approved trusted application HTTP handler/action registration contract with path/body validation, authorization and tenant-bound unit of work. Provide typed client integration for a developer-owned end-user web page and test SSR/cache/CSRF properties; no raw privileged Fastify/SQL escape hatch.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] Independent CRM exposes a custom authenticated deal-approval endpoint, backed by a transactionally safe action, and tests scope/role denial.
+- [ ] A user-facing frontend (not only Admin) consumes the public typed client; SSR and cache paths cannot leak another tenant or principal data.
+
+**Scope note:** Custom trusted application code is in a separately controlled app installation. Untrusted installed plugins do not gain arbitrary server code/SQL execution via generated endpoint metadata.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

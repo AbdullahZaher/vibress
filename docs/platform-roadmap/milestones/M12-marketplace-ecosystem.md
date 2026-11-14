@@ -105,6 +105,16 @@ Use matched versioned CRM/editor/visual tasks, publish raw inputs, tested featur
 
 **Implementation constraint:** Untrusted Tier-2 marketplace packages must remain blocked until actual process/container isolation is independently validated.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### Additional blocking exit checks
+
+- [ ] Module and publisher data-processing boundaries, documentation of stored end-user data and install/revocation permissions are reviewable before listing.
+
+**Scope note:** Extension distribution must remain a separate security/trust transition from discovery or vendor marketing.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

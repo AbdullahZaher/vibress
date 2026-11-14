@@ -105,6 +105,22 @@ Record checksums; verify live DB drift; lock concurrent migrations; apply lock/s
 
 **Implementation constraint:** An API user, visual editor or AI agent must never obtain DDL privileges simply by submitting a model descriptor.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M03-E10 — Topology-aware identity and schema compatibility
+
+Select per-installation physical schema ownership and tenant discriminators; add application_id only where justified by physical deployment. Define deterministic resource migration and stable event/schema compatibility contracts.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] Physical keys and scoped foreign keys match the approved per-installation topology, with tests of tenant isolation independent of unnecessary app_id duplication.
+- [ ] Schema-version and migration-manifest checksums are stable across clean app installs and staged upgrades.
+
+**Scope note:** Avoid forcing both app_id and tenant_id into every table without considering physical DB-per-application architecture.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

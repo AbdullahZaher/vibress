@@ -105,6 +105,22 @@ Require expand-contract for database upgrades; application rollback supported on
 
 **Implementation constraint:** Cloud is optional; v1 Framework GA does not require shipping a PaaS or Kubernetes adapter.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M11-E10 — Tenant offboarding and control-plane data rights
+
+Define data location, data/tenant export, deletion/retention/backup boundaries, break-glass operator access and incident evidence across hosted control plane and each application installation.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] Cloud-controlled tenant data export/deletion cannot access other installations, and residual encrypted backups/queues have disclosed expiration windows.
+- [ ] Managed service SLOs and RPO/RTO are verified independently from self-hosting support statements.
+
+**Scope note:** Never claim complete legal compliance or instant erasure solely from a database delete call.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

@@ -105,6 +105,17 @@ Enforce auth/policy and tenant isolation on preview/serialized UI; prevent scrip
 
 **Implementation constraint:** The standalone Lexical Studio editor remains document/content oriented and must not be used as the general app schema.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### Additional blocking exit checks
+
+- [ ] Visual/AI IR is limited to declarative models/pages/actions; the designer cannot silently round-trip or overwrite arbitrary application TypeScript.
+- [ ] Generated previews and external web routes honor the same effective server-side policy and audit constraints.
+
+**Scope note:** See Application Runtime and Extensibility for distinctions between declarative visual metadata and developer-owned code.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

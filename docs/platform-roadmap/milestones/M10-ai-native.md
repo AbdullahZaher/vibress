@@ -105,6 +105,16 @@ Cap cost/time/tool calls; show proposal and code/DDL diff, block high-risk chang
 
 **Implementation constraint:** MCP/skills/prompts are not an executable sandbox or substitutes for server-side authorization.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### Additional blocking exit checks
+
+- [ ] Agent-generated custom application actions and endpoints are subject to owner review, contract tests, tenant policy, quota and execution approval; tool use must not bypass runtime trust tier.
+
+**Scope note:** Agent prompts and a model's code understanding do not supersede the app/module authority boundary or security evidence.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

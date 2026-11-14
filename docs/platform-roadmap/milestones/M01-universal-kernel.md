@@ -99,6 +99,22 @@ Make app identity server-owned and unforgeable, keep the CMS publication resolve
 
 **Implementation constraint:** M01 feature prototyping is **dev/staging only** until M02 independent tenant/security proof is achieved.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M01-E09 — General application packaging and extension boundary
+
+Define developer-owned app package version, independently installable runtime artifact, typed custom action and route registration ports, and safe public web app template integration. The generic kernel must not import publishing modules or hand raw privileged DB/Fastify to plugins.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] An independent installation can own its application code, metadata, runtime/configuration and user-facing entry points through versioned contracts.
+- [ ] Custom application/business logic can use approved action/route extension points without modifying the kernel or inheriting CMS publication defaults.
+
+**Scope note:** A universal app kernel cannot be justified merely by names for Project/Application; it needs an executable route/action contract and ownership model.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

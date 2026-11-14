@@ -105,6 +105,22 @@ Audit/deprecate synthetic ExtensionHost result path, prove vetted module handler
 
 **Implementation constraint:** Existing Plugin Platform M0–M6 documents and statuses are not renumbered; signed ESM still has privileged Node rights.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M05-E10 — Public module/event ABI version fence
+
+Define module capability/route/action/event schema version negotiation, deprecation policy and runtime downgrade rejection for incompatible external consumers.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] A real external module pinned to an old supported API/ABI executes safely or is denied by explicit compatibility failure; no synthetic hook success.
+- [ ] Event/handler schema compatibility, revocation and tenant-context guards are included in module conformance tests.
+
+**Scope note:** Do not treat published module metadata or a plugin's TypeScript types as proof of application-scoped runtime enforcement.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

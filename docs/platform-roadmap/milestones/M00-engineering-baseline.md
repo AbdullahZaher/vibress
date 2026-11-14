@@ -105,6 +105,29 @@ Add a docs CI checker for Markdown links/headings, missing Mxx-Eyy work IDs, dup
 
 **Implementation constraint:** Do not treat proof-of-concept code in an isolated dev environment as authorization to host external apps or tenants.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M00-E10 — v1 product compatibility and architectural proof plan
+
+Document concrete classes supported by v1 code-first web runtime, including custom typed HTTP actions and end-user web routes; reject claiming native mobile or arbitrary compute. Establish initial app packaging, dependency and benchmark fixtures.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+
+### M00-E11 — Operational and privacy ownership baseline
+
+Choose SLI/SLO metrics, security/data owners, scoped tenant lifecycle, planned recovery RPO/RTO measurement and qualitative team/capacity assumptions. Record ADR-PLAT-009/010 as proposed and assign their later stage-specific sign-off.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] M00 records ADR-PLAT-001/002 accepted and ADR-PLAT-003 security transaction prototype reviewed before M01; later ADR-PLAT-004..010 have owners and future approval gates rather than an unconditional G0 block.
+- [ ] A v1 capability matrix states support for developer-owned custom API/actions/end-user web UI and explicit limitations for unsupported runtimes.
+- [ ] Named operational and data-lifecycle owners, evidence format and SLI/SLO baseline measurement plan are recorded without invented numeric service promises.
+
+**Scope note:** All ADRs must be owned at M00, but do not require speculative decisions 004–010 to be finally accepted before M01. This is an architectural/design phase, not an all-product sign-off.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

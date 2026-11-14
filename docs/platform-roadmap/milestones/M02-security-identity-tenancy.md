@@ -111,6 +111,22 @@ Replace general CREATE public and broad function EXECUTE grants to API/worker wi
 
 **Implementation constraint:** SET LOCAL/custom GUC is a row-policy input, not identity proof if the caller has arbitrary SQL access. Authentication and SQL mediation are separate controls.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M02-E11 — Tenant data lifecycle and authorization
+
+Define signed-off owner/tenant export, deletion/offboarding, session/API key revocation, cache/queue/storage/search cleanup and backup retention caveats. Test that a different tenant cannot request another tenant's export/delete.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] Tenant export/offboarding and revoked credentials are authorization-tested, with data classes covering SQL, object storage, logs, queues, index and backups.
+- [ ] Per-installation database and credential separation is tested; intra-app tenant RLS does not assume an unnecessary duplicate application_id on every table.
+
+**Scope note:** Applicable legal/privacy requirements depend on deployment and must receive appropriate owner/legal review; this PR is not a compliance certification.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

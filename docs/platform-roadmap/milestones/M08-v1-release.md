@@ -105,6 +105,23 @@ Publish proven platform capabilities and exclusions (GraphQL, untrusted plugins,
 
 **Implementation constraint:** Rename public deliverable description from 'certified' to 'release-readiness reviewed'. An M08 issue closed without independent evidence is NOT production approval.
 
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M08-E10 — General-app proof, privacy and operational service budget
+
+Require external CRM custom endpoint/action/end-user UI, verified tenant export/deletion procedure, backup and queue retention runbooks, independently reviewed support matrix, and baselined SLI/SLO/error budget and RPO/RTO evidence.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] The GA evidence includes both generated Admin CRUD and a trusted external CRM custom endpoint/action and user-facing web route.
+- [ ] Tenant data export/retention/offboarding, service SLI/SLO budgets, support/responsibility boundary and observed RPO/RTO are accepted by assigned owners.
+- [ ] A formal GO/NO-GO identifies unsupported application types, untrusted plugins, database providers, visual/AI/cloud product lines and any legal-compliance limits.
+
+**Scope note:** Rating a *written plan* 8.0/10 is not a certification of platform code; the release gate cannot be passed based on score or docs-only CI.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

@@ -14,7 +14,7 @@ Provide reproducible self-hostable creation, extension and upgrade of applicatio
 
 ### M07-E01 — CLI
 
-CLI: vibress create/add/generate/doctor/upgrade --plan/upgrade --apply/verify with dry-run and safe defaults.
+CLI: implement v1 supported `vibress create`, `add`, `doctor`, `upgrade --plan`; additional `generate`, `upgrade --apply` and `verify` commands are staged feature proposals requiring explicit versioned acceptance.
 
 **Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
 
@@ -50,7 +50,7 @@ Developer docs: quickstart, API and Plugin SDK, migration and production checkli
 
 ### M07-E07 — Golden apps
 
-Golden apps: CMS, CRM, real estate, booking and commerce using only public framework APIs.
+Golden apps: **v1 mandatory** CMS compatibility + independently installed CRM. Real Estate, Booking and Commerce are staged post-v1 reference tracks, or focused feature fixtures only if a feature is advertised for v1.
 
 **Completion proof:** public contract/implementation diff, risk review, named tests, migration/compatibility impact, immutable PR+CI evidence and sign-off.
 
@@ -58,14 +58,14 @@ Golden apps: CMS, CRM, real estate, booking and commerce using only public frame
 ## Deliverables
 
 - packages/cli, app-sdk and templates with docs
-- Five clean installed golden applications
+- Two mandatory v1 Golden Applications (existing CMS and clean external CRM); three progressive reference tracks after GA
 - Versioned module and app upgrade conformance suite
 
 ## Required acceptance gates
 
 - [ ] A CRM app is created and boots in a clean environment without kernel edits.
 - [ ] Adding and upgrading an external module works through documented public APIs.
-- [ ] All templates run their auth/tenant/security tests as generated.
+- [ ] All **v1 supported** templates run their auth/tenant/security tests as generated; post-v1 templates have separate preview/deprecation status.
 - [ ] Handwritten customizations survive code regeneration or produce an explicit merge conflict.
 
 ## Known risks and non-goals
@@ -104,6 +104,22 @@ Ensure the published SDK and module ABI match runtime, CLI commands operate on c
 - [ ] CLI upgrade --plan outputs a safe, reviewable migration/compatibility report; it never runs destructive DDL without approval.
 
 **Implementation constraint:** Do not advertise an unimplemented CLI command or the current private plugin SDK as a released consumer API.
+
+## Second-pass quality and execution corrections (R17–R25)
+
+The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) identify planning gaps. This **does not certify code**; proposed constraints must be implemented and demonstrated. Relevant additional design contracts: [general application runtime](../APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) and [data lifecycle](../DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+### M07-E10 — End-user code-first web app and custom action acceptance
+
+Deliver a clean external CRM with both generated resource CRUD/Admin **and** a developer-owned web route, typed client auth, custom HTTP endpoint/action, tenant-safe worker event and independently deployable source package.
+
+**Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+### Additional blocking exit checks
+
+- [ ] A clean external CRM implements custom deal approval and an end-user-facing route using the public SDK without raw SQL/Fastify or kernel edits.
+- [ ] v1 required artifacts/templates are explicitly separated from future examples; no milestone is blocked solely by missing full Real Estate/Booking/Commerce apps.
+
+**Scope note:** v1 exposes a bounded general **web application** substrate, not a promise to run arbitrary untrusted native code or any programming language.
 
 ## Milestone closure evidence ledger
 
