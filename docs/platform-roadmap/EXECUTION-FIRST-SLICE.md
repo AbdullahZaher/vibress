@@ -22,6 +22,12 @@
 
 **Do not enable public multi-tenant app hosting** until B+C pass. **Do not approve v1 GA** until A+B+C and the stage-6 independent release review pass. Focused M09–M12 prototypes may proceed separately but are not substitutes for these gates.
 
+## Release version choice and mandatory documentary validation
+
+**Do not treat M08 or the phrase “first Framework GA” as a `v1.0.0` tag.** The existing codebase is already versioned 1.2.0 and follows ADR-013; M00 must choose and sign the release namespace and verify package/CLI/Studio/DB/runtime metadata before M07/M08. See [support matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md).
+
+The [offline docs check](../../scripts/verify-platform-roadmap.mjs) and GitHub workflow must pass for the final PR SHA; successful documentation CI is only one **planning quality** indicator. [Release evidence ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) distinguishes documented, implemented and runtime-verified gates. The [provisional 9.1/10 score](QUALITY-9-PLUS-ASSESSMENT.md) cannot replace signatures, security tests or GO/NO-GO.
+
 ## Evidence and governance
 
 Every work item needs an owner, approved decision/ADR, bounded scope, immutable source and CI SHA, database/Studio fixture version, negative test, migration/restore results, risk/exception decision and a linked follow-up PR. Real schedules depend on staffed capacity and demonstrated effort, not arbitrary M/L/XL estimates.
