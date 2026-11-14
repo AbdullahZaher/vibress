@@ -129,6 +129,10 @@ The new [Vibress Universal Application Platform master roadmap](platform-roadmap
 **Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.
 
 
+## Program execution directive — five gated Waves
+
+The project requester adopted the [Vibress Universal Platform M00–M12 plan for controlled implementation](platform-roadmap/ROADMAP-EXECUTION-ADOPTION-2026-11-14.md) and published a [detailed English engineering/security execution prompt](platform-roadmap/FIVE-WAVE-ENGINEERING-SECURITY-MASTER-PROMPT.md). The team must implement Wave 1 through Wave 5 sequentially, complete all required tests, publish an English report after each Wave and proceed only after an approved GO; architectural, security and production release approvals remain independent.
+
 ## Final internationally benchmarked roadmap design review
 
 The [Final Design Baseline Acceptance Record](platform-roadmap/FINAL-DESIGN-BASELINE-APPROVAL.md) **conditionally recommends** the written M00–M12 program as an implementation-planning baseline. The [International Standards Alignment Matrix](platform-roadmap/INTERNATIONAL-STANDARDS-ALIGNMENT.md) maps NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001/25010, SLSA v1.2 and WCAG 2.2 to future verification gates. **No independent organizational certification or production GO is implied**; human A1–A8 approvals and actual runtime G0–G7 evidence remain pending.
