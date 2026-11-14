@@ -411,6 +411,37 @@ importers:
         specifier: ^5.5.3
         version: 5.9.3
 
+  apps/platform-reference:
+    dependencies:
+      '@vibress/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@vibress/platform-kernel':
+        specifier: workspace:*
+        version: link:../../packages/platform-kernel
+      '@vibress/tenancy':
+        specifier: workspace:*
+        version: link:../../packages/tenancy
+      fastify:
+        specifier: ^5.12.7
+        version: 5.12.7
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      '@types/pg':
+        specifier: ^8.20.4
+        version: 8.20.4
+      tsx:
+        specifier: ^4.23.9
+        version: 4.23.15
+      typescript:
+        specifier: ^5.5.3
+        version: 5.9.3
+
   apps/portal:
     dependencies:
       react:
@@ -629,9 +660,15 @@ importers:
       '@vibress/observability':
         specifier: workspace:*
         version: link:../observability
+      '@vibress/platform-kernel':
+        specifier: workspace:*
+        version: link:../platform-kernel
       '@vibress/security':
         specifier: workspace:*
         version: link:../security
+      '@vibress/tenancy':
+        specifier: workspace:*
+        version: link:../tenancy
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.4)(pg@8.22.0)

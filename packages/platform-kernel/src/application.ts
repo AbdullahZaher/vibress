@@ -12,8 +12,8 @@ import type {
   WebSurfaceDefinition,
 } from "./contracts";
 
-const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
-const ROUTE_AUTH = ["public", "member", "staff", "service"] as const;
+export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export const ROUTE_AUTH = ["public", "member", "staff", "service"] as const;
 const PERMISSION_PATTERN = /^[a-z][a-z0-9]*(?:\.[a-z0-9]+)+$/;
 const PATH_PARAM_PATTERN = /^:[a-zA-Z][a-zA-Z0-9_]*$/;
 // Action names are developer-facing lowerCamelCase symbols, not entity IDs.
@@ -37,6 +37,7 @@ export function defineAction<TInput, TOutput>(definition: {
     context: import("./contracts").RequestContext;
     input: TInput;
     transaction: import("./contracts").ActionTransaction;
+    pathParameters: Readonly<Record<string, string>>;
   }) => Promise<TOutput>;
 }): import("./contracts").ActionDefinition<TInput, TOutput> {
   if (!ACTION_NAME_PATTERN.test(definition.name)) {

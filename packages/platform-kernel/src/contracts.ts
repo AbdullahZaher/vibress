@@ -75,6 +75,7 @@ export interface ActionContext<TInput> {
   readonly context: RequestContext;
   readonly input: TInput;
   readonly transaction: ActionTransaction;
+  readonly pathParameters: Readonly<Record<string, string>>;
 }
 
 export type InputParser<T> = (value: unknown) => T;

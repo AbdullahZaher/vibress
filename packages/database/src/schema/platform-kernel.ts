@@ -1,5 +1,8 @@
 import {
+  boolean,
   pgTable,
+  jsonb,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -96,3 +99,64 @@ export type PlatformApplicationRow = typeof platformApplications.$inferSelect;
 export type PlatformInstallationRow = typeof platformInstallations.$inferSelect;
 export type PlatformTenantRow = typeof platformTenants.$inferSelect;
 export type PlatformCrmCustomerRow = typeof platformCrmCustomers.$inferSelect;
+
+/**
+ * Operator-owned registry of the serializable application manifest. Handler
+ * code is never persisted: `manifest_digest` proves that the code deployed at
+ * boot still matches what was registered.
+ */
+export const platformApplicationRegistrations = pgTable(
+  "platform_application_registrations",
+  {
+    applicationId: text("application_id")
+      .primaryKey()
+      .references(() => platformApplications.id, { onDelete: "cascade" }),
+    version: text("version").notNull(),
+    manifest: jsonb("manifest").notNull(),
+    manifestDigest: text("manifest_digest").notNull(),
+    registeredAt: timestamp("registered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+/**
+ * Principal membership directory. It is read before a verified tenant scope
+ * exists, so it is not RLS-protected and the tenant runtime role has no
+ * access to it; membership lookups belong to an auth service, not tenant code.
+ */
+export const platformMemberships = pgTable(
+  "platform_memberships",
+  {
+    applicationId: text("application_id").notNull(),
+    tenantId: text("tenant_id").notNull(),
+    principalId: text("principal_id").notNull(),
+    active: boolean("active").notNull().default(true),
+    roles: text("roles").array().notNull(),
+    permissions: text("permissions").array().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    primaryKey: primaryKey({
+      columns: [table.applicationId, table.tenantId, table.principalId],
+    }),
+    tenantForeignKey: foreignKey({
+      columns: [table.tenantId, table.applicationId],
+      foreignColumns: [platformTenants.id, platformTenants.applicationId],
+      name: "platform_memberships_tenant_fk",
+    }).onDelete("cascade"),
+    principalIdx: index("platform_memberships_principal_idx").on(
+      table.applicationId,
+      table.principalId,
+    ),
+  }),
+);
+
+export type PlatformApplicationRegistrationRow =
+  typeof platformApplicationRegistrations.$inferSelect;
+export type PlatformMembershipRow = typeof platformMemberships.$inferSelect;

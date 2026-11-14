@@ -33,8 +33,10 @@ export function readPlatformRuntimeRoleConfig(
  * - no TRUNCATE or REFERENCES (neither is governed by RLS);
  * - no function EXECUTE grants to the platform tables/infrastructure.
  *
- * `platform_applications`, `platform_installations` and `platform_tenants` are
- * operator-owned registry tables and are not reachable by this role.
+ * `platform_applications`, `platform_installations`, `platform_tenants` and
+ * `platform_application_registrations` are operator-owned registry tables and
+ * are not reachable by this role. `platform_memberships` is the principal
+ * directory, read before a verified scope exists, so it is denied as well.
  */
 export async function provisionPlatformRuntimeRole(
   client: ClientBase,
@@ -111,6 +113,19 @@ export async function provisionPlatformRuntimeRole(
   await client.query(
     `REVOKE ALL PRIVILEGES ON TABLE public.platform_tenants FROM ${role}`,
   );
+  for (const table of [
+    "platform_application_registrations",
+    "platform_memberships",
+  ]) {
+    const exists = await client.query<{ present: boolean }>(
+      "SELECT to_regclass($1) IS NOT NULL AS present",
+      [`public.${table}`],
+    );
+    if (!exists.rows[0]?.present) continue;
+    await client.query(
+      `REVOKE ALL PRIVILEGES ON TABLE public.${table} FROM ${role}`,
+    );
+  }
   await client.query(
     `REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM ${role}`,
   );

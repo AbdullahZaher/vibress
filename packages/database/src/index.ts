@@ -15,6 +15,19 @@ export {
   readPlatformRuntimeRoleConfig,
   type PlatformRuntimeRoleConfig,
 } from "./platform-runtime-role";
+export {
+  ApplicationRegistrationDriftError,
+  ApplicationRegistrationIntegrityError,
+  ApplicationRegistrationMissingError,
+  PlatformMembershipResolver,
+  PostgresApplicationRegistryStore,
+  UnexpectedApplicationRegistrationError,
+  type ApplicationRegistrationRecord,
+  type RegistryQueryable,
+  type RegistrySyncOptions,
+  type RegistrySyncOutcome,
+  type RegistrySyncResult,
+} from "./platform-application-registry";
 export { seedDatabase, SYSTEM_ROLES, SYSTEM_PERMISSIONS } from "./seed";
 export { seedFixturePost, TARGET_POST_ID } from "./seed-fixture-post";
 export * from "./transaction";

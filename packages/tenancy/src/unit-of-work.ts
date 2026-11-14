@@ -31,6 +31,13 @@ export interface ScopedTransaction extends ActionTransaction {
   markRollbackOnly(reason: string): void;
 }
 
+export interface TenantUnitOfWorkRunner {
+  run<T>(
+    scope: VerifiedScope,
+    work: (transaction: ScopedTransaction) => Promise<T>,
+  ): Promise<T>;
+}
+
 export class TenantTransactionError extends Error {
   constructor(message: string) {
     super(message);
@@ -149,7 +156,7 @@ function createScopedTransaction(
  * - an aborted PostgreSQL transaction can never COMMIT successfully;
  * - connections are always released, so pooled reuse cannot leak context.
  */
-export class TenantUnitOfWork {
+export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
   readonly #pool: PoolLike;
 
   constructor(pool: PoolLike) {
