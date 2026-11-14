@@ -4,6 +4,16 @@
 >
 > Planning content only: existence of a document or issue does **not** mean code shipped or production was approved. New `M00–M12` IDs do not replace the existing Plugin Platform `M0–M6` roadmap.
 
+## Current canonical decision summary (reviewed proposal)
+
+**Release identity:** M08 denotes a *program gate*, not a new `v1.0.0` artifact. Existing Vibress Host is already versioned **1.2.0** in package manifests and follows [ADR-013 unified SemVer](../14-decisions/release-versioning-strategy.md). The first Framework code-first GA version is **TBD pending an explicit versioning decision**, and must not reuse or overwrite an existing Host release tag. [Release version and tested support matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md).
+
+**Versioned evidence:** [release evidence and GO/NO-GO ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) defines implementation statuses and exact proof, including current *unverified* security/tenant/migration gates. A green documentation workflow is **not** product security evidence.
+
+**Executable order:** [first nonproduction vertical slice](EXECUTION-FIRST-SLICE.md), CMS two-publication compatibility, new independently installed CRM, tenant/role negative tests, real upgrade/restore, then M08 GO/NO-GO. New user-facing multi-tenant app hosting must not bypass these gates.
+
+**Review status:** historical reviews [R01–R39](FOURTH-PASS-REVIEW-2026-11-14.md) remain traceable; risks have proposed controls, **not guaranteed elimination**. The English roadmap is canonical; earlier Arabic overview is informational.
+
 ## Vision and strategy
 
 Turn Vibress into a **general-purpose, open-source application development framework**: CRM, SaaS, real estate, commerce, booking, education and publishing must be possible **without modifying platform kernel for each new project**. Preserve Vibress CMS and standalone Vibress Studio. Do not fork Payload or replace the existing TypeScript/Fastify/Drizzle/PostgreSQL/BullMQ stack without proven need.
@@ -90,7 +100,7 @@ The first general-purpose release includes a **minimal authenticated custom acti
 | --- | --- | --- |
 | **Platform Alpha** | M00–M04 | Nonproduction preview of resource→Postgres→REST/OpenAPI→admin; reviewed threat model and tenant gating |
 | **Platform Beta** | M00–M07 | Minimum trusted modules/workflows, external SDK/CLI, CMS + CRM reference fixtures |
-| **Platform v1.0 GA** | M00–M08 | Explicit security/recovery assessment and GO/NO-GO for a self-hosted code-first v1 |
+| **Framework code-first GA (SemVer TBD)** | M00–M08 | Explicit security/recovery assessment and GO/NO-GO for a self-hosted code-first v1 |
 | **Platform Builder** | M09 | Visual model/forms/tables/page construction atop same IR |
 | **Platform AI** | M10 | Scoped agents, MCP, skills, approvals and evaluation harness |
 | **Vibress Cloud** | M11 | Optional projects and environment deployment control plane |
@@ -104,6 +114,9 @@ Every milestone requires typed public contracts; CI/build/typecheck; integration
 
 ## Related documentation
 
+- [Release version, runtime and Studio/Plugin SDK compatibility matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md)
+- [Release evidence, risk status and GO/NO-GO register](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md)
+- [Automated roadmap validation instructions](../../scripts/verify-platform-roadmap.mjs)
 - [Third review: R26–R34 and 8.0/10 editorial rating](THIRD-REVIEW-AND-RATING-2026-11-14.md)
 - [PostgreSQL ACL / RLS privilege threat model](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md)
 - [App installation trust and external integration contract](APP-INSTALLATION-TRUST-AND-OPERATIONS.md)
