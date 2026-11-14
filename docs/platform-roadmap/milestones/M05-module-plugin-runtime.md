@@ -121,6 +121,23 @@ Define module capability/route/action/event schema version negotiation, deprecat
 
 **Scope note:** Do not treat published module metadata or a plugin's TypeScript types as proof of application-scoped runtime enforcement.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M05-E11 — Operator-trusted plugin and grant/ABI upgrade compatibility
+
+Prove signed trusted Tier-1 plugin admission and upgrades across app/runtime/SDK/DB versions; explicitly distinguish privileged Node plugin code from an untrusted sandbox and prevent installer role leakage.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] Plugin installer cannot retain unrestricted privileged DB grants in ordinary API/worker mode; PUBLIC and SECURITY DEFINER privileges reviewed.
+- [ ] Version-skew and signer/ABI mismatches fail admission or recover as specified, including crashed upgrade and stale worker tests.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

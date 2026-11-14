@@ -121,6 +121,23 @@ Deliver a clean external CRM with both generated resource CRUD/Admin **and** a d
 
 **Scope note:** v1 exposes a bounded general **web application** substrate, not a promise to run arbitrary untrusted native code or any programming language.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M07-E11 — External developer adoption and matched product trial
+
+Run clean external CRM development/onboarding and competitor-matched tasks with real developer participants, record unsupported workflows, manual edits, time to custom action/web view and broken SDK/upgrade compatibility.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] At least one real externally packaged v1 CRM app proves end-user UI/custom business action and a tenant-safe worker without private imports or kernel changes.
+- [ ] Product claims are limited to features actually benchmarked; M00 first-adopter feedback and recorded blockers are reviewed before declaring v1 ready.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

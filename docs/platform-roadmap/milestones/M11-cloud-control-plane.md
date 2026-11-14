@@ -121,6 +121,23 @@ Define data location, data/tenant export, deletion/retention/backup boundaries, 
 
 **Scope note:** Never claim complete legal compliance or instant erasure solely from a database delete call.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M11-E11 — Provable per-installation infrastructure and rollout isolation
+
+Define audited runtime database, Redis ACL/worker queues, object-store IAM, network, secrets and backup boundaries; test cross-install denial, service token delegation and mixed API/worker/schema rollouts.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] Distinct installation credentials cannot read/write another app's DB, Redis, queue, object storage or backups; shared physical infrastructure requires an explicit reviewed equivalent boundary.
+- [ ] Cloud operator and per-app service identities use distinct audiences/permissions and rollback is limited to schema-compatible release windows.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

@@ -116,6 +116,18 @@ The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-R
 
 **Scope note:** See Application Runtime and Extensibility for distinctions between declarative visual metadata and developer-owned code.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+
+### Blocking exit checks
+
+- [ ] Visual builder output never promotes unreviewed custom code into trusted app-server or plugin execution; runtime owner approves compiled code and network capabilities.
+- [ ] Builder data-binding previews remain within the selected physical installation and enforce tenant policy and scoped credentials.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

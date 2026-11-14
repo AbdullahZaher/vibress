@@ -121,6 +121,18 @@ Expose an approved trusted application HTTP handler/action registration contract
 
 **Scope note:** Custom trusted application code is in a separately controlled app installation. Untrusted installed plugins do not gain arbitrary server code/SQL execution via generated endpoint metadata.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+
+### Blocking exit checks
+
+- [ ] Custom authenticated route, generated CRUD and non-admin end-user UI all use a reviewed scoped access boundary; sensitive DB functions are not exposed as an authorization bypass.
+- [ ] An external clean CRM app and generated API run without direct plugin SQL, privileged Fastify escape hatches or undocumented internal imports.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

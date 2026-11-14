@@ -127,6 +127,36 @@ Define signed-off owner/tenant export, deletion/offboarding, session/API key rev
 
 **Scope note:** Applicable legal/privacy requirements depend on deployment and must receive appropriate owner/legal review; this PR is not a compliance certification.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M02-E12 — Function effective ACL and SECURITY DEFINER audit
+
+Inventory and restrict PUBLIC/inherited/default function EXECUTE, SECDEF owners/search_path and schema CREATE privileges under normal runtime credentials. Check newly created and migrated functions across actual PostgreSQL versions.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### M02-E13 — Multi-policy RLS and non-row privilege tests
+
+Define permissive/restrictive policy composition per generated table and deny accidental OR widening. Explicitly block runtime TRUNCATE and REFERENCES privileges and test owner/BYPASSRLS, FK errors and WITH CHECK.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### M02-E14 — Cross-install infrastructure access tests
+
+Enforce independent per-app database/credentials, Redis ACL/worker queues, object-store IAM and key/secret handling, not merely namespaced prefixes; stage migration and credential rotation.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] Effective function grants from PUBLIC, inherited roles and defaults are denied for sensitive functions, including SECURITY DEFINER fixtures and safe search_path.
+- [ ] Two simultaneously applicable RLS policies cannot produce unauthorized OR widening; TRUNCATE/REFERENCES are blocked using SQL ACLs.
+- [ ] Two app-installation credentials cannot cross-query or mutate each other's PostgreSQL, Redis/queue, object storage, secrets or backup resources; no SQL/GUC claim of hostile-code sandboxing.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

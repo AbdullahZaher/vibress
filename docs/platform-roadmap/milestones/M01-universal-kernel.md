@@ -115,6 +115,23 @@ Define developer-owned app package version, independently installable runtime ar
 
 **Scope note:** A universal app kernel cannot be justified merely by names for Project/Application; it needs an executable route/action contract and ownership model.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M01-E10 — Real application installation isolation and trust
+
+Decide whether app installations own physically separate databases, process identities, Redis key ACLs/queues, storage IAM and backups. Keep custom trusted server code scoped to its own deployment; separate platform operators from runtime users.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] App A's actual runtime/DB/Redis/storage credentials cannot access installation B under defined negative tests.
+- [ ] Trusted developer-owned server code executes in its own installation and no documentation claims malicious same-process code is sandboxed by TypeScript interfaces or RLS custom GUCs.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

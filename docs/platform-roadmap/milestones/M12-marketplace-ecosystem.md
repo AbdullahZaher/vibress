@@ -115,6 +115,18 @@ The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-R
 
 **Scope note:** Extension distribution must remain a separate security/trust transition from discovery or vendor marketing.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+
+### Blocking exit checks
+
+- [ ] Marketplace operator-approved Tier-1 package execution remains explicitly trusted privileged code, not advertised as in-process isolation; untrusted Tier-2 requires separate OS/runtime threat review.
+- [ ] Module upgrade admission and effective installer/DB grants are checked before activation; no package metadata alone grants SQL or cross-install authority.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

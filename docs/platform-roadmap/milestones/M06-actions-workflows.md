@@ -115,6 +115,23 @@ Use event ID, schema version, application/tenant context, causation/request IDs 
 
 **Scope note:** At-least-once delivery and external provider idempotency require separate policies; a version number alone is not event authorization.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M06-E10 — Cross-installation service integration and event replay
+
+Define per-target audience/scopes, signed or authenticated outbound/inbound API/events, token expiry/revocation, webhook idempotence, SSRF/egress limits, schema-versioned replay and dead letters. Never share another app's SQL/Redis credentials.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] Service app A cannot read app B through shared SQL or queues; specifically granted API/event exchange works only with scoped audience/credentials.
+- [ ] Old/new producer/worker/event versions either interoperate according to tested window or fail safely in DLQ without data/tenant cross-talk.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

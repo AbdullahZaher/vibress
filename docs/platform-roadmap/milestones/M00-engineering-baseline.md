@@ -128,6 +128,30 @@ Choose SLI/SLO metrics, security/data owners, scoped tenant lifecycle, planned r
 
 **Scope note:** All ADRs must be owned at M00, but do not require speculative decisions 004–010 to be finally accepted before M01. This is an architectural/design phase, not an all-product sign-off.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M00-E12 — PostgreSQL effective grant and RLS policy inventory
+
+Record actual function EXECUTE grants from PUBLIC/roles/default privilege owners, SECURITY DEFINER functions, writable search_path, existing RLS policies/role inheritance and deployment topology. Reconcile findings R26–R29 before choosing app hosting contracts.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### M00-E13 — First-adopter and documentation quality spike
+
+Choose an evidence-based external developer use case, comparator-matched CRM task, actual owner/capacity assumptions, and a testable docs checker plan (relative links, headings, IDs, ADR and GA scope).
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] An accepted R26–R29 threat model lists function effective ACLs, policy OR/AND, non-RLS privileges and trusted app code boundaries.
+- [ ] First-adopter/user research hypothesis, named architecture/security/product owners and resource assumption are documented with explicit stop/pivot tests.
+- [ ] Roadmap-specific CI checker task is defined; any current manual link check is explicitly labeled manual, not a passing dedicated CI job.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |

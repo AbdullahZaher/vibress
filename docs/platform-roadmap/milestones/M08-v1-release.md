@@ -122,6 +122,30 @@ Require external CRM custom endpoint/action/end-user UI, verified tenant export/
 
 **Scope note:** Rating a *written plan* 8.0/10 is not a certification of platform code; the release gate cannot be passed based on score or docs-only CI.
 
+## Third-pass security and feasibility acceptance (R26–R34)
+
+The [third-pass review, R26–R34, and 8.0/10 **roadmap-only** rating](../THIRD-REVIEW-AND-RATING-2026-11-14.md) refine the conditions for this milestone. These are proposed future tasks, **not actual runtime remediation**. Supporting contracts: [PostgreSQL effective ACL and RLS](../POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [app installation trust](../APP-INSTALLATION-TRUST-AND-OPERATIONS.md), [rolling compatibility](../UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+### M08-E11 — Effective privilege and infrastructure isolation release proof
+
+Independent reviewer checks PUBLIC/default function grants, SECURITY DEFINER, policy composition, TRUNCATE/REFERENCES, SQL owner roles and two-installation PostgreSQL/Redis/object-store credentials.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### M08-E12 — Version-skew and operator recovery release gate
+
+Exercise rolling old/new API+worker+web+database+module+event combinations; require measurable support/runbook, on-call ownership, product/operations budgets and a GO/NO-GO record.
+
+**Required proof:** immutable implementation SHA, actual test (negative/compatibility/restore/clean consumer as applicable), environment/fixture and reviewer sign-off.
+
+### Blocking exit checks
+
+- [ ] Independent security review includes actual function PUBLIC/default grants, multiple RLS policies, non-row SQL privileges and cross-installation DB/Redis/S3 negative tests.
+- [ ] Supported mixed-version API/worker/schema/event/SDK combinations, backfill interruption and rollback/forward-fix are verified in staging with immutable evidence.
+- [ ] Product owner records real first-adopter feedback, staff/capacity and operational budgets before a public 'better than competitors' or universal app support claim.
+
+**No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
