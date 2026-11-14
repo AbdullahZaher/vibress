@@ -138,6 +138,15 @@ Prove signed trusted Tier-1 plugin admission and upgrades across app/runtime/SDK
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Release naming and plugin ABI compatibility (existing M05-E08/E10)
+
+- [ ] `@vibress/plugin-sdk` remains **private** at baseline; before claiming public SDK support, approve namespace, package/ABI and independently packed consumer tests without changing historical Host release tags.
+- [ ] Validate the existing unified [ADR-013](../../14-decisions/release-versioning-strategy.md) against any proposed independent Framework GA release; ensure signed modules explicitly pin compatible Host/Framework SDK/ABI/schema versions and refuse unapproved version skew.
+- [ ] Release manifest includes runtime/module digests, public SDK version, admission approvals, promotion and downgrade rules. Existing trusted ESM plugins are not sandboxed.
+
+[Release compatibility matrix](../RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Evidence gate](../RELEASE-EVIDENCE-AND-DECISION-REGISTER.md).
+
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
