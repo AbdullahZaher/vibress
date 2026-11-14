@@ -26,6 +26,10 @@ Define SLOs using **measured baselines** rather than invented values. At M00 cho
 
 Before a GA promise, test load with two tenant scopes and representative relational joins, uploads, webhook jobs and session invalidation. For failure testing include partial network failure, stale authorization, queue replay, expired credentials, object-storage outage, database connection exhaustion and restore from compromised/stale backup.
 
+## PostgreSQL RLS and complete backup review
+
+A full installation backup must not rely on the RLS-filtered SELECT visibility of a tenant-scoped DML role. Use an audited backup identity, a scope manifest and per-tenant checksums/row counts, with an isolated staging restore. PostgreSQL `row_security=off` is a **fail-on-filtering** guard rather than a bypass. See the [complete backup/view contract](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md). This requirement does not change the existing legal/retention caveats.
+
 ## Governance gates and evidence
 
 - **M00:** nominate app/data ownership and required legal/contractual review; define data classes, operational SLI and measurable budgets.
