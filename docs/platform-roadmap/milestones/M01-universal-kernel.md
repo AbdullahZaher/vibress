@@ -132,6 +132,15 @@ Decide whether app installations own physically separate databases, process iden
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass acceptance: preserving publication identity
+
+This work is part of **M01-E05**, not a new kernel feature or renamed CMS schema. See [legacy identity compatibility](../LEGACY-CMS-IDENTITY-AND-MIGRATION.md).
+
+- [ ] One legacy CMS installation with multiple publications maps to a stable new Application/Installation identity **without interpreting each Publication as an Application or Tenant**.
+- [ ] The legacy `pub_default` fallback remains limited to audited CMS compatibility paths; no new CRM app or kernel contract depends on it.
+- [ ] Existing documents, memberships, URLs, subscription records, media references, queued messages and Studio data survive a seeded old/new upgrade fixture.
+- [ ] Independent CRM still runs with no publishing-domain imports and a separate physical installation security boundary.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
