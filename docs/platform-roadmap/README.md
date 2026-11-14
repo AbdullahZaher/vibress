@@ -4,6 +4,12 @@
 >
 > Planning content only: existence of a document or issue does **not** mean code shipped or production was approved. New `M00–M12` IDs do not replace the existing Plugin Platform `M0–M6` roadmap.
 
+## Final standards-based design review disposition
+
+**Design-baseline recommendation:** [CONDITIONAL ACCEPTANCE FOR M00 EXECUTION PLANNING](FINAL-DESIGN-BASELINE-APPROVAL.md), not a production/security certificate or an authorized organizational approval. The [international standards mapping](INTERNATIONAL-STANDARDS-ALIGNMENT.md) covers NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001:2022, ISO/IEC 25010:2023, SLSA v1.2 and WCAG 2.2. **Human architecture/security/release sign-offs A1–A8 remain open.** PR #151 stays Draft until owners accept the conditions.
+
+This latest control-design mapping also identifies that the [existing architecture overview](../01-architecture/overview.md) permits multiple runtime applications per deployment whereas v1 proposes one Application per independently isolated Installation; and [SECURITY.md](../../SECURITY.md) describes historical support versions which must be reconciled with current package releases. See [F-01–F-03](INTERNATIONAL-STANDARDS-ALIGNMENT.md). The provisional self-assessed **9.1/10 plan score** is retained without claiming independent certification.
+
 ## Current canonical decision summary (reviewed proposal)
 
 **Release identity:** M08 denotes a *program gate*, not a new `v1.0.0` artifact. Existing Vibress Host is already versioned **1.2.0** in package manifests and follows [ADR-013 unified SemVer](../14-decisions/release-versioning-strategy.md). The first Framework code-first GA version is **TBD pending an explicit versioning decision**, and must not reuse or overwrite an existing Host release tag. [Release version and tested support matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md).
