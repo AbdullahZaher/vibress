@@ -18,8 +18,16 @@ export {
   type PlatformRuntimeRoleConfig,
   type PlatformRuntimeRoleViolation,
   type PlatformRuntimeRoleViolationCode,
+  type PlatformRoleAssertionOptions,
+  type PlatformRoleProfile,
   type RuntimeRoleAttributes,
 } from "./platform-runtime-role";
+export {
+  assertSafePlatformMembershipReaderRole,
+  provisionPlatformMembershipReaderRole,
+  readPlatformMembershipReaderConfig,
+  type PlatformMembershipReaderConfig,
+} from "./platform-membership-reader";
 export {
   ApplicationRegistrationDriftError,
   ApplicationRegistrationIntegrityError,
@@ -28,9 +36,12 @@ export {
   InstallationMismatchError,
   PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
+  RegistryActorRequiredError,
   UnexpectedApplicationRegistrationError,
   type ApplicationRegistrationRecord,
   type InstallationRegistrationRecord,
+  type RegistryChangeKind,
+  type RegistryChangeRecord,
   type RegistryQueryable,
   type RegistrySyncOptions,
   type RegistrySyncOutcome,

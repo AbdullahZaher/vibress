@@ -24,6 +24,8 @@
     "db:migrate": "pnpm --filter @vibress/database run db:migrate",
     "db:seed": "pnpm --filter @vibress/database run db:seed",
     "bootstrap:owner": "tsx scripts/bootstrap-owner.ts",
+    "platform:provision-roles": "tsx scripts/provision-platform-roles.ts",
+    "test:e2e:platform-reference": "playwright test --config playwright.platform-reference.config.ts",
     "owner:create": "tsx scripts/bootstrap-owner.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,html,css}\"",
     "verify:clean-tree": "node scripts/verify-clean-tree.mjs",

@@ -4,18 +4,21 @@
 > This report records work executed on branch `feat/wave1-platform-kernel-tenant-isolation`
 > cut from `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`, with the unmerged
 > roadmap pinned at PR #151 head `c9997a9353a229a4287256f5ba3b94d718e3a5d9`.
-> Measured evidence in §5 is current for the W1-T01/W1-T03 remediation increment on
-> 2026-11-14 (on top of `07b9ae925c9889c0c35f3463005c4e9c9974d3ba`), which is committed
-> with this report.
+> Measured evidence in §5 is current for the W1-T09 remediation increment on
+> 2026-11-14 (uncommitted working tree on top of `fd64eb0a0499c20987483fa210f1d45556f8fa7b`,
+> which already contains the W1-T01/W1-T03 increment). The W1-T02, W1-T04,
+> W1-T08 and W1-T09 increments in this working tree are not yet committed. W1-T05 is
+> preparation only: the read-only inventory was re-run and an approval request
+> plus a hardened proposal exist, but **no grant was applied**.
 > Nothing here authorizes public application hosting, tenant onboarding or production.
 
 ## 1. Executive status
 
 | Item | Status |
 | --- | --- |
-| M00 baseline | **PARTIAL** — baseline, ownership map, ADR blockers, docs-link validator and CI wiring recorded; compatibility fixture pinning and named owners remain |
-| M01 kernel | **IMPLEMENTED, UNREVIEWED** — public contracts, in-memory registry, persisted registry with manifest digests, atomic installation binding (conflicting binds mutate nothing), hardened runtime-role boot verification (both identities, role membership, DDL authority, ownership, registry ACLs, SECURITY DEFINER EXECUTE), kernel route execution adapter and a bootable standalone reference app exist and are tested; independent review and sign-off remain |
-| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work with scope-mutation detection, additive RLS migration, least-privilege role, real PostgreSQL deny matrix, non-superuser owner proof and two-database installation boundary exist; R26 revocation approval, deployment owner change, views policy and Redis/S3 boundary remain |
+| M00 baseline | **PARTIAL** — baseline, ownership map, ADR blockers, docs-link validator and CI wiring recorded, legacy docs links cleaned and a digest-pinned CMS/Studio fixture pack added; named owners remain |
+| M01 kernel | **IMPLEMENTED, UNREVIEWED** — public contracts, in-memory registry, persisted registry with manifest digests, atomic installation binding (conflicting binds mutate nothing), hardened runtime-role boot verification (both identities, role membership, DDL authority, ownership, registry ACLs, SECURITY DEFINER EXECUTE), kernel route execution adapter, and a bootable standalone reference app whose owner-only registration phase is closed before the socket binds and whose membership reads use a dedicated SELECT-only reader role; independent review and sign-off remain |
+| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work with scope-mutation and role-switch detection, async-escape rejection, connection destruction on unknown session state and a pre-commit role identity probe, additive RLS migration, least-privilege role, real PostgreSQL deny matrix, non-superuser owner proof and two-database installation boundary exist; R26 revocation approval, deployment owner change, views policy and Redis/S3 boundary remain |
 | Independent security review | **NOT PERFORMED** |
 | Gate | **NO-GO** |
 
@@ -44,20 +47,23 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 | Registry | `packages/platform-kernel/src/registry.ts` | In-memory application registry, duplicate protection, action/route resolution with path params |
 | Application manifest | `packages/platform-kernel/src/manifest.ts` | Serializable manifest (no handler code), canonical SHA-256 digest, strict parser for manifests read back from storage |
 | Persisted registry | `packages/database/src/platform-application-registry.ts` | Idempotent sync, drift refusal without an explicit update, race-safe CAS update, integrity check on load, two-way deployed/persisted verification, atomic installation binding (guarded upsert; a conflicting bind changes no row, concurrent conflicts have one winner, unregistered applications create nothing) |
-| Membership directory | `packages/database/src/platform-application-registry.ts` | `PlatformMembershipResolver` reads the operator-owned membership directory before a verified scope exists (runtime role denied) |
+| Membership directory | `packages/database/src/platform-application-registry.ts`, `platform-membership-reader.ts` | `PlatformMembershipResolver` reads the operator-owned membership directory before a verified scope exists; the runtime role is denied the table and serving reads use a dedicated reader role with table-level SELECT on `platform_memberships` only |
+| Membership reader role | `packages/database/src/platform-membership-reader.ts` | Provisioner and boot assertion for the non-owner reader: SELECT on `platform_memberships`, no privilege on registry, tenant, CMS or other relations, sequences or SECURITY DEFINER functions; unsafe readers refuse boot |
 | Route executor | `packages/tenancy/src/executor.ts` | Route resolution, route-kind authentication, membership + policy authorization, verified scope, tenant unit of work, input parsing, stable error mapping |
 | Registry migration | `packages/database/migrations/0056_platform_application_registry.sql` | Additive `platform_application_registrations` (digest check) and `platform_memberships` tables |
-| Reference app | `apps/platform-reference` | Bootable Fastify app: manifest sync/verify, installation binding, runtime-role safety assertion at boot, bearer-token principal directory, real CRM read/write actions over the tenant unit of work, operator bootstrap script |
+| Registry change audit | `packages/database/migrations/0057_platform_registry_change_audit.sql`, `packages/database/src/platform-application-registry.ts` | Append-only `platform_application_registry_changes` (FK `ON DELETE RESTRICT`, shape/format checks); `sync` writes the `created`/`updated` row in the same SQL statement as the mutation, requires an actor for mutations, and writes nothing for `unchanged` or refused drift; `listChanges` reads the history |
+| Operator scripts | `scripts/provision-platform-roles.ts`, `scripts/start-platform-reference-e2e.ts` | Idempotent platform-role provisioning with post-provision attribute verification; reference-app E2E lifecycle over real PostgreSQL with per-run roles and cleanup |
+| Reference app | `apps/platform-reference` | Bootable Fastify app: owner-only registration phase (manifest sync/verify, installation binding) whose pool is closed before listening, runtime and reader safety assertions at boot, bearer-token principal directory, real CRM read/write actions over the tenant unit of work, operator bootstrap script |
 | Verified scope | `packages/tenancy/src/scope.ts` | `verifyTenantScope`, `resolveVerifiedScope`, `assertVerifiedScope`; scope can only be produced by verification |
 | Policy | `packages/tenancy/src/policy.ts` | Default-deny engine, deny precedence, exact/namespace/global permissions, cross-tenant denial |
-| Unit of work | `packages/tenancy/src/unit-of-work.ts` | Single-connection transaction, transaction-local context set and read back, nested scope-switch rejection, rollback-only marking, error-probe before `COMMIT` |
+| Unit of work | `packages/tenancy/src/unit-of-work.ts` | Single-connection transaction, transaction-local context set and read back, nested scope-switch rejection, rollback-only marking, error/identity probe before `COMMIT`, rejection of role switching and post-settlement queries, connection destruction when `ROLLBACK`/`COMMIT` fails, the transaction is aborted with work in flight, or the role changed |
 | Schema | `packages/database/src/schema/platform-kernel.ts` | Application/installation/tenant tables and a tenant-owned CRM customers table with a composite `(tenant_id, application_id)` FK |
 | Migration | `packages/database/migrations/0054_platform_tenant_rls.sql` | Additive tables and indexes, `ENABLE` + `FORCE` RLS, fail-closed `USING` and `WITH CHECK` policy |
 | Runtime role | `packages/database/src/platform-runtime-role.ts` | Non-owner `NOBYPASSRLS` role: DML only on tenant table, no CREATE, no TRUNCATE/REFERENCES/TRIGGER, no registry access, role-level EXECUTE revoked; boot assertion fails closed on unsafe `current_user`/`session_user`, privileged membership/SET ROLE, schema/database CREATE, ownership, registry table/column ACLs and executable SECURITY DEFINER functions |
 | Boundary test | `tests/architecture/platform-boundaries.test.ts` | Kernel must not import outside itself; tenancy may import only the kernel plus Node/relative; relative imports that escape a package root are violations; a missing or empty source directory fails instead of passing silently |
 | Installation isolation test | `tests/integration/platform-installation-isolation.test.ts` | Two databases, each with its own non-superuser owner and runtime role, `CONNECT` revoked from `PUBLIC`, independent tenant rows |
 | Platform test config | `vitest.platform.config.ts` | Isolated node-environment run without the CMS global setup |
-| Reference app integration test | `tests/integration/platform-reference-app.test.ts` | Real PostgreSQL, runtime role and RLS through HTTP: registry drift/integrity, conflicting installation binds that mutate nothing, unregistered-application refusal, one-winner conflict races, auth deny matrix, tenant-isolated create/list, registry and membership tables unreachable by the runtime role, six real-role privilege refusals |
+| Reference app integration test | `tests/integration/platform-reference-app.test.ts` | Real PostgreSQL, runtime and reader roles, and RLS through HTTP: registry drift/integrity, conflicting installation binds that mutate nothing, unregistered-application refusal, one-winner conflict races, auth deny matrix, tenant-isolated create/list, registry and membership tables unreachable by the runtime role, six real-role privilege refusals, owner pool closed before listen, reader denied writes and every other relation, unsafe-reader boot refusal |
 
 No placeholder handlers, no skipped tests, no lowered thresholds. `packages/platform-kernel`
 and `packages/tenancy` are workspace packages at `1.2.0` and are **private**, matching
@@ -75,9 +81,30 @@ The contract and measured PostgreSQL matrix are in
   after SQL comments are stripped, including `pg_catalog.set_config`, quoted GUC names,
   `SET SESSION`/`SET LOCAL` and `RESET ALL`; a detected attempt also marks the
   transaction rollback-only so it cannot commit.
+- Database role switching through the scoped handle is rejected after the same comment
+  stripping: `SET [LOCAL|SESSION] ROLE`, `SET [LOCAL|SESSION] AUTHORIZATION`,
+  `RESET ROLE`, `RESET SESSION AUTHORIZATION` and
+  `set_config('role'|'session_authorization', ...)`. Independently of pattern matching,
+  the pre-commit probe re-reads `current_user` and `session_user` and compares them with
+  the values captured at `BEGIN`; a mismatch aborts and **destroys** the connection,
+  because role changes survive `ROLLBACK`.
+- Unawaited work cannot outlive the transaction. The scoped handle is sealed as soon as
+  the awaited callback settles: queries from an escaped continuation are rejected, and a
+  query still in flight at settlement fails the unit of work closed and **destroys** the
+  connection (ROLLBACK would only queue behind the escaped query), so no other tenant
+  can inherit it.
+- A connection is destroyed instead of returned to the pool whenever its session state
+  is unknown: `ROLLBACK` failed, `COMMIT` failed, or the transaction aborted with work
+  still in flight.
 - The serving process verifies its runtime credentials at boot: the role must be a
   non-superuser, must not have `BYPASSRLS`, must not own tenant or registry tables, and
   must differ from the owner used for registry writes.
+- Owner credentials are confined to the registration phase. The owner pool runs manifest
+  sync, registry verification and installation binding, is closed before the socket
+  binds, and is not reachable from request handling. Membership lookups run on a
+  separate reader role that holds table-level `SELECT` on `platform_memberships` and no
+  privilege on any other relation, sequence or SECURITY DEFINER function. An unsafe
+  reader refuses boot before the owner phase runs.
 - Nested scope switches mark the outer transaction rollback-only and always trigger
   `ROLLBACK`, even when the caller swallows the error.
 - A swallowed PostgreSQL error is detected with a probe query before `COMMIT`.
@@ -87,7 +114,10 @@ The contract and measured PostgreSQL matrix are in
   CMS tables.
 - Persisted registry tables are operator-owned. The runtime role has no privileges on
   `platform_application_registrations` or `platform_memberships`; the integration test
-  asserts both fail with SQLSTATE `42501`.
+  asserts both fail with SQLSTATE `42501`. The reader role can select memberships but
+  is denied writes (`42501`) and is denied `platform_applications`,
+  `platform_installations`, `platform_tenants`, `platform_application_registrations`
+  and the tenant CRM table.
 - Handler code is never persisted. A registration stores the manifest plus its SHA-256
   digest; boot refuses a drift unless the deployment passes an explicit update, and
   `load` recomputes the digest so a tampered row fails closed.
@@ -105,13 +135,20 @@ PostgreSQL grants `EXECUTE` on new functions to `PUBLIC`. A role-specific
 `still executes owner-owned public functions through PUBLIC (R26 open)` proves the
 platform runtime role **can** execute an owner-created function in `public`.
 
-The read-only inventory is now done: 33 public functions, **0 `SECURITY DEFINER`**,
-31 extension-owned `pg_trgm`, 2 trigger functions, all with default `PUBLIC` EXECUTE,
-and no `pg_default_acl` policy. A targeted revocation and default-privilege change is
-[proposed but not applied](R26-FUNCTION-EXECUTE-INVENTORY.md) — applying it is a
-shared-database policy change that requires a production-shaped inventory and DB owner
-approval. Two read-only regression guards assert no `SECURITY DEFINER` function is
-reachable via `PUBLIC` and no runtime role owns functions.
+The read-only inventory is now done and was re-measured on
+2026-11-14T19:12:39.618Z with identical totals: 33 public functions, **0
+`SECURITY DEFINER`**, 31 extension-owned `pg_trgm`, 2 trigger functions, all with
+default `PUBLIC` EXECUTE, and no `pg_default_acl` policy. A targeted revocation
+and default-privilege change is [proposed but not applied](R26-FUNCTION-EXECUTE-INVENTORY.md).
+The exact [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) separates Scope A
+(`PUBLIC` revocation, proposal 0055) from Scope B (the legacy `vibress_app` role's
+explicit `GRANT EXECUTE ON ALL FUNCTIONS` and function default grant, re-created by
+`provisionRuntimeRole` on every migration). **Scope A alone would not close R26 for
+that legacy role.** Applying either scope is a shared-database policy change that
+requires a production-shaped inventory, DB owner approval, and flipping the
+residual test to expect `42501` in the same change. Two read-only regression
+guards assert no `SECURITY DEFINER` function is reachable via `PUBLIC` and no
+runtime role owns functions.
 
 ### Measured: `FORCE RLS` against a non-superuser owner
 
@@ -129,23 +166,30 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **11 files / 122 tests passed**, 2.16 s |
-| `… tests/integration/platform-reference-app.test.ts` | **26 tests passed**: manifest sync/drift/CAS/integrity, conflicting installation bind mutating nothing, unregistered-application refusal, one-winner concurrent bind, HTTP auth deny matrix, runtime role verified non-superuser/no-bypassrls/non-owner, tenant-isolated create/list, runtime role denied registry and membership tables (`42501`), six real-role refusals (privileged membership, schema CREATE, registry SELECT, function ownership, SECURITY DEFINER EXECUTE, unsafe `session_user` after SET ROLE) |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **11 files / 140 tests passed** (current W1-T09 tree) |
+| `… tests/integration/platform-reference-app.test.ts` | **36 tests passed**: manifest sync/drift/CAS/integrity, registry change audit (created/updated attributed atomically, unchanged/refused writes nothing, actor required, audit history blocks application deletion), conflicting installation bind mutating nothing, unregistered-application refusal, one-winner concurrent bind, HTTP auth deny matrix, runtime role verified non-superuser/no-bypassrls/non-owner, tenant-isolated create/list, runtime role denied registry and membership tables (`42501`), six runtime-role refusals (privileged membership, schema CREATE, registry SELECT, function ownership, SECURITY DEFINER EXECUTE, unsafe `session_user` after SET ROLE), owner pool closed before listen, reader SELECT on memberships and denied writes/other relations (`42501`), three unsafe-reader refusals and an unsafe-reader boot refusal |
 | `… tests/integration/platform-installation-isolation.test.ts` | **8 tests passed**: cross-database `CONNECT` denied `42501`, same tenant id independent |
-| `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **7 files / 67 tests passed** |
-| `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 22 tests passed** against PostgreSQL 16 |
+| `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **7 files / 70 tests passed** |
+| `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 24 tests passed** against PostgreSQL 16 (22 deny-matrix tests + 2 W1-T04 escape/role-switch tests) |
 | `pnpm exec tsc -p packages/platform-kernel/tsconfig.json --noEmit` | passed |
 | `pnpm exec tsc -p packages/tenancy/tsconfig.json --noEmit` | passed |
 | `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` | passed |
+| `pnpm exec nx run-many --target=typecheck --projects=@vibress/tenancy,@vibress/database,@vibress/platform-reference --skip-nx-cache` | **3 projects succeeded**, 4.5 s |
 | `pnpm exec eslint packages/platform-kernel packages/tenancy tests/architecture tests/integration/platform-tenant-isolation.test.ts packages/database/src/platform-runtime-role.ts packages/database/src/schema/platform-kernel.ts` | passed, no output |
 | `pnpm exec eslint` on the new registry store, executor, reference app and reference-app integration test | passed, no output |
-| `pnpm exec nx run-many --target=typecheck --all --skip-nx-cache` | **74 projects succeeded**, 69 s |
+| `pnpm exec nx run-many --target=typecheck --all --skip-nx-cache` | **74 projects succeeded**, 42.7 s |
 | CMS compatibility subset (`runtime-multi-publication-isolation`, `content-database`, `transactions`, `studio-persistence-roundtrip`, `outbox`) | **5 files / 79 tests passed** in 14.45 s, including migration + seed global setup |
-| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`) | **361 files / 2574 tests passed**, exit 0, 216.75 s |
-| **Full integration suite** (`vitest.config.ts tests/integration`, also via `pnpm test:integration`) | **45 files / 530 tests passed**, exit 0, 89.94 s, run sequentially |
-| `pnpm docs:validate-links` (new docs validator, program docs) | **26 relative links across 7 files resolve** |
+| `pnpm exec vitest run tests/unit/cms-studio-fixture-pack.test.ts` | **4 tests passed** — pinned digest, drift refusal, deterministic encoding |
+| `pnpm exec vitest run tests/integration/platform-cms-studio-fixture-pack.test.ts` | **3 tests passed** over HTTP + PostgreSQL — per-publication pinned documents, non-disclosing cross-publication read/write, Studio round-trip and pinned restore |
+| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`) | **362 files / 2584 tests passed**, exit 0, 208.17 s |
+| **Full integration suite** (`vitest.config.ts tests/integration`, also via `pnpm test:integration`) | **46 files / 542 tests passed**, exit 0, 95.35 s wall (59.92 s of test execution), run sequentially |
+| `pnpm docs:validate-links` (docs validator, program docs) | **87 relative links across 12 files resolve** |
+| `node scripts/validate-docs-links.mjs docs` (full tree) | **659 relative links across 300 files resolve** |
+| `DATABASE_URL=… pnpm test:e2e:platform-reference` (Playwright, API request context) | **8 tests passed**: public health, missing/unknown principal 401, missing tenant 400, member-on-staff 403, invalid input 400, tenant-scoped create/list, cross-tenant 403, second tenant empty through RLS; harness created and dropped its roles and rows |
+| `pnpm platform:provision-roles` against the dev fixture (throwaway roles) | Provisioned, then verified runtime role denied registry/membership/installation tables and `CREATE`; reader SELECT-only on memberships; both dropped, `pg_default_acl` back to 0 |
 | Pre-existing `tests/integration/platform-packages.test.ts` under the root config | **26 tests passed** (runs under root aliases, not the platform config) |
 | `node scripts/audit-function-privileges.mjs <url>` (read-only session) | 33 public functions, 0 `SECURITY DEFINER`, 33 `PUBLIC` EXECUTE, 0 default-ACL entries |
+| `tsc` (workspace options) + ESLint on the W1-T09 scripts, Playwright config and spec | passed, no output |
 
 The PostgreSQL proof applies migration `0054`, provisions the runtime role, inserts
 two tenants and two customers through the owner, then reconnects **as the runtime
@@ -161,7 +205,11 @@ afterwards for leftover `platform_%` roles and probe relations.
 - `0056_platform_application_registry.sql` only creates the registry and membership
   tables plus an index; it does not alter `0054` objects or CMS tables. `0055` is not
   used, keeping the number reserved for the unapplied R26 revocation proposal.
-- Journal entries `idx 54` and `idx 55` appended; no earlier migration or checksum modified.
+- `0057_platform_registry_change_audit.sql` only adds the append-only change-audit
+  table and its index, with an `ON DELETE RESTRICT` FK to the application row. No
+  existing table or row is rewritten.
+- Journal entries `idx 54`, `idx 55` and `idx 56` (migration `0057`) appended; no earlier
+  migration or checksum modified.
 - Rollback: dropping the six new tables and the policy returns the database to the
   pre-0054 shape; no CMS data depends on them. No destructive command was executed
   against shared or production data.
@@ -175,8 +223,9 @@ afterwards for leftover `platform_%` roles and probe relations.
 - `packages/database/src/index.ts` only adds exports; existing exports unchanged.
 - The legacy runtime role, pooled `getDb()` and transaction runner are untouched.
 - CMS compatibility evidence: the entire `tests/integration` suite passed on this
-  branch (section 8). The Playwright E2E/acceptance suites were **not** run in this
-  pass because they require staging secrets.
+  branch (section 8). The reference-app Playwright suite **was** run locally on the dev fixture
+  (8 API-level tests, no staging secrets); the broader CMS Playwright
+  E2E/acceptance suites were **not** run because they require staging secrets.
 
 ## 8. Compatibility run result
 
@@ -225,8 +274,11 @@ green result:
    other suite; the `auth-database` → `translations-management` pair then passed
    44/44 in isolation.
 
-The Playwright E2E/acceptance suites were **not** run (they require staging secrets),
-so this is a full integration result, not an end-to-end browser proof.
+The reference-app Playwright suite was run separately (`pnpm test:e2e:platform-reference`,
+**8/8 passed**) against a real PostgreSQL-backed reference app; the broader CMS
+Playwright E2E/acceptance suites were **not** run (they require staging secrets), so
+this is a full integration result plus a reference-app network proof, not a full CMS
+browser proof.
 
 **Run-isolation caveat (observed, not a defect):** one intermediate run reported
 **2 failures in `setup.test.ts`** (legacy-backfill classification saw an empty
@@ -235,32 +287,37 @@ integration suite started earlier against the same PostgreSQL database; the two
 suites truncated the shared `users`/`installation` tables under each other. Two
 subsequent sequential runs passed (45 files / 518 tests at that commit; 45 files /
 521 tests after the review-remediation commit; 45 files / 530 tests after the
-W1-T01/W1-T03 increment). Integration suites must not run concurrently against the
-shared dev database; the failure was environmental, and no test assertions were changed.
+W1-T01/W1-T03 increment; 45 files / 537 tests after W1-T02; 45 files / 539 tests
+after W1-T04; 46 files / 542 tests after W1-T08). Integration suites must
+not run concurrently against the shared dev database; the failure was environmental,
+and no test assertions were changed.
 
 **Tooling finding (fixed):** `pnpm test:integration` previously ran nothing —
 `nx run-many --target=test:integration --all` reported "No tasks were run" because no
 project exposes that target, while CI invoked `pnpm vitest run --no-file-parallelism`
 directly. The script now runs `vitest run --no-file-parallelism tests/integration`
-and was verified end to end: **45 files / 530 tests passed, exit 0**.
+and was verified end to end: **45 files / 539 tests passed, exit 0**
+(re-verified at W1-T08: **46 files / 542 tests passed, exit 0, 95.35 s**).
 
 **Documentation validator (added, wired into CI):** `scripts/validate-docs-links.mjs`
 checks that relative Markdown links resolve, skipping external URLs, `mailto:`,
 `file:` and in-page anchors, and ignoring fenced code blocks and inline code spans.
 `pnpm docs:validate-links` gates the active program docs (`docs/platform-roadmap`):
-**26 links across 7 files resolve**. A full `node scripts/validate-docs-links.mjs docs`
-audit reports **76 pre-existing broken links** in legacy `docs/reports`,
+**40 links across 8 files resolve**. A full `node scripts/validate-docs-links.mjs docs`
+audit initially reported **76 pre-existing broken links** in legacy `docs/reports`,
 `docs/audits`, `docs/09-studio`, `docs/archive` and `docs/deployment` files (mostly
-absolute `/vibress/...` paths); repairing those is a separate cleanup, so the gate is
-scoped and the debt is recorded rather than hidden.
+absolute `/vibress/...` paths). W1-T08 rewrote all 76 to relative targets (every
+target already existed; no content was changed) and the validator now also resolves
+the historical `/vibress/<path>` prefix against the repository root, so the full docs
+tree validates: **612 links across 296 files resolve**.
 
 **CI wiring:** `.github/workflows/ci.yml` now runs `pnpm docs:validate-links` and splits
 the former single test step into `pnpm test:unit` and `pnpm test:integration`. The
 no-op `test:unit` Nx script was also replaced: `vitest.unit.config.ts` merges the root
 config and excludes only `tests/integration/**`, so unit, boundary, component and
 integration tests each run exactly once (no duplicated suite, no lost coverage).
-Measured on this branch: **361 files / 2574 tests** (unit, 216.75 s) + **45 files /
-530 tests** (integration), both exit 0.
+Measured on this branch: **362 files / 2584 tests** (unit, 208.17 s) + **46 files /
+542 tests** (integration, 95.35 s), both exit 0.
 
 The split surfaced a real fixture-hygiene bug: `apps/api/src/__tests__/operations-api.test.ts`
 mutated `site/title`, `email/smtpHost`, `code/headerCode` and `security/passwordHash`
@@ -314,31 +371,119 @@ without creating an application row. Evidence: platform suite **11 files / 122 t
 (there is no provenance source yet), and `sync()` still updates the application name
 before refusing manifest drift.
 
+**W1-T02 remediation (previous increment):** the serving process no longer keeps owner
+credentials after boot. `startReferenceApplication` verifies the runtime and reader
+connections, runs manifest sync, two-way registry verification and installation binding
+through the owner pool, then closes that pool **before** binding the socket. Requests
+resolve memberships through a dedicated reader role provisioned with table-level
+`SELECT` on `platform_memberships` only; registry provisioning revokes table, sequence
+and function grants first. The reader boot assertion applies the runtime identity,
+ownership and SECURITY DEFINER checks plus a reader profile: missing membership SELECT,
+any membership write (including column-level), any privilege on another relation,
+sequence or column, and any relation ownership all fail closed. Evidence: platform suite
+**11 files / 129 tests** (33 in `platform-reference-app.test.ts`, including seven new
+tests), unit **361 files / 2574 tests**, integration **45 files / 537 tests**, workspace
+typecheck 74/74, targeted ESLint clean. The HTTP tests still pass while serving from the
+reader pool, and the owner pool rejects queries after boot.
+
+**W1-T04 remediation (current increment):** the tenant unit of work now enforces a
+transaction trust boundary. The scoped handle is sealed when the awaited callback
+settles, so a continuation that escaped the callback cannot query; a query still in
+flight at settlement fails the unit of work and the connection is destroyed rather than
+pooled or rolled back behind the escaped query. `SET [LOCAL|SESSION] ROLE`, `SET [LOCAL|SESSION] AUTHORIZATION`, `RESET ROLE`,
+`RESET SESSION AUTHORIZATION` and `set_config('role'|'session_authorization', ...)` are
+rejected and mark the transaction rollback-only after comment stripping. The pre-commit
+probe re-reads `current_user`/`session_user` and compares them with the identity
+captured at `BEGIN`; a change that evaded inspection aborts and destroys the connection,
+because role changes survive `ROLLBACK`. A failed `ROLLBACK` or `COMMIT` also destroys
+the connection. Evidence: platform suite **11 files / 137 tests** (six new unit tests,
+two new real-PostgreSQL tests; tenant-isolation file **24/24**), unit **361 files /
+2580 tests**, integration **45 files / 539 tests**, workspace typecheck 74/74, targeted
+ESLint clean. The legacy `runInTransaction` nesting behavior is deliberately unchanged
+(R37); the hardening applies to the scoped platform path.
+
+**W1-T08 remediation (current increment):** CMS/Studio compatibility is now pinned
+instead of implied. `tests/fixtures/cms-studio/fixture-pack.ts` holds a versioned pack
+(two publications, staff templates, canonical Studio documents including a
+`studio-card`, RTL Arabic content and inline linebreaks) whose SHA-256 digest is a
+checked-in constant; `loadCmsStudioFixturePack()` fails closed on digest drift, missing
+publications, duplicate keys, invalid documents, or a document the host editor cannot
+safely rewrite. `provision.ts` seeds the pack into two run-scoped publications with
+strict per-publication `owner` memberships (role looked up by key), and its teardown
+removes revisions, content, memberships, publications, role bindings and users.
+`tests/integration/platform-cms-studio-fixture-pack.test.ts` proves over real HTTP +
+PostgreSQL that each publication serves its pinned document unchanged, a Studio save
+round-trips and is restored to the pinned document, a cross-publication read/write is a
+non-disclosing 404 identical to a random id, and a publication-header switch is
+`PUBLICATION_ACCESS_DENIED`. The pack unit suite verifies the digest, drift refusal and
+deterministic encoding. W1-T08 also rewrote the 76 legacy `/vibress/...` documentation
+links to relative paths (all targets already existed) and produced the docs-only
+[F-012 CMS RLS decision record](F-012-CMS-RLS-DECISION.md): option B (application-level
+publication isolation for self-hosted v1, hard-gated multi-tenant hosting) is
+**proposed, not accepted**; no RLS, grant or migration was changed. Evidence: fixture
+unit **4 tests**; fixture integration **3 tests**; full docs link validation **612
+links across 296 files**; `pnpm docs:validate-links` **40/8**; workspace typecheck
+**74/74** (42.7 s); targeted ESLint clean.
+
+**W1-T05 preparation (docs-only; no grant applied):** the R26 audit was re-run on
+2026-11-14T19:12:39.618Z with the same totals (33 functions, 0 `SECURITY
+DEFINER`, 31 extension-owned, 2 trigger functions, 33 `PUBLIC`-executable, 0
+default ACLs, only the superuser role). The
+[approval request](R26-REVOCATION-APPROVAL-REQUEST.md) states the exact decisions
+for the DB and security owners: Scope A (proposal 0055: revoke `PUBLIC` on the two
+trigger functions, install an owner default-function ACL revoke) and Scope B
+(stop the legacy `vibress_app` role's explicit and default function grants, with
+a `provisionRuntimeRole` code companion). Scope A alone would not close R26 for
+the legacy role. Proposal 0055 was hardened with fail-closed verification blocks,
+post-apply audit expectations, an extension-upgrade risk note and rollback; it
+remains outside the migration journal. The residual test must be flipped to
+expect `42501` in the same change that applies the revoke. No grant, migration,
+audit record or runtime-provisioning code was changed. Docs links validate at
+**659/300** (full tree) and **87/12** (platform-roadmap).
+
+**W1-T09 increment (2026-11-14, uncommitted):** the registry change audit is
+implemented with migration `0057`; `sync` now writes a `created`/`updated` audit
+row in the same SQL statement as the mutation, requires an actor for mutations,
+and writes nothing for `unchanged` or refused drift. Real-PostgreSQL tests prove
+attribution, atomicity, the no-actor refusal and that audit history blocks
+application deletion. The operator surface gained
+`pnpm platform:provision-roles` (idempotent, refuses superuser targets, verifies
+the provisioned attributes) and a
+[boot/registry/deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md). A dedicated
+Playwright config and real-PostgreSQL lifecycle harness run the reference app over
+HTTP: **8/8 passed** (public health, 401/400/403 deny paths, tenant-scoped
+create/list, cross-tenant denial, second tenant empty through RLS), after which the
+harness dropped its per-run roles and rows (`pg_default_acl` back to 0). The
+[R40 version-identity decision record](R40-VERSION-IDENTITY-DECISION.md) and the
+[ownership assignment request](OWNERSHIP-ASSIGNMENT-REQUEST.md) are prepared;
+neither changes a tag, ADR status or gate. Current evidence: reference suite
+**36 tests**, installation **8 tests**, tenant **24 tests**, platform config
+**11 files / 140 tests**, full docs links **659/300** and **87/12**.
+
 ## 9. Open blockers and risk register deltas
 
 | ID | Blocker | Impact | State |
 | --- | --- | --- | --- |
-| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role | Privileged owner code callable | Inventoried; revocation proposed, **not applied** |
+| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role; legacy `vibress_app` additionally holds explicit function EXECUTE | Owner code callable without a reviewed grant | Inventoried and re-measured 2026-11-14; [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared, revocation **not applied**; Scope B legacy grant open |
 | — | Deployment owner (`vibress`) is a superuser, which bypasses `FORCE RLS` | Owner could bypass if left as-is | Test proven; deployment change open |
 | R35 | Views/materialized reports not covered by policy | Potential cross-tenant read if views are exposed | Open (excluded from contract) |
-| R37 | Legacy runner still nests without savepoints | Old code can half-commit semantics | Unchanged, documented |
+| R37 | Legacy `runInTransaction` still nests without savepoints (the scoped tenant unit of work is hardened) | Old CMS code can half-commit semantics | Unchanged by design; documented |
 | ADR-PLAT-001 | Redis key ACL/instance and object-storage boundary untested | Queue/object isolation unproven | Open (database boundary proven) |
-| — | Serving process still holds owner credentials for registry writes and membership reads (W1-T02) | Owner compromise or a bug reaches operator tables | Open |
+| — | Owner credentials are present in the serving process environment for the one-shot registration phase (W1-T02) | A compromise during boot could reach operator tables | Bounded: the owner pool closes before listen and serving uses reader/runtime pools only; deployment must scope owner credentials to a boot step (runbook W1-T09) |
 | — | Installation `artifact_digest` is caller-supplied; no CI/artifact provenance is verified | Digest can be absent or stale; it is not a security boundary | Open |
-| — | `sync()` updates `platform_applications.name` before refusing manifest drift | A refused boot can still rename an application | Open (minor) |
-| — | Transaction trust boundary not yet hardened: async escape, rollback-failure connection discard, SET ROLE (W1-T04) | Scope could leak through unawaited work or a reused broken connection | Open |
+| — | Application name upsert ran before the drift decision | A refused boot could still rename an application | **Fixed (W1-T09)** — the name upsert runs only after a committed mutation or an observed `unchanged` state; refused drift writes nothing |
 | — | No independent security review of this branch | Gate cannot pass | Open |
-| — | 76 pre-existing broken links in legacy docs outside `docs/platform-roadmap` | Docs rot; scoped validator hides the rest | Recorded; cleanup not started |
+| — | 76 pre-existing broken links in legacy docs outside `docs/platform-roadmap` | Docs rot | **Resolved (W1-T08)** — rewritten to relative targets; full-docs validator passes 612 links / 296 files |
 | — | Split CI test steps not yet exercised on GitHub Actions itself | Local unit + integration equivalents pass; runner ordering/services unproven | Pending first pipeline run |
-| — | Playwright E2E/acceptance suites not run (staging secrets) | Browser-level regression unproven | Open |
+| — | Broader CMS Playwright E2E/acceptance suites not run (staging secrets) | CMS browser-level regression unproven | Open; reference-app Playwright **8/8 passed** locally (W1-T09) |
 | — | Reference app authenticates with an operator-configured static bearer-token directory | Not a production identity provider; no rotation or revocation API | Reference only; replace before shared deployment |
 | — | Membership directory is not RLS-protected (it is read before a scope exists) | Auth infrastructure must read all memberships; tenant runtime role is denied the table | By design; needs a reviewed auth-service access model |
-| — | No application/tenant provisioning API; only the reference bootstrap script and SQL | Operator workflow is manual | Open |
-| — | Deployed manifest drift requires an explicit `allowUpdate` deployment action | A forgotten update fails boot (fail-closed), not silently | By design; deployment runbook needed |
-| — | Registry changes have no audit record of the operator or previous digest | Drift is detected but not attributed | Open |
+| — | No application/tenant provisioning API; platform-role provisioning is a CLI and tenant/membership seeding remains SQL/bootstrap | Operator workflow is manual | Provisioning CLI added; API open |
+| — | Deployed manifest drift requires an explicit `allowUpdate` deployment action | A forgotten update fails boot (fail-closed), not silently | By design; documented in the [boot/registry runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md) (W1-T09) |
+| — | Registry changes had no operator/digest audit | Drift was detected but not attributed | **Addressed (W1-T09)** — `platform_application_registry_changes` records actor, previous/new digest and version atomically with each create/update; `unchanged` writes nothing |
 | — | Public actions cannot access the database at all | Public route surface limited to principal/tenant-independent handlers | By design until a reviewed unscoped-read contract exists |
 | — | A1–A8, G0 unsigned; owners unassigned | Program blocked for acceptance | Open |
-| F-012 | Global RLS still not activated for CMS tables | Security review gate still conditional | Unchanged |
+| F-012 | Global RLS still not activated for CMS tables | Security review gate still conditional | Open — [CMS disposition proposed](F-012-CMS-RLS-DECISION.md) (option B), not accepted; no RLS/grant change made |
 
 No finding was closed by documentation. No test was skipped to make the run green.
 
@@ -351,39 +496,43 @@ PostgreSQL tenant-isolation matrix through a least-privilege role, `FORCE RLS`
 against a non-superuser owner, a two-database installation boundary, a persisted
 registry with drift/integrity refusal, side-effect-free installation binding, hardened
 runtime-role privilege assertions, a bootable reference app serving tenant-isolated
-reads and writes through the kernel executor, and the full `tests/integration` suite.
+reads and writes through the kernel executor, an owner-free serving process with a
+SELECT-only membership reader, a hardened tenant transaction trust boundary (async
+escape, role-switch rejection, connection destruction), a digest-pinned two-publication
+CMS/Studio compatibility pack proven over HTTP + PostgreSQL, a fully validating docs
+tree, and the full `tests/integration` suite.
 Missing evidence:
-serving-process credential split (W1-T02), transaction trust-boundary hardening
-(W1-T04), R26 revocation approval/application, non-superuser owner in the deployment
-topology, views policy decision, Redis/S3 cross-installation denial, Playwright
-E2E/acceptance run, independent review, and named human sign-offs. Wave 2 (M03) may
-not start under this gate.
+R26 revocation approval/application,
+non-superuser owner in the deployment topology, views policy decision, F-012
+disposition acceptance, Redis/S3 cross-installation denial, broader CMS Playwright
+E2E/acceptance run, independent review, and named human sign-offs. Wave 2 (M03) may not start under
+this gate.
 
 ## 11. Next steps (ordered)
 
 1. Independent review of this branch and the three ADR proposals by a reviewer who is
    not the author; record findings as blocking or accepted with rationale.
-2. W1-T02: remove owner credentials from the serving process — split registry writes
-   and membership reads into a dedicated operator/reader role — and re-run the platform
-   and integration suites.
-3. W1-T04: harden the transaction trust boundary (async escape, rollback-failure
-   connection discard, SET ROLE) and add its negative tests (R37).
-4. R26: run the inventory against a production-shaped role set, get DB/security
-   approval, then apply [proposals/0055_revoke_public_execute.sql](proposals/0055_revoke_public_execute.sql)
-   and re-run the residual test expecting denial; keep the documented rollback ready.
-5. Change the deployment owner from the superuser `vibress` role to a non-superuser
+2. R26: run the inventory against a production-shaped role set; answer
+   [the approval request](R26-REVOCATION-APPROVAL-REQUEST.md) for Scope A
+   ([proposals/0055_revoke_public_execute.sql](proposals/0055_revoke_public_execute.sql))
+   and Scope B; then apply as the migration owner, flip the residual test to
+   expect `42501`, re-run the audit and keep the documented rollback ready.
+3. Change the deployment owner from the superuser `vibress` role to a non-superuser
    owner and re-run the owner RLS proof there.
-6. Replace the reference app's static token directory with a real identity provider,
-   and wire manifest sync plus platform-runtime-role provisioning into the deployment
-   runbook (including the explicit `allowUpdate` step for manifest changes).
-7. Run the Playwright E2E/acceptance suites against staging (requires secrets) to
-   complete end-to-end compatibility; the full Vitest integration suite already
-   passes on this branch SHA.
-8. Decide the views/materialized-report contract (excluded for v1 unless reviewed).
-9. Add Redis/S3 cross-installation denial tests (database boundary is already
+4. Replace the reference app's static token directory with a real identity provider.
+   Role provisioning, manifest sync/drift, audit review and owner-credential scoping
+   are documented in the [boot/registry runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md).
+5. Run the broader CMS Playwright E2E/acceptance suites against staging (requires
+   secrets); the reference-app Playwright suite (8/8) and the full Vitest integration
+   suite already pass on this branch.
+6. Decide the views/materialized-report contract (excluded for v1 unless reviewed).
+7. Accept or reject the [F-012 CMS RLS disposition](F-012-CMS-RLS-DECISION.md) with the
+   security review owner and DB owner; acceptance does not activate RLS, and any
+   multi-tenant hosting still requires the option-A RLS project first.
+8. Add Redis/S3 cross-installation denial tests (database boundary is already
    proven); confirm queue keys and objects cannot cross installations.
-10. Only after the above: request human sign-off on ADR-PLAT-001/002/003 and the Wave 1
-    gate. Do not start Wave 2 before that.
+9. Only after the above: request human sign-off on ADR-PLAT-001/002/003 and the Wave 1
+   gate. Do not start Wave 2 before that.
 
 ## Evidence index
 
@@ -391,5 +540,6 @@ not start under this gate.
 - ADR-PLAT-001: [installation topology](adr/ADR-PLAT-001-installation-topology.md)
 - ADR-PLAT-002: [identity vocabulary](adr/ADR-PLAT-002-identity-vocabulary.md)
 - ADR-PLAT-003: [tenant transaction and RLS](adr/ADR-PLAT-003-tenant-transaction-rls.md)
-- R26: [function EXECUTE inventory](R26-FUNCTION-EXECUTE-INVENTORY.md) and [proposed revocation](proposals/0055_revoke_public_execute.sql)
+- R26: [function EXECUTE inventory](R26-FUNCTION-EXECUTE-INVENTORY.md), [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) and [proposed revocation](proposals/0055_revoke_public_execute.sql)
+- F-012: [CMS RLS decision record](F-012-CMS-RLS-DECISION.md)
 - Program status: [PROGRAM-EXECUTION-STATUS.md](PROGRAM-EXECUTION-STATUS.md)

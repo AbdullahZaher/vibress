@@ -52,28 +52,28 @@ recovery verification for the official **v1.0.0** open-source release.
 All user-facing, developer, and operator documentation has been reviewed,
 cross-referenced, and updated:
 
-- **[README.md](/vibress/README.md):** Open-source first experience,
+- **[README.md](../../../README.md):** Open-source first experience,
   architecture diagram, feature overview, quickstart guides (Docker & local),
   and verification instructions.
-- **[CONTRIBUTING.md](/vibress/CONTRIBUTING.md):** Contributor workflow,
+- **[CONTRIBUTING.md](../../../CONTRIBUTING.md):** Contributor workflow,
   prerequisites, monorepo structure, database migration process, code style, and
   PR checklist.
-- **[SECURITY.md](/vibress/SECURITY.md):** Active security policy, supported
+- **[SECURITY.md](../../../SECURITY.md):** Active security policy, supported
   versions (`v1.0.x`), private reporting channels via GitHub Security
   Advisories, response timeline SLAs, and operational hardening recommendations.
-- **[CHANGELOG.md](/vibress/CHANGELOG.md):** Structured `v1.0.0` release notes
+- **[CHANGELOG.md](../../../CHANGELOG.md):** Structured `v1.0.0` release notes
   categorized into Added, Security, Publishing, Localization, Infrastructure,
   Developer Experience, Deployment, and Validation.
-- **[SELF_HOSTING.md](/vibress/docs/deployment/SELF_HOSTING.md):** Step-by-step
+- **[SELF_HOSTING.md](../../deployment/SELF_HOSTING.md):** Step-by-step
   operator guide for VPS/bare-metal self-hosting, reverse proxy configuration
   (NGINX/Caddy), TLS termination, and SMTP/Stripe setup.
-- **[PRODUCTION.md](/vibress/docs/deployment/PRODUCTION.md):** Production
+- **[PRODUCTION.md](../../deployment/PRODUCTION.md):** Production
   runbook, secrets management, non-root execution, fail-closed setup rules, and
   scaling guidance.
-- **[DOCKER.md](/vibress/docs/deployment/DOCKER.md):** Detailed 8-service
+- **[DOCKER.md](../../deployment/DOCKER.md):** Detailed 8-service
   runtime container architecture, network isolation policies, health checks, and
   volume mounts.
-- **[TROUBLESHOOTING.md](/vibress/docs/deployment/TROUBLESHOOTING.md):**
+- **[TROUBLESHOOTING.md](../../deployment/TROUBLESHOOTING.md):**
   Diagnostic playbooks, container recovery, database lock resolution, and health
   probe failures.
 

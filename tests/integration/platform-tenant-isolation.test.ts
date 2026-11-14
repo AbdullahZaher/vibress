@@ -10,6 +10,8 @@ import {
   type VerifiedPrincipal,
 } from "@vibress/platform-kernel";
 import {
+  TenantAsyncEscapeError,
+  TenantRoleSwitchError,
   TenantScopeMutationError,
   TenantScopeSwitchError,
   TenantUnitOfWork,
@@ -468,5 +470,46 @@ describe("tenant unit of work against PostgreSQL", () => {
         );
       }),
     ).rejects.toThrow(TenantScopeMutationError);
+  });
+
+  it("rejects database role switching inside the scoped transaction", async () => {
+    const uow = new TenantUnitOfWork(runtimePool);
+    await expect(
+      uow.run(scopeFor(tenantA), async (tx) => {
+        await tx.query(`SET ROLE ${ownerRoleName}`);
+      }),
+    ).rejects.toThrow(TenantRoleSwitchError);
+
+    // The session-level role can never persist: a later unit of work still
+    // runs as the runtime role and remains scoped to tenant A.
+    const observed = await uow.run(scopeFor(tenantA), async (tx) => {
+      const identity = await tx.query<{ role: string }>(
+        "SELECT current_user AS role",
+      );
+      return identity.rows[0]!.role;
+    });
+    expect(observed).toBe(roleName);
+  });
+
+  it("fails closed when unawaited work escapes and recovers the pool", async () => {
+    const uow = new TenantUnitOfWork(runtimePool);
+    let escaped: Promise<unknown> | undefined;
+
+    await expect(
+      uow.run(scopeFor(tenantA), async (tx) => {
+        escaped = tx.query("SELECT pg_sleep(0.2)").catch((error: unknown) => error);
+      }),
+    ).rejects.toThrow(TenantAsyncEscapeError);
+    await escaped;
+
+    // The connection carrying the escaped query was destroyed, so the pool
+    // hands out a clean connection for the next unit of work.
+    const rows = await uow.run(scopeFor(tenantA), async (tx) => {
+      const result = await tx.query<{ id: string }>(
+        "SELECT id FROM platform_crm_customers ORDER BY id",
+      );
+      return result.rows.map((row) => row.id);
+    });
+    expect(rows).toEqual(["cust-a", "cust-a2"]);
   });
 });

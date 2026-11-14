@@ -14,14 +14,14 @@ import {
 } from "@vibress/tenancy";
 import type {
   PlatformMembershipResolver,
-  PostgresApplicationRegistryStore,
   RegistrySyncResult,
 } from "@vibress/database";
 import type { ReferenceTokenDirectory } from "./token-directory";
 
 export interface ReferenceServerOptions {
   readonly application: ApplicationDefinition;
-  readonly registryStore: PostgresApplicationRegistryStore;
+  /** Result of the owner-only boot phase; see `registration.ts`. */
+  readonly registration: RegistrySyncResult;
   readonly membershipResolver: PlatformMembershipResolver;
   readonly unitOfWork: TenantUnitOfWorkRunner;
   readonly tokens: ReferenceTokenDirectory;
@@ -29,7 +29,6 @@ export interface ReferenceServerOptions {
   readonly policy: PolicyEngine;
   readonly policyVersion: string;
   readonly kernelVersion?: string;
-  readonly allowRegistryUpdate?: boolean;
   readonly onUnexpectedError?: (error: unknown) => void;
 }
 
@@ -48,27 +47,16 @@ function bearerToken(header: string | undefined): string | null {
 }
 
 /**
- * Boots the reference application:
- * 1. sync and verify the persisted manifest;
- * 2. build the in-memory registry from deployed code;
- * 3. serve every request through the kernel route executor.
+ * Wires the serving process:
+ * 1. build the in-memory registry from deployed code;
+ * 2. serve every request through the kernel route executor.
  *
- * An unregistered or drifted application refuses to boot.
+ * Persistence (manifest sync, registry verification, installation binding) is
+ * the owner-only boot phase and has already run before this is called.
  */
 export async function createReferenceServer(
   options: ReferenceServerOptions,
 ): Promise<ReferenceServer> {
-  const registration = await options.registryStore.sync(
-    options.application,
-    options.allowRegistryUpdate ? { allowUpdate: true } : {},
-  );
-  await options.registryStore.verifyDefinitions([options.application]);
-  await options.registryStore.syncInstallation({
-    id: options.installationId,
-    applicationId: options.application.id,
-    environment: process.env.NODE_ENV ?? "development",
-  });
-
   const registry = new InMemoryApplicationRegistry(
     [options.application],
     options.kernelVersion ?? "1.2.0",
@@ -130,5 +118,5 @@ export async function createReferenceServer(
     });
   });
 
-  return { app, executor, registration };
+  return { app, executor, registration: options.registration };
 }

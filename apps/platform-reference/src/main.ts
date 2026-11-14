@@ -1,16 +1,11 @@
 import { Pool } from "pg";
-import {
-  assertSafePlatformRuntimeRole,
-  PlatformMembershipResolver,
-  PostgresApplicationRegistryStore,
-} from "@vibress/database";
-import { PolicyEngine, TenantUnitOfWork } from "@vibress/tenancy";
+import { PolicyEngine } from "@vibress/tenancy";
 import { asInstallationId } from "@vibress/platform-kernel";
 import {
   createReferenceApplication,
   REFERENCE_PERMISSIONS,
 } from "./application";
-import { createReferenceServer } from "./server";
+import { startReferenceApplication } from "./start";
 import { ReferenceTokenDirectory } from "./token-directory";
 
 const HOST = process.env.PLATFORM_REFERENCE_HOST ?? "127.0.0.1";
@@ -28,9 +23,10 @@ function required(name: string): string {
 async function main(): Promise<void> {
   const ownerUrl = required("DATABASE_URL");
   const runtimeUrl = required("PLATFORM_RUNTIME_DATABASE_URL");
-  if (ownerUrl === runtimeUrl) {
+  const readerUrl = required("PLATFORM_MEMBERSHIP_READER_DATABASE_URL");
+  if (new Set([ownerUrl, runtimeUrl, readerUrl]).size !== 3) {
     throw new Error(
-      "PLATFORM_RUNTIME_DATABASE_URL must use the non-owner platform runtime role",
+      "DATABASE_URL, PLATFORM_RUNTIME_DATABASE_URL and PLATFORM_MEMBERSHIP_READER_DATABASE_URL must be distinct",
     );
   }
 
@@ -43,25 +39,20 @@ async function main(): Promise<void> {
     process.env.PLATFORM_REFERENCE_TOKENS,
   );
   const ownerPool = new Pool({ connectionString: ownerUrl, max: 4 });
+  const readerPool = new Pool({ connectionString: readerUrl, max: 4 });
   const runtimePool = new Pool({ connectionString: runtimeUrl, max: 8 });
 
   try {
-    const runtimeRole = await assertSafePlatformRuntimeRole(runtimePool);
-    const ownerUser = (
-      await ownerPool.query<{ current_user: string }>("SELECT current_user")
-    ).rows[0]?.current_user;
-    if (ownerUser === runtimeRole.currentUser) {
-      throw new Error(
-        `DATABASE_URL and PLATFORM_RUNTIME_DATABASE_URL both authenticate as '${ownerUser}'. Runtime role must be a separate, non-owner role.`,
-      );
-    }
-    const server = await createReferenceServer({
+    const { app, registration } = await startReferenceApplication({
       application,
-      registryStore: new PostgresApplicationRegistryStore(ownerPool),
-      membershipResolver: new PlatformMembershipResolver(ownerPool),
-      unitOfWork: new TenantUnitOfWork(runtimePool),
-      tokens,
       installationId,
+      tokens,
+      ownerPool,
+      readerPool,
+      runtimePool,
+      environment: process.env.NODE_ENV ?? "development",
+      host: HOST,
+      port: PORT,
       policyVersion: POLICY_VERSION,
       policy: new PolicyEngine([
         {
@@ -75,21 +66,25 @@ async function main(): Promise<void> {
           effect: "allow",
         },
       ]),
-      allowRegistryUpdate: process.env.PLATFORM_REGISTRY_UPDATE === "1",
+      ...(process.env.PLATFORM_REGISTRY_UPDATE === "1"
+        ? { allowRegistryUpdate: true }
+        : {}),
+      ...(process.env.PLATFORM_REGISTRY_ACTOR?.trim()
+        ? { registryActor: process.env.PLATFORM_REGISTRY_ACTOR.trim() }
+        : {}),
       onUnexpectedError: (error) => {
         console.error("[platform-reference] action failed", error);
       },
     });
 
-    await server.app.listen({ host: HOST, port: PORT });
     console.log(
-      `[platform-reference] ${application.id} listening on http://${HOST}:${PORT} (registration: ${server.registration.outcome})`,
+      `[platform-reference] ${application.id} listening on http://${HOST}:${PORT} (registration: ${registration.outcome})`,
     );
 
     const shutdown = async (signal: string): Promise<void> => {
       console.log(`[platform-reference] ${signal} received, shutting down`);
-      await server.app.close();
-      await ownerPool.end();
+      await app.close();
+      await readerPool.end();
       await runtimePool.end();
       process.exit(0);
     };
@@ -97,6 +92,7 @@ async function main(): Promise<void> {
     process.once("SIGINT", () => void shutdown("SIGINT"));
   } catch (error) {
     await ownerPool.end().catch(() => undefined);
+    await readerPool.end().catch(() => undefined);
     await runtimePool.end().catch(() => undefined);
     throw error;
   }

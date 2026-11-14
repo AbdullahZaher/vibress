@@ -834,7 +834,7 @@ Example: media/51c3d028-53b9-4967-b707-1d74198d82ff/test-image.png
 ## 12. Worker Tenant Context
 
 A complete audit of all 11 background workers was performed and committed to:
-[`docs/audits/WORKER_TENANT_CONTEXT_MATRIX.md`](/vibress/docs/audits/WORKER_TENANT_CONTEXT_MATRIX.md)
+[`docs/audits/WORKER_TENANT_CONTEXT_MATRIX.md`](./WORKER_TENANT_CONTEXT_MATRIX.md)
 
 Key requirement: Every queue job payload and scheduled sweep must carry explicit
 `publicationId` context and reject un-scoped execution.

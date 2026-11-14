@@ -50,7 +50,7 @@ Workspace globs: `apps/*`, `packages/*`, `packages/domains/*` (`pnpm-workspace.y
 | Transaction runner | `packages/database/src/transaction/transaction-runner.ts` | Nested calls reuse the outer transaction **without savepoints**; unchanged |
 | Runtime role (legacy) | `packages/database/src/runtime-role.ts` | Grants `CREATE` on `public`, DML on all tables, `EXECUTE ON ALL FUNCTIONS`, plus default privileges |
 | Plugin SDK | `packages/plugin-sdk/package.json` | `private: true`; not an independently released package |
-| Security review | `SECURITY-REVIEW.md` | F-012 residual risk records RLS not activated; launch recommendation remains conditional |
+| Security review | `SECURITY-REVIEW.md` | F-012 residual risk records RLS not activated; launch recommendation remains conditional. CMS disposition proposed, not accepted ([F-012 decision record](F-012-CMS-RLS-DECISION.md)) |
 | Release identity | `docs/14-decisions/release-versioning-strategy.md` (ADR-013) | Unified SemVer; no Framework `v1.0.0` artifact exists |
 
 ## 4. Ownership and decision blockers (all OPEN)
@@ -65,9 +65,9 @@ Workspace globs: `apps/*`, `packages/*`, `packages/domains/*` (`pnpm-workspace.y
 | ADR-PLAT-006 | Module ABI and trust | Plugin lead | Not started (Wave 2) |
 | ADR-PLAT-007/008 | v1 scope, version stream, upgrades | Release owner | Not started (Wave 3) |
 | ADR-PLAT-009/010 | Frontend boundary, data lifecycle | Architecture + privacy owner | Not started (Waves 3–5) |
-| A1–A8 | Organizational sign-offs | Human owners | **OPEN** |
-| G0–G7 | Execution gates | Named reviewers | **G0 not signed** |
-| R26–R40 | Audit findings | DB/security/release | Open; R26 partially measured (see Wave 1 report) |
+| A1–A8 | Organizational sign-offs | Human owners | **OPEN** — roles requested in [OWNERSHIP-ASSIGNMENT-REQUEST.md](OWNERSHIP-ASSIGNMENT-REQUEST.md) |
+| G0–G7 | Execution gates | Named reviewers | **G0 not signed** — roles requested in [OWNERSHIP-ASSIGNMENT-REQUEST.md](OWNERSHIP-ASSIGNMENT-REQUEST.md) |
+| R26–R40 | Audit findings | DB/security/release | Open; R26 approval package prepared ([request](R26-REVOCATION-APPROVAL-REQUEST.md)), R40 decision record prepared ([record](R40-VERSION-IDENTITY-DECISION.md)), neither applied |
 
 Named humans are **not** invented here. Until real owners sign, every ADR remains
 `PROPOSED` and the program remains blocked for acceptance, not approved.

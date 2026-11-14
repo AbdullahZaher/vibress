@@ -199,7 +199,7 @@ crontab -e
 > continuous Write-Ahead Log (WAL) archiving to the `postgres_wal` volume. For
 > catastrophic host loss protection, ship WAL segments off-host to durable S3
 > storage. See
-> [`docs/deployment/PRODUCTION.md`](/vibress/docs/deployment/PRODUCTION.md) for
+> [`docs/deployment/PRODUCTION.md`](./PRODUCTION.md) for
 > detailed failure-scenario RPO analysis and PITR instructions.
 
 ### Restoring Backups

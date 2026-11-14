@@ -68,6 +68,35 @@ export interface RegistrySyncOptions {
    * application is a deliberate deployment action.
    */
   readonly allowUpdate?: boolean;
+  /**
+   * Operator identity recorded in the append-only change audit. Required for
+   * `created` and `updated` mutations; an idempotent `unchanged` boot needs no
+   * actor because it writes no change record.
+   */
+  readonly actor?: string;
+}
+
+export type RegistryChangeKind = "created" | "updated";
+
+export interface RegistryChangeRecord {
+  readonly id: string;
+  readonly applicationId: ApplicationId;
+  readonly changeKind: RegistryChangeKind;
+  readonly actor: string;
+  readonly previousDigest: string | null;
+  readonly newDigest: string;
+  readonly previousVersion: string | null;
+  readonly newVersion: string;
+  readonly recordedAt: Date;
+}
+
+export class RegistryActorRequiredError extends Error {
+  constructor() {
+    super(
+      "Registry mutation requires a non-empty actor (set PLATFORM_REGISTRY_ACTOR or pass options.actor)",
+    );
+    this.name = "RegistryActorRequiredError";
+  }
 }
 
 export class ApplicationRegistrationDriftError extends Error {
@@ -130,6 +159,23 @@ interface InstallationRow {
   created_at: Date;
 }
 
+interface RegistryChangeRow {
+  id: string;
+  application_id: string;
+  change_kind: string;
+  actor: string;
+  previous_digest: string | null;
+  new_digest: string;
+  previous_version: string | null;
+  new_version: string;
+  recorded_at: Date;
+}
+
+function normalizeRegistryActor(value: string | undefined): string | null {
+  const actor = value?.trim();
+  return actor ? actor : null;
+}
+
 /**
  * Persists the serializable manifest of an application and proves at boot that
  * the deployed code still matches it. Handler functions are never persisted.
@@ -147,17 +193,13 @@ export class PostgresApplicationRegistryStore {
   ): Promise<RegistrySyncResult> {
     const manifest = toApplicationManifest(application);
     const digest = applicationManifestDigest(manifest);
-
-    await this.#client.query(
-      `INSERT INTO platform_applications (id, name) VALUES ($1, $2)
-       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
-      [application.id, application.name],
-    );
+    const actor = normalizeRegistryActor(options.actor);
 
     const existing = await this.load(application.id);
 
     if (existing) {
       if (existing.manifestDigest === digest) {
+        await this.#upsertApplicationName(application);
         return { outcome: "unchanged", digest };
       }
       if (!options.allowUpdate) {
@@ -167,26 +209,43 @@ export class PostgresApplicationRegistryStore {
           digest,
         );
       }
-      // Concurrency-safe CAS update: only update if registered digest has not shifted
+      if (!actor) {
+        throw new RegistryActorRequiredError();
+      }
+      // Concurrency-safe CAS update: only update if the registered digest has
+      // not shifted. The audit row is inserted by the same statement, so a
+      // committed mutation always has its record.
       const updateResult = await this.#client.query(
-        `UPDATE platform_application_registrations
-            SET version = $1,
-                manifest = $2::jsonb,
-                manifest_digest = $3,
-                updated_at = now()
-          WHERE application_id = $4 AND manifest_digest = $5
-          RETURNING application_id`,
+        `WITH updated AS (
+           UPDATE platform_application_registrations
+              SET version = $1,
+                  manifest = $2::jsonb,
+                  manifest_digest = $3,
+                  updated_at = now()
+            WHERE application_id = $4 AND manifest_digest = $5
+            RETURNING application_id, version, manifest_digest
+         ), changed AS (
+           INSERT INTO platform_application_registry_changes
+             (application_id, change_kind, actor, previous_digest,
+              previous_version, new_digest, new_version)
+           SELECT application_id, 'updated', $6, $5, $7, manifest_digest, version
+             FROM updated
+         )
+         SELECT application_id FROM updated`,
         [
           application.version,
           JSON.stringify(manifest),
           digest,
           application.id,
           existing.manifestDigest,
+          actor,
+          existing.version,
         ],
       );
       if (updateResult.rowCount === 0) {
         const reloaded = await this.load(application.id);
         if (reloaded && reloaded.manifestDigest === digest) {
+          await this.#upsertApplicationName(application);
           return { outcome: "unchanged", digest };
         }
         throw new ApplicationRegistrationDriftError(
@@ -195,17 +254,43 @@ export class PostgresApplicationRegistryStore {
           digest,
         );
       }
+      await this.#upsertApplicationName(application);
       return { outcome: "updated", digest };
     }
 
-    // Atomic insert: fail gracefully into reload if another process won the race
+    if (!actor) {
+      throw new RegistryActorRequiredError();
+    }
+    // Atomic insert and audit: fail gracefully into reload if another process
+    // won the race.
     const insertResult = await this.#client.query(
-      `INSERT INTO platform_application_registrations
-         (application_id, version, manifest, manifest_digest, registered_at, updated_at)
-       VALUES ($1, $2, $3::jsonb, $4, now(), now())
-       ON CONFLICT (application_id) DO NOTHING
-       RETURNING application_id`,
-      [application.id, application.version, JSON.stringify(manifest), digest],
+      `WITH application_row AS (
+         INSERT INTO platform_applications (id, name) VALUES ($1, $2)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
+         RETURNING id
+       ), inserted AS (
+         INSERT INTO platform_application_registrations
+           (application_id, version, manifest, manifest_digest, registered_at, updated_at)
+         SELECT application_row.id, $3, $4::jsonb, $5, now(), now()
+           FROM application_row
+         ON CONFLICT (application_id) DO NOTHING
+         RETURNING application_id, version, manifest_digest
+       ), changed AS (
+         INSERT INTO platform_application_registry_changes
+           (application_id, change_kind, actor, previous_digest,
+            previous_version, new_digest, new_version)
+         SELECT application_id, 'created', $6, NULL, NULL, manifest_digest, version
+           FROM inserted
+       )
+       SELECT application_id FROM inserted`,
+      [
+        application.id,
+        application.name,
+        application.version,
+        JSON.stringify(manifest),
+        digest,
+        actor,
+      ],
     );
 
     if (insertResult.rowCount === 0) {
@@ -214,6 +299,7 @@ export class PostgresApplicationRegistryStore {
         throw new ApplicationRegistrationMissingError(application.id);
       }
       if (concurrent.manifestDigest === digest) {
+        await this.#upsertApplicationName(application);
         return { outcome: "unchanged", digest };
       }
       throw new ApplicationRegistrationDriftError(
@@ -224,6 +310,16 @@ export class PostgresApplicationRegistryStore {
     }
 
     return { outcome: "created", digest };
+  }
+
+  async #upsertApplicationName(
+    application: ApplicationDefinition,
+  ): Promise<void> {
+    await this.#client.query(
+      `INSERT INTO platform_applications (id, name) VALUES ($1, $2)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+      [application.id, application.name],
+    );
   }
 
   /**
@@ -356,6 +452,22 @@ export class PostgresApplicationRegistryStore {
     return Object.freeze(rows.map(parseRegistrationRow));
   }
 
+  async listChanges(
+    applicationId: ApplicationId | string,
+  ): Promise<readonly RegistryChangeRecord[]> {
+    const rows = (
+      await this.#client.query<RegistryChangeRow>(
+        `SELECT id, application_id, change_kind, actor, previous_digest,
+                new_digest, previous_version, new_version, recorded_at
+           FROM platform_application_registry_changes
+          WHERE application_id = $1
+          ORDER BY recorded_at, id`,
+        [applicationId],
+      )
+    ).rows;
+    return Object.freeze(rows.map(parseRegistryChangeRow));
+  }
+
   /**
    * Fails when the persisted registry and the deployed definitions disagree in
    * either direction. Call after `sync` at boot, before serving traffic.
@@ -403,6 +515,28 @@ function parseInstallationRow(
     environment: row.environment,
     artifactDigest: row.artifact_digest,
     createdAt: row.created_at,
+  };
+}
+
+function parseRegistryChangeRow(
+  row: RegistryChangeRow,
+): RegistryChangeRecord {
+  if (row.change_kind !== "created" && row.change_kind !== "updated") {
+    throw new ApplicationRegistrationIntegrityError(
+      row.application_id,
+      `unknown registry change kind '${row.change_kind}'`,
+    );
+  }
+  return {
+    id: row.id,
+    applicationId: asApplicationId(row.application_id),
+    changeKind: row.change_kind,
+    actor: row.actor,
+    previousDigest: row.previous_digest,
+    newDigest: row.new_digest,
+    previousVersion: row.previous_version,
+    newVersion: row.new_version,
+    recordedAt: row.recorded_at,
   };
 }
 

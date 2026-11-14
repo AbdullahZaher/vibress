@@ -5,6 +5,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uuid,
   uniqueIndex,
   index,
   foreignKey,
@@ -122,6 +123,39 @@ export const platformApplicationRegistrations = pgTable(
       .defaultNow(),
   },
 );
+
+/**
+ * Append-only record of registry mutations. Each row names the actor and the
+ * digests before/after, so a drift update is attributable rather than only
+ * detected. The foreign key restricts application deletion: audit rows are not
+ * silently cascaded away with the application they describe.
+ */
+export const platformApplicationRegistryChanges = pgTable(
+  "platform_application_registry_changes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    applicationId: text("application_id")
+      .notNull()
+      .references(() => platformApplications.id, { onDelete: "restrict" }),
+    changeKind: text("change_kind").notNull(),
+    actor: text("actor").notNull(),
+    previousDigest: text("previous_digest"),
+    newDigest: text("new_digest").notNull(),
+    previousVersion: text("previous_version"),
+    newVersion: text("new_version").notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    applicationRecordedIdx: index(
+      "platform_application_registry_changes_app_idx",
+    ).on(table.applicationId, table.recordedAt),
+  }),
+);
+
+export type PlatformApplicationRegistryChangeRow =
+  typeof platformApplicationRegistryChanges.$inferSelect;
 
 /**
  * Principal membership directory. It is read before a verified tenant scope

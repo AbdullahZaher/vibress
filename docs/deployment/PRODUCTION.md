@@ -185,7 +185,7 @@ contract:
 - **Generations Older than $G_{n-1}$**: Cleaned up during package replacement
   once $G_n$ is authoritative.
 - Details: See
-  [`packages/domains/themes/THEME_STORAGE_LIFECYCLE.md`](/vibress/packages/domains/themes/THEME_STORAGE_LIFECYCLE.md).
+  [`packages/domains/themes/THEME_STORAGE_LIFECYCLE.md`](../../packages/domains/themes/THEME_STORAGE_LIFECYCLE.md).
 
 ### Continuous WAL Archiving & Point-In-Time Recovery (PITR)
 

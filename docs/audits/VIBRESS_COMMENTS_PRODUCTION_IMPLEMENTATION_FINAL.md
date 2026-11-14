@@ -302,28 +302,28 @@ pnpm vitest run packages/theme-core
 
 ## 5. Files Changed in Closure Pass
 
-1. [`apps/api/src/routes/comments.ts`](/vibress/apps/api/src/routes/comments.ts) -
+1. [`apps/api/src/routes/comments.ts`](../../apps/api/src/routes/comments.ts) -
    Fixed cross-tenant post check to return 404, documented rate limit limits and
    in-memory topology, supported publication headers.
-2. [`packages/domains/comments/src/application/comments-service.ts`](/vibress/packages/domains/comments/src/application/comments-service.ts) -
+2. [`packages/domains/comments/src/application/comments-service.ts`](../../packages/domains/comments/src/application/comments-service.ts) -
    Enhanced zero-width character sanitization, declared uninitialized
    `targetStatus` for lint compliance.
-3. [`packages/domains/comments/src/infrastructure/drizzle-comment-repositories.ts`](/vibress/packages/domains/comments/src/infrastructure/drizzle-comment-repositories.ts) -
+3. [`packages/domains/comments/src/infrastructure/drizzle-comment-repositories.ts`](../../packages/domains/comments/src/infrastructure/drizzle-comment-repositories.ts) -
    Handled concurrent duplicate clientCommentId and concurrent like toggles
    safely.
-4. [`packages/database/src/seed.ts`](/vibress/packages/database/src/seed.ts) -
+4. [`packages/database/src/seed.ts`](../../packages/database/src/seed.ts) -
    Added trigger creation to database seed to guarantee trigger activation
    across local and test environments.
-5. [`packages/database/migrations/0027_comments_hardened_publication_isolation.sql`](/vibress/packages/database/migrations/0027_comments_hardened_publication_isolation.sql) -
+5. [`packages/database/migrations/0027_comments_hardened_publication_isolation.sql`](../../packages/database/migrations/0027_comments_hardened_publication_isolation.sql) -
    Added PostgreSQL trigger `trg_immutable_comment_moderation_events` and
    function.
-6. [`apps/web/src/components/comments/CommentSection.tsx`](/vibress/apps/web/src/components/comments/CommentSection.tsx) -
+6. [`apps/web/src/components/comments/CommentSection.tsx`](../../apps/web/src/components/comments/CommentSection.tsx) -
    Added try-catch block for optimistic like handling.
-7. [`apps/api/src/__tests__/comments-closure-gates.test.ts`](/vibress/apps/api/src/__tests__/comments-closure-gates.test.ts) -
+7. [`apps/api/src/__tests__/comments-closure-gates.test.ts`](../../apps/api/src/__tests__/comments-closure-gates.test.ts) -
    Comprehensive 10-test suite covering Gates 1-11 with strict TypeScript types.
-8. [`apps/api/src/__tests__/comments-adversarial-publication-isolation.test.ts`](/vibress/apps/api/src/__tests__/comments-adversarial-publication-isolation.test.ts) -
+8. [`apps/api/src/__tests__/comments-adversarial-publication-isolation.test.ts`](../../apps/api/src/__tests__/comments-adversarial-publication-isolation.test.ts) -
    10-test adversarial tenant isolation test suite.
-9. [`docs/audits/VIBRESS_COMMENTS_PRODUCTION_IMPLEMENTATION_FINAL.md`](/vibress/docs/audits/VIBRESS_COMMENTS_PRODUCTION_IMPLEMENTATION_FINAL.md) -
+9. [`docs/audits/VIBRESS_COMMENTS_PRODUCTION_IMPLEMENTATION_FINAL.md`](./VIBRESS_COMMENTS_PRODUCTION_IMPLEMENTATION_FINAL.md) -
    Final truth-aligned closure report.
 
 ---

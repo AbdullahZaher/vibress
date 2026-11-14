@@ -5,8 +5,9 @@
  *
  * Usage: node scripts/validate-docs-links.mjs [docs-root ...]
  * Defaults to `docs`. External URLs, mail links and pure in-page anchors are
- * ignored; fenced code blocks are skipped. Exits non-zero on broken links so
- * docs rot is caught before merge (M00 documentation validator).
+ * ignored; fenced code blocks are skipped. Root-absolute `/vibress/<path>`
+ * links from historical docs resolve against the repository root. Exits
+ * non-zero on broken links so docs rot is caught before merge (M00 validator).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -30,6 +31,7 @@ const SKIP_PREFIXES = [
   "file:",
   "//",
 ];
+const LEGACY_ROOT_PREFIX = "/vibress/";
 
 const markdownFiles = [];
 
@@ -92,9 +94,13 @@ for (const file of markdownFiles.sort()) {
         // Keep the raw target when it is not valid percent-encoding.
       }
 
-      const resolved = decoded.startsWith("/")
-        ? path.resolve(repoRoot, `.${decoded}`)
-        : path.resolve(path.dirname(file), decoded);
+      // Root-absolute links resolve from the repository root; the legacy
+      // `/vibress/<path>` convention drops the prefix before resolving.
+      const resolved = decoded.startsWith(LEGACY_ROOT_PREFIX)
+        ? path.resolve(repoRoot, decoded.slice(LEGACY_ROOT_PREFIX.length))
+        : decoded.startsWith("/")
+          ? path.resolve(repoRoot, decoded.slice(1))
+          : path.resolve(path.dirname(file), decoded);
 
       if (!fs.existsSync(resolved)) {
         broken.push({ file, line: index + 1, target });

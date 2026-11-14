@@ -1,8 +1,11 @@
 # R26 — Function EXECUTE Inventory (read-only)
 
 > **Status: INVENTORY COMPLETE ON THE DEV FIXTURE. The proposed revocation is
-> NOT APPLIED.** Production data was not touched. No grant was changed by this
-> task; this document and the proposal only describe what was measured.
+> NOT APPROVED AND NOT APPLIED.** Production data was not touched. No grant was
+> changed by this task; this document and the proposal only describe what was
+> measured. Re-measured 2026-11-14T19:12:39.618Z with identical totals. The
+> exact approval request is
+> [R26-REVOCATION-APPROVAL-REQUEST.md](R26-REVOCATION-APPROVAL-REQUEST.md).
 
 ## 1. Why this exists
 
@@ -63,6 +66,15 @@ the residual test exercises for future migration-created functions.
    revocation must be validated against a realistic role set before production.
 5. Extension functions are recreated by extension upgrades; revoking `PUBLIC` on
    them is not durable and is not proposed.
+6. **Revoking `PUBLIC` alone does not close R26 for the legacy runtime role.**
+   `provisionRuntimeRole` (api/worker, `POSTGRES_APP_USER` default
+   `vibress_app`) runs `GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public` and
+   `ALTER DEFAULT PRIVILEGES ... GRANT EXECUTE ON FUNCTIONS TO vibress_app` on
+   every migration run. Those are explicit grants, not `PUBLIC`; the next
+   migration recreates them. The platform role (`vibress_platform_app`) is
+   different: it revokes role-level EXECUTE and depends on `PUBLIC`, so 0055
+   would deny it. Closing the legacy path needs a separate decision plus a
+   `provisionRuntimeRole` code companion (Scope B in the approval request).
 
 ## 5. Proposed migration (NOT APPLIED)
 
@@ -75,23 +87,36 @@ Scope:
 - `REVOKE EXECUTE` on the two trigger functions from `PUBLIC`;
 - `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` for the
   migration owner, so future functions are closed by default;
-- explicit re-grants only where a real caller needs them.
+- explicit re-grants only where a real caller needs them;
+- two fail-closed `DO` blocks: abort if any other non-extension function is still
+  `PUBLIC`-executable or if the default ACL did not take effect.
 
 Companion rollback is included in the same file, commented as a rollback section.
+The file does not revoke the legacy role's explicit grants; that is Scope B in
+the [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) and needs a code
+companion so the next migration does not restore them.
 
 ## 6. Before this can be applied (blocking)
 
 1. Run the script against a **production-shaped** database with the real role set
-   (`vibress_app`, plugin roles, reporting roles) — the dev fixture has none.
+   (`vibress_app`, `vibress_platform_app`, plugin roles, reporting roles) — the
+   dev fixture has none.
 2. Identify every legitimate direct caller of the two trigger functions and of any
-   future default-revoked function; the legacy runtime role may need explicit
-   `EXECUTE` if it issues `CREATE TRIGGER`.
+   future default-revoked function; trigger definitions need EXECUTE at
+   `CREATE TRIGGER`, not at trigger run time.
 3. Get DB/security owner approval for the default-privilege change; it is a
-   shared-database policy change.
-4. Apply with the migration owner (not the runtime role), then re-run
-   `scripts/audit-function-privileges.mjs` and the residual test, expecting the
-   role to be denied.
-5. Keep the rollback ready; the change is reversible (`GRANT ... TO PUBLIC`).
+   shared-database policy change. Decide Scope A only or Scope A + B.
+4. Decide the extension-upgrade mitigation: `ALTER DEFAULT PRIVILEGES` applies
+   to functions an extension script creates later, which could affect trigram
+   operators after an extension upgrade. This is documented, not tested.
+5. Apply with the migration owner (not the runtime role), then re-run
+   `scripts/audit-function-privileges.mjs` and expect 31 `PUBLIC`-executable
+   functions, all extension-owned, plus one default-ACL entry.
+6. **Flip the residual test in the same change.** `still executes owner-owned
+   public functions through PUBLIC (R26 open)` asserts success today; after
+   application it must assert SQLSTATE `42501`. Leaving it unchanged fails the
+   suite; deleting it would hide the finding.
+7. Keep the rollback ready; the change is reversible (`GRANT ... TO PUBLIC`).
 
 ## 7. Accepted residual
 
@@ -103,6 +128,8 @@ This is a recorded decision, not a certification.
 ## 8. What this task did not do
 
 - No grant was changed, in dev or elsewhere.
+- No code change was made to `provisionRuntimeRole` or
+  `provisionPlatformRuntimeRole`; Scope B is only described.
 - No production inventory was possible from this environment.
 - No `SECURITY DEFINER` search-path review was required because none exist here;
   the script reports `proconfig` so a future one is visible.

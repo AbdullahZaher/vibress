@@ -19,7 +19,11 @@ export interface Queryable {
 }
 
 export interface PoolClientLike extends Queryable {
-  release(): void;
+  /**
+   * Returns the connection to the pool. Pass `true` to destroy it instead,
+   * which is required whenever the connection's session state is unknown.
+   */
+  release(destroy?: boolean): void;
 }
 
 export interface PoolLike {
@@ -82,15 +86,44 @@ export class TenantContextMismatchError extends TenantTransactionError {
   }
 }
 
+export class TenantRoleSwitchError extends TenantTransactionError {
+  constructor(
+    message = "scoped transactions cannot switch database role (SET ROLE / SET SESSION AUTHORIZATION)",
+  ) {
+    super(message);
+    this.name = "TenantRoleSwitchError";
+  }
+}
+
+export class TenantAsyncEscapeError extends TenantTransactionError {
+  constructor() {
+    super(
+      "database work escaped the unit of work or used a settled transaction and was rejected",
+    );
+    this.name = "TenantAsyncEscapeError";
+  }
+}
+
 interface RollbackState {
   value: boolean;
   reason: string | null;
+}
+
+interface TransactionState {
+  sealed: boolean;
+  inFlight: number;
 }
 
 interface ActiveTransaction {
   readonly scope: VerifiedScope;
   readonly client: PoolClientLike;
   readonly rollback: RollbackState;
+  readonly state: TransactionState;
+}
+
+interface TransactionIdentity {
+  readonly currentUser: string;
+  readonly sessionUser: string;
 }
 
 const transactionStorage = new AsyncLocalStorage<ActiveTransaction>();
@@ -111,8 +144,12 @@ function sameScope(left: VerifiedScope, right: VerifiedScope): boolean {
  * NOT a sandboxing mechanism for untrusted SQL or malicious third-party code.
  * Untrusted code must run in an isolated process/container sandbox.
  *
- * Any detected attempt to alter or reset `vibress.*` GUCs immediately marks the
- * transaction as rollback-only so it can never be committed.
+ * Any detected attempt to alter or reset `vibress.*` GUCs, or to assume a
+ * different database role, immediately marks the transaction as rollback-only
+ * so it can never be committed. The pre-commit identity probe is the authority:
+ * a role change that evades inspection is still detected and destroys the
+ * connection, because `SET ROLE` and `SET SESSION AUTHORIZATION` survive
+ * ROLLBACK.
  */
 function stripSqlComments(sql: string): string {
   return sql
@@ -123,8 +160,14 @@ function stripSqlComments(sql: string): string {
 const SCOPE_MUTATION_PATTERN =
   /(?:(?:pg_catalog\.)?set_config\s*\(\s*['"]vibress\.|set\s+(?:(?:session|local)\s+)?['"]?vibress\.|reset\s+(?:all|['"]?vibress\.))/i;
 
-function assertNoScopeMutation(sql: string): void {
+const ROLE_SWITCH_PATTERN =
+  /(?:(?:pg_catalog\.)?set_config\s*\(\s*['"](?:role|session_authorization)['"]|set\s+(?:(?:session|local)\s+)?role\b|set\s+(?:(?:session|local)\s+)?authorization\b|set\s+session_authorization\b|reset\s+(?:role|session_authorization)\b|reset\s+(?:(?:session|local)\s+)?authorization\b)/i;
+
+function assertNoGuardedMutation(sql: string): void {
   const stripped = stripSqlComments(sql);
+  if (ROLE_SWITCH_PATTERN.test(stripped)) {
+    throw new TenantRoleSwitchError();
+  }
   if (SCOPE_MUTATION_PATTERN.test(stripped)) {
     throw new TenantScopeMutationError();
   }
@@ -134,6 +177,7 @@ function createScopedTransaction(
   client: PoolClientLike,
   scope: VerifiedScope,
   rollback: RollbackState,
+  state: TransactionState,
 ): ScopedTransaction {
   const markRollbackOnly = (reason: string): void => {
     if (!rollback.value) {
@@ -147,18 +191,30 @@ function createScopedTransaction(
       sql: string,
       parameters?: readonly unknown[],
     ): Promise<QueryResult<TRow>> => {
+      if (state.sealed) {
+        throw new TenantAsyncEscapeError();
+      }
       if (rollback.value) {
         throw new TenantTransactionRollbackOnlyError(
           rollback.reason ?? "transaction marked rollback-only",
         );
       }
       try {
-        assertNoScopeMutation(sql);
+        assertNoGuardedMutation(sql);
       } catch (error) {
-        markRollbackOnly("scope mutation attempt detected");
+        markRollbackOnly(
+          error instanceof TenantRoleSwitchError
+            ? "role switch attempt detected"
+            : "scope mutation attempt detected",
+        );
         throw error;
       }
-      return client.query<TRow>(sql, parameters);
+      state.inFlight += 1;
+      try {
+        return await client.query<TRow>(sql, parameters);
+      } finally {
+        state.inFlight -= 1;
+      }
     },
     markRollbackOnly,
   };
@@ -176,7 +232,12 @@ function createScopedTransaction(
  * - a caught inner failure marks the outer unit rollback-only, even if the
  *   callback swallows the error;
  * - an aborted PostgreSQL transaction can never COMMIT successfully;
- * - connections are always released, so pooled reuse cannot leak context.
+ * - work that escapes the awaited callback is rejected and cannot use the
+ *   connection after settlement;
+ * - role changes (`SET ROLE`, `SET SESSION AUTHORIZATION`) are rejected and
+ *   re-verified before COMMIT;
+ * - connections are always released, and destroyed whenever their session
+ *   state is unknown, so pooled reuse cannot leak context or a raised role.
  */
 export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
   readonly #pool: PoolLike;
@@ -203,6 +264,9 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
         active.rollback.reason = "nested tenant scope switch rejected";
         throw new TenantScopeSwitchError();
       }
+      if (active.state.sealed) {
+        throw new TenantAsyncEscapeError();
+      }
       if (active.rollback.value) {
         throw new TenantTransactionRollbackOnlyError(
           active.rollback.reason ?? "parent transaction is rollback-only",
@@ -212,6 +276,7 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
         active.client,
         scope,
         active.rollback,
+        active.state,
       );
       try {
         return await work(nested);
@@ -225,19 +290,45 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
 
     const client = await this.#pool.connect();
     const rollback: RollbackState = { value: false, reason: null };
+    const state: TransactionState = { sealed: false, inFlight: 0 };
     let settled = false;
+    let destroy = false;
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
-      await applyTenantContext(client, scope);
-      const transaction = createScopedTransaction(client, scope, rollback);
-      const result = await transactionStorage.run(
-        { scope, client, rollback },
-        () => work(transaction),
+      const identity = await applyTenantContext(client, scope);
+      const transaction = createScopedTransaction(
+        client,
+        scope,
+        rollback,
+        state,
       );
+      let result: T;
+      try {
+        result = await transactionStorage.run(
+          { scope, client, rollback, state },
+          () => work(transaction),
+        );
+      } finally {
+        // Seal before any settlement SQL runs: work that escaped the awaited
+        // callback can no longer reach the connection once the unit settles.
+        state.sealed = true;
+      }
+
+      if (state.inFlight > 0) {
+        rollback.value = true;
+        rollback.reason = "async database work escaped the unit of work";
+        settled = true;
+        // Destroy instead of rolling back: ROLLBACK would queue behind the
+        // escaped query, and the connection must never be reused.
+        destroy = true;
+        throw new TenantAsyncEscapeError();
+      }
 
       if (rollback.value) {
-        await safeRollback(client);
+        const rolledBack = await safeRollback(client);
         settled = true;
+        destroy = !rolledBack;
         throw new TenantTransactionRollbackOnlyError(
           rollback.reason ?? "transaction marked rollback-only",
         );
@@ -245,17 +336,47 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
 
       // A callback can swallow a PostgreSQL error while the transaction is
       // already aborted. COMMIT would silently become ROLLBACK, so probe first.
+      // The probe also re-reads the role identity: a role change that evaded
+      // SQL inspection is rejected and the connection destroyed, because role
+      // changes survive ROLLBACK.
+      let probe: TransactionIdentity;
       try {
-        await client.query("SELECT 1");
+        const probed = await client.query<{
+          current_user: string;
+          session_user: string;
+        }>(
+          `SELECT
+             current_user AS current_user,
+             session_user AS session_user`,
+        );
+        const row = probed.rows[0];
+        if (!row) {
+          throw new Error("commit probe returned no row");
+        }
+        probe = { currentUser: row.current_user, sessionUser: row.session_user };
       } catch (error) {
         rollback.value = true;
         rollback.reason =
           error instanceof Error ? error.message : "transaction is aborted";
-        await safeRollback(client);
+        const rolledBack = await safeRollback(client);
         settled = true;
+        destroy = !rolledBack;
         throw new TenantTransactionRollbackOnlyError(rollback.reason);
       }
 
+      if (
+        probe.currentUser !== identity.currentUser ||
+        probe.sessionUser !== identity.sessionUser
+      ) {
+        await safeRollback(client);
+        settled = true;
+        destroy = true;
+        throw new TenantRoleSwitchError(
+          `database role changed during the transaction (expected ${identity.currentUser}/${identity.sessionUser}, received ${probe.currentUser}/${probe.sessionUser})`,
+        );
+      }
+
+      commitAttempted = true;
       await client.query("COMMIT");
       settled = true;
       return result;
@@ -264,11 +385,22 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
       // nested scope switch or caught inner failure sets that flag without
       // touching the connection.
       if (!settled) {
-        await safeRollback(client);
+        if (state.inFlight > 0) {
+          // An escaped query is still using the connection; ROLLBACK would
+          // queue behind it, so destroy the connection instead.
+          destroy = true;
+        } else {
+          const rolledBack = await safeRollback(client);
+          // Destroy when the transaction outcome is unknown (ROLLBACK failed
+          // or COMMIT already failed).
+          if (!rolledBack || commitAttempted) {
+            destroy = true;
+          }
+        }
       }
       throw error;
     } finally {
-      client.release();
+      client.release(destroy);
     }
   }
 }
@@ -276,7 +408,7 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
 async function applyTenantContext(
   client: Queryable,
   scope: VerifiedScope,
-): Promise<void> {
+): Promise<TransactionIdentity> {
   await client.query(
     `SELECT
        set_config('vibress.application_id', $1, true),
@@ -289,11 +421,15 @@ async function applyTenantContext(
     application_id: string | null;
     tenant_id: string | null;
     principal_id: string | null;
+    current_user: string;
+    session_user: string;
   }>(
     `SELECT
        current_setting('vibress.application_id', true) AS application_id,
        current_setting('vibress.tenant_id', true) AS tenant_id,
-       current_setting('vibress.principal_id', true) AS principal_id`,
+       current_setting('vibress.principal_id', true) AS principal_id,
+       current_user AS current_user,
+       session_user AS session_user`,
   );
   const row = applied.rows[0];
   if (
@@ -307,12 +443,15 @@ async function applyTenantContext(
       `${row?.application_id ?? "null"}/${row?.tenant_id ?? "null"}/${row?.principal_id ?? "null"}`,
     );
   }
+  return { currentUser: row.current_user, sessionUser: row.session_user };
 }
 
-async function safeRollback(client: Queryable): Promise<void> {
+async function safeRollback(client: Queryable): Promise<boolean> {
   try {
     await client.query("ROLLBACK");
+    return true;
   } catch {
-    // The connection may already be unusable; release still returns it.
+    // The connection may already be unusable; the caller destroys it.
+    return false;
   }
 }

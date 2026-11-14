@@ -66,10 +66,13 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl, max: 2 });
   try {
     const store = new PostgresApplicationRegistryStore(pool);
-    const registration = await store.sync(
-      application,
-      process.env.PLATFORM_REGISTRY_UPDATE === "1" ? { allowUpdate: true } : {},
-    );
+    const registryActor = process.env.PLATFORM_REGISTRY_ACTOR?.trim();
+    const registration = await store.sync(application, {
+      ...(process.env.PLATFORM_REGISTRY_UPDATE === "1"
+        ? { allowUpdate: true }
+        : {}),
+      ...(registryActor ? { actor: registryActor } : {}),
+    });
     await store.verifyDefinitions([application]);
 
     await pool.query(

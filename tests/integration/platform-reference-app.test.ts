@@ -15,8 +15,8 @@ import {
   ApplicationRegistrationMissingError,
   InstallationApplicationMissingError,
   InstallationMismatchError,
-  PlatformMembershipResolver,
   PostgresApplicationRegistryStore,
+  RegistryActorRequiredError,
   UnexpectedApplicationRegistrationError,
   type InstallationRegistrationRecord,
 } from "../../packages/database/src/platform-application-registry";
@@ -26,12 +26,19 @@ import {
   UnsafePlatformRuntimeRoleError,
   type PlatformRuntimeRoleViolationCode,
 } from "../../packages/database/src/platform-runtime-role";
-import { PolicyEngine, TenantUnitOfWork } from "@vibress/tenancy";
+import {
+  assertSafePlatformMembershipReaderRole,
+  provisionPlatformMembershipReaderRole,
+} from "../../packages/database/src/platform-membership-reader";
+import { PolicyEngine } from "@vibress/tenancy";
 import {
   createReferenceApplication,
   REFERENCE_PERMISSIONS,
 } from "../../apps/platform-reference/src/application";
-import { createReferenceServer } from "../../apps/platform-reference/src/server";
+import {
+  startReferenceApplication,
+  type StartedReferenceApplication,
+} from "../../apps/platform-reference/src/start";
 import { ReferenceTokenDirectory } from "../../apps/platform-reference/src/token-directory";
 
 /**
@@ -46,10 +53,14 @@ const DATABASE_URL =
 
 const applicationId = "reference-crm-integration";
 const otherApplicationId = "reference-crm-other";
+const auditApplicationId = "reference-crm-audit";
+const unauditedApplicationId = "reference-crm-unaudited";
 const tenantAId = "reference-tenant-a";
 const tenantBId = "reference-tenant-b";
 const roleName = `reference_rt_${Date.now().toString(36)}`;
 const rolePassword = `reference_${Date.now().toString(36)}`;
+const readerRoleName = `reference_rd_${Date.now().toString(36)}`;
+const readerRolePassword = `reference_rd_${Date.now().toString(36)}`;
 
 const installationId = asInstallationId("reference-installation");
 
@@ -58,10 +69,12 @@ const createPermission = REFERENCE_PERMISSIONS.createCustomer;
 
 let owner: Client;
 let ownerPool: Pool;
+let bootOwnerPool: Pool;
+let readerPool: Pool;
 let runtimePool: Pool;
 let store: PostgresApplicationRegistryStore;
 let application: ApplicationDefinition;
-let server: Awaited<ReturnType<typeof createReferenceServer>>;
+let server: StartedReferenceApplication;
 let databaseName: string;
 let roleSequence = 0;
 
@@ -69,6 +82,7 @@ async function applyPlatformMigrations(client: Client): Promise<void> {
   for (const file of [
     "0054_platform_tenant_rls.sql",
     "0056_platform_application_registry.sql",
+    "0057_platform_registry_change_audit.sql",
   ]) {
     const migrationPath = path.resolve(
       process.cwd(),
@@ -85,6 +99,16 @@ async function seedTenant(id: string, name: string): Promise<void> {
      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
     [id, applicationId, name],
   );
+}
+
+async function deleteApplications(ids: readonly string[]): Promise<void> {
+  await owner.query(
+    "DELETE FROM platform_application_registry_changes WHERE application_id = ANY($1)",
+    [ids],
+  );
+  await owner.query("DELETE FROM platform_applications WHERE id = ANY($1)", [
+    ids,
+  ]);
 }
 
 async function seedMembership(input: {
@@ -179,7 +203,27 @@ async function expectUnsafeRuntimeRole(
   client: Client,
   expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
 ): Promise<void> {
-  const error = await assertSafePlatformRuntimeRole(client).then(
+  await expectUnsafeRole(
+    () => assertSafePlatformRuntimeRole(client),
+    expectedCodes,
+  );
+}
+
+async function expectUnsafeReaderRole(
+  client: Client,
+  expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
+): Promise<void> {
+  await expectUnsafeRole(
+    () => assertSafePlatformMembershipReaderRole(client),
+    expectedCodes,
+  );
+}
+
+async function expectUnsafeRole(
+  assertion: () => Promise<unknown>,
+  expectedCodes: readonly PlatformRuntimeRoleViolationCode[],
+): Promise<void> {
+  const error = await assertion().then(
     () => null,
     (caught: unknown) => caught,
   );
@@ -201,22 +245,35 @@ beforeAll(async () => {
     roleName,
     password: rolePassword,
   });
+  await provisionPlatformMembershipReaderRole(owner, {
+    roleName: readerRoleName,
+    password: readerRolePassword,
+  });
 
   ownerPool = new Pool({ connectionString: DATABASE_URL, max: 4 });
+  bootOwnerPool = new Pool({ connectionString: DATABASE_URL, max: 2 });
   const runtimeUrl = new URL(DATABASE_URL);
   runtimeUrl.username = roleName;
   runtimeUrl.password = rolePassword;
   runtimePool = new Pool({ connectionString: runtimeUrl.toString(), max: 2 });
+  const readerUrl = new URL(DATABASE_URL);
+  readerUrl.username = readerRoleName;
+  readerUrl.password = readerRolePassword;
+  readerPool = new Pool({ connectionString: readerUrl.toString(), max: 2 });
 
   // A fixed identity keeps repeated runs deterministic; the cascade removes the
-  // registration, tenants, memberships and customer rows.
-  await owner.query("DELETE FROM platform_applications WHERE id = ANY($1)", [
-    [applicationId, otherApplicationId],
+  // registration, tenants, memberships and customer rows. Audit rows restrict
+  // application deletion, so they are removed first by the helper.
+  await deleteApplications([
+    applicationId,
+    otherApplicationId,
+    auditApplicationId,
+    unauditedApplicationId,
   ]);
 
   application = createReferenceApplication({ id: applicationId });
   store = new PostgresApplicationRegistryStore(ownerPool);
-  await store.sync(application);
+  await store.sync(application, { actor: "integration-test" });
   await store.verifyDefinitions([application]);
 
   await seedTenant(tenantAId, "Reference Tenant A");
@@ -240,13 +297,16 @@ beforeAll(async () => {
     permissions: [readPermission],
   });
 
-  server = await createReferenceServer({
+  server = await startReferenceApplication({
     application,
-    registryStore: store,
-    membershipResolver: new PlatformMembershipResolver(ownerPool),
-    unitOfWork: new TenantUnitOfWork(runtimePool),
-    tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
     installationId,
+    tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
+    ownerPool: bootOwnerPool,
+    readerPool,
+    runtimePool,
+    environment: "integration-test",
+    host: "127.0.0.1",
+    port: 0,
     policyVersion: "reference-crm-integration",
     policy: new PolicyEngine([
       { id: "allow-read", action: readPermission, effect: "allow" },
@@ -257,17 +317,22 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server?.app.close().catch(() => undefined);
+  await bootOwnerPool?.end().catch(() => undefined);
+  await readerPool?.end().catch(() => undefined);
   await runtimePool?.end().catch(() => undefined);
   await ownerPool?.end().catch(() => undefined);
   if (owner) {
-    await owner
-      .query("DELETE FROM platform_applications WHERE id = ANY($1)", [
-        [applicationId, otherApplicationId],
-      ])
-      .catch(() => undefined);
-    const role = owner.escapeIdentifier(roleName);
-    await owner.query(`DROP OWNED BY ${role}`).catch(() => undefined);
-    await owner.query(`DROP ROLE ${role}`).catch(() => undefined);
+    await deleteApplications([
+      applicationId,
+      otherApplicationId,
+      auditApplicationId,
+      unauditedApplicationId,
+    ]).catch(() => undefined);
+    for (const name of [roleName, readerRoleName]) {
+      const role = owner.escapeIdentifier(name);
+      await owner.query(`DROP OWNED BY ${role}`).catch(() => undefined);
+      await owner.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
+    }
     await owner.end().catch(() => undefined);
   }
 });
@@ -288,25 +353,27 @@ describe("persisted application registry", () => {
   it("stores an explicitly approved update and restores the original", async () => {
     const updated = await store.sync(withVersion(application, "1.0.1"), {
       allowUpdate: true,
+      actor: "integration-test",
     });
     expect(updated.outcome).toBe("updated");
 
-    const restored = await store.sync(application, { allowUpdate: true });
+    const restored = await store.sync(application, {
+      allowUpdate: true,
+      actor: "integration-test",
+    });
     expect(restored.outcome).toBe("updated");
     await store.verifyDefinitions([application]);
   });
 
   it("detects a registration with no deployed definition", async () => {
     const other = createReferenceApplication({ id: otherApplicationId });
-    await store.sync(other);
+    await store.sync(other, { actor: "integration-test" });
     try {
       await expect(store.verifyDefinitions([application])).rejects.toThrow(
         UnexpectedApplicationRegistrationError,
       );
     } finally {
-      await owner.query("DELETE FROM platform_applications WHERE id = $1", [
-        otherApplicationId,
-      ]);
+      await deleteApplications([otherApplicationId]);
     }
   });
 
@@ -318,7 +385,7 @@ describe("persisted application registry", () => {
     await expect(store.verifyDefinitions([application])).rejects.toThrow(
       ApplicationRegistrationMissingError,
     );
-    await store.sync(application);
+    await store.sync(application, { actor: "integration-test" });
     await store.verifyDefinitions([application]);
   });
 
@@ -343,7 +410,7 @@ describe("persisted application registry", () => {
   it("rejects a conflicting installation bind without mutating the persisted record", async () => {
     const instId = asInstallationId("test-installation-conflict");
     const other = createReferenceApplication({ id: otherApplicationId });
-    await store.sync(other);
+    await store.sync(other, { actor: "integration-test" });
     try {
       await store.syncInstallation({
         id: instId,
@@ -368,11 +435,7 @@ describe("persisted application registry", () => {
       await owner
         .query("DELETE FROM platform_installations WHERE id = $1", [instId])
         .catch(() => undefined);
-      await owner
-        .query("DELETE FROM platform_applications WHERE id = $1", [
-          otherApplicationId,
-        ])
-        .catch(() => undefined);
+      await deleteApplications([otherApplicationId]).catch(() => undefined);
     }
   });
 
@@ -399,7 +462,7 @@ describe("persisted application registry", () => {
   it("lets exactly one of two concurrent conflicting binds win without overwriting it", async () => {
     const instId = asInstallationId("test-installation-race");
     const other = createReferenceApplication({ id: otherApplicationId });
-    await store.sync(other);
+    await store.sync(other, { actor: "integration-test" });
     try {
       const results = await Promise.allSettled([
         store.syncInstallation({
@@ -444,11 +507,95 @@ describe("persisted application registry", () => {
       await owner
         .query("DELETE FROM platform_installations WHERE id = $1", [instId])
         .catch(() => undefined);
-      await owner
-        .query("DELETE FROM platform_applications WHERE id = $1", [
-          otherApplicationId,
-        ])
-        .catch(() => undefined);
+      await deleteApplications([otherApplicationId]).catch(() => undefined);
+    }
+  });
+});
+
+describe("registry change audit", () => {
+  it("records created and updated mutations with actor, version and digests", async () => {
+    const audited = createReferenceApplication({ id: auditApplicationId });
+    await deleteApplications([auditApplicationId]);
+    try {
+      const created = await store.sync(audited, { actor: "release-bot" });
+      expect(created.outcome).toBe("created");
+
+      const unchanged = await store.sync(audited);
+      expect(unchanged.outcome).toBe("unchanged");
+
+      await expect(store.sync(withVersion(audited, "1.0.1"))).rejects.toThrow(
+        ApplicationRegistrationDriftError,
+      );
+
+      const updated = await store.sync(withVersion(audited, "1.0.1"), {
+        allowUpdate: true,
+        actor: "release-owner",
+      });
+      expect(updated.outcome).toBe("updated");
+
+      const changes = await store.listChanges(auditApplicationId);
+      expect(
+        changes.map((change) => [change.changeKind, change.actor]),
+      ).toEqual([
+        ["created", "release-bot"],
+        ["updated", "release-owner"],
+      ]);
+      expect(changes[0]).toMatchObject({
+        previousDigest: null,
+        newDigest: created.digest,
+        previousVersion: null,
+        newVersion: audited.version,
+      });
+      expect(changes[1]).toMatchObject({
+        previousDigest: created.digest,
+        newDigest: updated.digest,
+        previousVersion: audited.version,
+        newVersion: "1.0.1",
+      });
+    } finally {
+      await deleteApplications([auditApplicationId]);
+    }
+  });
+
+  it("requires an actor for a new registration and writes nothing", async () => {
+    const unaudited = createReferenceApplication({ id: unauditedApplicationId });
+    await deleteApplications([unauditedApplicationId]);
+
+    await expect(store.sync(unaudited)).rejects.toThrow(
+      RegistryActorRequiredError,
+    );
+
+    const counts = await owner.query<{
+      applications: string;
+      registrations: string;
+      changes: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM platform_applications WHERE id = $1)::text AS applications,
+         (SELECT count(*) FROM platform_application_registrations WHERE application_id = $1)::text AS registrations,
+         (SELECT count(*) FROM platform_application_registry_changes WHERE application_id = $1)::text AS changes`,
+      [unauditedApplicationId],
+    );
+    expect(counts.rows[0]).toEqual({
+      applications: "0",
+      registrations: "0",
+      changes: "0",
+    });
+  });
+
+  it("refuses to delete an application while its audit history exists", async () => {
+    const audited = createReferenceApplication({ id: auditApplicationId });
+    await deleteApplications([auditApplicationId]);
+    await store.sync(audited, { actor: "release-bot" });
+    try {
+      await expect(
+        owner.query("DELETE FROM platform_applications WHERE id = $1", [
+          auditApplicationId,
+        ]),
+      ).rejects.toMatchObject({ code: "23503" });
+      expect((await store.listChanges(auditApplicationId)).length).toBe(1);
+    } finally {
+      await deleteApplications([auditApplicationId]);
     }
   });
 });
@@ -640,6 +787,175 @@ describe("runtime role verification", () => {
         await dropEphemeralRoles([sessionLogin, setRoleName]);
       }
     });
+  });
+});
+
+describe("serving process privilege split", () => {
+  it("closes the owner pool before binding the listening socket", async () => {
+    expect(server.address).toMatch(/^http:\/\/127\.0\.0\.1:/);
+    await expect(bootOwnerPool.query("SELECT 1")).rejects.toThrow(
+      /after calling end/i,
+    );
+  });
+
+  it("validates the reader as SELECT-only on the membership directory", async () => {
+    const attributes = await assertSafePlatformMembershipReaderRole(readerPool);
+    expect(attributes.currentUser).toBe(readerRoleName);
+
+    const memberships = await readerPool.query<{ count: string }>(
+      "SELECT count(*) AS count FROM platform_memberships WHERE application_id = $1",
+      [applicationId],
+    );
+    expect(Number(memberships.rows[0]?.count)).toBeGreaterThan(0);
+  });
+
+  it("denies the reader writes on memberships and every other relation", async () => {
+    await expect(
+      readerPool.query(
+        `INSERT INTO platform_memberships
+           (application_id, tenant_id, principal_id, active, roles, permissions)
+         VALUES ($1, $2, 'intruder', true, ARRAY[]::text[], ARRAY[]::text[])`,
+        [applicationId, tenantAId],
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      readerPool.query("UPDATE platform_memberships SET active = false"),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      readerPool.query("DELETE FROM platform_memberships"),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      readerPool.query("TRUNCATE platform_memberships"),
+    ).rejects.toMatchObject({ code: "42501" });
+
+    for (const relation of [
+      "platform_applications",
+      "platform_installations",
+      "platform_tenants",
+      "platform_application_registrations",
+      "platform_crm_customers",
+    ]) {
+      await expect(
+        readerPool.query(`SELECT * FROM ${relation}`),
+      ).rejects.toMatchObject({ code: "42501" });
+    }
+  });
+
+  it("fails closed when the reader lacks SELECT on memberships", async () => {
+    const login = ephemeralRoleName("reader_missing");
+    const password = `${login}_pw`;
+    try {
+      await createEphemeralLogin(login, password);
+      const client = new Client({
+        connectionString: roleConnectionString(login, password),
+      });
+      await client.connect();
+      try {
+        await expectUnsafeReaderRole(client, ["membership_read_missing"]);
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    } finally {
+      await dropEphemeralRoles([login]);
+    }
+  });
+
+  it("fails closed when the reader can write memberships", async () => {
+    const login = ephemeralRoleName("reader_write");
+    const password = `${login}_pw`;
+    try {
+      await createEphemeralLogin(login, password);
+      await owner.query(
+        `GRANT SELECT, INSERT ON TABLE public.platform_memberships TO ${owner.escapeIdentifier(login)}`,
+      );
+      const client = new Client({
+        connectionString: roleConnectionString(login, password),
+      });
+      await client.connect();
+      try {
+        await expectUnsafeReaderRole(client, ["membership_write_privilege"]);
+      } finally {
+        await client.end().catch(() => undefined);
+      }
+    } finally {
+      await dropEphemeralRoles([login]);
+    }
+  });
+
+  it("fails closed when the reader can read a registry or tenant relation", async () => {
+    for (const relation of ["platform_applications", "platform_crm_customers"]) {
+      const login = ephemeralRoleName("reader_extra");
+      const password = `${login}_pw`;
+      try {
+        await createEphemeralLogin(login, password);
+        await owner.query(
+          `GRANT SELECT ON TABLE public.platform_memberships TO ${owner.escapeIdentifier(login)}`,
+        );
+        await owner.query(
+          `GRANT SELECT ON TABLE public.${relation} TO ${owner.escapeIdentifier(login)}`,
+        );
+        const client = new Client({
+          connectionString: roleConnectionString(login, password),
+        });
+        await client.connect();
+        try {
+          await expectUnsafeReaderRole(client, [
+            "unexpected_relation_privilege",
+          ]);
+        } finally {
+          await client.end().catch(() => undefined);
+        }
+      } finally {
+        await dropEphemeralRoles([login]);
+      }
+    }
+  });
+
+  it("refuses to boot, before the owner phase, with an unsafe reader role", async () => {
+    const login = ephemeralRoleName("reader_boot");
+    const password = `${login}_pw`;
+    const unsafeOwnerPool = new Pool({ connectionString: DATABASE_URL, max: 1 });
+    try {
+      await createEphemeralLogin(login, password);
+      const unsafeReaderPool = new Pool({
+        connectionString: roleConnectionString(login, password),
+        max: 1,
+      });
+      try {
+        const error = await startReferenceApplication({
+          application,
+          installationId: asInstallationId("test-installation-unsafe-reader"),
+          tokens: ReferenceTokenDirectory.fromJson(application.id, tokenJson()),
+          ownerPool: unsafeOwnerPool,
+          readerPool: unsafeReaderPool,
+          runtimePool,
+          environment: "test",
+          host: "127.0.0.1",
+          port: 0,
+          policyVersion: "reference-crm-unsafe-reader",
+          policy: new PolicyEngine([]),
+        }).then(
+          () => null,
+          (caught: unknown) => caught,
+        );
+        expect(error).toBeInstanceOf(UnsafePlatformRuntimeRoleError);
+        expect(
+          (error as UnsafePlatformRuntimeRoleError).violations.map(
+            (violation) => violation.code,
+          ),
+        ).toContain("membership_read_missing");
+
+        const probe = await unsafeOwnerPool.query<{ ok: number }>(
+          "SELECT 1 AS ok",
+        );
+        expect(probe.rows[0]?.ok).toBe(1);
+      } finally {
+        await unsafeReaderPool.end().catch(() => undefined);
+      }
+    } finally {
+      await unsafeOwnerPool.end().catch(() => undefined);
+      await dropEphemeralRoles([login]);
+    }
   });
 });
 

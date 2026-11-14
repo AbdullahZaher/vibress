@@ -115,6 +115,7 @@ export async function provisionPlatformRuntimeRole(
   );
   for (const table of [
     "platform_application_registrations",
+    "platform_application_registry_changes",
     "platform_memberships",
   ]) {
     const exists = await client.query<{ present: boolean }>(
@@ -157,7 +158,10 @@ export type PlatformRuntimeRoleViolationCode =
   | "owns_function"
   | "registry_table_privilege"
   | "tenant_table_forbidden_privilege"
-  | "security_definer_execute";
+  | "security_definer_execute"
+  | "membership_read_missing"
+  | "membership_write_privilege"
+  | "unexpected_relation_privilege";
 
 export interface PlatformRuntimeRoleViolation {
   readonly code: PlatformRuntimeRoleViolationCode;
@@ -200,6 +204,7 @@ const REGISTRY_TABLES = [
   "platform_installations",
   "platform_tenants",
   "platform_application_registrations",
+  "platform_application_registry_changes",
   "platform_memberships",
 ] as const;
 
@@ -219,6 +224,21 @@ const TENANT_TABLE_FORBIDDEN_PRIVILEGES = [
   "TRIGGER",
 ] as const;
 
+const SEQUENCE_PRIVILEGES = ["USAGE", "SELECT", "UPDATE"] as const;
+
+const COLUMN_PRIVILEGES = ["SELECT", "INSERT", "UPDATE", "REFERENCES"] as const;
+
+export type PlatformRoleProfile = "runtime" | "membership_reader";
+
+export interface PlatformRoleAssertionOptions {
+  /**
+   * `membership_reader` validates the dedicated membership-directory reader:
+   * SELECT on `platform_memberships` only, and no privilege on any other
+   * relation, sequence or function.
+   */
+  readonly profile?: PlatformRoleProfile;
+}
+
 /**
  * Validates that the active PostgreSQL connection has verified non-owner,
  * least-privilege runtime credentials suitable for serving tenant-bound traffic.
@@ -235,10 +255,16 @@ const TENANT_TABLE_FORBIDDEN_PRIVILEGES = [
  * - any table/column privilege on operator registry and membership tables;
  * - TRUNCATE/REFERENCES/TRIGGER on the tenant table (not governed by RLS);
  * - EXECUTE on a SECURITY DEFINER function in a non-system schema.
+ *
+ * The `membership_reader` profile applies the same identity, ownership and
+ * function checks to the membership-directory reader, which must hold SELECT
+ * on `platform_memberships` and no privilege on any other relation.
  */
 export async function assertSafePlatformRuntimeRole(
   client: { query: <TRow = unknown>(sql: string, params?: readonly unknown[]) => Promise<{ rows: TRow[] }> },
+  options: PlatformRoleAssertionOptions = {},
 ): Promise<RuntimeRoleAttributes> {
+  const isReader = options.profile === "membership_reader";
   const roleRow = (
     await client.query<RuntimeIdentityRow>(
       `SELECT current_user AS "currentUser",
@@ -419,29 +445,36 @@ export async function assertSafePlatformRuntimeRole(
     }
   }
 
-  const ownedTables = (
-    await client.query<{ tableName: string }>(
-      `SELECT c.relname AS "tableName"
-         FROM pg_class c
-         JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public'
-          AND c.relname IN (
-            'platform_crm_customers',
-            'platform_application_registrations',
-            'platform_memberships',
-            'platform_installations',
-            'platform_tenants',
-            'platform_applications'
-          )
-          AND pg_get_userbyid(c.relowner) IN (current_user, session_user)`,
-    )
-  ).rows;
-  if (ownedTables.length > 0) {
-    addViolation(
-      "owns_table",
-      `runtime identity owns tables: ${ownedTables.map((r) => r.tableName).join(", ")}`,
-    );
+  if (!isReader) {
+    const ownedTables = (
+      await client.query<{ tableName: string }>(
+        `SELECT c.relname AS "tableName"
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public'
+            AND c.relname IN (
+              'platform_crm_customers',
+              'platform_application_registrations',
+              'platform_application_registry_changes',
+              'platform_memberships',
+              'platform_installations',
+              'platform_tenants',
+              'platform_applications'
+            )
+            AND pg_get_userbyid(c.relowner) IN (current_user, session_user)`,
+      )
+    ).rows;
+    if (ownedTables.length > 0) {
+      addViolation(
+        "owns_table",
+        `runtime identity owns tables: ${ownedTables.map((r) => r.tableName).join(", ")}`,
+      );
+    }
   }
+
+  const registryTables = isReader
+    ? REGISTRY_TABLES.filter((table) => table !== "platform_memberships")
+    : REGISTRY_TABLES;
 
   const registryPrivileges = (
     await client.query<{
@@ -460,7 +493,7 @@ export async function assertSafePlatformRuntimeRole(
             i.identity, format('public.%I', t.table_name), p.privilege
           )
         GROUP BY i.identity, t.table_name`,
-      [REGISTRY_TABLES, REGISTRY_TABLE_PRIVILEGES],
+      [registryTables, REGISTRY_TABLE_PRIVILEGES],
     )
   ).rows;
   for (const privilege of registryPrivileges) {
@@ -490,7 +523,7 @@ export async function assertSafePlatformRuntimeRole(
             i.identity, format('public.%I', t.table_name), p.privilege
           )
         GROUP BY i.identity, t.table_name`,
-      [REGISTRY_TABLES],
+      [registryTables],
     )
   ).rows;
   for (const privilege of registryColumnPrivileges) {
@@ -500,7 +533,12 @@ export async function assertSafePlatformRuntimeRole(
     );
   }
 
+  if (isReader) {
+    await inspectMembershipReaderRelationAccess(client, roleRow, addViolation);
+  }
+
   if (
+    !isReader &&
     (
       await client.query<{ present: boolean }>(
         "SELECT to_regclass('public.platform_crm_customers') IS NOT NULL AS present",
@@ -611,5 +649,201 @@ export async function assertSafePlatformRuntimeRole(
   }
 
   return attributes;
+}
+
+type AddViolation = (
+  code: PlatformRuntimeRoleViolationCode,
+  detail: string,
+) => void;
+
+/**
+ * Reader profile: the membership directory is read before a verified scope
+ * exists, so the reader must hold SELECT on `platform_memberships` and nothing
+ * else. It must not reach registry, tenant or CMS relations by any privilege,
+ * including column-level grants and sequences.
+ */
+async function inspectMembershipReaderRelationAccess(
+  client: {
+    query: <TRow = unknown>(
+      sql: string,
+      params?: readonly unknown[],
+    ) => Promise<{ rows: TRow[] }>;
+  },
+  roleRow: RuntimeIdentityRow,
+  addViolation: AddViolation,
+): Promise<void> {
+  const identities = [...new Set([roleRow.currentUser, roleRow.sessionUser])];
+  const membershipPresent = (
+    await client.query<{ present: boolean }>(
+      "SELECT to_regclass('public.platform_memberships') IS NOT NULL AS present",
+    )
+  ).rows[0]?.present;
+
+  if (!membershipPresent) {
+    addViolation(
+      "membership_read_missing",
+      "public.platform_memberships does not exist; apply the platform migrations before boot",
+    );
+  } else {
+    const membershipPrivileges = (
+      await client.query<{ identity: string; privilege: string }>(
+        `SELECT i.identity::text AS identity, p.privilege
+           FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+           CROSS JOIN unnest($1::text[]) AS p(privilege)
+          WHERE has_table_privilege(
+                  i.identity, 'public.platform_memberships', p.privilege
+                )`,
+        [REGISTRY_TABLE_PRIVILEGES],
+      )
+    ).rows;
+    const membershipColumns = (
+      await client.query<{ identity: string; privilege: string }>(
+        `SELECT i.identity::text AS identity, p.privilege
+           FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+           CROSS JOIN unnest($1::text[]) AS p(privilege)
+          WHERE has_any_column_privilege(
+                  i.identity, 'public.platform_memberships', p.privilege
+                )
+            AND NOT has_table_privilege(
+                  i.identity, 'public.platform_memberships', p.privilege
+                )`,
+        [COLUMN_PRIVILEGES],
+      )
+    ).rows;
+
+    for (const identity of identities) {
+      const tablePrivileges = membershipPrivileges
+        .filter((row) => row.identity === identity)
+        .map((row) => row.privilege);
+      if (!tablePrivileges.includes("SELECT")) {
+        addViolation(
+          "membership_read_missing",
+          `'${identity}' lacks table-level SELECT on membership table 'platform_memberships'`,
+        );
+      }
+      const writes = tablePrivileges.filter(
+        (privilege) => privilege !== "SELECT",
+      );
+      const columnWrites = membershipColumns
+        .filter((row) => row.identity === identity)
+        .map((row) => `${row.privilege} (column)`);
+      const allWrites = [...writes, ...columnWrites];
+      if (allWrites.length > 0) {
+        addViolation(
+          "membership_write_privilege",
+          `'${identity}' has ${allWrites.join(", ")} on membership table 'platform_memberships'`,
+        );
+      }
+    }
+  }
+
+  const relationPrivileges = (
+    await client.query<{
+      identity: string;
+      relation: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              format('%I.%I', n.nspname, c.relname) AS relation,
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest($1::text[]) AS p(privilege)
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_toast%'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND NOT (n.nspname = 'public' AND c.relname = 'platform_memberships')
+          AND has_table_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname`,
+      [REGISTRY_TABLE_PRIVILEGES],
+    )
+  ).rows;
+  for (const privilege of relationPrivileges) {
+    addViolation(
+      "unexpected_relation_privilege",
+      `'${privilege.identity}' has ${privilege.privileges.join(", ")} on relation '${privilege.relation}'`,
+    );
+  }
+
+  const columnPrivileges = (
+    await client.query<{
+      identity: string;
+      relation: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              format('%I.%I', n.nspname, c.relname) AS relation,
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest($1::text[]) AS p(privilege)
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_toast%'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+          AND NOT (n.nspname = 'public' AND c.relname = 'platform_memberships')
+          AND has_any_column_privilege(i.identity, c.oid, p.privilege)
+          AND NOT has_table_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname`,
+      [COLUMN_PRIVILEGES],
+    )
+  ).rows;
+  for (const privilege of columnPrivileges) {
+    addViolation(
+      "unexpected_relation_privilege",
+      `'${privilege.identity}' has column-level ${privilege.privileges.join(", ")} on relation '${privilege.relation}'`,
+    );
+  }
+
+  const sequencePrivileges = (
+    await client.query<{
+      identity: string;
+      relation: string;
+      privileges: string[];
+    }>(
+      `SELECT i.identity::text AS identity,
+              format('%I.%I', n.nspname, c.relname) AS relation,
+              array_agg(DISTINCT p.privilege ORDER BY p.privilege) AS privileges
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         CROSS JOIN unnest($1::text[]) AS p(privilege)
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_toast%'
+          AND c.relkind = 'S'
+          AND has_sequence_privilege(i.identity, c.oid, p.privilege)
+        GROUP BY i.identity, n.nspname, c.relname`,
+      [SEQUENCE_PRIVILEGES],
+    )
+  ).rows;
+  for (const privilege of sequencePrivileges) {
+    addViolation(
+      "unexpected_relation_privilege",
+      `'${privilege.identity}' has ${privilege.privileges.join(", ")} on sequence '${privilege.relation}'`,
+    );
+  }
+
+  const ownedRelations = (
+    await client.query<{ identity: string; relation: string }>(
+      `SELECT i.identity::text AS identity,
+              format('%I.%I', n.nspname, c.relname) AS relation
+         FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
+         CROSS JOIN pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
+          AND n.nspname NOT LIKE 'pg_toast%'
+          AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
+          AND pg_get_userbyid(c.relowner) = i.identity`,
+    )
+  ).rows;
+  if (ownedRelations.length > 0) {
+    addViolation(
+      "owns_table",
+      `runtime identity owns relations: ${ownedRelations
+        .map((row) => row.relation)
+        .join(", ")}`,
+    );
+  }
 }
 

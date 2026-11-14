@@ -14,7 +14,9 @@ Existing runtime paths cannot enforce tenant isolation:
 - The legacy runtime role holds `CREATE` on `public`, DML on all tables and
   `EXECUTE ON ALL FUNCTIONS`, plus default privileges for future objects
   ([runtime-role.ts](../../../../packages/database/src/runtime-role.ts)).
-- The 2026-11-13 security review records RLS as not activated (F-012 residual).
+- The 2026-11-13 security review records RLS as not activated (F-012 residual);
+  the proposed CMS disposition is recorded in
+  [F-012 decision record](../F-012-CMS-RLS-DECISION.md) and remains unaccepted.
 
 ## Proposed decision
 

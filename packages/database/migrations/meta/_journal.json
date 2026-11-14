@@ -393,6 +393,13 @@
       "when": 1794900000003,
       "tag": "0056_platform_application_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1794900000004,
+      "tag": "0057_platform_registry_change_audit",
+      "breakpoints": true
     }
   ]
 }
