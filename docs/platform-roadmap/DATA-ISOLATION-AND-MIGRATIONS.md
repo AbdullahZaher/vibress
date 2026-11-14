@@ -78,6 +78,15 @@ RLS permissive policies may combine using **OR**; tests must exercise multiple p
 
 See the [complete effective ACL/RLS proof matrix](POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md), [installation trust contract](APP-INSTALLATION-TRUST-AND-OPERATIONS.md) and [rolling upgrade rules](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
 
+## Additional review gate: Views and transaction nesting
+
+Tenant RLS on a base table **does not guarantee** an ordinary view will apply the caller's RLS: PostgreSQL normally evaluates base-table policies using the **view owner's** rights. If app-owned views or materialized reports are supported, require explicit owner/privilege review, `security_invoker` tests on supported PostgreSQL versions and tenant A/B denial through exports/reports. Otherwise exclude the feature from the v1 generated resource contract. See [views and backup tests](RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md).
+
+The current [transaction runner](../../packages/database/src/transaction/transaction-runner.ts) reuses nested transactions **without savepoints**. The proposed tenant unit-of-work must prevent nested scope switches and define rollback-only behavior for caught inner failures; no assumed per-nested-operation rollback.
+
+Full-installation backups must use an audited identity and a verified row-count/checksum manifest: a tenant-scoped RLS query must never silently be accepted as a complete database snapshot. PostgreSQL `row_security=off` detects filtering; **it does not bypass RLS**.
+
+
 ## 6. Minimum negative acceptance matrix
 
 - Tenant A/B and application A/B (separate installs): list/detail/create/update/delete, relation and field access, search and exports.
