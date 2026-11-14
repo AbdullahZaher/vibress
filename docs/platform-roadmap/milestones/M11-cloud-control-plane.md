@@ -138,6 +138,14 @@ Define audited runtime database, Redis ACL/worker queues, object-store IAM, netw
 
 **No certification by documentation:** an ADR approval or completed checklist does not verify production deployment or actual SQL permissions.
 
+## Fourth-pass managed-installation backup scope
+
+Apply these requirements to **M11-E10**. The Cloud plan is post-v1 and does not confer authorization to runtime tenant data.
+
+- [ ] Managed backup identity, complete-installation manifest and tenant-only export are distinct; `row_security=off` is used only for filtering detection where appropriate, not a bypass.
+- [ ] Restore validates database rows for two tenants, their object references and message behavior under per-installation IAM/Redis boundaries and measures observed recovery.
+- [ ] Owner/retention/privacy and scoped break-glass procedures are documented without claiming immediate erasure of all backup copies.
+
 ## Milestone closure evidence ledger
 
 | Evidence | Status / link |
