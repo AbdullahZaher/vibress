@@ -44,7 +44,8 @@ prefixes and distinct role names alone are not an isolation boundary.
 ## Proof required before acceptance
 
 - Two installations with distinct credentials cannot read or write each other's
-  tables, queue keys, objects or backups (negative tests, real infrastructure).
+  tables (negative tests, real infrastructure). **Database boundary measured; Redis
+  keys/objects and backups still unproven.**
 - Deployment/runbook review and restore rehearsal for one installation.
 - Human architecture/security sign-off recorded on the ADR.
 
@@ -54,6 +55,21 @@ prefixes and distinct role names alone are not an isolation boundary.
   `NOBYPASSRLS` runtime role scoped to platform tenant tables.
 - `tests/integration/platform-tenant-isolation.test.ts` proves the role cannot read
   the operator registry, CMS `users`, or another tenant's rows.
+- `tests/integration/platform-installation-isolation.test.ts` creates **two**
+  installation databases, each with its own non-superuser owner and runtime role,
+  and revokes `CONNECT` from `PUBLIC`. Measured results: 8/8 passed —
+  - installation B's runtime credentials are rejected at `CONNECT` on A's database
+    (`42501`), and A's owner is rejected at `CONNECT` on B's database;
+  - no installation role has membership in the superuser role;
+  - the same tenant id `t-acme` exists in both installations with independent rows,
+    and each runtime role sees only its own installation's row;
+  - neither runtime role can read the registry or create objects.
 
-**Not proven here:** two separate installations with two separate databases. That
-remains an open Wave 1 blocker.
+**Still open:** Redis ACL/instance and object-storage IAM boundaries are not tested
+here, and a staged deployment/restore runbook has not been exercised.
+
+## Verification status
+
+The database-credential boundary is **measured in tests**, not yet in a deployed
+environment. Provisioning a non-superuser owner in the actual Compose topology is an
+open Wave 1 item.

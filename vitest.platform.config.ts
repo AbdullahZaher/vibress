@@ -20,6 +20,7 @@ export default defineConfig({
     hookTimeout: 30000,
     include: [
       "tests/integration/platform-tenant-isolation.test.ts",
+      "tests/integration/platform-installation-isolation.test.ts",
       "tests/integration/platform-function-privileges.test.ts",
       "tests/architecture/**/*.test.ts",
       "packages/platform-kernel/src/**/*.test.ts",

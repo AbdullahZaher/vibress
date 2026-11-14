@@ -12,7 +12,7 @@
 | --- | --- |
 | M00 baseline | **PARTIAL** — baseline, ownership map and ADR blockers recorded; docs validator and compatibility fixture pinning remain |
 | M01 kernel | **PARTIAL** — public contracts, registry, reference action/route/module exist; persisted registry and a bootable reference app remain |
-| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege role, real PostgreSQL deny matrix and non-superuser owner proof exist; R26 revocation approval, deployment owner change, views policy and cross-installation proof remain |
+| M02 tenancy/security | **PARTIAL** — verified scope, default-deny policy, tenant unit of work, additive RLS migration, least-privilege role, real PostgreSQL deny matrix, non-superuser owner proof and two-database installation boundary exist; R26 revocation approval, deployment owner change, views policy and Redis/S3 boundary remain |
 | Independent security review | **NOT PERFORMED** |
 | Gate | **NO-GO** |
 
@@ -43,6 +43,7 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 | Migration | `packages/database/migrations/0054_platform_tenant_rls.sql` | Additive tables and indexes, `ENABLE` + `FORCE` RLS, fail-closed `USING` and `WITH CHECK` policy |
 | Runtime role | `packages/database/src/platform-runtime-role.ts` | Non-owner `NOBYPASSRLS` role: DML only on tenant table, no CREATE, no TRUNCATE/REFERENCES/TRIGGER, no registry access, role-level EXECUTE revoked |
 | Boundary test | `tests/architecture/platform-boundaries.test.ts` | Kernel must not import outside itself; tenancy may import only the kernel plus Node/relative |
+| Installation isolation test | `tests/integration/platform-installation-isolation.test.ts` | Two databases, each with its own non-superuser owner and runtime role, `CONNECT` revoked from `PUBLIC`, independent tenant rows |
 | Platform test config | `vitest.platform.config.ts` | Isolated node-environment run without the CMS global setup |
 
 No placeholder handlers, no skipped tests, no lowered thresholds. `packages/platform-kernel`
@@ -97,7 +98,8 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **7 files / 63 tests passed** |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration) | **8 files / 71 tests passed** |
+| `… tests/integration/platform-installation-isolation.test.ts` | **8 tests passed**: cross-database `CONNECT` denied `42501`, same tenant id independent |
 | `pnpm exec vitest run --config vitest.platform.config.ts packages/platform-kernel/src packages/tenancy/src tests/architecture` | **5 files / 39 tests passed** |
 | `DATABASE_URL=postgresql://vibress:vibress@127.0.0.1:5433/vibress pnpm exec vitest run --config vitest.platform.config.ts tests/integration/platform-tenant-isolation.test.ts` | **1 file / 22 tests passed** against PostgreSQL 16 |
 | `pnpm exec tsc -p packages/platform-kernel/tsconfig.json --noEmit` | passed |
@@ -165,7 +167,7 @@ pass, so this is a compatibility subset, not a full regression proof.
 | — | Deployment owner (`vibress`) is a superuser, which bypasses `FORCE RLS` | Owner could bypass if left as-is | Test proven; deployment change open |
 | R35 | Views/materialized reports not covered by policy | Potential cross-tenant read if views are exposed | Open (excluded from contract) |
 | R37 | Legacy runner still nests without savepoints | Old code can half-commit semantics | Unchanged, documented |
-| ADR-PLAT-001 | Cross-installation proof with two databases | Installation isolation unproven | Open |
+| ADR-PLAT-001 | Redis key ACL/instance and object-storage boundary untested | Queue/object isolation unproven | Open (database boundary proven) |
 | — | No independent security review of this branch | Gate cannot pass | Open |
 | — | A1–A8, G0 unsigned; owners unassigned | Program blocked for acceptance | Open |
 | F-012 | Global RLS still not activated for CMS tables | Security review gate still conditional | Unchanged |
@@ -177,10 +179,11 @@ No finding was closed by documentation. No test was skipped to make the run gree
 **NO-GO for Wave 1 exit and NO-GO for Wave 2 start.**
 
 Passing evidence on this branch: kernel/tenancy unit and boundary tests, a real
-PostgreSQL tenant-isolation matrix through a least-privilege role, and `FORCE RLS`
-against a non-superuser owner. Missing evidence:
+PostgreSQL tenant-isolation matrix through a least-privilege role, `FORCE RLS`
+against a non-superuser owner, and a two-database installation boundary.
+Missing evidence:
 R26 revocation approval/application, non-superuser owner in the deployment topology, views policy
-decision, cross-installation negative tests, full CMS/Studio compatibility run,
+decision, Redis/S3 cross-installation denial, full CMS/Studio compatibility run,
 independent review, and named human sign-offs. Wave 2 (M03) may not start under
 this gate.
 
@@ -196,7 +199,8 @@ this gate.
 4. Pin the two-publication CMS fixture (`pub_alpha`, `pub_beta`, `pub_default`) and
    run the full integration suite; record results against this branch SHA.
 5. Decide the views/materialized-report contract (excluded for v1 unless reviewed).
-6. Add two-database installation isolation test and Redis/S3 cross-install denial.
+6. Add Redis/S3 cross-installation denial tests (database boundary is already
+   proven); confirm queue keys and objects cannot cross installations.
 7. Only after the above: request human sign-off on ADR-PLAT-001/002/003 and the Wave 1
    gate. Do not start Wave 2 before that.
 
