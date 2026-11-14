@@ -46,6 +46,10 @@ M00 must select **one narrow first-adopter cohort** and agree on a real-world ta
 
 For real self-hosting claims, test two independently deployed app installations with verified PostgreSQL, Redis and S3 credentials; no cross-access. Include a rolling upgrade and backup recovery scenario using [upgrade matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
 
+## Fourth-pass legacy versus new installation fixture
+
+The two **mandatory** v1 Golden Apps must cover distinct scenarios: (1) an **existing multi-publication CMS** with `pub_default` legacy data and full Studio/member/media/link compatibility, and (2) an **independently installed CRM** with no publication imports, scoped tenant permissions, business action and end-user UI. The CMS case tests migration/backward compatibility; the CRM case tests universal extensibility. They must not be conflated into one identity or database tenancy demonstration. See [migration mapping](LEGACY-CMS-IDENTITY-AND-MIGRATION.md) and [first execution slice](EXECUTION-FIRST-SLICE.md).
+
 ## Evidence protocol
 
 Pin versions/SHAs, hardware, PG version, seeded dataset and scripted tasks; run clean setup; publish raw artifacts and scripts; capture failures; explain unmatched features. Repeat after platform releases and security patches; independent reviewer signs the comparison.
