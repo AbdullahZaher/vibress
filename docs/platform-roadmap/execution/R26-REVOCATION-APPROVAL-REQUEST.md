@@ -1,9 +1,11 @@
 # R26 — Revocation Approval Request
 
-> **Status: PREPARED, NOT APPROVED, NOT APPLIED.** Date 2026-11-14.
-> No grant, default ACL, migration journal or production database was changed by
-> this request. [Proposal 0055](proposals/0055_revoke_public_execute.sql) remains
-> outside `packages/database/migrations/` and outside the journal.
+> **Status: PREPARED, NOT APPROVED, NOT APPLIED.** Date 2026-11-14, revised
+> 2026-11-15 after the ineffective schema-scoped default-privilege statement was
+> found and replaced (section 4). No grant, default ACL, migration journal or
+> production database was changed by this request.
+> [Proposal 0055](proposals/0055_revoke_public_execute.sql) remains outside
+> `packages/database/migrations/` and outside the journal.
 >
 > This document exists so the database owner and the security review owner can
 > approve or reject an exact change instead of a description of one.
@@ -12,7 +14,7 @@
 
 | Scope | Change | Decision needed |
 | --- | --- | --- |
-| **A (proposal 0055)** | Revoke `PUBLIC` EXECUTE on the two migration-created trigger functions; install `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` for the migration owner in `public` | Approve / reject |
+| **A (proposal 0055)** | Revoke `PUBLIC` EXECUTE on the two migration-created trigger functions; install a **global** `ALTER DEFAULT PRIVILEGES ... REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` for the migration owner | Approve / reject |
 | **B (not written as SQL)** | Stop the legacy runtime role (`vibress_app`, the api/worker role from `compose.prod.yml`) from holding `EXECUTE ON ALL FUNCTIONS` and from receiving future function EXECUTE by default; re-grant only reviewed callables | Approve / reject / defer |
 
 Scope A and Scope B are separable. Scope A alone closes `PUBLIC` for the platform
@@ -74,9 +76,34 @@ See [proposals/0055_revoke_public_execute.sql](proposals/0055_revoke_public_exec
 ```sql
 REVOKE EXECUTE ON FUNCTION public.prevent_comment_moderation_events_mutation() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.vibress_plugin_storage_append_only() FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER> IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER>
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 ```
+
+**Correction (2026-11-15):** the earlier draft used `... IN SCHEMA public
+REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`. That statement is ineffective and was
+replaced after measurement:
+
+- Schema-scoped default ACLs (`IN SCHEMA`) are applied on top of an **empty**
+  baseline ACL (`aclchk.c`, `SetDefaultACL`: `def_acl = make_empty_acl()`),
+  so a revoke from PUBLIC on that baseline is a no-op and PostgreSQL stores no
+  `pg_default_acl` row.
+- Measured on the PostgreSQL 16.15 dev container in a disposable database:
+  after the schema-scoped statement, `pg_default_acl` had 0 rows and a function
+  created by the owner was still executable by an unrelated role.
+- Only a **global** default-privilege entry replaces the hard-wired default
+  (PUBLIC EXECUTE) for functions created by that role. Measured: the global
+  statement stores one row with `defaclnamespace = 0` and
+  `defaclacl = {<owner>=X/<owner>}`, and owner-created functions in `public`
+  and in another schema are then not executable by the caller role.
+- The proposal's guard was also corrected: it previously required a
+  schema-scoped row, so it could never pass and the transaction always aborted.
+  It now requires the global row and fails closed if it is missing.
+
+The behavior is pinned by
+[tests/integration/platform-r26-revocation.test.ts](../../../tests/integration/platform-r26-revocation.test.ts),
+which reads the proposal, substitutes the owner and applies it to a disposable
+database. Nothing was applied to the shared dev database.
 
 Not included:
 
@@ -87,9 +114,12 @@ Not included:
 - no migration-journal entry.
 
 Expected effect: the two trigger functions become owner-execute-only; functions
-created later by the migration owner are not `PUBLIC`-executable until an
-explicit grant is added; `vibress_platform_app` (and any other role with no
-explicit grant) is denied direct execution.
+created **by the migration owner** after the change are not `PUBLIC`-executable
+until an explicit grant is added, in any schema (the entry is global);
+`vibress_platform_app` (and any other role with no explicit grant) is denied
+direct execution. Objects created by a different role — including a superuser
+bootstrap — are **not** covered by the owner's default entry and remain
+`PUBLIC`-executable until reviewed.
 
 ## 5. Scope B — legacy runtime companion (not prepared as SQL)
 
@@ -118,14 +148,28 @@ No such caller is visible here.
 
 `ALTER DEFAULT PRIVILEGES` applies to objects the migration owner creates after
 the change, including functions an **extension script** creates during
-`CREATE EXTENSION` or `ALTER EXTENSION UPDATE`. The installed `pg_trgm` functions
-are unaffected because they already exist. A future extension upgrade that
-creates new function objects could leave them without `PUBLIC` EXECUTE; serving
-roles without an explicit grant could then fail on trigram operators or
-`similarity(...)`.
+`CREATE EXTENSION` or `ALTER EXTENSION UPDATE` when the owner runs the script.
+The installed `pg_trgm` functions are unaffected because they already exist. A
+future extension upgrade that creates new function objects could leave them
+without `PUBLIC` EXECUTE; serving roles without an explicit grant could then
+fail on trigram operators or `similarity(...)`.
 
-This was **not tested** here; it is a documented PostgreSQL behavior, not a
-measured failure. Mitigations the owner can choose:
+Two further consequences of the corrected global form, both measured:
+
+- The entry covers functions the owner creates in **every schema**, not only
+  `public`. For this repository that is the intended strict default, but the
+  owner should confirm no owner-created utility function in another schema is
+  consumed through `PUBLIC`.
+- The entry is keyed to the **creating role**. Functions created by a different
+  role (for example a superuser bootstrap, or an operator running a one-off SQL
+  script) keep the hard-wired `PUBLIC` EXECUTE. The fail-closed inventory guard
+  in 0055 only runs when the proposal is applied; ongoing coverage requires the
+  released audit (`scripts/audit-function-privileges.mjs`) in CI or a release
+  checklist entry.
+
+This was measured in a disposable database, not on shared infrastructure. The
+extension-upgrade effect was **not** exercised; it is documented PostgreSQL
+behavior, not a measured failure. Mitigations the owner can choose:
 
 - re-check and explicitly grant EXECUTE after any extension upgrade; or
 - prefer explicit per-function revokes plus a CI audit guard instead of default
@@ -155,7 +199,9 @@ Order matters:
 1. Apply 0055 as the migration owner, never as a runtime role.
 2. Re-run `node scripts/audit-function-privileges.mjs "<production url>"` and
    expect `public_execute` to drop by 2 (31 remaining, all extension-owned) and
-   one `pg_default_acl` entry with `defaclobjtype = 'f'` (functions) to exist.
+   one function entry to exist in `pg_default_acl` with `defaclnamespace = 0`
+   (global) and no `PUBLIC` grantee. A schema-scoped entry would satisfy the
+   audit count but not the effect; check the namespace.
 3. **Update the residual test in the same change.** `still executes owner-owned
    public functions through PUBLIC (R26 open)` currently asserts success and must
    be changed to expect SQLSTATE `42501` for the platform role; leaving it
@@ -194,11 +240,13 @@ SELECT pg_get_userbyid(defaclrole) AS owner,
 
 ## 9. Rollback
 
-The rollback in 0055 restores `PUBLIC` on both trigger functions and restores the
-owner default privilege. It does not need a data restore and is safe to run if
-the change causes an unexpected denial. If Scope B is applied, its rollback must
-re-grant the legacy role's previous EXECUTE and default privilege and revert the
-code companion; no rollback script for B is prepared yet.
+The rollback in 0055 restores `PUBLIC` on both trigger functions and grants the
+owner default back to `PUBLIC` (which removes the stored global entry, restoring
+the hard-wired default). It does not need a data restore and is safe to run if
+the change causes an unexpected denial. Existing objects are unaffected either
+way: they keep the ACL they were created with. If Scope B is applied, its
+rollback must re-grant the legacy role's previous EXECUTE and default privilege
+and revert the code companion; no rollback script for B is prepared yet.
 
 ## 10. What remains open if only Scope A is approved
 
@@ -208,6 +256,8 @@ code companion; no rollback script for B is prepared yet.
 | R26 for `vibress_app` | **Open** — explicit and default function grants persist and are re-created by migrations |
 | `pg_trgm` PUBLIC EXECUTE | Accepted residual R26-EXT; no table data exposed |
 | Extension-upgrade default-ACL behavior | Risk documented in section 6; mitigation not selected |
+| Owner-created functions outside `public` | Closed by the global entry; blast radius documented in section 6 |
+| Functions created by a non-owner role | **Not covered** by the default entry; inventory guard and audit required |
 | Production inventory | Not performed |
 
 ## 11. Sign-off (unsigned)

@@ -16,6 +16,18 @@
 --      same change; it currently pins the open behavior and will fail otherwise.
 --
 -- Scope notes:
+-- - The default-privilege change is GLOBAL, not schema-scoped. Measured on
+--   PostgreSQL 16.15: `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public REVOKE
+--   EXECUTE ON FUNCTIONS FROM PUBLIC` stores no entry and changes nothing,
+--   because a schema-scoped entry is applied on top of an empty baseline
+--   (SetDefaultACL: `def_acl = make_empty_acl()`), while PUBLIC EXECUTE on new
+--   functions comes from the hard-wired acl default that only a global entry
+--   replaces. Consequence: the global entry also covers functions the
+--   migration owner creates outside schema public. Verified in
+--   tests/integration/platform-r26-revocation.test.ts.
+-- - The migration owner must be the role that actually creates functions;
+--   objects created by another role (including a superuser bootstrap) are not
+--   covered by this entry and stay PUBLIC-executable until reviewed.
 -- - Extension functions (pg_trgm) are intentionally NOT revoked: extension
 --   upgrades recreate them, so the revocation would not be durable. They expose
 --   no table data (see R26 inventory section 7). ALTER DEFAULT PRIVILEGES does
@@ -38,8 +50,10 @@ REVOKE EXECUTE ON FUNCTION public.vibress_plugin_storage_append_only()
   FROM PUBLIC;
 
 -- 2. Future functions created by the migration owner are closed by default.
---    Replace <MIGRATION_OWNER> before running. Re-running is idempotent.
-ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER> IN SCHEMA public
+--    Replace <MIGRATION_OWNER> before running. No IN SCHEMA clause: a
+--    schema-scoped entry cannot remove the hard-wired PUBLIC EXECUTE (see the
+--    scope note above). Re-running is idempotent.
+ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER>
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
 -- 3. Re-grant only to roles with a reviewed need. Leave empty until the
@@ -77,13 +91,15 @@ BEGIN
 END
 $$;
 
--- 5. Fail closed if the default-privilege change did not take effect.
+-- 5. Fail closed if the default-privilege change did not take effect. The
+--    entry must be global (defaclnamespace = 0); a schema-scoped entry with
+--    the same ACL does not affect object creation.
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
       FROM pg_default_acl d
-     WHERE d.defaclnamespace = 'public'::regnamespace
+     WHERE d.defaclnamespace = 0
        AND d.defaclobjtype = 'f'
        AND pg_get_userbyid(d.defaclrole) = '<MIGRATION_OWNER>'
        AND NOT EXISTS (
@@ -103,7 +119,8 @@ COMMIT;
 -- ---------------------------------------------------------------------------
 -- node scripts/audit-function-privileges.mjs "<database url>"
 --   expect: public_functions 33, public_execute 31 (all extension-owned),
---           default_acl_entries >= 1
+--           default_acl_entries >= 1 with one global (defaclnamespace 0)
+--           function entry whose ACL has no PUBLIC grantee
 -- Then run the residual integration test with its assertion flipped to expect
 -- 42501 for the platform runtime role.
 
@@ -115,7 +132,7 @@ COMMIT;
 --   TO PUBLIC;
 -- GRANT EXECUTE ON FUNCTION public.vibress_plugin_storage_append_only()
 --   TO PUBLIC;
--- ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER> IN SCHEMA public
+-- ALTER DEFAULT PRIVILEGES FOR ROLE <MIGRATION_OWNER>
 --   GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
 -- COMMIT;
 --
