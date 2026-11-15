@@ -39,13 +39,13 @@ tree. The full integration suite was **not green in this environment**
 (44/46 files; 12 unrelated LMS tests fail on `*.localhost` DNS and fail
 identically at baseline `c34e159d`). CI run
 [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696)
-on the P2 code SHA `054ac8e6` (`docs` head `9684362f`) passed `build`, `e2e`
-and `container-scan`; the build job includes typecheck, lint, documentation
-links, unit and integration steps.
+on head `9684362f` (which contains P2 code `054ac8e6`) passed `build`, `e2e`
+and `container-scan`; the final docs-only head `0d712005` passed run
+[43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602).
 
 | Suite | Result |
 | --- | --- |
-| **Full platform suite, P2 tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 191 tests passed**, exit 0, no unhandled errors |
+| **Full platform suite, P2 tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **12 files / 195 tests passed**, exit 0, no unhandled errors |
 | **Reference app, P2 tree** (`tests/integration/platform-reference-app.test.ts`) | **86/86 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation); 11 signature-identity tests (exact signature; two explicit overloads; unauthorized overload; late-added overload; `PUBLIC` EXECUTE; explicit grant on an unauthorized overload; SECURITY DEFINER; refused non-existent signature; signature change; removed definition; contract validation); 4 prior atomic-provisioning tests plus 6 connection-safety tests (successful commit reuse, rollback + retry, failed `BEGIN`, failed `ROLLBACK`, terminated backend, unknown `COMMIT` outcome) |
 | Architecture boundary (`tests/architecture/platform-boundaries.test.ts`) | 6/6 passed, including no provisioning imports/owner identifiers in `server.ts`/`start.ts` |
 | Typecheck + lint, P2 tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
@@ -54,6 +54,7 @@ links, unit and integration steps.
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 24/24 passed |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
 | R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | Re-measured 2026-11-15 on the P2 tree: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role |
+| R26 proposal verification (`tests/integration/platform-r26-revocation.test.ts`) | **4/4 passed** in a disposable database with a fresh non-superuser owner; reads the proposal file and applies its exact statements. Proves: PUBLIC execute denied on both trigger functions; global `pg_default_acl` entry with no `PUBLIC` grantee; owner-created functions in `public` **and** another schema denied (`42501`); `pg_trgm` functions still PUBLIC (R26-EXT); trigger still fires for the caller without runtime EXECUTE; fail-closed guard rejects an unreviewed PUBLIC-executable function and re-application is idempotent; rollback restores the built-in default. Shared dev database unchanged (audit above re-run after: 33/33, 0 default ACLs). **Proposal still not applied anywhere.** |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
@@ -61,9 +62,9 @@ links, unit and integration steps.
 | Unit/boundary/component suite (`pnpm test:unit`, P2 tree) | 362 files / 2585 tests passed, exit 0, 279.12 s |
 | Full integration suite (`pnpm test:integration`, P2 tree) | **44/46 files, 583/595 tests passed**; 12 tests in `real-lms-authoring-host.test.ts` and `real-lms-pilot-host.test.ts` fail on `getaddrinfo ENOTFOUND site-a-<runId>.localhost`. The same 12 fail at baseline `c34e159d` with the P2 changes stashed (diff hash verified), and the changed files are platform-only, so this is an environment defect, not a regression; **not reported as PASS** |
 | Workspace typecheck on the P2 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
-| CI on the P2 source SHA | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on code `054ac8e6` (docs head `9684362f`): `build`, `e2e` and `container-scan` succeeded; the build job includes typecheck, lint, docs links, unit and integration steps |
+| CI on the P2 source head | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on head `9684362f` (contains code `054ac8e6`), and run [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602) on the final docs-only head `0d712005`: `build`, `e2e` and `container-scan` succeeded; the build job includes typecheck, lint, docs links, unit and integration steps |
 | CI on the prior increment's SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
-| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 89 links across 12 files resolve |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 90 links across 12 files resolve |
 
 Integration suites share the dev database and must run sequentially. One run that
 overlapped a second suite produced 2 spurious `setup.test.ts` failures (shared tables
@@ -79,7 +80,7 @@ runs passed.
 | W1-T02 split owner/registry access from serving | P0 | **Superseded by P0-A/P1** — the owner pool was removed from the serving process entirely; provisioning is a separate executable |
 | W1-T03 atomic installation binding | P0 | **Superseded by the P1 create/update split** — creation is one statement with its audit row; installation changes are a separate mandatory-CAS operation with a transactional audit row |
 | W1-T04 transaction trust boundary | P0 | **Done** — scoped handle sealed at settlement, escaped in-flight work fails the unit closed and destroys the connection, role switching rejected and re-verified against the identity captured at `BEGIN`, failed `ROLLBACK`/`COMMIT` destroys the connection; six unit and two real-PostgreSQL negative tests |
-| W1-T05 R26 PUBLIC EXECUTE revocation | P0 | Blocked — requires DB-owner authorization; [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared and proposal 0055 hardened (fail-closed checks, verification, rollback), **not applied**; Scope B legacy-role grant decision also required |
+| W1-T05 R26 PUBLIC EXECUTE revocation | P0 | **Blocked — requires DB-owner authorization.** [Approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared, **not applied**. Proposal 0055 corrected on 2026-11-15: the schema-scoped `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public` was measured to be ineffective on PostgreSQL 16.15 (schema-scoped defaults are additive over an empty baseline) and replaced with the global form; the fail-closed guard now requires the global row. The corrected proposal is executed and pinned by `platform-r26-revocation.test.ts` in a disposable database only. Scope B legacy-role grant decision also required |
 | W1-T06 Redis/S3/queue isolation proof | P1 | Pending — requires production-shaped infrastructure authorization |
 | W1-T07 production identity provider | P1 | Pending — static bearer-token directory remains reference-only |
 | W1-T08 CMS/Studio fixture pack; F-012 decision; legacy docs links | P1 | **Done** — digest-pinned two-publication CMS/Studio pack with run-scoped provisioning and teardown, 4 pack unit tests and 3 real HTTP+PostgreSQL compatibility tests (per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and restore); 76 legacy docs links rewritten and the full docs tree validates (612/296); F-012 decision record proposed (option B), **not accepted** |

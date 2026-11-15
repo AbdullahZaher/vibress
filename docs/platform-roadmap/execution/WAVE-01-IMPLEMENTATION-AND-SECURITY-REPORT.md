@@ -232,7 +232,7 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **P2 remediation tree**) | **11 files / 191 tests passed**, 8.65 s, exit 0, no unhandled errors |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **P2 remediation tree**) | **12 files / 195 tests passed**, exit 0, no unhandled errors |
 | `… tests/integration/platform-reference-app.test.ts` (**P2 remediation tree**) | **86 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources; contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation) and **11 signature-identity tests** (exact signature authorized; two explicit overloads authorized; unauthorized overload, `PUBLIC` EXECUTE on an unrelated function, explicit grant on an unauthorized overload, SECURITY DEFINER, late-added overload, changed signature and removed definition refused; provisioning refuses a non-existent signature; contract version/identity validation); 4 prior atomic-provisioning tests plus **6 connection-safety tests** (successful commit reuse, rollback + retry, failed `BEGIN`, failed `ROLLBACK`, terminated backend, unknown `COMMIT` outcome) |
 | `… tests/architecture/platform-boundaries.test.ts` | **6 tests passed**, including the serving-process provisioning-authority boundary |
 | `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` + `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` (**P2 remediation tree**) | both passed |
@@ -254,9 +254,10 @@ non-superuser owner and re-verify there. Open blocker.
 | **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`, **P2 remediation tree**) | **362 files / 2585 tests passed**, exit 0, 279.12 s |
 | **Full integration suite** (`pnpm test:integration`, sequential, **P2 remediation tree**) | **44/46 files and 583/595 tests passed**; 12 tests in 2 files failed on `getaddrinfo ENOTFOUND site-a-<runId>.localhost` because this host no longer resolves wildcard `*.localhost`. The identical 12 tests fail at the committed baseline `c34e159d` with the P2 changes stashed (working-tree diff hash `c5f6ae74…` verified before and after), and the changed files are platform-only. **Not claimed as PASS**; the failure is environmental and unrelated to the P2 code |
 | Workspace typecheck (`pnpm exec nx run-many --target=typecheck --all --skip-nx-cache`, **P2 remediation tree**) | **74/74 projects succeeded**, 1 m 16 s |
-| `pnpm docs:validate-links` (docs validator, program docs) | **89 relative links across 12 files resolve** |
-| `node scripts/validate-docs-links.mjs docs` (full tree) | **661 relative links across 300 files resolve** |
+| `pnpm docs:validate-links` (docs validator, program docs) | **90 relative links across 12 files resolve** |
+| `node scripts/validate-docs-links.mjs docs` (full tree) | **662 relative links across 300 files resolve** |
 | `node scripts/audit-function-privileges.mjs` (read-only, **P2 remediation tree**) | Re-measured 2026-11-15: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role (`vibress`) |
+| `… tests/integration/platform-r26-revocation.test.ts` (new, 2026-11-15) | **4 tests passed** in a disposable database with a fresh non-superuser owner. The test reads `proposals/0055_revoke_public_execute.sql` and applies its exact statements, proving PUBLIC execute denied on both trigger functions, a global `pg_default_acl` entry with no `PUBLIC` grantee, owner-created functions in `public` and another schema denied (`42501`), `pg_trgm` still PUBLIC (R26-EXT), the trigger still firing for the caller, the fail-closed guard rejecting an unreviewed PUBLIC-executable function, idempotent re-application and rollback to the built-in default. This also exposed and corrected a defect in the draft proposal: `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` is a no-op on PostgreSQL 16.15 because schema-scoped default ACLs are additive over an empty baseline. **Nothing was applied to the shared dev database** (audit re-run unchanged: 33/33, 0 default ACLs) |
 | `DATABASE_URL=… pnpm test:e2e:platform-reference` (Playwright, API request context) | **8 tests passed**: public health, missing/unknown principal 401, missing tenant 400, member-on-staff 403, invalid input 400, tenant-scoped create/list, cross-tenant 403, second tenant empty through RLS; harness created and dropped its roles and rows |
 | `pnpm platform:provision-roles` against the dev fixture (throwaway roles) | Provisioned, then verified runtime role denied registry/membership/installation tables and `CREATE`; reader SELECT-only on memberships; both dropped, `pg_default_acl` back to 0 |
 | Pre-existing `tests/integration/platform-packages.test.ts` under the root config | **26 tests passed** (runs under root aliases, not the platform config) |
@@ -264,23 +265,26 @@ non-superuser owner and re-verify there. Open blocker.
 | `tsc` (workspace options) + ESLint on the W1-T09 scripts, Playwright config and spec | passed, no output |
 
 Rows labelled **P2 remediation tree** were measured on the working tree committed
-as `054ac8e6` on top of `0f64936a`. Platform suite (11 files / 191 tests),
+as `054ac8e6` on top of `0f64936a`. Platform suite (12 files / 195 tests,
+including the new isolated R26 proposal harness),
 unit suite (362 files / 2585 tests), workspace typecheck (74/74), reference-app
 Playwright (8/8), targeted typecheck/ESLint and both docs link validators passed
 on that tree. The full integration suite was **not green in this environment**:
 44/46 files and 583/595 tests passed, and the 12 failures were reproduced
 unchanged at baseline `c34e159d` (see the row above), so they are not a
 regression and are not reported as a pass. The same suite's integration step
-passed in CI on `054ac8e6` (Linux resolves wildcard `*.localhost`), so the code
-path is covered there while the local limit stays recorded. CI run
+passed in CI on head `9684362f` (which contains P2 code `054ac8e6`; Linux
+resolves wildcard `*.localhost`), so the code path is covered there while the
+local limit stays recorded. CI run
 [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696)
-on the P2 code SHA `054ac8e6` (docs head `9684362f`) passed typecheck, lint,
-explicit-any guard, documentation links, unit, integration, locale replay,
-build, clean-tree and production dependency audit, and the `e2e` and
-`container-scan` jobs succeeded; CI run
-[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
-remains the prior increment's evidence. The earlier green run is not reused as
-proof of the P2 code.
+on head `9684362f` passed typecheck, lint, explicit-any guard, documentation
+links, unit, integration, locale replay, build, clean-tree and production
+dependency audit, and the `e2e` and `container-scan` jobs succeeded; the final
+docs-only head `0d712005` passed run
+[43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602).
+CI run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
+remains the prior increment's evidence on `0f64936a`. No run is attributed to a
+commit other than its `head_sha`.
 
 The prior tree (`0f64936a`) had also passed the full integration suite
 (46 files / 578 tests) when wildcard `*.localhost` resolution was available on
@@ -633,7 +637,7 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
 
 | ID | Blocker | Impact | State |
 | --- | --- | --- | --- |
-| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role; legacy `vibress_app` additionally holds explicit function EXECUTE | Owner code callable without a reviewed grant | Inventoried and re-measured 2026-11-14; [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared, revocation **not applied**; Scope B legacy grant open |
+| R26 | `PUBLIC` function `EXECUTE` reachable by the platform role; legacy `vibress_app` additionally holds explicit function EXECUTE | Owner code callable without a reviewed grant | Inventoried and re-measured 2026-11-15; [approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared, revocation **not applied**. Proposal 0055 corrected on 2026-11-15: the draft's schema-scoped `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public` was measured ineffective on PostgreSQL 16.15 (schema-scoped defaults are additive over an empty baseline) and replaced with the global form; the corrected SQL is executed and pinned by `platform-r26-revocation.test.ts` in a disposable database only. Scope B legacy grant open |
 | — | Deployment owner (`vibress`) is a superuser, which bypasses `FORCE RLS` | Owner could bypass if left as-is | Test proven; deployment change open |
 | R35 | Views/materialized reports not covered by policy | Potential cross-tenant read if views are exposed | Open (excluded from contract) |
 | R37 | Legacy `runInTransaction` still nests without savepoints (the scoped tenant unit of work is hardened) | Old CMS code can half-commit semantics | Unchanged by design; documented |
@@ -683,7 +687,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on the P2 code SHA `054ac8e6` (docs head `9684362f`): `build`, `e2e` and `container-scan` succeeded. Prior increment: run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a` |
+| CI on the final source SHA | **PASS** — final docs-only head `0d712005`: run [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602), `build`, `e2e` and `container-scan` succeeded. P2 code head `9684362f` (contains `054ac8e6`): run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696), same jobs succeeded. Prior increment `0f64936a`: run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) |
 
 The author does not sign off on this implementation, does not mark the gate
 passed, and did not fabricate any signature or approval.
@@ -708,10 +712,12 @@ verification, full SET-able membership closure, a hardened tenant transaction tr
 boundary (async escape, role-switch rejection, connection destruction), a
 digest-pinned two-publication CMS/Studio compatibility pack proven over HTTP +
 PostgreSQL, a fully validating docs tree, 44/46 integration files with the
-remaining two proven to fail identically at baseline on host DNS, and a
-green CI run ([43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696))
-on the P2 code SHA `054ac8e6` (`build`, `e2e`, `container-scan`); the same run's
-build job includes unit and integration steps.
+remaining two proven to fail identically at baseline on host DNS, and
+green CI runs on head `9684362f` (contains P2 code `054ac8e6`) and on the final
+docs-only head `0d712005`
+([43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696),
+[43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602));
+`build`, `e2e` and `container-scan` succeeded in both.
 
 Missing evidence:
 R26 revocation approval/application,
