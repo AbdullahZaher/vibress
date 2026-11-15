@@ -61,13 +61,13 @@ and `container-scan`; the final docs-only head `0d712005` passed run
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
-| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-15: 668 links across 301 files resolve |
+| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-15: 674 links across 303 files resolve |
 | Unit/boundary/component suite (`pnpm test:unit`, P2 tree) | 362 files / 2585 tests passed, exit 0, 279.12 s |
 | Full integration suite (`pnpm test:integration`, P2 tree) | **44/46 files, 583/595 tests passed**; 12 tests in `real-lms-authoring-host.test.ts` and `real-lms-pilot-host.test.ts` fail on `getaddrinfo ENOTFOUND site-a-<runId>.localhost`. The same 12 fail at baseline `c34e159d` with the P2 changes stashed (diff hash verified), and the changed files are platform-only, so this is an environment defect, not a regression; **not reported as PASS** |
 | Workspace typecheck on the P2 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
 | CI on the P2 source head | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on head `9684362f` (contains code `054ac8e6`), and run [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602) on the final docs-only head `0d712005`: `build`, `e2e` and `container-scan` succeeded; the build job includes typecheck, lint, docs links, unit and integration steps |
 | CI on the prior increment's SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
-| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 96 links across 13 files resolve |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 102 links across 15 files resolve |
 
 Integration suites share the dev database and must run sequentially. One run that
 overlapped a second suite produced 2 spurious `setup.test.ts` failures (shared tables
@@ -84,8 +84,8 @@ runs passed.
 | W1-T03 atomic installation binding | P0 | **Superseded by the P1 create/update split** — creation is one statement with its audit row; installation changes are a separate mandatory-CAS operation with a transactional audit row |
 | W1-T04 transaction trust boundary | P0 | **Done** — scoped handle sealed at settlement, escaped in-flight work fails the unit closed and destroys the connection, role switching rejected and re-verified against the identity captured at `BEGIN`, failed `ROLLBACK`/`COMMIT` destroys the connection; six unit and two real-PostgreSQL negative tests |
 | W1-T05 R26 PUBLIC EXECUTE revocation | P0 | **Blocked — requires DB-owner authorization.** [Approval request](R26-REVOCATION-APPROVAL-REQUEST.md) prepared, **not applied**. Proposal 0055 corrected on 2026-11-15: the schema-scoped `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public` was measured to be ineffective on PostgreSQL 16.15 (schema-scoped defaults are additive over an empty baseline) and replaced with the global form; the fail-closed guard now requires the global row. The corrected proposal is executed and pinned by `platform-r26-revocation.test.ts` in a disposable database only. Scope B legacy-role grant decision also required |
-| W1-T06 Redis/S3/queue isolation proof | P1 | Pending — requires production-shaped infrastructure authorization |
-| W1-T07 production identity provider | P1 | Pending — static bearer-token directory remains reference-only |
+| W1-T06 Redis/S3/queue isolation proof | P1 | **Blocked — authorization required.** Harness and deny matrix specified in the [resource-isolation request](W1-T06-RESOURCE-ISOLATION-REQUEST.md); no ACL, bucket or credential change made. Current cache/queue/storage paths remain naming-isolated, not identity-isolated |
+| W1-T07 production identity provider | P1 | **Blocked — authorization required.** Adapter contract, deny matrix and required IdP claims specified in the [identity-provider request](W1-T07-IDENTITY-PROVIDER-REQUEST.md); static bearer-token directory remains reference-only |
 | W1-T08 CMS/Studio fixture pack; F-012 decision; legacy docs links | P1 | **Done** — digest-pinned two-publication CMS/Studio pack with run-scoped provisioning and teardown, 4 pack unit tests and 3 real HTTP+PostgreSQL compatibility tests (per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and restore); 76 legacy docs links rewritten and the full docs tree validates (612/296); F-012 decision record proposed (option B) with an A/B matrix and a fail-closed topology/onboarding boot gate (5 tests), **not accepted** |
 | W1-T09 runbooks, registry change audit, reference-app Playwright, R40, ownership | P2 | **Done** — [registry change audit](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md) with migration 0057 and real-PostgreSQL tests (69 reference-app tests on the final tree); [boot/registry/deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md) and `pnpm platform:provision-roles`; [reference-app Playwright](PLATFORM-BOOT-REGISTRY-RUNBOOK.md#9-reference-app-playwright-harness) **8/8 passed** with per-run roles/rows cleaned; [R40 decision record](R40-VERSION-IDENTITY-DECISION.md) and [ownership assignment request](OWNERSHIP-ASSIGNMENT-REQUEST.md) prepared but unresolved/unsigned |
 | P0-A privileged provisioning authority out of the serving process | P0 | **Done in code, unreviewed** — separate `pnpm platform:provision-reference` executable; serving refuses `DATABASE_URL`, holds no owner pool/registry store, and a source-boundary test enforces it; child-process negative tests |
@@ -129,6 +129,8 @@ runs passed.
 - [Platform boot, registry and deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md)
 - [R40 version-identity decision record](R40-VERSION-IDENTITY-DECISION.md)
 - [R35 runtime view policy](R35-VIEW-SURFACE-POLICY.md)
+- [W1-T06 resource-isolation request](W1-T06-RESOURCE-ISOLATION-REQUEST.md)
+- [W1-T07 identity-provider request](W1-T07-IDENTITY-PROVIDER-REQUEST.md)
 - [Ownership assignment request](OWNERSHIP-ASSIGNMENT-REQUEST.md)
 - [ADR-PLAT-001](adr/ADR-PLAT-001-installation-topology.md)
 - [ADR-PLAT-002](adr/ADR-PLAT-002-identity-vocabulary.md)
