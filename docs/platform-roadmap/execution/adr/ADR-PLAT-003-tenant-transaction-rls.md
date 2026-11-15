@@ -89,8 +89,14 @@ Existing runtime paths cannot enforce tenant isolation:
    non-superuser owner. The dev/Compose migration role `vibress` is still a
    superuser, so the deployment topology must be changed to a non-superuser owner
    and re-verified there; a superuser owner would bypass RLS silently.
-3. **Views/materialized reports (R35):** no view is covered by this policy; views
-   must be excluded from the generated resource contract or reviewed separately.
+3. **Views/materialized reports (R35):** the runtime privilege contract now
+   rejects materialized views outright and refuses to boot when a declared view
+   is not `security_invoker`, with a measured leak/deny test
+   ([R35 policy](../R35-VIEW-SURFACE-POLICY.md)). The membership-reader and
+   deployment-verifier profiles grant no view, and a view reaching them would be
+   reported as an unexpected relation privilege. Views executed by
+   owner-credential code remain outside this guard and are excluded by default
+   from the generated resource contract.
 4. **Cross-installation proof:** see ADR-PLAT-001.
 5. **Independent security review** by someone other than the author.
 

@@ -1926,6 +1926,19 @@ describe("runtime role verification", () => {
           ]),
         ),
       ).toThrow(/exact pg_get_function_identity_arguments value/);
+      expect(() =>
+        assertValidRuntimePrivilegeContract({
+          ...REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+          relations: [
+            {
+              schema: "public",
+              relation: "platform_crm_customers",
+              kind: "materialized_view",
+              privileges: ["SELECT"],
+            },
+          ],
+        }),
+      ).toThrow(/materialized views are excluded from the runtime contract/);
     });
 
     it("authorizes one exact function signature", async () => {

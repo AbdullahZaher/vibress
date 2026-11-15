@@ -44,6 +44,10 @@ export interface RuntimeFunctionGrant {
  *
  * A profile must be updated before an application gains a new relation, view,
  * sequence or owner-defined function; there is no implicit allow.
+ *
+ * R35: a declared `view` must exist with `security_invoker=true` (boot rejects
+ * it otherwise) and `materialized_view` is rejected outright, because stored
+ * materialized rows cannot be filtered by the caller's row-level security.
  */
 export interface PlatformRuntimePrivilegeContract {
   readonly version: 2;
@@ -116,6 +120,11 @@ export function assertValidRuntimePrivilegeContract(
     if (!RELATION_KINDS.includes(grant.kind)) {
       throw new Error(
         `Runtime privilege contract has an invalid relation kind '${String(grant.kind)}' for ${grant.schema}.${grant.relation}`,
+      );
+    }
+    if (grant.kind === "materialized_view") {
+      throw new Error(
+        `Runtime privilege contract declares '${grant.schema}.${grant.relation}' as a materialized view; PostgreSQL cannot evaluate row-level security as the caller against stored materialized rows, so materialized views are excluded from the runtime contract (R35)`,
       );
     }
     if (grant.privileges.length === 0) {

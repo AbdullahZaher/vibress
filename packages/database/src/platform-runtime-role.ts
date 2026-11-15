@@ -249,6 +249,7 @@ export type PlatformRuntimeRoleViolationCode =
   | "membership_read_missing"
   | "membership_write_privilege"
   | "unexpected_relation_privilege"
+  | "view_not_security_invoker"
   | "unexpected_column_privilege"
   | "unexpected_sequence_privilege"
   | "unexpected_schema_privilege"
@@ -1137,6 +1138,31 @@ async function inspectRuntimePrivilegeContract(
     ),
   );
   const allowedSchemas = new Set(contract.schemas);
+
+  for (const grant of contract.relations) {
+    if (grant.kind !== "view") continue;
+    const options = (
+      await client.query<{ options: string | null }>(
+        `SELECT array_to_string(c.reloptions, ',') AS options
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = $1 AND c.relname = $2`,
+        [grant.schema, grant.relation],
+      )
+    ).rows[0]?.options;
+    if (options === undefined) continue;
+    const invoker = (options ?? "")
+      .split(",")
+      .find((option) => option.startsWith("security_invoker="))
+      ?.slice("security_invoker=".length)
+      .toLowerCase();
+    if (invoker !== "true" && invoker !== "on") {
+      addViolation(
+        "view_not_security_invoker",
+        `'${grant.schema}.${grant.relation}' is declared as a view but is not security_invoker; PostgreSQL would evaluate it with the view owner's rights and skip row-level security for the caller (R35)`,
+      );
+    }
+  }
 
   const relationPrivileges = (
     await client.query<{

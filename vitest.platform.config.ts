@@ -25,6 +25,7 @@ export default defineConfig({
       "tests/integration/platform-reference-app.test.ts",
       "tests/integration/platform-r26-revocation.test.ts",
       "tests/integration/platform-production-topology.test.ts",
+      "tests/integration/platform-view-surface.test.ts",
       "tests/architecture/**/*.test.ts",
       "packages/platform-kernel/src/**/*.test.ts",
       "packages/tenancy/src/**/*.test.ts",
