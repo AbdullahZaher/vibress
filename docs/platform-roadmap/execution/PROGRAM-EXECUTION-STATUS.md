@@ -3,16 +3,20 @@
 > **Last updated: 2026-11-15.** Implementation branch:
 > `feat/wave1-platform-kernel-tenant-isolation`, cut from `main` at
 > `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`. Verified source HEAD
-> `a9d99a414f671583485900433286702f6a5b6a2c` (PR #166 head; CI run
-> 43750359129 passed on that exact SHA). Code evidence commit `f0d8aaed`
-> (offline OIDC verifier + reference auth-mode gate); prior head `beaeeb71`
-> passed run 43744722260. Earlier remediation increments:
+> `a9d99a414f671583485900433286702f6a5b6a2c` (CI run 43750359129 passed on
+> that exact SHA). Code evidence commit `f0d8aaed` (offline OIDC verifier +
+> reference auth-mode gate); prior head `beaeeb71` passed run 43744722260.
+> Docs-only head `0d308dfa15bca01489c5ecb4dbcbe6ffcc143066` after
+> `a9d99a41` passed run 43752560245
+> (`build`, `e2e`, `container-scan`). Earlier remediation increments:
 > `b62ffdf5`, `6b31320d`, `0f64936a` and P2 `054ac8e6`; the R35 increment is
 > `b2ffc688`. Roadmap input pinned at PR #151 (draft) head
 > `c9997a9353a229a4287256f5ba3b94d718e3a5d9`.
 >
-> Documentation-only commits after `a9d99a41` do not change code or evidence;
-> their own CI result is visible in PR #166 checks.
+> Documentation-only commits after `a9d99a41` do not change code or evidence.
+> The docs-only head `0d308dfa` passed its own full CI run 43752560245; that
+> result is recorded in the evidence table and does not re-attest the code
+> evidence above. Later docs-only heads are covered by their own PR checks.
 >
 > **No wave has passed its gate. No ADR is accepted. No production authorization
 > exists.** This file records measured status only.
@@ -73,6 +77,7 @@ below).
 | CI on `0d248dc6` | **PASS** — run [43742169334](https://github.com/AbdullahZaher/vibress/actions/runs/43742169334) on head `0d248dc6`: typecheck, lint, explicit-any guard, docs links, unit, integration, locale replay, build, clean-tree, dependency audit, `e2e` and `container-scan` all succeeded |
 | CI on prior verified source HEAD `beaeeb71` | **PASS** — run [43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260) on head `beaeeb71`: `build`, `e2e` and `container-scan` all succeeded |
 | CI on verified source HEAD `a9d99a41` | **PASS** — run [43750359129](https://github.com/AbdullahZaher/vibress/actions/runs/43750359129) on head `a9d99a414f671583485900433286702f6a5b6a2c`: typecheck, lint, explicit-any guard, docs links, unit, integration, locale replay, build, clean-tree, dependency audit, `e2e` and `container-scan` all succeeded |
+| CI on docs-only head `0d308dfa` | **PASS** — run [43752560245](https://github.com/AbdullahZaher/vibress/actions/runs/43752560245) on head `0d308dfa15bca01489c5ecb4dbcbe6ffcc143066` (`pull_request` event): `build`, `e2e` and `container-scan` all succeeded. This head contains no code change after `a9d99a41` |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
