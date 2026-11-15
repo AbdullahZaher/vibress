@@ -66,8 +66,12 @@ export async function provisionReferenceApplication(
   }
 
   const client = await options.ownerPool.connect();
+  let beginSucceeded = false;
+  let commitAttempted = false;
+  let destroyConnection = false;
   try {
     await client.query("BEGIN");
+    beginSucceeded = true;
     const store = new PostgresApplicationRegistryStore(client);
 
     const registration = await store.sync(options.application, {
@@ -126,12 +130,32 @@ export async function provisionReferenceApplication(
       artifactDigest,
     });
 
+    commitAttempted = true;
     await client.query("COMMIT");
     return { registration, installation: verified.installation };
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    if (beginSucceeded) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // The connection no longer has a known transaction state.
+        destroyConnection = true;
+      }
+    } else {
+      // BEGIN itself failed, so the session state is unknown.
+      destroyConnection = true;
+    }
+    if (commitAttempted) {
+      // A failed COMMIT may still have committed on the server. The outcome is
+      // unknown, so the connection must never be reused.
+      destroyConnection = true;
+    }
     throw error;
   } finally {
-    client.release();
+    if (destroyConnection) {
+      client.release(true);
+    } else {
+      client.release();
+    }
   }
 }

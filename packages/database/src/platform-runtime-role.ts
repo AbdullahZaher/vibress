@@ -143,18 +143,19 @@ export async function provisionPlatformRuntimeRole(
   for (const grant of contract.functions) {
     const signatures = (
       await client.query<{ signature: string }>(
-        `SELECT DISTINCT p.oid::regprocedure::text AS signature
+        `SELECT p.oid::regprocedure::text AS signature
            FROM pg_proc p
            JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = $1
             AND p.proname = $2
-            AND p.prokind IN ('f', 'p')`,
-        [grant.schema, grant.name],
+            AND p.prokind IN ('f', 'p')
+            AND pg_get_function_identity_arguments(p.oid) = $3`,
+        [grant.schema, grant.name, grant.identityArguments],
       )
     ).rows.map((row) => row.signature);
     if (signatures.length !== 1) {
       throw new Error(
-        `Runtime privilege contract references function '${grant.schema}.${grant.name}' but found ${signatures.length} definitions`,
+        `Runtime privilege contract references function '${grant.schema}.${grant.name}(${grant.identityArguments})' but found ${signatures.length} matching definitions`,
       );
     }
     await client.query(
@@ -252,6 +253,7 @@ export type PlatformRuntimeRoleViolationCode =
   | "unexpected_sequence_privilege"
   | "unexpected_schema_privilege"
   | "unexpected_function_execute"
+  | "contract_function_missing"
   | "privilege_contract_missing"
   | "privilege_contract_invalid";
 
@@ -1129,7 +1131,10 @@ async function inspectRuntimePrivilegeContract(
     ]),
   );
   const allowedFunctions = new Set(
-    contract.functions.map((grant) => `${grant.schema}.${grant.name}`),
+    contract.functions.map(
+      (grant) =>
+        `${grant.schema}.${grant.name}(${grant.identityArguments})`,
+    ),
   );
   const allowedSchemas = new Set(contract.schemas);
 
@@ -1285,10 +1290,12 @@ async function inspectRuntimePrivilegeContract(
       identity: string;
       schemaName: string;
       functionName: string;
+      identityArguments: string;
     }>(
       `SELECT i.identity::text AS identity,
               n.nspname AS "schemaName",
-              p.proname AS "functionName"
+              p.proname AS "functionName",
+              pg_get_function_identity_arguments(p.oid) AS "identityArguments"
          FROM unnest(ARRAY[current_user, session_user]) AS i(identity)
          CROSS JOIN pg_proc p
          JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1303,15 +1310,38 @@ async function inspectRuntimePrivilegeContract(
                AND d.deptype = 'e'
           )
           AND has_function_privilege(i.identity, p.oid, 'EXECUTE')
-        GROUP BY i.identity, n.nspname, p.proname`,
+        GROUP BY i.identity, n.nspname, p.proname,
+                 pg_get_function_identity_arguments(p.oid)`,
     )
   ).rows;
   for (const executable of executableFunctions) {
-    const key = `${executable.schemaName}.${executable.functionName}`;
+    const key = `${executable.schemaName}.${executable.functionName}(${executable.identityArguments})`;
     if (!allowedFunctions.has(key)) {
       addViolation(
         "unexpected_function_execute",
         `'${executable.identity}' can execute '${key}', which the runtime privilege contract does not describe`,
+      );
+    }
+  }
+
+  for (const grant of contract.functions) {
+    const definition = (
+      await client.query<{ present: boolean }>(
+        `SELECT true AS present
+           FROM pg_proc p
+           JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = $1
+            AND p.proname = $2
+            AND p.prokind IN ('f', 'p')
+            AND pg_get_function_identity_arguments(p.oid) = $3
+          LIMIT 1`,
+        [grant.schema, grant.name, grant.identityArguments],
+      )
+    ).rows[0];
+    if (!definition?.present) {
+      addViolation(
+        "contract_function_missing",
+        `the runtime privilege contract authorizes '${grant.schema}.${grant.name}(${grant.identityArguments})', but no such function definition exists`,
       );
     }
   }

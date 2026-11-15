@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { Client, Pool } from "pg";
+import { Client, Pool, type PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   asApplicationId,
@@ -25,7 +25,12 @@ import {
   type InstallationRegistrationRecord,
   type InstallationUpdateInput,
 } from "../../packages/database/src/platform-application-registry";
-import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "../../packages/database/src/platform-runtime-privilege-contract";
+import {
+  assertValidRuntimePrivilegeContract,
+  REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+  type PlatformRuntimePrivilegeContract,
+  type RuntimeFunctionGrant,
+} from "../../packages/database/src/platform-runtime-privilege-contract";
 import {
   DeploymentVerificationError,
   verifyDeploymentIdentity,
@@ -307,6 +312,91 @@ async function expectUnsafeRuntimeContractGrant(
     await cleanup(login).catch(() => undefined);
     await dropEphemeralRoles([login]);
   }
+}
+
+function contractWithFunctions(
+  functions: readonly RuntimeFunctionGrant[],
+  schemas: readonly string[] = ["public"],
+): PlatformRuntimePrivilegeContract {
+  return {
+    version: 2,
+    profile: "function-signature-contract-test",
+    schemas,
+    relations: [],
+    sequences: [],
+    functions,
+  };
+}
+
+async function withContractRuntime<T>(
+  contract: PlatformRuntimePrivilegeContract,
+  run: (client: Client, login: string) => Promise<T>,
+): Promise<T> {
+  const login = ephemeralRoleName("fncontract");
+  const password = `${login}_pw`;
+  try {
+    await createEphemeralLogin(login, password);
+    await provisionPlatformRuntimeRole(
+      owner,
+      { roleName: login, password },
+      contract,
+    );
+    const client = new Client({
+      connectionString: roleConnectionString(login, password),
+    });
+    await client.connect();
+    try {
+      return await run(client, login);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  } finally {
+    await dropEphemeralRoles([login]);
+  }
+}
+
+type QueryFault = (
+  text: string,
+  client: PoolClient,
+) => Promise<Error | null> | Error | null;
+
+/**
+ * Wraps one checked-out owner connection so a named command can fail. The
+ * recorded release argument proves whether the implementation destroyed the
+ * connection (`true`) or returned it to the pool (`undefined`).
+ */
+async function faultyOwnerPool(
+  fault: QueryFault,
+): Promise<{
+  pool: Pool;
+  releases: Array<boolean | Error | undefined>;
+}> {
+  const realClient = await ownerPool.connect();
+  // A terminated backend emits a transport-level 'error' event on the checked-out
+  // client; without a listener pg raises it as an uncaught exception. The
+  // awaited query rejection is what the implementation must handle.
+  realClient.on("error", () => undefined);
+  const releases: Array<boolean | Error | undefined> = [];
+  const wrapped = {
+    query: async (text: string, values?: unknown[]) => {
+      const error = await fault(text, realClient);
+      if (error) throw error;
+      return (
+        realClient.query as unknown as (
+          statement: string,
+          parameters?: unknown[],
+        ) => Promise<unknown>
+      )(text, values);
+    },
+    release: (mode?: boolean | Error) => {
+      releases.push(mode);
+      realClient.release(mode);
+    },
+  };
+  return {
+    pool: { connect: async () => wrapped } as unknown as Pool,
+    releases,
+  };
 }
 
 beforeAll(async () => {
@@ -1092,6 +1182,132 @@ describe("atomic provisioning transaction", () => {
       await deleteInstallation(atomicInstallationId);
     }
   });
+
+  it("returns a reusable pooled connection after a successful commit", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const persisted = await store.loadInstallation(atomicInstallationId);
+      expect(persisted).toMatchObject({
+        environment: "staging",
+        artifactDigest: initialDigest,
+      });
+      const pooled = await ownerPool.query<{ ok: number }>("SELECT 1 AS ok");
+      expect(pooled.rows[0]?.ok).toBe(1);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("rolls back a manifest registry failure and allows a retry", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      await expect(
+        provision({
+          application: withVersion(
+            createReferenceApplication({ id: applicationId }),
+            "9.9.9",
+          ),
+        }),
+      ).rejects.toThrow(ApplicationRegistrationDriftError);
+
+      expect(await snapshot()).toEqual(before);
+      const pooled = await ownerPool.query<{ ok: number }>("SELECT 1 AS ok");
+      expect(pooled.rows[0]?.ok).toBe(1);
+
+      await provision();
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("destroys the connection when BEGIN fails", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      const { pool, releases } = await faultyOwnerPool((text) =>
+        text === "BEGIN" ? new Error("simulated BEGIN failure") : null,
+      );
+      await expect(
+        provision({ ownerPool: pool }),
+      ).rejects.toThrow(/simulated BEGIN failure/);
+      expect(releases).toEqual([true]);
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("destroys the connection when ROLLBACK fails", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      await provision();
+      const before = await snapshot();
+      const { pool, releases } = await faultyOwnerPool((text) =>
+        text === "ROLLBACK" ? new Error("simulated ROLLBACK failure") : null,
+      );
+      await expect(
+        provision({
+          ownerPool: pool,
+          environment: "production",
+          artifactDigest: nextDigest,
+          allowInstallationUpdate: true,
+          expectedEnvironment: "staging",
+          expectedArtifactDigest: "3".repeat(64),
+        }),
+      ).rejects.toBeInstanceOf(InstallationMismatchError);
+      expect(releases).toEqual([true]);
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("destroys the connection when the backend is lost mid-provisioning", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      const before = await snapshot();
+      const { pool, releases } = await faultyOwnerPool(async (text, client) => {
+        if (text !== "COMMIT") return null;
+        await client
+          .query("SELECT pg_terminate_backend(pg_backend_pid())")
+          .catch(() => undefined);
+        return new Error("connection lost before commit");
+      });
+      await expect(provision({ ownerPool: pool })).rejects.toThrow(
+        /connection lost before commit/,
+      );
+      expect(releases).toEqual([true]);
+      expect(await snapshot()).toEqual(before);
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
+
+  it("treats an unknown COMMIT outcome as unsafe and destroys the connection", async () => {
+    await deleteInstallation(atomicInstallationId);
+    try {
+      const { pool, releases } = await faultyOwnerPool(async (text, client) => {
+        if (text !== "COMMIT") return null;
+        await client.query("COMMIT");
+        return new Error("commit response lost");
+      });
+      await expect(provision({ ownerPool: pool })).rejects.toThrow(
+        /commit response lost/,
+      );
+      expect(releases).toEqual([true]);
+      // The server may have committed even though the client saw an error; the
+      // guarantee is that this connection is never reused, not a guessed outcome.
+      const persisted = await store.loadInstallation(atomicInstallationId);
+      expect(persisted).toMatchObject({ environment: "staging" });
+    } finally {
+      await deleteInstallation(atomicInstallationId);
+    }
+  });
 });
 
 describe("registry change audit", () => {
@@ -1682,6 +1898,314 @@ describe("runtime role verification", () => {
           .query(`DROP TABLE IF EXISTS ${relation}`)
           .catch(() => undefined);
         await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("rejects a contract version or function identity that is not exact", () => {
+      expect(() =>
+        assertValidRuntimePrivilegeContract({
+          ...REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
+          version: 1,
+        } as unknown as PlatformRuntimePrivilegeContract),
+      ).toThrow(/Unsupported runtime privilege contract version/);
+      expect(() =>
+        assertValidRuntimePrivilegeContract(
+          contractWithFunctions([
+            { schema: "public", name: "missing_identity" } as RuntimeFunctionGrant,
+          ]),
+        ),
+      ).toThrow(/invalid identity arguments/);
+      expect(() =>
+        assertValidRuntimePrivilegeContract(
+          contractWithFunctions([
+            {
+              schema: "public",
+              name: "padded",
+              identityArguments: " integer",
+            },
+          ]),
+        ),
+      ).toThrow(/exact pg_get_function_identity_arguments value/);
+    });
+
+    it("authorizes one exact function signature", async () => {
+      const functionName = ephemeralRoleName("exactfn");
+      const fn = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await expect(
+            assertSafePlatformRuntimeRole(client, {
+              profile: "runtime",
+              privilegeContract: contract,
+            }),
+          ).resolves.toMatchObject({ isSuperuser: false });
+        });
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+      }
+    });
+
+    it("authorizes two overloads of the same name explicitly", async () => {
+      const functionName = ephemeralRoleName("twofns");
+      const fnInteger = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const fnText = `public.${owner.escapeIdentifier(functionName)}(text)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+        { schema: "public", name: functionName, identityArguments: "text" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fnInteger} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await owner.query(
+          `CREATE FUNCTION ${fnText} RETURNS integer LANGUAGE sql AS 'SELECT length($1)'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await expect(
+            assertSafePlatformRuntimeRole(client, {
+              profile: "runtime",
+              privilegeContract: contract,
+            }),
+          ).resolves.toMatchObject({ isSuperuser: false });
+        });
+      } finally {
+        await owner
+          .query(`DROP FUNCTION IF EXISTS ${fnInteger}, ${fnText}`)
+          .catch(() => undefined);
+      }
+    });
+
+    it("rejects an unauthorized overload of an authorized name", async () => {
+      const functionName = ephemeralRoleName("overload");
+      const fnInteger = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const fnText = `public.${owner.escapeIdentifier(functionName)}(text)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fnInteger} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await owner.query(
+          `CREATE FUNCTION ${fnText} RETURNS integer LANGUAGE sql AS 'SELECT length($1)'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["unexpected_function_execute"],
+          );
+        });
+      } finally {
+        await owner
+          .query(`DROP FUNCTION IF EXISTS ${fnInteger}, ${fnText}`)
+          .catch(() => undefined);
+      }
+    });
+
+    it("detects an overload added after role provisioning", async () => {
+      const functionName = ephemeralRoleName("lateoverload");
+      const fnInteger = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const fnBoolean = `public.${owner.escapeIdentifier(functionName)}(boolean)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fnInteger} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await owner.query(
+            `CREATE FUNCTION ${fnBoolean} RETURNS integer LANGUAGE sql AS 'SELECT CASE WHEN $1 THEN 1 ELSE 0 END'`,
+          );
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["unexpected_function_execute"],
+          );
+        });
+      } finally {
+        await owner
+          .query(`DROP FUNCTION IF EXISTS ${fnInteger}, ${fnBoolean}`)
+          .catch(() => undefined);
+      }
+    });
+
+    it("rejects PUBLIC EXECUTE on an unrelated function", async () => {
+      const functionName = ephemeralRoleName("publicfn");
+      const fn = `public.${owner.escapeIdentifier(functionName)}(text)`;
+      const contract = contractWithFunctions([]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT length($1)'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["unexpected_function_execute"],
+          );
+        });
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+      }
+    });
+
+    it("rejects an explicit grant on an unauthorized overload", async () => {
+      const functionName = ephemeralRoleName("grantedoverload");
+      const fnInteger = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const fnText = `public.${owner.escapeIdentifier(functionName)}(text)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fnInteger} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await owner.query(
+          `CREATE FUNCTION ${fnText} RETURNS integer LANGUAGE sql AS 'SELECT length($1)'`,
+        );
+        await withContractRuntime(contract, async (client, login) => {
+          await owner.query(
+            `GRANT EXECUTE ON FUNCTION ${fnText} TO ${owner.escapeIdentifier(login)}`,
+          );
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["unexpected_function_execute"],
+          );
+        });
+      } finally {
+        await owner
+          .query(`DROP FUNCTION IF EXISTS ${fnInteger}, ${fnText}`)
+          .catch(() => undefined);
+      }
+    });
+
+    it("rejects EXECUTE on an authorized-name SECURITY DEFINER function", async () => {
+      const functionName = ephemeralRoleName("definercontract");
+      const fn = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql SECURITY DEFINER AS 'SELECT $1'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["security_definer_execute"],
+          );
+        });
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+      }
+    });
+
+    it("refuses to provision a contract whose exact signature does not exist", async () => {
+      const functionName = ephemeralRoleName("missingfn");
+      const fn = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const login = ephemeralRoleName("missingcontract");
+      const password = `${login}_pw`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "bigint" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await createEphemeralLogin(login, password);
+        await expect(
+          provisionPlatformRuntimeRole(
+            owner,
+            { roleName: login, password },
+            contract,
+          ),
+        ).rejects.toThrow(/found 0 matching definitions/);
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
+        await dropEphemeralRoles([login]);
+      }
+    });
+
+    it("detects a function signature change after provisioning", async () => {
+      const functionName = ephemeralRoleName("replacedfn");
+      const fnInteger = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const fnBigint = `public.${owner.escapeIdentifier(functionName)}(bigint)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fnInteger} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await owner.query(`DROP FUNCTION ${fnInteger}`);
+          await owner.query(
+            `CREATE FUNCTION ${fnBigint} RETURNS bigint LANGUAGE sql AS 'SELECT $1'`,
+          );
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["contract_function_missing", "unexpected_function_execute"],
+          );
+        });
+      } finally {
+        await owner
+          .query(`DROP FUNCTION IF EXISTS ${fnInteger}, ${fnBigint}`)
+          .catch(() => undefined);
+      }
+    });
+
+    it("detects an authorized function that was removed", async () => {
+      const functionName = ephemeralRoleName("removedfn");
+      const fn = `public.${owner.escapeIdentifier(functionName)}(integer)`;
+      const contract = contractWithFunctions([
+        { schema: "public", name: functionName, identityArguments: "integer" },
+      ]);
+      try {
+        await owner.query(
+          `CREATE FUNCTION ${fn} RETURNS integer LANGUAGE sql AS 'SELECT $1'`,
+        );
+        await withContractRuntime(contract, async (client) => {
+          await owner.query(`DROP FUNCTION ${fn}`);
+          await expectUnsafeRole(
+            () =>
+              assertSafePlatformRuntimeRole(client, {
+                profile: "runtime",
+                privilegeContract: contract,
+              }),
+            ["contract_function_missing"],
+          );
+        });
+      } finally {
+        await owner.query(`DROP FUNCTION IF EXISTS ${fn}`).catch(() => undefined);
       }
     });
   });

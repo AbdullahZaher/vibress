@@ -28,6 +28,13 @@ export interface RuntimeSequenceGrant {
 export interface RuntimeFunctionGrant {
   readonly schema: string;
   readonly name: string;
+  /**
+   * Exact PostgreSQL identity arguments, as produced by
+   * `pg_get_function_identity_arguments(oid)` (for example `"integer, text"`,
+   * or `""` for a zero-argument function). Overloads of one name have
+   * different identities and must each be authorized explicitly.
+   */
+  readonly identityArguments: string;
 }
 
 /**
@@ -39,7 +46,7 @@ export interface RuntimeFunctionGrant {
  * sequence or owner-defined function; there is no implicit allow.
  */
 export interface PlatformRuntimePrivilegeContract {
-  readonly version: 1;
+  readonly version: 2;
   readonly profile: string;
   /** Non-system schemas where USAGE is permitted. CREATE is never permitted. */
   readonly schemas: readonly string[];
@@ -92,7 +99,7 @@ function assertUnique(
 export function assertValidRuntimePrivilegeContract(
   contract: PlatformRuntimePrivilegeContract,
 ): void {
-  if (contract.version !== 1) {
+  if (contract.version !== 2) {
     throw new Error(
       `Unsupported runtime privilege contract version: ${String(contract.version)}`,
     );
@@ -161,10 +168,27 @@ export function assertValidRuntimePrivilegeContract(
   for (const grant of contract.functions) {
     assertIdentifier("schema", grant.schema);
     assertIdentifier("function", grant.name);
+    if (typeof grant.identityArguments !== "string") {
+      throw new Error(
+        `Runtime privilege contract has invalid identity arguments for ${grant.schema}.${grant.name}`,
+      );
+    }
+    if (
+      grant.identityArguments !== grant.identityArguments.trim() ||
+      grant.identityArguments.includes("\u0000") ||
+      grant.identityArguments.includes("\n")
+    ) {
+      throw new Error(
+        `Runtime privilege contract identity arguments for ${grant.schema}.${grant.name} must be the exact pg_get_function_identity_arguments value`,
+      );
+    }
   }
   assertUnique(
     "function",
-    contract.functions.map((grant) => `${grant.schema}.${grant.name}`),
+    contract.functions.map(
+      (grant) =>
+        `${grant.schema}.${grant.name}(${grant.identityArguments})`,
+    ),
   );
 }
 
@@ -174,7 +198,7 @@ export function assertValidRuntimePrivilegeContract(
  */
 export const REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT: PlatformRuntimePrivilegeContract =
   Object.freeze({
-    version: 1,
+    version: 2,
     profile: "reference-crm",
     schemas: ["public"],
     relations: [
