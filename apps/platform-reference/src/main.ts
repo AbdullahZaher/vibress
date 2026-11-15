@@ -8,7 +8,10 @@ import {
 } from "./application";
 import { startReferenceApplication } from "./start";
 import { ReferenceTokenDirectory } from "./token-directory";
-import { assertSupportedTopology } from "./topology";
+import {
+  assertReferenceAuthenticationMode,
+  assertSupportedTopology,
+} from "./topology";
 
 const HOST = process.env.PLATFORM_REFERENCE_HOST ?? "127.0.0.1";
 const PORT = Number(process.env.PLATFORM_REFERENCE_PORT ?? "4100");
@@ -24,6 +27,7 @@ function required(name: string): string {
 
 async function main(): Promise<void> {
   assertSupportedTopology(process.env);
+  assertReferenceAuthenticationMode(process.env);
 
   if (process.env.DATABASE_URL?.trim()) {
     throw new Error(

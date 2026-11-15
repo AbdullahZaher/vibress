@@ -4,7 +4,9 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
+  UnsupportedAuthenticationModeError,
   UnsupportedTopologyError,
+  assertReferenceAuthenticationMode,
   assertSupportedTopology,
 } from "../../apps/platform-reference/src/topology";
 
@@ -78,6 +80,73 @@ describe("F-012 deployment topology gate", () => {
     expect(failure.code).toBe(1);
     expect(failure.stderr).toContain("UnsupportedTopologyError");
     expect(failure.stderr).toContain("F-012");
+    expect(failure.stderr).not.toContain("PLATFORM_RUNTIME_DATABASE_URL is required");
+  });
+
+  it("refuses reference bearer tokens in a production-shaped process", () => {
+    for (const env of [
+      { NODE_ENV: "production" },
+      { PLATFORM_ENVIRONMENT: "production" },
+      { PLATFORM_ENVIRONMENT: " PROD " },
+      { NODE_ENV: "test", PLATFORM_ENVIRONMENT: "production" },
+    ]) {
+      const error = capture(() => assertReferenceAuthenticationMode(env));
+      expect(error).toBeInstanceOf(UnsupportedAuthenticationModeError);
+      expect((error as UnsupportedAuthenticationModeError).code).toBe(
+        "unsupported_authentication_mode",
+      );
+      expect((error as Error).message).toContain("W1-T07");
+    }
+  });
+
+  it("accepts only reference authentication outside production", () => {
+    expect(assertReferenceAuthenticationMode({})).toBe("reference");
+    expect(
+      assertReferenceAuthenticationMode({
+        NODE_ENV: "development",
+        PLATFORM_ENVIRONMENT: "staging",
+      }),
+    ).toBe("reference");
+    expect(
+      assertReferenceAuthenticationMode({ PLATFORM_AUTH_MODE: "REFERENCE" }),
+    ).toBe("reference");
+    for (const mode of ["oidc", "jwt", "none"]) {
+      const error = capture(() =>
+        assertReferenceAuthenticationMode({
+          NODE_ENV: "development",
+          PLATFORM_AUTH_MODE: mode,
+        }),
+      );
+      expect(error).toBeInstanceOf(UnsupportedAuthenticationModeError);
+      expect((error as Error).message).toContain(mode);
+    }
+  });
+
+  it("stops a production-shaped serving process before it reads any database URL", async () => {
+    const tsx = path.join(process.cwd(), "node_modules", ".bin", "tsx");
+    const env = {
+      ...process.env,
+      NODE_ENV: "production",
+      PLATFORM_ENVIRONMENT: "production",
+      PLATFORM_AUTH_MODE: "reference",
+    };
+    delete env.DATABASE_URL;
+    delete env.PLATFORM_RUNTIME_DATABASE_URL;
+    delete env.PLATFORM_MEMBERSHIP_READER_DATABASE_URL;
+    delete env.PLATFORM_DEPLOYMENT_VERIFIER_DATABASE_URL;
+
+    const failure = (await promisify(execFile)(
+      tsx,
+      ["apps/platform-reference/src/main.ts"],
+      { env },
+    ).catch((error: { code?: number; stderr?: string }) => error)) as {
+      code?: number;
+      stderr?: string;
+    };
+
+    expect(failure.code).toBe(1);
+    expect(failure.stderr).toContain("UnsupportedAuthenticationModeError");
+    expect(failure.stderr).toContain("W1-T07");
     expect(failure.stderr).not.toContain("PLATFORM_RUNTIME_DATABASE_URL is required");
   });
 });

@@ -41,3 +41,41 @@ export function assertSupportedTopology(
   }
   return topology;
 }
+
+export class UnsupportedAuthenticationModeError extends Error {
+  readonly code = "unsupported_authentication_mode";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedAuthenticationModeError";
+  }
+}
+
+const PRODUCTION_ENVIRONMENTS = new Set(["production", "prod"]);
+
+/**
+ * The static bearer-token directory is a reference adapter, not production
+ * authentication. It cannot be selected in a production-shaped process, and no
+ * other mode is accepted until a production IdP adapter is approved and wired
+ * (W1-T07).
+ */
+export function assertReferenceAuthenticationMode(
+  env: Record<string, string | undefined>,
+): "reference" {
+  const mode = (env.PLATFORM_AUTH_MODE?.trim() || "reference").toLowerCase();
+  if (mode !== "reference") {
+    throw new UnsupportedAuthenticationModeError(
+      `PLATFORM_AUTH_MODE '${mode}' is not available: the production identity-provider adapter is not approved or wired (W1-T07)`,
+    );
+  }
+  const environment = env.PLATFORM_ENVIRONMENT?.trim().toLowerCase() ?? "";
+  if (
+    env.NODE_ENV?.trim().toLowerCase() === "production" ||
+    PRODUCTION_ENVIRONMENTS.has(environment)
+  ) {
+    throw new UnsupportedAuthenticationModeError(
+      "PLATFORM_AUTH_MODE=reference (static bearer tokens) is refused in a production-shaped environment; a production identity provider must be approved first (W1-T07)",
+    );
+  }
+  return mode;
+}
