@@ -1,9 +1,21 @@
 # W1-T07 — Production identity provider adapter — authorization request
 
-> **Status: BLOCKED — awaiting an identity-provider administrator and the
-> security review owner.** No token, client registration, session cookie or
-> IdP configuration has been created. The current bearer directory is a
-> reference adapter and is not production authentication.
+> **Status: BLOCKED for production wiring — awaiting an identity-provider
+> administrator and the security review owner.** No token, client registration,
+> session cookie or IdP configuration has been created. The offline verification
+> contract is implemented and tested without network access
+> (`apps/platform-reference/src/oidc-principal-verifier.ts`, 21 tests), but it
+> is **not wired into the serving process**. The current bearer directory is a
+> reference adapter and is not production authentication; it is now refused in
+> a production-shaped process and when any other auth mode is requested.
+>
+> **Implemented 2026-11-15 (offline only):** algorithm allowlist (RS256/ES256),
+> strict `kid` lookup against a static JWKS snapshot, signature verification,
+> `iss`/`aud`/`exp`/`nbf`/`iat` with bounded skew, required `sub`, application
+> and installation binding claims, deterministic principal-id derivation, and
+> no trust in tenant/role/permission claims. Undecided and therefore not
+> implemented: JWKS fetching/rotation, revocation semantics, cookie/session
+> flow, and live membership integration.
 
 ## Current state (measured)
 
@@ -93,10 +105,20 @@
 ## Exit criteria
 
 1. Adapter committed with the deny matrix above as executable tests against the
-   approved IdP tenant (or a pinned local provider image).
-2. Revocation semantics accepted in writing by the security owner.
+   approved IdP tenant (or a pinned local provider image). **Partially met:**
+   the offline deny matrix runs with generated RSA/EC keys and a static JWKS;
+   no live provider is exercised.
+2. Revocation semantics accepted in writing by the security owner. **Open.**
 3. Reference token mode cannot be enabled in a production-shaped configuration.
-4. No secret appears in git history or logs.
+   **Met at boot:** `assertReferenceAuthenticationMode` refuses reference mode
+   when `NODE_ENV=production` or `PLATFORM_ENVIRONMENT` is production-shaped,
+   and refuses `PLATFORM_AUTH_MODE` values other than `reference`; a spawned
+   process is proven to stop before reading any database URL.
+4. No secret appears in git history or logs. **Met for this increment:** tests
+   generate ephemeral keys in memory and commit no secret.
+
+The adapter still cannot be certified until the IdP owner supplies the issuer,
+client, claims, revocation choice and live test principals.
 
 Until then W1-T07 remains **Pending — blocked by authorization**, and Wave 1
 remains **NO-GO**.

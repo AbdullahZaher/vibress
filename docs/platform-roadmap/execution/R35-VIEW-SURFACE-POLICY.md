@@ -49,7 +49,20 @@ The reference profile declares `platform_crm_customers` directly and no view.
      row with it.
 - `tests/integration/platform-reference-app.test.ts` — the contract-validation
   test now also asserts the materialized-view rejection.
-- Full platform suite: **15 files / 211 tests passed** (exit 0).
+- Full platform suite: **15 files / 214 tests passed** (exit 0, re-run 2026-11-15).
+
+## Auditor review (2026-11-15)
+
+An auditor code-and-catalog review (not an independent reviewer) confirmed the
+three controls above at the Runtime Contract boundary: materialized views are
+rejected before any SQL; boot reads `pg_class.reloptions` and refuses a declared
+view that is not `security_invoker`; effective authority is evaluated with
+`has_table_privilege`/`has_any_column_privilege`/`has_sequence_privilege`/
+`has_function_privilege` for both `current_user` and `session_user`; and any
+executable non-system `SECURITY DEFINER` function is refused. The review also
+recorded the residual scope below rather than treating it as covered. Full
+record: [WAVE-01-FINAL-CERTIFICATION-REPORT.md](WAVE-01-FINAL-CERTIFICATION-REPORT.md)
+§2.1.
 
 ## Residual risk
 
@@ -58,6 +71,7 @@ The reference profile declares `platform_crm_customers` directly and no view.
 | Views owned or queried by the migration/owner identity | Open — covered by ADR-PLAT-003 blocker 2 (non-superuser owner); `FORCE RLS` still applies to a non-superuser owner |
 | Views that use `SECURITY DEFINER` functions to read other tenants | Unchanged — R26 function-execute work governs owner-defined functions |
 | Non-runtime identities (membership reader, deployment verifier) and views | Out of scope — those profiles are limited to fixed relations and deny everything else |
+| Declared `foreign_table` relations | Open — the contract accepts the kind, but PostgreSQL cannot apply row-level security to a foreign table; declaring one requires a separate review of the foreign server's authorization |
 | Production owner remains a superuser in the dev fixture | Open deployment blocker, unchanged |
 
 ## Non-goals

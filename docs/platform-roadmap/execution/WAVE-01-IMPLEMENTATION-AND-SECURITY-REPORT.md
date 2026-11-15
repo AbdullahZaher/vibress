@@ -42,9 +42,10 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 - Migration `0056` (persisted registry and membership directory), `0057`
   (registry change audit) and `0058` (installation change audit) are additive and
   appended; `0055` stays reserved for the unapplied R26 proposal file.
-- Current reviewed baseline: `b62ffdf5` (PR #166 head), then the remediation
-  increments `6b31320d` and `0f64936a`, and the P2 increment `054ac8e6`. The P2
-  increment changes no schema and no grant: it makes the runtime function
+- Current verified source HEAD: `beaeeb71` (PR #166 head; CI run 43744722260).
+  Earlier reviewed baseline `b62ffdf5`, remediation increments `6b31320d` and
+  `0f64936a`, the P2 increment `054ac8e6` and the R35 increment `b2ffc688`. The
+  P2 increment changes no schema and no grant: it makes the runtime function
   contract exact by signature and hardens provisioning connection handling.
   Documentation updates follow the code SHA.
 
@@ -232,7 +233,11 @@ non-superuser owner and re-verify there. Open blocker.
 
 | Command | Result |
 | --- | --- |
-| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **P2 remediation tree**) | **15 files / 211 tests passed**, exit 0, no unhandled errors |
+| `pnpm exec vitest run --config vitest.platform.config.ts` (unit + boundary + PostgreSQL integration, **P2 remediation tree**) | **15 files / 214 tests passed** on the 2026-11-15 re-run, exit 0, no unhandled errors, 19.14 s (211 at the P2 commit plus the 3 auth-mode topology tests) |
+| `pnpm test:integration` (2026-11-15, final tree) | **49 files / 610 tests passed**, exit 0, 141.47 s. Earlier 44/46 DNS-limited results remain recorded as environment-specific. A first run on this tree had one failure — `real-lms-pilot-host.test.ts` Step 4 exceeded the default 5 s timeout under load; the file passed 8/8 standalone and the sequential rerun passed 610/610. Not claimed as a first-attempt pass |
+| `pnpm exec vitest run apps/platform-reference/src/oidc-principal-verifier.test.ts tests/architecture/platform-deployment-topology.test.ts` | **29 tests passed** (21 offline OIDC verifier + 8 topology/auth-mode, including two spawned-process refusals) |
+| `pnpm docs:validate-links` + `node scripts/validate-docs-links.mjs docs` | **120 links / 17 files** and **692 links / 305 files** resolve (2026-11-15) |
+| `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` + ESLint on the new verifier, topology gate and tests | passed, no diagnostics |
 | `… tests/integration/platform-reference-app.test.ts` (**P2 remediation tree**) | **86 tests passed**: all prior registry/CAS/audit/HTTP/RLS evidence plus owner-free start with byte-identical installation and registration rows including timestamps; pinned environment/artifact/application-id/manifest drift each raise `DeploymentVerificationError` before serving with the row unchanged; verifier SELECT-only on the two registry tables and denied writes (`42501`) and every other relation; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process start exits 1 with `DATABASE_URL` set and with three equal connection URLs; architecture test rejects provisioning imports in serving sources; contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation) and **11 signature-identity tests** (exact signature authorized; two explicit overloads authorized; unauthorized overload, `PUBLIC` EXECUTE on an unrelated function, explicit grant on an unauthorized overload, SECURITY DEFINER, late-added overload, changed signature and removed definition refused; provisioning refuses a non-existent signature; contract version/identity validation); 4 prior atomic-provisioning tests plus **6 connection-safety tests** (successful commit reuse, rollback + retry, failed `BEGIN`, failed `ROLLBACK`, terminated backend, unknown `COMMIT` outcome) |
 | `… tests/architecture/platform-boundaries.test.ts` | **6 tests passed**, including the serving-process provisioning-authority boundary |
 | `pnpm exec tsc -p packages/database/tsconfig.json --noEmit` + `pnpm exec tsc -p apps/platform-reference/tsconfig.json --noEmit` (**P2 remediation tree**) | both passed |
@@ -251,14 +256,14 @@ non-superuser owner and re-verify there. Open blocker.
 | CMS compatibility subset (`runtime-multi-publication-isolation`, `content-database`, `transactions`, `studio-persistence-roundtrip`, `outbox`) | **5 files / 79 tests passed** in 14.45 s, including migration + seed global setup |
 | `pnpm exec vitest run tests/unit/cms-studio-fixture-pack.test.ts` | **4 tests passed** — pinned digest, drift refusal, deterministic encoding |
 | `pnpm exec vitest run tests/integration/platform-cms-studio-fixture-pack.test.ts` | **3 tests passed** over HTTP + PostgreSQL — per-publication pinned documents, non-disclosing cross-publication read/write, Studio round-trip and pinned restore |
-| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`, **P2 remediation tree**) | **362 files / 2585 tests passed**, exit 0, 279.12 s |
+| **Unit/boundary/component suite** (`pnpm test:unit`, `vitest.unit.config.ts`, **P2 remediation tree**) | **364 files / 2614 tests passed** under Node 24.16.0 (declared engine `>=24 <25`), exit 0, 246.53 s on the 2026-11-15 re-run. A Node 26.13.0 run, outside the declared engine, failed 5 jsdom tests in `return-to.test.ts` and `ImportExportCard.test.tsx` because Node 26 predefines a `localStorage` accessor that jsdom population skips; measured as environment-specific |
 | **Full integration suite** (`pnpm test:integration`, sequential, **P2 remediation tree**) | **44/46 files and 583/595 tests passed**; 12 tests in 2 files failed on `getaddrinfo ENOTFOUND site-a-<runId>.localhost` because this host no longer resolves wildcard `*.localhost`. The identical 12 tests fail at the committed baseline `c34e159d` with the P2 changes stashed (working-tree diff hash `c5f6ae74…` verified before and after), and the changed files are platform-only. **Not claimed as PASS**; the failure is environmental and unrelated to the P2 code |
 | Workspace typecheck (`pnpm exec nx run-many --target=typecheck --all --skip-nx-cache`, **P2 remediation tree**) | **74/74 projects succeeded**, 1 m 16 s |
 | `pnpm docs:validate-links` (docs validator, program docs) | **90 relative links across 12 files resolve** |
 | `node scripts/validate-docs-links.mjs docs` (full tree) | **687 relative links across 304 files resolve** |
 | `node scripts/audit-function-privileges.mjs` (read-only, **P2 remediation tree**) | Re-measured 2026-11-15: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role (`vibress`) |
 | `… tests/integration/platform-r26-revocation.test.ts` (new, 2026-11-15) | **4 tests passed** in a disposable database with a fresh non-superuser owner. The test reads `proposals/0055_revoke_public_execute.sql` and applies its exact statements, proving PUBLIC execute denied on both trigger functions, a global `pg_default_acl` entry with no `PUBLIC` grantee, owner-created functions in `public` and another schema denied (`42501`), `pg_trgm` still PUBLIC (R26-EXT), the trigger still firing for the caller, the fail-closed guard rejecting an unreviewed PUBLIC-executable function, idempotent re-application and rollback to the built-in default. This also exposed and corrected a defect in the draft proposal: `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` is a no-op on PostgreSQL 16.15 because schema-scoped default ACLs are additive over an empty baseline. **Nothing was applied to the shared dev database** (audit re-run unchanged: 33/33, 0 default ACLs) |
-| `… tests/architecture/platform-deployment-topology.test.ts` (new, 2026-11-15) | **5 tests passed**: the F-012 gate defaults to `single-installation`, rejects `shared`/`multi-tenant`/`public-hosting` and enabled external onboarding with `UnsupportedTopologyError` naming F-012, does not mutate the inspected environment, and a spawned serving process exits 1 on `PLATFORM_TOPOLOGY=multi-tenant` before any database URL is read |
+| `… tests/architecture/platform-deployment-topology.test.ts` (new, 2026-11-15) | **8 tests passed**: the F-012 gate defaults to `single-installation`, rejects `shared`/`multi-tenant`/`public-hosting` and enabled external onboarding with `UnsupportedTopologyError` naming F-012, does not mutate the inspected environment, and a spawned serving process exits 1 on `PLATFORM_TOPOLOGY=multi-tenant` before any database URL is read; the auth-mode gate refuses reference tokens in `NODE_ENV=production` or production-shaped `PLATFORM_ENVIRONMENT`, accepts only `reference` elsewhere, and a spawned production-shaped process exits 1 with `UnsupportedAuthenticationModeError` before any database URL is read |
 | `… tests/integration/platform-production-topology.test.ts` (new, 2026-11-15) | **8 tests passed** with throwaway roles dropped afterwards: three distinct `NOSUPERUSER NOBYPASSRLS` serving logins with no role memberships; tenant tables owned by the migration role with `ENABLE`+`FORCE` RLS; runtime sees 0 rows unscoped and only the scoped tenant with context; runtime denied every operator/directory relation and `CREATE`; reader SELECT-only on memberships; verifier SELECT-only on installations and registrations; each identity is `current_user` and never the owner. The dev owner remains a superuser (deployment blocker unchanged; non-superuser owner proof is in the installation-isolation test) |
 | `… tests/integration/platform-view-surface.test.ts` (new, 2026-11-15, R35) | **3 tests passed** with a throwaway view and role dropped afterwards: materialized-view contract rejected; declared view without `security_invoker` fails boot with `view_not_security_invoker` and the leak is measured (direct table read 0 rows, non-invoker view returns the row because the dev owner is a superuser); after `ALTER VIEW ... SET (security_invoker = true)` boot passes, unscoped view read 0 rows and scoped view read exactly the tenant row. Policy: [R35-VIEW-SURFACE-POLICY.md](R35-VIEW-SURFACE-POLICY.md) |
 | CMS/Studio compatibility re-run (2026-11-15, after the topology gate) | **6 files / 82 tests passed** — `runtime-multi-publication-isolation`, `content-database`, `transactions`, `studio-persistence-roundtrip`, `outbox` and `platform-cms-studio-fixture-pack` |
@@ -270,8 +275,8 @@ non-superuser owner and re-verify there. Open blocker.
 
 Rows labelled **P2 remediation tree** were measured on the working tree committed
 as `054ac8e6` on top of `0f64936a`, plus the 2026-11-15 R26, topology-gate,
-identity-separation and R35 view-surface harnesses. Platform suite (15 files /
-211 tests),
+identity-separation, R35 view-surface and offline-OIDC harnesses. Platform suite
+(15 files / 214 tests),
 unit suite (362 files / 2585 tests), workspace typecheck (74/74), reference-app
 Playwright (8/8), targeted typecheck/ESLint and both docs link validators passed
 on that tree. The full integration suite was **not green in this environment**:
@@ -654,11 +659,11 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
 | — | Installation `artifact_digest` is supplied by the deployment pipeline, not derived from a signed artifact | A wrong or stale digest is rejected at boot (pinned), but provenance itself is not cryptographically verified | Partially addressed (P1) — digest is required and pinned by provisioning and verification; CI provenance remains open |
 | — | Application name upsert ran before the drift decision | A refused boot could still rename an application | **Fixed (W1-T09)** — the name upsert runs only after a committed mutation or an observed `unchanged` state; refused drift writes nothing |
 | — | No independent security review of this branch | Gate cannot pass | Open |
-| — | 76 pre-existing broken links in legacy docs outside `docs/platform-roadmap` | Docs rot | **Resolved (W1-T08)** — rewritten to relative targets; full-docs validator passes 612 links / 296 files |
-| — | Split CI test steps not yet exercised on GitHub Actions itself | Local unit + integration equivalents pass; runner ordering/services unproven | Pending first pipeline run |
+| — | 76 pre-existing broken links in legacy docs outside `docs/platform-roadmap` | Docs rot | **Resolved (W1-T08)** — rewritten to relative targets; full-docs validator passes (re-measured 2026-11-15: 692 links / 305 files) |
+| — | Split CI test steps not yet exercised on GitHub Actions itself | Local unit + integration equivalents pass; runner ordering/services unproven | **Exercised** — CI runs 43706333296 and 43742169334 executed typecheck, lint, docs links, unit, integration, locale replay, build and clean-tree steps on their own heads; `e2e` and `container-scan` passed |
 | — | Broader CMS Playwright E2E/acceptance suites not run (staging secrets) | CMS browser-level regression unproven | Open; reference-app Playwright **8/8 passed** locally (W1-T09) |
-| — | This host no longer resolves wildcard `*.localhost` | Two LMS integration files (12 tests) cannot pass locally; same result at baseline `c34e159d` | Environment defect, not a code regression and not claimed as a pass; re-run the suite where wildcard `*.localhost` resolves (or map the run hosts) to restore the local full-suite signal |
-| — | Reference app authenticates with an operator-configured static bearer-token directory | Not a production identity provider; no rotation or revocation API | Reference only; replace before shared deployment |
+| — | Wildcard `*.localhost` resolution was unavailable during the earlier full-suite runs | Two LMS integration files (12 tests) failed locally in those runs; same result at baseline `c34e159d` | **Environment change observed 2026-11-15** — this host now resolves `*.localhost` (`dscacheutil`/`dns.lookup` → `::1`, `127.0.0.1`); the final-tree full suite passed 49/49 files, 610/610 tests. The earlier failures stay recorded as environment-specific, not retroactively passed; one load-sensitive 5 s timeout in `real-lms-pilot-host.test.ts` Step 4 on the first attempt is recorded separately |
+| — | Reference app authenticates with an operator-configured static bearer-token directory | Not a production identity provider; no rotation or revocation API | Reference only; now refused in production-shaped runs and for any non-`reference` auth mode (W1-T07 gate); offline OIDC verifier prepared but not wired |
 | — | Membership directory is not RLS-protected (it is read before a scope exists) | Auth infrastructure must read all memberships; tenant runtime role is denied the table | By design; needs a reviewed auth-service access model |
 | — | No application/tenant provisioning API; platform-role provisioning is a CLI and tenant/membership seeding remains SQL/bootstrap | Operator workflow is manual | Provisioning CLI added; API open |
 | — | Deployed manifest drift requires an explicit `allowUpdate` deployment action | A forgotten update fails boot (fail-closed), not silently | By design; documented in the [boot/registry runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md) (W1-T09) |
@@ -666,7 +671,7 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
 | — | Public actions cannot access the database at all | Public route surface limited to principal/tenant-independent handlers | By design until a reviewed unscoped-read contract exists |
 | — | Registry provisioning and a worker identity are not split from the owner/legacy runtime | The registry write path still runs as the database owner and no distinct worker role exists in this build | Open — runtime, membership-reader and deployment-verifier identities are split and verified against their own deny matrices (8 tests, throwaway roles dropped); a separate registry-provisioning identity and a worker identity require an authorized grant/code change |
 | — | A1–A8, G0 unsigned; owners unassigned | Program blocked for acceptance | Open |
-| F-012 | Global RLS still not activated for CMS tables | Security review gate still conditional | Open — [CMS disposition proposed](F-012-CMS-RLS-DECISION.md) (option B), not accepted; no RLS/grant change made. Unsupported topologies and external onboarding are now rejected at boot (`UnsupportedTopologyError`, 5 tests incl. spawned-process refusal) |
+| F-012 | Global RLS still not activated for CMS tables | Security review gate still conditional | Open — [CMS disposition proposed](F-012-CMS-RLS-DECISION.md) (option B), not accepted; no RLS/grant change made. Unsupported topologies, external onboarding and production-shaped reference auth are now rejected at boot (`UnsupportedTopologyError` / `UnsupportedAuthenticationModeError`, 8 tests incl. two spawned-process refusals) |
 
 No finding was closed by documentation. No test was skipped to make the run green.
 
@@ -679,7 +684,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | --- | --- | --- |
 | Privilege separation (P0-A/P0-B, contract) | 8.7/10 | Owner authority removed from serving sources and refused at runtime; full SET-able membership closure proven with real PostgreSQL; the versioned runtime privilege contract constrains relations by kind, columns, sequences, schemas and function `EXECUTE` against effective authority including PUBLIC and inherited grants, and function grants are now keyed by exact signature so an overload cannot inherit authority from an authorized name. Deducted because provisioning and serving are not yet exercised as separate deployment units on a real orchestrator, and R26 `PUBLIC` function grants remain unrevoked. |
 | Verification correctness (P1, atomicity, rollback) | 8.7/10 | Pinned, read-only checks cover application, installation, environment, artifact and manifest; installation changes require mandatory CAS on both expected values; the entire provisioning flow runs on one checked-out connection in one transaction, a forced CAS failure after a manifest update leaves manifest, installation and both audit streams unchanged, and a failed `BEGIN`, `ROLLBACK` or `COMMIT` outcome destroys the connection instead of returning it to the pool. Deducted because the artifact digest is still operator-supplied, not derived from CI provenance. |
-| Test evidence | 8.7/10 | 211 platform tests in 15 files (86 reference-app) including a production-shaped identity harness that provisions throwaway runtime/reader/verifier logins through the real code paths and proves their deny matrices, and an R35 view harness that rejects materialized views and refuses a non-`security_invoker` view while measuring the leak it prevents, full unit 2585, 8 Playwright tests, 74/74 typecheck and lint all green locally on the P2 tree, and CI run 43641264614 green on the prior implementation SHA `0f64936a` (later runs 43685146696, 43690688602 and 43706333296 green on their own heads). Deducted because the full local integration suite was 44/46 files in this environment (12 unrelated LMS tests fail on `*.localhost` DNS, reproduced at baseline), the identity harness runs against a dev superuser owner rather than a non-superuser deployment owner, and no local test or CI job can prove the production orchestrator topology. |
+| Test evidence | 8.7/10 | 214 platform tests in 15 files (86 reference-app), 21 offline OIDC verifier tests, a production-shaped identity harness that provisions throwaway runtime/reader/verifier logins through the real code paths and proves their deny matrices, and an R35 view harness that rejects materialized views and refuses a non-`security_invoker` view while measuring the leak it prevents; full unit 2614 (364 files, Node 24), 8 Playwright tests, 74/74 typecheck and lint all green locally on the P2 tree, and CI run 43641264614 green on the prior implementation SHA `0f64936a` (later runs 43685146696, 43690688602 and 43706333296 green on their own heads). The full local integration suite passed **49/49 files, 610/610 tests** on the 2026-11-15 rerun, after one load-sensitive 5 s timeout in `real-lms-pilot-host.test.ts` Step 4 on the first attempt (file then 8/8 standalone); earlier runs were 44/46 files on `*.localhost` DNS, reproduced at baseline. Deducted because that timeout remains load-sensitive, the identity harness runs against a dev superuser owner rather than a non-superuser deployment owner, and no local test or CI job can prove the production orchestrator topology. |
 | Compatibility and maintainability | 8.5/10 | Additive schema/exports; full CMS/Studio unit and integration suites green; the change adds one verifier role, one operator CLI, one migration and one generic contract type. Deducted because browser-level CMS acceptance suites and CI remain outstanding. |
 | Operational readiness | 6.5/10 | Runbook updated for two executables, three roles, mandatory CAS variables, both audit queries, signature-exact function grants and `contract_function_missing`. Missing: production-shaped Redis/S3/queue/secrets isolation, production IdP, non-superuser deployment owner, external secret-manager wiring. |
 | Auditability and governance | 8.5/10 | Registry audit (0057) and installation audit (0058) rows are written in the same statement as each mutation, with actor, reason and observed before/after values; runbook, finding table and explicit non-claims. Deducted because ADRs and A1–A8/G0 remain unsigned and no independent reviewer has examined this increment. |
@@ -696,8 +701,8 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. Run 43742169334 on the final head `0d248dc6` passed every step (`build`, `e2e`, `container-scan`, typecheck, lint, docs links, unit, integration, locale replay, clean-tree and dependency audit) |
-| Final certification report | [FINAL-PROGRAM-CERTIFICATION-REPORT.md](FINAL-PROGRAM-CERTIFICATION-REPORT.md) — decision **NO-GO**; five-way classification of implemented/awaiting-review/blocked-human/blocked-infrastructure/incomplete |
+| CI on the verified source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. Run 43742169334 on `0d248dc6` passed every step (`build`, `e2e`, `container-scan`, typecheck, lint, docs links, unit, integration, locale replay, clean-tree and dependency audit). Run 43744722260 passed on the verified HEAD `beaeeb71` (`build`, `e2e`, `container-scan`). No run is attributed to a different commit |
+| Final certification report | [WAVE-01-FINAL-CERTIFICATION-REPORT.md](WAVE-01-FINAL-CERTIFICATION-REPORT.md) — decision **NO-GO**; five-way classification of implemented/awaiting-review/blocked-human/blocked-infrastructure/incomplete. [FINAL-PROGRAM-CERTIFICATION-REPORT.md](FINAL-PROGRAM-CERTIFICATION-REPORT.md) is an interim program-level placeholder: no program-wide certification has been issued |
 
 The author does not sign off on this implementation, does not mark the gate
 passed, and did not fabricate any signature or approval.
@@ -721,13 +726,16 @@ membership reader, a SELECT-only deployment verifier with pinned read-only boot
 verification, full SET-able membership closure, a hardened tenant transaction trust
 boundary (async escape, role-switch rejection, connection destruction), a
 digest-pinned two-publication CMS/Studio compatibility pack proven over HTTP +
-PostgreSQL, a fully validating docs tree, 44/46 integration files with the
-remaining two proven to fail identically at baseline on host DNS, and
-green CI runs on head `9684362f` (contains P2 code `054ac8e6`) and on the final
-docs-only head `0d712005`
+PostgreSQL, a fully validating docs tree, and the full integration suite **49/49
+files, 610/610 tests** on the 2026-11-15 rerun (earlier runs were 44/46 on host
+`*.localhost` DNS, recorded as environment-specific, and the first final-tree
+attempt hit one load-sensitive 5 s timeout that did not recur); green CI runs on
+head `9684362f` (contains P2 code `054ac8e6`), on the docs-only head `0d712005`
+and on the verified HEAD `beaeeb71`
 ([43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696),
-[43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602));
-`build`, `e2e` and `container-scan` succeeded in both.
+[43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602),
+[43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260));
+`build`, `e2e` and `container-scan` succeeded in each.
 
 Missing evidence:
 R26 revocation approval/application,
@@ -759,8 +767,12 @@ this gate, and a high rubric score cannot override these critical defects.
 5. Run the broader CMS Playwright E2E/acceptance suites against staging (requires
    secrets); the reference-app Playwright suite (8/8) passes on the current tree.
    Re-run the full Vitest integration suite in an environment where wildcard
-   `*.localhost` resolves; twelve unrelated LMS tests fail on that host DNS today
-   and fail identically at baseline.
+   `*.localhost` resolves. That re-run was performed on 2026-11-15 (host now
+   resolves the wildcard) and passed 49/49 files, 610/610 tests; the earlier
+   twelve-test failure remains recorded as environment-specific. Consider giving
+   the LMS live-host acceptance step an explicit integration timeout: its 5 s
+   default expired once under load before passing 8/8 standalone and on the
+   sequential rerun.
 6. Decide the views/materialized-report contract (excluded for v1 unless reviewed).
 7. Accept or reject the [F-012 CMS RLS disposition](F-012-CMS-RLS-DECISION.md) with the
    security review owner and DB owner; acceptance does not activate RLS, and any

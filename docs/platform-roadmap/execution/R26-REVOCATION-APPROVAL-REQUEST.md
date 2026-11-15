@@ -2,7 +2,8 @@
 
 > **Status: PREPARED, NOT APPROVED, NOT APPLIED.** Date 2026-11-14, revised
 > 2026-11-15 after the ineffective schema-scoped default-privilege statement was
-> found and replaced (section 4). No grant, default ACL, migration journal or
+> found and replaced (section 4), and re-measured read-only on 2026-11-15 at
+> source HEAD `beaeeb71` (section 2). No grant, default ACL, migration journal or
 > production database was changed by this request.
 > [Proposal 0055](proposals/0055_revoke_public_execute.sql) remains outside
 > `packages/database/migrations/` and outside the journal.
@@ -43,9 +44,17 @@ node scripts/audit-function-privileges.mjs "postgresql://vibress:vibress@127.0.0
 | non-system roles | 1 (`vibress`, superuser, `BYPASSRLS`) |
 
 This matches the [inventory](R26-FUNCTION-EXECUTE-INVENTORY.md) recorded earlier.
-The dev fixture still has **no application runtime role**, so it cannot answer
-which grants production roles actually need. No production-shaped inventory was
-possible from this environment.
+
+**Re-measured 2026-11-15 at source HEAD `beaeeb71`** (read-only,
+`node scripts/audit-function-privileges.mjs` against the dev fixture): 33 public
+functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with effective `PUBLIC`
+EXECUTE, **0 `pg_default_acl` entries**, and one login role (`vibress`,
+superuser, `BYPASSRLS`). The branch has since added additive migrations `0056`–
+`0058`; none adds a function, so the function inventory is unchanged. The
+disposable-database proof (`platform-r26-revocation.test.ts`, 4/4) passed again
+in this round. The dev fixture still has **no application runtime role**, so it
+cannot answer which grants production roles actually need. No production-shaped
+inventory was possible from this environment.
 
 ## 3. Why Scope A alone is not a complete R26 fix
 
