@@ -1,7 +1,7 @@
 # Wave 1 Final Certification Report — M00–M02
 
 > **Date: 2026-11-15. Branch:** `feat/wave1-platform-kernel-tenant-isolation`
-> **Verified source HEAD:** `beaeeb71d96b5c4fda66b612333e8097b868ee6b`.
+> **Verified source HEAD:** `a9d99a414f671583485900433286702f6a5b6a2c`.
 > **PR:** #166 (**open, not merged**). **Decision: WAVE 1 — NO-GO.**
 >
 > **Scope:** this report certifies Wave 1 only (M00–M02). It is **not** a
@@ -14,12 +14,17 @@
 > the head SHA named. Nothing in this report is inferred from a document, a
 > naming convention or an unexecuted plan. No production system, shared
 > database, migration journal or git tag was changed.
+>
+> **Publication note:** the report text itself is published in a
+> documentation-only commit on top of the verified source HEAD `a9d99a41`; that
+> commit does not change code or evidence. Its own CI run is recorded in PR #166
+> checks and does not alter any result above.
 
 ## 1. Gate summary
 
 | Mandatory gate | Status | Evidence |
 | --- | --- | --- |
-| PR #166 and CI on the exact head | **PASS per head** | Runs 43685146696 → `9684362f`, 43690688602 → `0d712005`, 43706333296 → `d0fc26c3`, 43742169334 → `0d248dc6` and 43744722260 → `beaeeb71` (verified source HEAD) each report their own `head_sha`; no run is attributed to another commit |
+| PR #166 and CI on the exact head | **PASS per head** | Runs 43685146696 → `9684362f`, 43690688602 → `0d712005`, 43706333296 → `d0fc26c3`, 43742169334 → `0d248dc6`, 43744722260 → `beaeeb71` and 43750359129 → `a9d99a41` (verified source HEAD) each report their own `head_sha`; no run is attributed to another commit |
 | R26 `PUBLIC` EXECUTE revoked | **BLOCKED — DB owner + AppSec** | Proposal 0055 corrected and proven in a disposable DB (4/4); **not applied** to the shared database |
 | F-012 CMS RLS decision | **BLOCKED — owners** | Option B recommended, not accepted; no RLS/grant change |
 | F-012 supported topology enforced | **IMPLEMENTED and verified** | `UnsupportedTopologyError` before any DB URL read; 8 tests including a spawned-process refusal |
@@ -52,8 +57,12 @@ Platform suite after these changes: **15 files / 214 tests passed**, exit 0,
 19.14 s (`platform-reference-app` 86/86). Targeted `tsc` for
 `packages/database` and `apps/platform-reference` passed; ESLint on all changed
 files passed. CI run
+[43750359129](https://github.com/AbdullahZaher/vibress/actions/runs/43750359129)
+on verified HEAD `a9d99a41` passed typecheck, lint, explicit-any guard, docs
+links, unit, integration, locale replay, build, clean-tree, dependency audit,
+`e2e` and `container-scan`; the prior head `beaeeb71` passed run
 [43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260)
-on verified HEAD `beaeeb71` passed `build`, `e2e` and `container-scan`.
+on `build`, `e2e` and `container-scan`.
 
 ## 2.1 Auditor code/catalog review — R35 view surface and function authority
 

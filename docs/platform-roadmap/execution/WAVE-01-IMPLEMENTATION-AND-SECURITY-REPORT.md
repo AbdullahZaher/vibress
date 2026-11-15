@@ -42,12 +42,15 @@ See [BASELINE-AND-OWNERSHIP-M00.md](BASELINE-AND-OWNERSHIP-M00.md). Summary:
 - Migration `0056` (persisted registry and membership directory), `0057`
   (registry change audit) and `0058` (installation change audit) are additive and
   appended; `0055` stays reserved for the unapplied R26 proposal file.
-- Current verified source HEAD: `beaeeb71` (PR #166 head; CI run 43744722260).
+- Current verified source HEAD: `a9d99a41` (PR #166 head; CI run 43750359129).
+  Code evidence commit `f0d8aaed` (offline OIDC verifier + reference auth-mode
+  gate); prior verified head `beaeeb71` (CI run 43744722260).
   Earlier reviewed baseline `b62ffdf5`, remediation increments `6b31320d` and
   `0f64936a`, the P2 increment `054ac8e6` and the R35 increment `b2ffc688`. The
   P2 increment changes no schema and no grant: it makes the runtime function
   contract exact by signature and hardens provisioning connection handling.
-  Documentation updates follow the code SHA.
+  Documentation updates follow the code SHA; documentation-only commits after
+  `a9d99a41` are tracked in PR #166 checks and do not change evidence.
 
 ## 3. Implemented code (real, compiled, tested)
 
@@ -701,7 +704,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the verified source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. Run 43742169334 on `0d248dc6` passed every step (`build`, `e2e`, `container-scan`, typecheck, lint, docs links, unit, integration, locale replay, clean-tree and dependency audit). Run 43744722260 passed on the verified HEAD `beaeeb71` (`build`, `e2e`, `container-scan`). No run is attributed to a different commit |
+| CI on the verified source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. Run 43742169334 on `0d248dc6` passed every step (`build`, `e2e`, `container-scan`, typecheck, lint, docs links, unit, integration, locale replay, clean-tree and dependency audit). Run 43744722260 passed on prior verified HEAD `beaeeb71` (`build`, `e2e`, `container-scan`). Run 43750359129 on verified HEAD `a9d99a41` passed typecheck, lint, explicit-any guard, docs links, unit, integration, locale replay, build, clean-tree, dependency audit, `e2e` and `container-scan`. No run is attributed to a different commit |
 | Final certification report | [WAVE-01-FINAL-CERTIFICATION-REPORT.md](WAVE-01-FINAL-CERTIFICATION-REPORT.md) — decision **NO-GO**; five-way classification of implemented/awaiting-review/blocked-human/blocked-infrastructure/incomplete. [FINAL-PROGRAM-CERTIFICATION-REPORT.md](FINAL-PROGRAM-CERTIFICATION-REPORT.md) is an interim program-level placeholder: no program-wide certification has been issued |
 
 The author does not sign off on this implementation, does not mark the gate
@@ -731,11 +734,13 @@ files, 610/610 tests** on the 2026-11-15 rerun (earlier runs were 44/46 on host
 `*.localhost` DNS, recorded as environment-specific, and the first final-tree
 attempt hit one load-sensitive 5 s timeout that did not recur); green CI runs on
 head `9684362f` (contains P2 code `054ac8e6`), on the docs-only head `0d712005`
-and on the verified HEAD `beaeeb71`
+and on the verified HEAD `beaeeb71` and `a9d99a41`
 ([43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696),
 [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602),
-[43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260));
-`build`, `e2e` and `container-scan` succeeded in each.
+[43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260),
+[43750359129](https://github.com/AbdullahZaher/vibress/actions/runs/43750359129));
+every step passed on `a9d99a41`, and `build`, `e2e` and `container-scan`
+succeeded on the others.
 
 Missing evidence:
 R26 revocation approval/application,

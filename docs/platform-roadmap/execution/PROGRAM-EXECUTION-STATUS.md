@@ -3,11 +3,16 @@
 > **Last updated: 2026-11-15.** Implementation branch:
 > `feat/wave1-platform-kernel-tenant-isolation`, cut from `main` at
 > `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`. Verified source HEAD
-> `beaeeb71d96b5c4fda66b612333e8097b868ee6b` (PR #166 head; CI run
-> 43744722260 passed on that exact SHA). Earlier remediation increments:
+> `a9d99a414f671583485900433286702f6a5b6a2c` (PR #166 head; CI run
+> 43750359129 passed on that exact SHA). Code evidence commit `f0d8aaed`
+> (offline OIDC verifier + reference auth-mode gate); prior head `beaeeb71`
+> passed run 43744722260. Earlier remediation increments:
 > `b62ffdf5`, `6b31320d`, `0f64936a` and P2 `054ac8e6`; the R35 increment is
 > `b2ffc688`. Roadmap input pinned at PR #151 (draft) head
 > `c9997a9353a229a4287256f5ba3b94d718e3a5d9`.
+>
+> Documentation-only commits after `a9d99a41` do not change code or evidence;
+> their own CI result is visible in PR #166 checks.
 >
 > **No wave has passed its gate. No ADR is accepted. No production authorization
 > exists.** This file records measured status only.
@@ -46,8 +51,9 @@ on the first attempt; see the evidence table). CI run
 on head `9684362f` (which contains P2 code `054ac8e6`) passed `build`, `e2e`
 and `container-scan`; the docs-only head `0d712005` passed run
 [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602).
-Later heads raised the verified source HEAD to `beaeeb71` (CI run 43744722260,
-recorded in the evidence table below).
+Later heads raised the verified source HEAD through `beaeeb71` (CI run
+43744722260) to `a9d99a41` (CI run 43750359129, recorded in the evidence table
+below).
 
 | Suite | Result |
 | --- | --- |
@@ -65,7 +71,8 @@ recorded in the evidence table below).
 | R35 view surface (`tests/integration/platform-view-surface.test.ts`) | **3/3 passed** with a throwaway view and role dropped afterwards. A materialized-view contract is rejected; a declared view without `security_invoker` fails boot with `view_not_security_invoker` and the leak is measured (direct table read 0 rows, non-invoker view returns the row because the dev owner is a superuser); after `ALTER VIEW ... SET (security_invoker = true)` boot passes, the unscoped view returns 0 rows and the scoped view returns exactly the tenant's row. Policy: [R35-VIEW-SURFACE-POLICY.md](R35-VIEW-SURFACE-POLICY.md) |
 | CI on `d0fc26c3` | **PASS** — run [43706333296](https://github.com/AbdullahZaher/vibress/actions/runs/43706333296) on head `d0fc26c3`: `build`, `e2e` and `container-scan` succeeded |
 | CI on `0d248dc6` | **PASS** — run [43742169334](https://github.com/AbdullahZaher/vibress/actions/runs/43742169334) on head `0d248dc6`: typecheck, lint, explicit-any guard, docs links, unit, integration, locale replay, build, clean-tree, dependency audit, `e2e` and `container-scan` all succeeded |
-| CI on verified source HEAD `beaeeb71` | **PASS** — run [43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260) on head `beaeeb71`: `build`, `e2e` and `container-scan` all succeeded |
+| CI on prior verified source HEAD `beaeeb71` | **PASS** — run [43744722260](https://github.com/AbdullahZaher/vibress/actions/runs/43744722260) on head `beaeeb71`: `build`, `e2e` and `container-scan` all succeeded |
+| CI on verified source HEAD `a9d99a41` | **PASS** — run [43750359129](https://github.com/AbdullahZaher/vibress/actions/runs/43750359129) on head `a9d99a414f671583485900433286702f6a5b6a2c`: typecheck, lint, explicit-any guard, docs links, unit, integration, locale replay, build, clean-tree, dependency audit, `e2e` and `container-scan` all succeeded |
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
