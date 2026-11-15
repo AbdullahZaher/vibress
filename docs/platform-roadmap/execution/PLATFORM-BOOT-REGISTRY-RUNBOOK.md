@@ -39,8 +39,13 @@ Order inside `startReferenceApplication`:
    relations, columns, sequences, schemas and executable functions outside the
    contract fail boot (`unexpected_relation_privilege`,
    `unexpected_column_privilege`, `unexpected_sequence_privilege`,
-   `unexpected_schema_privilege`, `unexpected_function_execute`). A missing or
-   invalid contract fails boot as well; there is no implicit allowlist.
+   `unexpected_schema_privilege`, `unexpected_function_execute`). Contract
+   version `2` authorizes each function by schema, name and exact
+   `pg_get_function_identity_arguments` text — overloads are separate entries,
+   so a newly added overload is not covered by an authorized name and fails boot.
+   A contract entry with no matching definition fails boot as
+   `contract_function_missing`. A missing or invalid contract fails boot as
+   well; there is no implicit allowlist.
 2. `assertSafePlatformMembershipReaderRole(readerPool)` — refuses a reader that
    can do anything beyond `SELECT` on `platform_memberships`, including column
    grants, ownership, sequence or function privileges, or any role membership.
@@ -131,7 +136,9 @@ Run each step with the owner/migration credential, not a runtime role.
    The command is idempotent (existing non-superuser roles are altered), refuses
    to manage a superuser, refuses equal role names, and re-verifies in
    `pg_roles` that no role is `rolsuper` or `rolbypassrls` after provisioning.
-   It does not print or store the passwords.
+   It grants function `EXECUTE` only for the exact signatures declared in the
+   privilege contract and aborts with `found 0 matching definitions` when a
+   declared signature does not exist. It does not print or store the passwords.
 3. **Provision the installation with owner authority.** On the first
    provisioning run the registry row does not exist, so `sync` returns
    `created`; without `PLATFORM_REGISTRY_ACTOR` or `PLATFORM_CHANGE_REASON` the
@@ -285,6 +292,7 @@ What the audit tables prove and do not prove:
 | `membership_write_privilege` | reader can write the membership directory | re-provision; the reader must be SELECT-only |
 | `unexpected_relation_privilege` | the **verifier** holds a write, column-only or non-registry privilege; on the **runtime** login it means effective authority (direct, inherited or via `PUBLIC`) on a relation outside the privilege contract, including a view or foreign table | re-provision; the verifier must be table-level SELECT on the two registry tables only, and the runtime must match the versioned contract exactly |
 | `unexpected_column_privilege` / `unexpected_sequence_privilege` / `unexpected_schema_privilege` / `unexpected_function_execute` | the runtime login has effective column, sequence, schema `USAGE` or non-trigger function `EXECUTE` authority outside the privilege contract | re-provision the runtime role; if the new authority is intentional, version the contract first — there is no bypass flag |
+| `contract_function_missing` | the privilege contract authorizes a function signature (`schema.name(identity arguments)`) that no longer exists, for example after a migration changed the signature | update the contract to the new exact signature and re-provision; a renamed or replaced signature is not silently re-authorized |
 | `privilege_contract_missing` / `privilege_contract_invalid` | the serving process was started without a runtime privilege contract, or the supplied contract fails validation | pass the deployed contract from `@vibress/database`; boot stays closed |
 | `DATABASE_URL` present in the serving environment | owner credential leaked into the long-lived process | remove it; run `pnpm platform:provision-reference` as the separate operator job |
 | connection URLs not distinct | two pools share a role | use three distinct least-privilege credentials |

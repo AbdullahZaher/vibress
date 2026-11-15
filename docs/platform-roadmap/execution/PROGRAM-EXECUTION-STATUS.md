@@ -1,10 +1,11 @@
 # Program Execution Status — M00–M12
 
-> **Last updated: 2026-11-14.** Implementation branch:
+> **Last updated: 2026-11-15.** Implementation branch:
 > `feat/wave1-platform-kernel-tenant-isolation`, cut from `main` at
 > `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`. Current reviewed baseline
-> `b62ffdf5` (PR #166 head); the P0-A/P0-B/P1 security remediation is an
-> uncommitted working tree on top of it. Roadmap input pinned at
+> `b62ffdf5` (PR #166 head); remediation increments `6b31320d`, `0f64936a`
+> and the P2 increment `054ac8e6` (exact function-signature authorization and
+> unknown-state connection destruction). Roadmap input pinned at
 > PR #151 (draft) head `c9997a9353a229a4287256f5ba3b94d718e3a5d9`.
 >
 > **No wave has passed its gate. No ADR is accepted. No production authorization
@@ -30,43 +31,37 @@
 
 ## Evidence executed on this branch
 
-Suites and typecheck were re-measured on 2026-11-15 for the final remediation
-increment (commit `0f64936a` on top of `6b31320d`): platform suite, reference-app integration,
-architecture, full unit, full integration, workspace typecheck, lint, Playwright and
-both docs link validators all passed on that tree. CI run
-[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on
-`0f64936a` passed build, container-scan and e2e; only docs-only edits followed that
-SHA. The R26 read-only audit was last re-run on
-2026-11-14T19:12:39.618Z with identical totals; the CMS-subset audit was run earlier
-on this branch.
+Suites and typecheck were re-measured on 2026-11-15 for the P2 increment
+(commit `054ac8e6` on top of `0f64936a`): platform suite, unit suite,
+workspace typecheck, reference-app Playwright, targeted typecheck/lint,
+both docs link validators and the R26 read-only audit all passed on that
+tree. The full integration suite was **not green in this environment**
+(44/46 files; 12 unrelated LMS tests fail on `*.localhost` DNS and fail
+identically at baseline `c34e159d`). CI run
+[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
+on `0f64936a` passed build, container-scan and e2e; a run on `054ac8e6` is
+pending and is required before the gate is reconsidered.
 
 | Suite | Result |
 | --- | --- |
-| **Full platform suite, final remediation tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 174 tests passed**, exit 0 |
-| **Reference app, final remediation tree** (`tests/integration/platform-reference-app.test.ts`) | **69/69 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; 11 contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation) and 4 atomic-provisioning tests (manifest update + forced CAS failure leaves manifest, installation and both audit streams unchanged; forced audit failure rolls back; idempotent retry; single concurrent winner) |
+| **Full platform suite, P2 tree** (`pnpm exec vitest run --config vitest.platform.config.ts`) | **11 files / 191 tests passed**, exit 0, no unhandled errors |
+| **Reference app, P2 tree** (`tests/integration/platform-reference-app.test.ts`) | **86/86 passed**; matching installation boots; environment/artifact/application-id/manifest drift fails read-only with rows unchanged; verifier SELECT-only and denied writes/other relations; runtime/reader/verifier reject privileged, ordinary, indirect and `NOINHERIT` memberships; child-process serving start exits 1 with `DATABASE_URL` or non-distinct URLs; CAS-guarded provisioning leaves rows unchanged on mismatch; contract/provisioning tests (ten real-PostgreSQL negatives plus a pre-existing-grant revocation); 11 signature-identity tests (exact signature; two explicit overloads; unauthorized overload; late-added overload; `PUBLIC` EXECUTE; explicit grant on an unauthorized overload; SECURITY DEFINER; refused non-existent signature; signature change; removed definition; contract validation); 4 prior atomic-provisioning tests plus 6 connection-safety tests (successful commit reuse, rollback + retry, failed `BEGIN`, failed `ROLLBACK`, terminated backend, unknown `COMMIT` outcome) |
 | Architecture boundary (`tests/architecture/platform-boundaries.test.ts`) | 6/6 passed, including no provisioning imports/owner identifiers in `server.ts`/`start.ts` |
-| Typecheck + lint, final remediation tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
-| Reference-app Playwright, final remediation tree | 8/8 passed |
+| Typecheck + lint, P2 tree | `tsc` for `packages/database` and `apps/platform-reference` passed; ESLint on all changed files clean |
+| Reference-app Playwright, P2 tree | 8/8 passed |
 | Kernel + tenancy unit tests + architecture boundary (prior commit content) | 70 tests passed (7 files) |
 | PostgreSQL tenant isolation (`tests/integration/platform-tenant-isolation.test.ts`) | 24/24 passed |
 | Two-installation database boundary (`tests/integration/platform-installation-isolation.test.ts`) | 8/8 passed, cross-database `CONNECT` denied |
-| R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | Re-measured 2026-11-14T19:12:39.618Z: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 2 trigger functions, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role |
-| CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed |
+| R26 read-only function audit (`scripts/audit-function-privileges.mjs`) | Re-measured 2026-11-15 on the P2 tree: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role |
+| CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
-| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-14 after the W1-T09 E2E/usability increment: 661 links across 300 files resolve (657/300 after the W1-T09 E2E section; 652/300 after the W1-T09 runbook; 629/298 after W1-T09 #27/#28; 626/297 after W1-T05; 612/296 at W1-T08; 76 legacy links rewritten; `/vibress/<path>` legacy prefix supported) |
-| Unit/boundary/component suite (`pnpm test:unit`, earlier split-suite increment) | 362 files / 2584 tests passed, exit 0 |
-| Full integration suite (`vitest.config.ts tests/integration`, earlier split-suite increment) | 46 files / 542 tests passed, exit 0 |
-| `pnpm test:integration` (now runs `vitest run --no-file-parallelism tests/integration`, earlier increment) | 46 files / 542 tests passed, exit 0, run sequentially, 95.35 s wall (59.92 s test execution) |
-| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-14: 89 links across 12 files resolve (85/12 after the W1-T09 E2E section; 80/12 after the W1-T09 runbook; 57/10 after W1-T09 #27/#28; 54/9 after W1-T05; 40/8 before it) |
-| Full platform suite (prior commit content) | 11 files / 137 tests passed |
-| Targeted typecheck (kernel, tenancy, database, reference app) | passed |
-| Targeted ESLint (new packages, executor, registry store, reference app, boundary test, integration tests) | passed |
-| Full unit suite on the final remediation tree (`pnpm test:unit`) | 362 files / 2585 tests passed, exit 0, 317.19 s |
-| Full integration suite on the final remediation tree (`pnpm test:integration`) | 46 files / 578 tests passed, exit 0, 127.31 s, sequential |
-| Workspace typecheck on the final remediation tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
-| CI on the final remediation source SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
-| Workspace-wide typecheck (`nx run-many --target=typecheck --all --skip-nx-cache`) | 74/74 projects succeeded |
+| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-15: 661 links across 300 files resolve |
+| Unit/boundary/component suite (`pnpm test:unit`, P2 tree) | 362 files / 2585 tests passed, exit 0, 279.12 s |
+| Full integration suite (`pnpm test:integration`, P2 tree) | **44/46 files, 583/595 tests passed**; 12 tests in `real-lms-authoring-host.test.ts` and `real-lms-pilot-host.test.ts` fail on `getaddrinfo ENOTFOUND site-a-<runId>.localhost`. The same 12 fail at baseline `c34e159d` with the P2 changes stashed (diff hash verified), and the changed files are platform-only, so this is an environment defect, not a regression; **not reported as PASS** |
+| Workspace typecheck on the P2 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
+| CI on the P2 source SHA | **Pending** — run on `054ac8e6`; the prior increment's run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a` passed build, container-scan and e2e |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 89 links across 12 files resolve |
 
 Integration suites share the dev database and must run sequentially. One run that
 overlapped a second suite produced 2 spurious `setup.test.ts` failures (shared tables
@@ -91,6 +86,8 @@ runs passed.
 | P0-B full SET-able membership closure | P0 | **Done in code, unreviewed** — runtime/reader/verifier reject any non-self membership, including indirect and `NOINHERIT`; real-PostgreSQL tests |
 | P1 separate provisioning and pinned read-only verification | P1 | **Done in code, unreviewed** — CAS-guarded operator provisioning; dedicated SELECT-only verifier role; environment/artifact/application/manifest drift fails before serving without mutation; audit attribution |
 | P1 strict runtime privilege contract | P1 | **Done in code, unreviewed** — versioned, extensible allowlist (schemas, relations by kind, sequences, functions) enforced on effective authority at boot and provisioning; ten real-PostgreSQL negatives plus a pre-existing-grant revocation test; reference CRM profile is one contract instance |
+| P2 exact function-signature authorization | P2 | **Done in code, unreviewed** — contract version `2` identifies each function by schema, name and exact `pg_get_function_identity_arguments`; provisioning grants only the catalog-resolved signature and refuses a missing definition; boot reports `contract_function_missing`; 11 real-PostgreSQL signature tests plus contract-validation negatives |
+| P2 provisioning rollback / connection destruction | P2 | **Done in code, unreviewed** — `BEGIN` failure, `ROLLBACK` failure and an attempted-then-unknown `COMMIT` destroy the connection (`release(true)`); successful rollback returns a reusable connection; six fault-injection tests including a terminated backend and an unknown commit outcome |
 | P1 atomic provisioning transaction | P1 | **Done in code, unreviewed** — one checked-out connection and one transaction for manifest, installation, both audit streams and the read-only proof; stale-CAS, forced-audit-failure, idempotent-retry and one-winner-concurrency tests |
 | P1 mandatory CAS + installation audit | P1 | **Done in code, unreviewed** — `registerInstallation`/`updateInstallation` split; actor, reason and both expected-state values required for updates; migration `0058` audit row written in the same statement |
 
