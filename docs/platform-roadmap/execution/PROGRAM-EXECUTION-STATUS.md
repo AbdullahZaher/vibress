@@ -38,9 +38,10 @@ both docs link validators and the R26 read-only audit all passed on that
 tree. The full integration suite was **not green in this environment**
 (44/46 files; 12 unrelated LMS tests fail on `*.localhost` DNS and fail
 identically at baseline `c34e159d`). CI run
-[43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
-on `0f64936a` passed build, container-scan and e2e; a run on `054ac8e6` is
-pending and is required before the gate is reconsidered.
+[43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696)
+on the P2 code SHA `054ac8e6` (`docs` head `9684362f`) passed `build`, `e2e`
+and `container-scan`; the build job includes typecheck, lint, documentation
+links, unit and integration steps.
 
 | Suite | Result |
 | --- | --- |
@@ -60,7 +61,8 @@ pending and is required before the gate is reconsidered.
 | Unit/boundary/component suite (`pnpm test:unit`, P2 tree) | 362 files / 2585 tests passed, exit 0, 279.12 s |
 | Full integration suite (`pnpm test:integration`, P2 tree) | **44/46 files, 583/595 tests passed**; 12 tests in `real-lms-authoring-host.test.ts` and `real-lms-pilot-host.test.ts` fail on `getaddrinfo ENOTFOUND site-a-<runId>.localhost`. The same 12 fail at baseline `c34e159d` with the P2 changes stashed (diff hash verified), and the changed files are platform-only, so this is an environment defect, not a regression; **not reported as PASS** |
 | Workspace typecheck on the P2 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
-| CI on the P2 source SHA | **Pending** — run on `054ac8e6`; the prior increment's run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a` passed build, container-scan and e2e |
+| CI on the P2 source SHA | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on code `054ac8e6` (docs head `9684362f`): `build`, `e2e` and `container-scan` succeeded; the build job includes typecheck, lint, docs links, unit and integration steps |
+| CI on the prior increment's SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
 | `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 89 links across 12 files resolve |
 
 Integration suites share the dev database and must run sequentially. One run that

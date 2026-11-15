@@ -270,11 +270,17 @@ Playwright (8/8), targeted typecheck/ESLint and both docs link validators passed
 on that tree. The full integration suite was **not green in this environment**:
 44/46 files and 583/595 tests passed, and the 12 failures were reproduced
 unchanged at baseline `c34e159d` (see the row above), so they are not a
-regression and are not reported as a pass. CI run
+regression and are not reported as a pass. The same suite's integration step
+passed in CI on `054ac8e6` (Linux resolves wildcard `*.localhost`), so the code
+path is covered there while the local limit stays recorded. CI run
+[43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696)
+on the P2 code SHA `054ac8e6` (docs head `9684362f`) passed typecheck, lint,
+explicit-any guard, documentation links, unit, integration, locale replay,
+build, clean-tree and production dependency audit, and the `e2e` and
+`container-scan` jobs succeeded; CI run
 [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
-on `0f64936a` passed build, container-scan and e2e; a run on `054ac8e6` is the
-required next CI step, and the earlier green run is not reused as proof of the
-P2 code.
+remains the prior increment's evidence. The earlier green run is not reused as
+proof of the P2 code.
 
 The prior tree (`0f64936a`) had also passed the full integration suite
 (46 files / 578 tests) when wildcard `*.localhost` resolution was available on
@@ -677,7 +683,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **PASS on `0f64936a`** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614): build, container-scan and e2e succeeded. A run on the P2 SHA `054ac8e6` is pending and must be recorded before any gate decision |
+| CI on the final source SHA | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on the P2 code SHA `054ac8e6` (docs head `9684362f`): `build`, `e2e` and `container-scan` succeeded. Prior increment: run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a` |
 
 The author does not sign off on this implementation, does not mark the gate
 passed, and did not fabricate any signature or approval.
@@ -703,17 +709,16 @@ boundary (async escape, role-switch rejection, connection destruction), a
 digest-pinned two-publication CMS/Studio compatibility pack proven over HTTP +
 PostgreSQL, a fully validating docs tree, 44/46 integration files with the
 remaining two proven to fail identically at baseline on host DNS, and a
-green CI run ([43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614))
-on the prior implementation SHA `0f64936a`; CI on `054ac8e6` must pass before the
-gate is reconsidered.
+green CI run ([43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696))
+on the P2 code SHA `054ac8e6` (`build`, `e2e`, `container-scan`); the same run's
+build job includes unit and integration steps.
 
 Missing evidence:
 R26 revocation approval/application,
 non-superuser owner in the deployment topology, views policy decision, F-012
 disposition acceptance, Redis/S3 cross-installation denial, production identity
 provider, broader CMS Playwright E2E/acceptance run, artifact provenance from CI,
-a green CI run on the P2 SHA, independent review, and named human sign-offs.
-Wave 2 (M03) may not start under
+independent review, and named human sign-offs. Wave 2 (M03) may not start under
 this gate, and a high rubric score cannot override these critical defects.
 
 ## 14. Next steps (ordered)
