@@ -13,7 +13,7 @@
 
 | Mandatory gate | Status | Evidence |
 | --- | --- | --- |
-| PR #166 and CI on the exact head | **PASS for the verified heads; final-head run recorded in §7 after completion** | Runs 43685146696 → `9684362f`, 43690688602 → `0d712005` and 43706333296 → `d0fc26c3` report their own `head_sha`; no run is attributed to another commit. The final documentation head is claimed only after its conclusion is read |
+| PR #166 and CI on the exact head | **PASS per head** | Runs 43685146696 → `9684362f`, 43690688602 → `0d712005`, 43706333296 → `d0fc26c3` and 43742169334 → `0d248dc6` (final head) each report their own `head_sha`; no run is attributed to another commit |
 | R26 `PUBLIC` EXECUTE revoked | **BLOCKED — DB owner + AppSec** | Proposal 0055 corrected and proven in a disposable DB (4/4); **not applied** to the shared database |
 | F-012 CMS RLS decision | **BLOCKED — owners** | Option B recommended, not accepted; no RLS/grant change |
 | F-012 supported topology enforced | **IMPLEMENTED and verified** | `UnsupportedTopologyError` before any DB URL read; 5 tests including a spawned-process refusal |

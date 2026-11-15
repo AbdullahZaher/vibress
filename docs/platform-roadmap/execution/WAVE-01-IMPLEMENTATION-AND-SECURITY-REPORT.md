@@ -696,7 +696,7 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. The run for the final documentation head is recorded in the CI evidence table only after its conclusion is read; it is not claimed here in advance |
+| CI on the final source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. Run 43742169334 on the final head `0d248dc6` passed every step (`build`, `e2e`, `container-scan`, typecheck, lint, docs links, unit, integration, locale replay, clean-tree and dependency audit) |
 | Final certification report | [FINAL-PROGRAM-CERTIFICATION-REPORT.md](FINAL-PROGRAM-CERTIFICATION-REPORT.md) — decision **NO-GO**; five-way classification of implemented/awaiting-review/blocked-human/blocked-infrastructure/incomplete |
 
 The author does not sign off on this implementation, does not mark the gate
