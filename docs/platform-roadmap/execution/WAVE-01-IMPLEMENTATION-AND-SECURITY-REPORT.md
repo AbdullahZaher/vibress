@@ -696,7 +696,8 @@ Scores are for this increment only and are not a certification. A critical defec
 | Release owner (R40) | **NO SIGNATURE** |
 | ADR-PLAT-001/002/003 | **PROPOSED, NOT ACCEPTED** |
 | A1–A8, G0–G7 | **UNSIGNED** |
-| CI on the final source SHA | **PASS** — final docs-only head `0d712005`: run [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602), `build`, `e2e` and `container-scan` succeeded. P2 code head `9684362f` (contains `054ac8e6`): run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696), same jobs succeeded. Prior increment `0f64936a`: run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) |
+| CI on the final source SHA | **PASS per head** — run 43706333296 on `d0fc26c3`, run 43690688602 on `0d712005`, run 43685146696 on `9684362f` (contains P2 code `054ac8e6`) and run 43641264614 on `0f64936a`: `build`, `e2e` and `container-scan` succeeded on each head. The run for the final documentation head is recorded in the CI evidence table only after its conclusion is read; it is not claimed here in advance |
+| Final certification report | [FINAL-PROGRAM-CERTIFICATION-REPORT.md](FINAL-PROGRAM-CERTIFICATION-REPORT.md) — decision **NO-GO**; five-way classification of implemented/awaiting-review/blocked-human/blocked-infrastructure/incomplete |
 
 The author does not sign off on this implementation, does not mark the gate
 passed, and did not fabricate any signature or approval.
@@ -730,10 +731,12 @@ docs-only head `0d712005`
 
 Missing evidence:
 R26 revocation approval/application,
-non-superuser owner in the deployment topology, views policy decision, F-012
-disposition acceptance, Redis/S3 cross-installation denial, production identity
-provider, broader CMS Playwright E2E/acceptance run, artifact provenance from CI,
-independent review, and named human sign-offs. Wave 2 (M03) may not start under
+non-superuser owner in the deployment topology, R35 policy review, F-012
+disposition acceptance, Redis/S3 cross-installation denial (request prepared:
+[W1-T06](W1-T06-RESOURCE-ISOLATION-REQUEST.md)), production identity provider
+(request prepared: [W1-T07](W1-T07-IDENTITY-PROVIDER-REQUEST.md)), broader CMS
+Playwright E2E/acceptance run, artifact provenance from CI, independent review,
+and named human sign-offs. Wave 2 (M03) may not start under
 this gate, and a high rubric score cannot override these critical defects.
 
 ## 14. Next steps (ordered)

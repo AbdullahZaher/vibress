@@ -125,6 +125,7 @@ runs passed.
 ## Linked evidence
 
 - [Wave 1 report](WAVE-01-IMPLEMENTATION-AND-SECURITY-REPORT.md)
+- [Final program certification report — Wave 1 NO-GO](FINAL-PROGRAM-CERTIFICATION-REPORT.md)
 - [M00 baseline and ownership](BASELINE-AND-OWNERSHIP-M00.md)
 - [Platform boot, registry and deployment runbook](PLATFORM-BOOT-REGISTRY-RUNBOOK.md)
 - [R40 version-identity decision record](R40-VERSION-IDENTITY-DECISION.md)
