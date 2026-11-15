@@ -61,13 +61,13 @@ and `container-scan`; the final docs-only head `0d712005` passed run
 | CMS compatibility subset (publications, content, transactions, Studio persistence, outbox) | 79/79 passed (within the full integration run) |
 | Pinned CMS/Studio fixture pack (unit) | 4/4 passed — digest, drift refusal, deterministic encoding |
 | Pinned CMS/Studio fixture pack (HTTP + PostgreSQL) | 3/3 passed — per-publication pinned documents, non-disclosing cross-publication 404/403, Studio round-trip and pinned restore |
-| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-15: 674 links across 303 files resolve |
+| Full docs link validation (`node scripts/validate-docs-links.mjs docs`) | Re-run 2026-11-15: 687 links across 304 files resolve |
 | Unit/boundary/component suite (`pnpm test:unit`, P2 tree) | 362 files / 2585 tests passed, exit 0, 279.12 s |
 | Full integration suite (`pnpm test:integration`, P2 tree) | **44/46 files, 583/595 tests passed**; 12 tests in `real-lms-authoring-host.test.ts` and `real-lms-pilot-host.test.ts` fail on `getaddrinfo ENOTFOUND site-a-<runId>.localhost`. The same 12 fail at baseline `c34e159d` with the P2 changes stashed (diff hash verified), and the changed files are platform-only, so this is an environment defect, not a regression; **not reported as PASS** |
 | Workspace typecheck on the P2 tree (`nx run-many --target=typecheck --all`) | 74/74 projects succeeded |
 | CI on the P2 source head | **PASS** — run [43685146696](https://github.com/AbdullahZaher/vibress/actions/runs/43685146696) on head `9684362f` (contains code `054ac8e6`), and run [43690688602](https://github.com/AbdullahZaher/vibress/actions/runs/43690688602) on the final docs-only head `0d712005`: `build`, `e2e` and `container-scan` succeeded; the build job includes typecheck, lint, docs links, unit and integration steps |
 | CI on the prior increment's SHA | **PASS** — run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614) on `0f64936a`: build, container-scan and e2e succeeded |
-| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 102 links across 15 files resolve |
+| `pnpm docs:validate-links` (`docs/platform-roadmap`) | Re-run 2026-11-15: 115 links across 16 files resolve |
 
 Integration suites share the dev database and must run sequentially. One run that
 overlapped a second suite produced 2 spurious `setup.test.ts` failures (shared tables

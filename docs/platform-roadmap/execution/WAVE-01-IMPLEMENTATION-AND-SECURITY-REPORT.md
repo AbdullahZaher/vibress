@@ -255,7 +255,7 @@ non-superuser owner and re-verify there. Open blocker.
 | **Full integration suite** (`pnpm test:integration`, sequential, **P2 remediation tree**) | **44/46 files and 583/595 tests passed**; 12 tests in 2 files failed on `getaddrinfo ENOTFOUND site-a-<runId>.localhost` because this host no longer resolves wildcard `*.localhost`. The identical 12 tests fail at the committed baseline `c34e159d` with the P2 changes stashed (working-tree diff hash `c5f6ae74…` verified before and after), and the changed files are platform-only. **Not claimed as PASS**; the failure is environmental and unrelated to the P2 code |
 | Workspace typecheck (`pnpm exec nx run-many --target=typecheck --all --skip-nx-cache`, **P2 remediation tree**) | **74/74 projects succeeded**, 1 m 16 s |
 | `pnpm docs:validate-links` (docs validator, program docs) | **90 relative links across 12 files resolve** |
-| `node scripts/validate-docs-links.mjs docs` (full tree) | **674 relative links across 303 files resolve** |
+| `node scripts/validate-docs-links.mjs docs` (full tree) | **687 relative links across 304 files resolve** |
 | `node scripts/audit-function-privileges.mjs` (read-only, **P2 remediation tree**) | Re-measured 2026-11-15: 33 public functions, 0 `SECURITY DEFINER`, 31 extension-owned, 33 with `PUBLIC` EXECUTE, 0 default-ACL entries, one superuser role (`vibress`) |
 | `… tests/integration/platform-r26-revocation.test.ts` (new, 2026-11-15) | **4 tests passed** in a disposable database with a fresh non-superuser owner. The test reads `proposals/0055_revoke_public_execute.sql` and applies its exact statements, proving PUBLIC execute denied on both trigger functions, a global `pg_default_acl` entry with no `PUBLIC` grantee, owner-created functions in `public` and another schema denied (`42501`), `pg_trgm` still PUBLIC (R26-EXT), the trigger still firing for the caller, the fail-closed guard rejecting an unreviewed PUBLIC-executable function, idempotent re-application and rollback to the built-in default. This also exposed and corrected a defect in the draft proposal: `ALTER DEFAULT PRIVILEGES ... IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC` is a no-op on PostgreSQL 16.15 because schema-scoped default ACLs are additive over an empty baseline. **Nothing was applied to the shared dev database** (audit re-run unchanged: 33/33, 0 default ACLs) |
 | `… tests/architecture/platform-deployment-topology.test.ts` (new, 2026-11-15) | **5 tests passed**: the F-012 gate defaults to `single-installation`, rejects `shared`/`multi-tenant`/`public-hosting` and enabled external onboarding with `UnsupportedTopologyError` naming F-012, does not mutate the inspected environment, and a spawned serving process exits 1 on `PLATFORM_TOPOLOGY=multi-tenant` before any database URL is read |
@@ -635,8 +635,8 @@ suite **36 tests**, installation **8 tests**, tenant **24 tests**, platform conf
   contract/provisioning tests and 4 atomic-provisioning tests), Playwright
   **8/8** with verified teardown, full unit **362 files / 2585 tests**, full
   integration **46 files / 578 tests** (sequential, shared dev database), workspace
-  typecheck **74/74**, eslint clean on all changed files, docs links **102/15** and
-  **674/303**. CI run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
+  typecheck **74/74**, eslint clean on all changed files, docs links **115/16** and
+  **687/304**. CI run [43641264614](https://github.com/AbdullahZaher/vibress/actions/runs/43641264614)
   on `0f64936a` passed (build, container-scan, e2e; 2026-11-14T21:09:05Z–21:32:16Z).
   Artifact provenance remains unclaimed: the digest is still
   caller-supplied and no mechanism proves executable code matches it.
