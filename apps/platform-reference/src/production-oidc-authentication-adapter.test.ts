@@ -43,7 +43,7 @@ function fixture(opts: {
       if (opts.membershipDown) throw new Error("db-outage");
       if (tenantId !== asTenantId("tenant-a")) return null;
       return { principalId, applicationId, tenantId, active: opts.active ?? true,
-        roles: ["admin"], permissions: ["customers:read"] };
+        roles: ["admin"], permissions: ["customers.read"] };
     },
   };
   const config: ProductionOidcConfig = {
@@ -76,12 +76,12 @@ describe("W1-T07 production OIDC candidate", () => {
     })));
     expect(principal.tenantIds).toEqual(["tenant-a"]);
     expect(principal.roles).toEqual([]);
-    expect(principal.permissions).toEqual(["customers:read"]);
+    expect(principal.permissions).toEqual(["customers.read"]);
     const scope = await resolveVerifiedScope(membership, {
       principal, tenantId: asTenantId("tenant-a"),
       applicationId: asApplicationId(app), policyVersion: "p1",
     });
-    expect(scope.authorization.permissions).toEqual(["customers:read"]);
+    expect(scope.authorization.permissions).toEqual(["customers.read"]);
   });
   it("authorizes only server-side membership grants and rechecks revocation at action time", async () => {
     const state = { active: true };
@@ -91,7 +91,7 @@ describe("W1-T07 production OIDC candidate", () => {
       permissions: ["*"],
     })));
     expect(principal.roles).toEqual([]);
-    expect(principal.permissions).toEqual(["customers:read"]);
+    expect(principal.permissions).toEqual(["customers.read"]);
 
     const application = defineApplication({
       id: asApplicationId(app),
@@ -99,12 +99,12 @@ describe("W1-T07 production OIDC candidate", () => {
       version: "1.0.0",
       actions: {
         read: defineAction({
-          name: "read", permission: "customers:read",
+          name: "read", permission: "customers.read",
           input: () => null,
           handler: async ({ context }) => ({ tenant: context.tenantId }),
         }),
         write: defineAction({
-          name: "write", permission: "customers:write",
+          name: "write", permission: "customers.write",
           input: () => null,
           handler: async () => ({ unsafe: true }),
         }),
