@@ -48,6 +48,25 @@
 | M02-16 | M02 | Independent five-agent formal verdicts | BLOCKED | 4 PR reviews COMMENTED by PR author, 0 APPROVED; 20 open review threads | Agents 02–06, Agent 06 independent | No authorized signed verdict with evidence on final SHA | Signed standard-format 02–05 verdicts and 06 independent concurrence; threads triaged |
 | M02-17 | M02 | Release gate, PR merge, Wave 2 authority | BLOCKED | PR #166 OPEN, NO-GO; owner sign-offs missing | Project Owner & Final Release Authority | No GO, merge authority or Wave 2 start | Final owner-signed decision and non-bypassable merge controls |
 
+## Normative draft G0–G7 mapping (not approved)
+
+The gate meanings have been traced to the pinned, still-unmerged PR #151 [release evidence ledger](https://github.com/AbdullahZaher/vibress/blob/c9997a9353a229a4287256f5ba3b94d718e3a5d9/docs/platform-roadmap/RELEASE-EVIDENCE-AND-DECISION-REGISTER.md). **G0 is unsigned**, and no future gate is marked accepted. See the [approval register](WAVE-01-APPROVAL-REGISTER.md) for A1–A8 and accountable role requests.
+
+| Gate | Proposed scope in pinned roadmap | Wave 1 relevance |
+| --- | --- | --- |
+| G0 | Application/Publication topology; ADR-PLAT-001/002, CMS mapping | **BLOCKED**: signed design baseline missing |
+| G1 | Scoped transaction, effective SQL ACL/RLS, tenant security | **PARTIAL**: runtime tests exist, R26/F-012/production proofs missing |
+| G1b | Distinct installation DB, Redis, object IAM and backups | **BLOCKED**: non-DB negative tests missing |
+| G2 | Safe schema compiler and generated API authorization | Future M03/M04, not passed |
+| G3 | CMS/Studio legacy compatibility | **PARTIAL**: local fixture pass; staging acceptance missing |
+| G3b | Clean external CRM SDK, UI and custom action | Future clean external consumer validation, not passed |
+| G4 | Module ABI, event reliability and upgrade compatibility | Future Wave, not passed |
+| G5 | Full restore, RLS-safe backups, measured RPO/RTO | **BLOCKED** for any deploy; full program gate later |
+| G6 | Release metadata/version and support compatibility | R40 currently **BLOCKED**; full gate later |
+| G7 | Independent GA owner GO/NO-GO | Future M08, not Wave 1 GO; **NO-GO** remains |
+
+**Source limitation:** this is a mapping from proposed roadmap definitions, not proof of their formal organizational adoption. Design A1–A8 are defined in [pinned PR #151 design baseline](https://github.com/AbdullahZaher/vibress/blob/c9997a9353a229a4287256f5ba3b94d718e3a5d9/docs/platform-roadmap/FINAL-DESIGN-BASELINE-APPROVAL.md). Human names/signatures remain UNASSIGNED.
+
 ## Decision dependencies and parallel work
 
 1. **Parallel, non-privileged:** Agent 02 audits R26 Scope A/B and R35 view/foreign table inventory; Agent 03 assesses Fastify CVE-2026-120216 and F-012 controls, reviews application trust; Agent 04 prepares resource-isolation harness and recovery/alert criteria without deploying; Agent 05 defines IdP tests and effective-role ACL matrix; Agent 01 gathers accountable owner acceptances, exact CI/threads and version decision.
