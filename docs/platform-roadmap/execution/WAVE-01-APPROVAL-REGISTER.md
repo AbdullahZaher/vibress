@@ -121,3 +121,10 @@ Full decision-ready evidence, role matrix and mandatory remaining gates: WAVE-01
 **Wave 1 exit mapping:** G0 signed architecture, G1 scoped PG16.16/RLS/ACL and G1b installation isolation are applicable; R26/F-012/R35, non-superuser roles, IdP and actual recovery are blocking for the proposed production-shaped scope. G2/G3b/G4 and full GA G5/G6/G7 are later roadmap gates and not claimed as Wave 1 exits; minimum tested recovery and R40/version identity remain necessary for any deploy. A1–A8 applicability requires named authority; no future milestone is falsely marked passed.
 
 **Additional deliverables:** [integrated PR/commit evidence](WAVE-01-INTEGRATED-PR-COMMIT-EVIDENCE-REGISTER.md), [branch protection recommendation](WAVE-01-BRANCH-PROTECTION-RECOMMENDATION.md), and [owner action checklist](WAVE-01-OWNER-FINAL-ACTION-CHECKLIST.md). The previously recorded **8.3/10 remains unchanged (Δ 0.0)**. No security/DB/branch settings were modified; no merge, production operation, release GO, risk acceptance or Wave 2 authorization was issued.
+
+
+### Agent 01 integration execution addendum — PR #189 (2026-11-16)
+
+**NO-GO / NOT APPROVED.** Dedicated branch `integration/wave1-final-remediation-20261116` was created from PR #176 HEAD `3df799b365f8933d8cea234c403beb189a139335`. Imported Agent 02 PR #187 `dfcedbf1d`, Agent 04 PR #174 `e5a43dc1`, scoped Agent 03 PR #188 `ae7b6eb4`, and Agent 05 PR #173 identity evidence `99549c68`. The OIDC adapter reconciles server-side membership permissions with required `jti` validation and negative tests. See [six-agent integration record](WAVE-01-SIX-AGENT-INTEGRATION-2026-11-16.md) and [Draft PR #189](https://github.com/AbdullahZaher/vibress/pull/189).
+
+CI #43896862303 was triggered on initial integration commit `491fe26b03c670b5c635e7be477d2ea862614e8a`; its result is **not certified for this subsequent documentation HEAD**. Node 24 immutable image, Fastify patched lockfile, artifact provenance, R26 A/B, F-012 A/B, IdP/staging authorization, full restore, branch protection and human/Agent 06 reviews remain BLOCKED. Quality baseline **8.3/10**, no risk acceptance, no GO/merge/Wave 2.
