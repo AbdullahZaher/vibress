@@ -102,9 +102,13 @@ function onlyKeys(
   allowed: readonly string[],
   path: string,
 ): void {
-  for (const key of Object.keys(source)) {
-    if (!allowed.includes(key)) {
-      fail("UNSAFE_DEFINITION", path + "." + key, "unsupported property");
+  for (const key of Reflect.ownKeys(source)) {
+    if (typeof key !== "string" || !allowed.includes(key)) {
+      fail("UNSAFE_DEFINITION", path + "." + String(key), "unsupported property");
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      fail("UNSAFE_DEFINITION", path + "." + key, "hidden or accessor property");
     }
   }
 }
