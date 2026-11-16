@@ -109,7 +109,7 @@ describe("M03-S02 canonical PostgreSQL 16 schema manifest", () => {
     expect(() => parseResourceDefinition({ ...source, [Symbol("sql")]: "DROP" }))
       .toThrow(/unsupported property/);
     const field = { id: "name", type: "text", required: true };
-    Object.defineProperty(field, "hidden", { value: "DROP", enumerable: false });
+    Object.defineProperty(field, "required", { value: true, enumerable: false });
     expect(() => parseResourceDefinition({ ...source, fields: [field] }))
       .toThrow(/hidden or accessor/);
     const accessor = { ...source };
