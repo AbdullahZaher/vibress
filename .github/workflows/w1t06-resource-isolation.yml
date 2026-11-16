@@ -1,0 +1,53 @@
+name: W1-T06 Disposable Resource Isolation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/platform/resource-isolation/**"
+      - "docs/platform-roadmap/execution/W1-T06-RESOURCE-ISOLATION-VERIFICATION.md"
+      - ".github/workflows/w1t06-resource-isolation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resource-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified actions/checkout v4
+
+      - name: Install isolated Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/w1t06-python
+          /tmp/w1t06-python/bin/python -m pip install --disable-pip-version-check --no-input redis==6.4.0 boto3==1.40.0
+
+      - name: Validate harness syntax and static contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/w1t06-python/bin/python -m py_compile scripts/platform/resource-isolation/verify.py
+          /tmp/w1t06-python/bin/python scripts/platform/resource-isolation/verify.py --self-test
+          T06_ROOT_USER=configonly T06_ROOT_PASSWORD=configonly-do-not-use docker compose -f scripts/platform/resource-isolation/compose.yml config --quiet
+
+      - name: Prove ACL and IAM negative matrix on throwaway services
+        env:
+          W1T06_DISPOSABLE: I_ACKNOWLEDGE_DISPOSABLE_ONLY
+          W1T06_REPORT: artifacts/w1t06-resource-isolation.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/w1t06-python/bin/python scripts/platform/resource-isolation/verify.py
+
+      - name: Upload non-secret evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified v4.6.2
+        with:
+          name: w1t06-resource-isolation-${{ github.run_id }}
+          path: artifacts/w1t06-resource-isolation.json
+          if-no-files-found: warn
+          retention-days: 14
