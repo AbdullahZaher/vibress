@@ -9,7 +9,6 @@
 import { createQueue, createWorker, assertJobScope, QUEUE_NAMES,
   getQueueIsolationOptions } from "@vibress/queue";
 import { closeRedisClient } from "@vibress/cache";
-import { WebhookDeliveryWorker } from "../../../apps/worker/src/processors/webhook-delivery-worker";
 import type { Worker } from "@vibress/queue";
 
 type TestData = {
@@ -39,6 +38,11 @@ async function execute(): Promise<void> {
   // processing path, replacing only its external webhook delivery side effect
   // with a sentinel. No mail/HTTP delivery, PG writes or production secrets.
   if (mode === "domain-worker") {
+    // Domain package dependencies load only when a domain worker is tested.
+    // Basic Queue/Worker permission tests must not depend on DB/client startup.
+    const { WebhookDeliveryWorker } = await import(
+      "../../../apps/worker/src/processors/webhook-delivery-worker"
+    );
     const domain = new WebhookDeliveryWorker();
     let delivered = 0;
     const replacement = domain as unknown as {
