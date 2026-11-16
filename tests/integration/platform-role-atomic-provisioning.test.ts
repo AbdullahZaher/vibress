@@ -115,6 +115,14 @@ describe("AG06-05 atomic platform role provisioning on PostgreSQL", () => {
     await failAt("after_reader");
   });
 
+  it("rolls back runtime and reader when verifier configuration itself fails", async () => {
+    const input = config();
+    await expect(provisionPlatformRolesAtomically(owner, {
+      ...input, verifier: { ...input.verifier, password: "" },
+    })).rejects.toThrow(/password/);
+    expect(await actualRoles(input)).toEqual([]);
+  });
+
   it("rolls back all three roles when final privileges cannot be certified", async () => {
     await failAt("after_verifier");
     await failAt("after_validation");
@@ -311,6 +319,33 @@ describeDisposable("AG06-05 failure injection: unsafe transport and privilege re
         [input.runtime.roleName, input.reader.roleName, input.verifier.roleName],
       ]);
       expect(observed.rowCount).toBe(3);
+      // A committed batch is not certified by mere role existence: compare
+      // EFFECTIVE relation privileges from an independent backend session.
+      const grants = await probe.query<{
+        runtime_select: boolean;
+        runtime_registry: boolean;
+        reader_select: boolean;
+        reader_update: boolean;
+        verifier_select: boolean;
+        verifier_update: boolean;
+      }>(
+        `SELECT
+           has_table_privilege($1,'public.platform_crm_customers','SELECT') AS runtime_select,
+           has_table_privilege($1,'public.platform_installations','SELECT') AS runtime_registry,
+           has_table_privilege($2,'public.platform_memberships','SELECT') AS reader_select,
+           has_table_privilege($2,'public.platform_memberships','UPDATE') AS reader_update,
+           has_table_privilege($3,'public.platform_installations','SELECT') AS verifier_select,
+           has_table_privilege($3,'public.platform_installations','UPDATE') AS verifier_update`,
+        [input.runtime.roleName, input.reader.roleName, input.verifier.roleName],
+      );
+      expect(grants.rows[0]).toEqual({
+        runtime_select: true,
+        runtime_registry: false,
+        reader_select: true,
+        reader_update: false,
+        verifier_select: true,
+        verifier_update: false,
+      });
     } finally {
       await probe.end();
     }
