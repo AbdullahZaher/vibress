@@ -3,6 +3,7 @@ import {
   QUEUE_NAMES,
   enqueueTraced,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
 } from "@vibress/queue";
 import { NewslettersService, NewsletterDomainError } from "@vibress/newsletters";
 import { DrizzleEmailRecipientRepository } from "@vibress/email";
@@ -26,6 +27,7 @@ export class NewsletterSendEnqueuer {
     if (!this.queue) {
       this.queue = new Queue(EMAIL_QUEUE_NAME, {
         connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
         defaultJobOptions: {
           attempts: 5,
           backoff: { type: "exponential", delay: 5000 },

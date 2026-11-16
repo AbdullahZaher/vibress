@@ -1,0 +1,63 @@
+name: AG02 PostgreSQL 16 Atomic Role / R26 Rehearsal
+
+on:
+  push:
+    branches:
+      - fix/agent02-ag06-05-atomic-20261116
+      - integration/wave1-final-remediation-20261116
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-postgres-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck complete workspace on exact SHA
+        run: pnpm typecheck
+      - name: Boot disposable PostgreSQL only
+        run: docker compose -f compose.dev.yml up -d --wait postgres
+      - name: Require PostgreSQL 16.16+ patched fixture
+        run: |
+          version=$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc "SHOW server_version_num")
+          echo "PostgreSQL server_version_num=$version"
+          test "$version" -ge 160016 && test "$version" -lt 170000
+      - name: Apply disposable DB migrations
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+        run: pnpm db:migrate
+      - name: Lint changed TypeScript
+        run: pnpm exec eslint scripts/lib/provision-platform-roles-atomic.ts tests/integration/platform-role-atomic-provisioning.test.ts
+      - name: AG06-05 atomic and R26 Scope A disposable regression
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          PLATFORM_TEST_DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          AG02_DISPOSABLE_PG_CONFIRMED: "1"
+        run: |
+          git rev-parse HEAD
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-role-atomic-provisioning.test.ts tests/integration/platform-r26-revocation.test.ts
+      - name: AG02 real-role RLS, installation and view negative matrix
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          PLATFORM_TEST_DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+        run: |
+          git rev-parse HEAD
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-tenant-isolation.test.ts tests/integration/platform-installation-isolation.test.ts tests/integration/platform-production-topology.test.ts tests/integration/platform-view-surface.test.ts
+      - name: Teardown disposable PG and role state
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes

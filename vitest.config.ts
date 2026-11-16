@@ -22,6 +22,9 @@ export default defineConfig({
       "references/**",
       "**/references/**",
       "tests/e2e/**",
+      // The reference-app spec is driven by playwright.platform-reference.config.ts,
+      // which starts the harness and writes the E2E state file.
+      "tests/e2e-platform/**",
       // Real Playwright acceptance tests need staging secrets, not Vitest.
       "tests/acceptance/**",
       // LMS is tested by its own node:test runner as a pinned source fixture.
@@ -47,6 +50,14 @@ export default defineConfig({
       "@vibress/utils": path.resolve(
         __dirname,
         "./packages/utils/src/index.ts",
+      ),
+      "@vibress/platform-kernel": path.resolve(
+        __dirname,
+        "./packages/platform-kernel/src/index.ts",
+      ),
+      "@vibress/tenancy": path.resolve(
+        __dirname,
+        "./packages/tenancy/src/index.ts",
       ),
       "@vibress/users": path.resolve(
         __dirname,

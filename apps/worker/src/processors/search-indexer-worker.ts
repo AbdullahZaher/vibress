@@ -3,6 +3,7 @@ import {
   Job,
   QUEUE_NAMES,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
   assertJobScope,
 } from "@vibress/queue";
 import {
@@ -72,7 +73,8 @@ export class SearchIndexerWorker {
     this.worker = new Worker<SearchIndexJob | SearchRebuildJob>(
       SEARCH_QUEUE_NAME,
       tracedProcessor("worker.job.search", (job) => this.process(job)),
-      { connection: getBullMqRedisConnection(), concurrency: 1 },
+      { connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(), concurrency: 1 },
     );
     this.worker.on("failed", (job, err) => {
       console.error(`[SearchIndexer] Job ${job?.id} failed:`, err.message);

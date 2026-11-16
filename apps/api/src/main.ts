@@ -133,6 +133,9 @@ export const buildApp = () => {
   }
 
   const fastify = Fastify({
+    // GHSA-3qgw-9275-xf8w: a nonzero handlerTimeout with streaming media
+    // can crash Fastify <5.12.8. Keep the unaffected timeout path explicit.
+    handlerTimeout: 0,
     logger: false,
     bodyLimit: config.bodyLimitBytes, // Safe configurable default (1MB); raised per-route on upload/import endpoints
     requestIdHeader: "x-request-id",

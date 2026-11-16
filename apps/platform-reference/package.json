@@ -1,0 +1,32 @@
+{
+  "name": "@vibress/platform-reference",
+  "version": "1.2.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "bootstrap": "tsx src/bootstrap.ts",
+    "build": "tsc",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vibress/database": "workspace:*",
+    "@vibress/platform-kernel": "workspace:*",
+    "@vibress/tenancy": "workspace:*",
+    "fastify": "^5.12.8",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.20.4",
+    "tsx": "^4.23.9",
+    "typescript": "^5.5.3"
+  },
+  "nx": {
+    "tags": [
+      "type:app"
+    ]
+  }
+}

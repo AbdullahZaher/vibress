@@ -47,7 +47,7 @@ launch.
 - **Database State**: PostgreSQL 16 managed via Drizzle ORM; 25 applied
   migrations (`0000_` to `0024_multilingual_publications_translations`). Latest
   journal index: `24` in
-  [`packages/database/migrations/meta/_journal.json`](/vibress/packages/database/migrations/meta/_journal.json).
+  [`packages/database/migrations/meta/_journal.json`](../../packages/database/migrations/meta/_journal.json).
 - **Testing Baseline**: 127 test files, 1,028 passing unit/integration tests in
   Vitest (`pnpm vitest run`).
 
@@ -56,8 +56,8 @@ launch.
 > [!IMPORTANT]
 > All browser testing, API verification, and health probes **MUST** use these
 > verified ports configured in
-> [`packages/config/src/index.ts`](/vibress/packages/config/src/index.ts) and
-> [`infrastructure/nginx/nginx.conf`](/vibress/infrastructure/nginx/nginx.conf).
+> [`packages/config/src/index.ts`](../../packages/config/src/index.ts) and
+> [`infrastructure/nginx/nginx.conf`](../../infrastructure/nginx/nginx.conf).
 > Default port `3000` is **NOT used** anywhere in Vibress.
 
 ```text
@@ -115,7 +115,7 @@ presented as verified facts:
 ### 4.1 SEC-01: RBAC Seed Hardening (P0 — `VERIFIED-BLOCKER`)
 
 - **Current State `[VERIFIED]`**: In
-  [`packages/database/src/seed.ts:257-266`](/vibress/packages/database/src/seed.ts#L257-L266),
+  [`packages/database/src/seed.ts:257-266`](../../packages/database/src/seed.ts#L257-L266),
   wildcard prefix checks (`permKey.startsWith("posts.")`,
   `permKey.startsWith("pages.")`) grant `posts.delete`, `posts.publish`,
   `pages.delete`, and `pages.publish` to `author` and `contributor` roles upon
@@ -135,7 +135,7 @@ presented as verified facts:
   `translations.edit`, `translations.review`) to `author` and `contributor`
   roles.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/database/src/seed.ts`](/vibress/packages/database/src/seed.ts).
+  [`packages/database/src/seed.ts`](../../packages/database/src/seed.ts).
 - **Dependencies**: None (`INDEPENDENT`).
 - **Data/Migration Impact**: None; affects seed script only.
 - **Tests Required `[PROPOSED]`**: Unit test verifying exact seeded permission
@@ -153,7 +153,7 @@ presented as verified facts:
 ### 4.2 SEC-02: Content Ownership & Mutation Policy (P0 — `VERIFIED-BLOCKER`)
 
 - **Current State `[VERIFIED]`**: In
-  [`packages/domains/posts/src/application/posts-service.ts:149-270`](/vibress/packages/domains/posts/src/application/posts-service.ts#L149-L270),
+  [`packages/domains/posts/src/application/posts-service.ts:149-270`](../../packages/domains/posts/src/application/posts-service.ts#L149-L270),
   `updatePostTx`, `deletePostTx`, `publishPostTx`, and `restoreRevisionTx`
   verify that the actor possesses permission tokens (`posts.edit`,
   `posts.delete`), but do not evaluate resource ownership
@@ -168,7 +168,7 @@ presented as verified facts:
   across staff content creators.
 - **Required Change `[PROPOSED]`**: Extend the existing capability resolution
   architecture in
-  [`packages/security/src/authorization/index.ts`](/vibress/packages/security/src/authorization/index.ts)
+  [`packages/security/src/authorization/index.ts`](../../packages/security/src/authorization/index.ts)
   by adding capability-based resource authorization
   (`hasResourcePermission(userPermissions, requiredPermission, isOwner, userRoles)`
   or `canMutateContent(actorCapabilities, resourceOwnerId, actorId)`). Domain
@@ -176,9 +176,9 @@ presented as verified facts:
   capabilities (`posts.edit`) without unrestricted management capabilities
   (`posts.manage` / `posts.edit.all`).
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/security/src/authorization/index.ts`](/vibress/packages/security/src/authorization/index.ts),
-  [`packages/domains/posts/src/application/posts-service.ts`](/vibress/packages/domains/posts/src/application/posts-service.ts),
-  [`packages/domains/pages/src/application/pages-service.ts`](/vibress/packages/domains/pages/src/application/pages-service.ts).
+  [`packages/security/src/authorization/index.ts`](../../packages/security/src/authorization/index.ts),
+  [`packages/domains/posts/src/application/posts-service.ts`](../../packages/domains/posts/src/application/posts-service.ts),
+  [`packages/domains/pages/src/application/pages-service.ts`](../../packages/domains/pages/src/application/pages-service.ts).
 - **Dependencies**: `SEC-01` (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: None; application-layer capability evaluation.
 - **Tests Required `[PROPOSED]`**:
@@ -199,7 +199,7 @@ presented as verified facts:
 ### 4.3 AUTH-01: Staff Onboarding Lifecycle (P0 — `VERIFIED-BLOCKER`)
 
 - **Current State `[VERIFIED]`**: In
-  [`apps/api/src/routes/admin.ts:40-115`](/vibress/apps/api/src/routes/admin.ts#L40-L115),
+  [`apps/api/src/routes/admin.ts:40-115`](../../apps/api/src/routes/admin.ts#L40-L115),
   `POST /users/invite` creates an active user with a dummy argon2 password hash.
   No invitation token is created, no email is sent, and no activation endpoint
   exists.
@@ -220,10 +220,10 @@ presented as verified facts:
   dynamically from validated environment configuration (`SITE_URL` /
   `ADMIN_ORIGIN`), never hardcoded.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/database/src/schema/users.ts`](/vibress/packages/database/src/schema/users.ts),
-  [`apps/api/src/routes/admin.ts`](/vibress/apps/api/src/routes/admin.ts),
-  [`apps/api/src/routes/auth.ts`](/vibress/apps/api/src/routes/auth.ts),
-  [`packages/domains/auth/src/application/auth-service.ts`](/vibress/packages/domains/auth/src/application/auth-service.ts).
+  [`packages/database/src/schema/users.ts`](../../packages/database/src/schema/users.ts),
+  [`apps/api/src/routes/admin.ts`](../../apps/api/src/routes/admin.ts),
+  [`apps/api/src/routes/auth.ts`](../../apps/api/src/routes/auth.ts),
+  [`packages/domains/auth/src/application/auth-service.ts`](../../packages/domains/auth/src/application/auth-service.ts).
 - **Dependencies**: Dynamic database migration for `user_invitations`
   (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: Additive table `user_invitations` (foreign key to
@@ -248,7 +248,7 @@ presented as verified facts:
 ### 4.4 AUTH-02: Staff Password Recovery (P0 — `VERIFIED-BLOCKER`)
 
 - **Current State `[VERIFIED]`**: In
-  [`apps/api/src/routes/auth.ts:1-125`](/vibress/apps/api/src/routes/auth.ts#L1-L125),
+  [`apps/api/src/routes/auth.ts:1-125`](../../apps/api/src/routes/auth.ts#L1-L125),
   zero password reset endpoints exist for staff users.
 - **Evidence `[VERIFIED]`**: Grep inspection of `apps/api/src/routes/auth.ts`
   confirms only `/login`, `/logout`, `/session`, `/refresh` routes exist.
@@ -264,9 +264,9 @@ presented as verified facts:
   sessions via `authService.revokeAllUserSessions(userId)`. Base URLs must
   resolve from environment configuration.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/database/src/schema/users.ts`](/vibress/packages/database/src/schema/users.ts),
-  [`apps/api/src/routes/auth.ts`](/vibress/apps/api/src/routes/auth.ts),
-  [`packages/domains/auth/src/application/auth-service.ts`](/vibress/packages/domains/auth/src/application/auth-service.ts).
+  [`packages/database/src/schema/users.ts`](../../packages/database/src/schema/users.ts),
+  [`apps/api/src/routes/auth.ts`](../../apps/api/src/routes/auth.ts),
+  [`packages/domains/auth/src/application/auth-service.ts`](../../packages/domains/auth/src/application/auth-service.ts).
 - **Dependencies**: Dynamic database migration for `password_reset_tokens`
   (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: Additive table `password_reset_tokens`.
@@ -288,7 +288,7 @@ presented as verified facts:
 ### 4.5 STUDIO-01: Lexical Block Handle Gutter Stability (P0 — `VERIFIED-BLOCKER`)
 
 - **Current State `[VERIFIED]`**: In
-  [`packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx:86, 177`](/vibress/packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx#L86),
+  [`packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx:86, 177`](../../packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx#L86),
   mousemove event handlers execute `editor.getEditorState().read(...)` when DOM
   elements are unmounted or transitioning.
 - **Evidence `[VERIFIED]`**: Code inspection of `BlockHandleGutterPlugin.tsx`
@@ -304,8 +304,8 @@ presented as verified facts:
   before executing read operations; unify node conversions in
   `TurnIntoHelper.ts` inside a single atomic `editor.update()` callback.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx`](/vibress/packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx),
-  [`packages/studio-react/src/plugins/TurnIntoHelper.ts`](/vibress/packages/studio-react/src/plugins/TurnIntoHelper.ts).
+  [`packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx`](../../packages/studio-react/src/plugins/BlockHandleGutterPlugin.tsx),
+  [`packages/studio-react/src/plugins/TurnIntoHelper.ts`](../../packages/studio-react/src/plugins/TurnIntoHelper.ts).
 - **Dependencies**: None (`INDEPENDENT`).
 - **Data/Migration Impact**: None; client React component.
 - **Tests Required `[PROPOSED]`**: Unit tests in `packages/studio-react`
@@ -344,9 +344,9 @@ presented as verified facts:
   sanitize/strip client-provided `x-publication-id` and `x-workspace-id` headers
   and enforce host publication singleton resolution across all domain services.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`apps/api/src/main.ts`](/vibress/apps/api/src/main.ts), Fastify request
+  [`apps/api/src/main.ts`](../../apps/api/src/main.ts), Fastify request
   hooks,
-  [`packages/domains/workspaces/src/application/workspace-service.ts`](/vibress/packages/domains/workspaces/src/application/workspace-service.ts).
+  [`packages/domains/workspaces/src/application/workspace-service.ts`](../../packages/domains/workspaces/src/application/workspace-service.ts).
 - **Dependencies**: `SEC-02` (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: None; request middleware.
 - **Tests Required `[PROPOSED]`**:
@@ -365,7 +365,7 @@ presented as verified facts:
 ### 4.7 TEST-01: Visual Regression Test Trustworthiness (P1 — `VERIFIED-CORRECTNESS`)
 
 - **Current State `[VERIFIED]`**: In
-  [`tests/e2e/visual/multilingual-visual-regression.test.ts:33-50`](/vibress/tests/e2e/visual/multilingual-visual-regression.test.ts#L33-L50),
+  [`tests/e2e/visual/multilingual-visual-regression.test.ts:33-50`](../../tests/e2e/visual/multilingual-visual-regression.test.ts#L33-L50),
   `compareScreenshotBuffers` computes PNG byte-length difference ratios instead
   of comparing pixel data.
 - **Evidence `[VERIFIED]`**: Source code inspection of
@@ -380,7 +380,7 @@ presented as verified facts:
   native `expect(page).toHaveScreenshot()` with reduced motion enabled,
   stabilized dynamic elements, and an empirically calibrated pixel threshold.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`tests/e2e/visual/multilingual-visual-regression.test.ts`](/vibress/tests/e2e/visual/multilingual-visual-regression.test.ts).
+  [`tests/e2e/visual/multilingual-visual-regression.test.ts`](../../tests/e2e/visual/multilingual-visual-regression.test.ts).
 - **Dependencies**: None (`INDEPENDENT`).
 - **Data/Migration Impact**: None; test harness only.
 - **Tests Required `[PROPOSED]`**: Playwright visual regression test suite.
@@ -396,7 +396,7 @@ presented as verified facts:
 ### 4.8 DB-01: Search Performance & Index Investigation (P1 — `VERIFIED-PERFORMANCE`)
 
 - **Current State `[VERIFIED]`**: Search repository in
-  [`packages/domains/search/src/infrastructure/drizzle-search-repository.ts:77-100`](/vibress/packages/domains/search/src/infrastructure/drizzle-search-repository.ts#L77-L100)
+  [`packages/domains/search/src/infrastructure/drizzle-search-repository.ts:77-100`](../../packages/domains/search/src/infrastructure/drizzle-search-repository.ts#L77-L100)
   executes `ILIKE` on `title`, `body_text`, and `slug`. Migration `0011` created
   GIN indexes on `title` and `body_text`, but `slug` is unindexed and Drizzle
   schema does not declare them.
@@ -413,8 +413,8 @@ presented as verified facts:
   empirically justified index strategy, and apply the next valid migration
   sequence index dynamically determined from the migration journal.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/database/src/schema/intelligence.ts`](/vibress/packages/database/src/schema/intelligence.ts),
-  [`packages/domains/search/src/infrastructure/drizzle-search-repository.ts`](/vibress/packages/domains/search/src/infrastructure/drizzle-search-repository.ts),
+  [`packages/database/src/schema/intelligence.ts`](../../packages/database/src/schema/intelligence.ts),
+  [`packages/domains/search/src/infrastructure/drizzle-search-repository.ts`](../../packages/domains/search/src/infrastructure/drizzle-search-repository.ts),
   migration journal.
 - **Dependencies**: Empirical baseline measurement (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: Additive index creation migration.
@@ -432,7 +432,7 @@ presented as verified facts:
 ### 4.9 DB-02: PostgreSQL Transaction Concurrency (P1 — `VERIFIED-OPERATIONAL`)
 
 - **Current State `[VERIFIED]`**: Transaction runner in
-  [`packages/database/src/transaction/transaction-runner.ts:24-32`](/vibress/packages/database/src/transaction/transaction-runner.ts#L24-L32)
+  [`packages/database/src/transaction/transaction-runner.ts:24-32`](../../packages/database/src/transaction/transaction-runner.ts#L24-L32)
   leases a single client connection per transaction.
 - **Evidence `[VERIFIED]`**: Code inspection of `transaction-runner.ts` confirms
   `db.transaction(...)` wraps execution inside a single connection lease.
@@ -445,7 +445,7 @@ presented as verified facts:
   ensure sequential query execution within transaction blocks or lease dedicated
   pool clients for parallel operations.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`packages/database/src/transaction/transaction-runner.ts`](/vibress/packages/database/src/transaction/transaction-runner.ts),
+  [`packages/database/src/transaction/transaction-runner.ts`](../../packages/database/src/transaction/transaction-runner.ts),
   background worker transaction callers.
 - **Dependencies**: Concurrency reproduction test (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: None; connection pool management.
@@ -463,9 +463,9 @@ presented as verified facts:
 ### 4.10 SEC-03: Staged Content Security Policy (P1 — `VERIFIED-PRODUCTION-GAP`)
 
 - **Current State `[VERIFIED]`**: Fastify API sets helmet CSP in
-  [`apps/api/src/main.ts:116-133`](/vibress/apps/api/src/main.ts#L116-L133), and
+  [`apps/api/src/main.ts:116-133`](../../apps/api/src/main.ts#L116-L133), and
   Next.js web application
-  [`apps/web/src/middleware.ts:19-43`](/vibress/apps/web/src/middleware.ts#L19-L43)
+  [`apps/web/src/middleware.ts:19-43`](../../apps/web/src/middleware.ts#L19-L43)
   builds enforced nonce-based CSP.
 - **Evidence `[VERIFIED]`**: Inspection of `apps/web/src/middleware.ts` confirms
   nonce-based CSP configuration with Google Fonts and S3 media allowances.
@@ -479,8 +479,8 @@ presented as verified facts:
   minimal allowlist (Google Fonts, S3, YouTube/Vimeo embeds); and enforce in
   production without development wildcards.
 - **Files/Modules to Inspect `[VERIFIED]`**:
-  [`apps/web/src/middleware.ts`](/vibress/apps/web/src/middleware.ts),
-  [`apps/api/src/main.ts`](/vibress/apps/api/src/main.ts).
+  [`apps/web/src/middleware.ts`](../../apps/web/src/middleware.ts),
+  [`apps/api/src/main.ts`](../../apps/api/src/main.ts).
 - **Dependencies**: Asset inventory audit (`HARD DEPENDENCY`).
 - **Data/Migration Impact**: None; HTTP response headers.
 - **Tests Required `[PROPOSED]`**: Automated header assertions verifying CSP
@@ -540,19 +540,19 @@ Before any code is modified, the implementation team must verify:
 ### 7.1 Existing Authorization Architecture `[VERIFIED]`
 
 - **Canonical Roles** in
-  [`packages/database/src/seed.ts:16-47`](/vibress/packages/database/src/seed.ts#L16-L47):
+  [`packages/database/src/seed.ts:16-47`](../../packages/database/src/seed.ts#L16-L47):
   - `owner` (Site Owner, `isSystem: true`)
   - `administrator` (System Administrator, `isSystem: true`)
   - `editor` (Content Editor, `isSystem: true`)
   - `author` (Content Author, `isSystem: true`)
   - `contributor` (Content Contributor, `isSystem: true`)
 - **Permission Resolution** in
-  [`packages/security/src/authorization/index.ts:1-15`](/vibress/packages/security/src/authorization/index.ts#L1-L15):
+  [`packages/security/src/authorization/index.ts:1-15`](../../packages/security/src/authorization/index.ts#L1-L15):
   - `hasPermission(userPermissions, requiredPermission, userRoles)`: If
     `userRoles.includes("owner")`, returns `true`; otherwise checks
     `userPermissions.includes(requiredPermission)`.
 - **API Route Enforcement** in
-  [`apps/api/src/middleware/auth.ts:58-85`](/vibress/apps/api/src/middleware/auth.ts#L58-L85):
+  [`apps/api/src/middleware/auth.ts:58-85`](../../apps/api/src/middleware/auth.ts#L58-L85):
   - `requirePermission(permissionKey)` preHandler checks
     `hasPermission(req.permissions, permissionKey, req.roles)`.
 
@@ -888,11 +888,11 @@ failure paths:
 ### 18.1 Existing Operational Controls `[VERIFIED]`
 
 - `MEMBERS_SIGNUP_ENABLED` in
-  [`packages/config/src/index.ts:167`](/vibress/packages/config/src/index.ts#L167):
+  [`packages/config/src/index.ts:167`](../../packages/config/src/index.ts#L167):
   Configures whether reader member registration is accepted (Feature Flag /
   Access Control).
 - `EVENT_DELIVERY_MODE` in
-  [`packages/config/src/index.ts:177`](/vibress/packages/config/src/index.ts#L177):
+  [`packages/config/src/index.ts:177`](../../packages/config/src/index.ts#L177):
   Configures event dispatching mode (`outbox` vs `direct`) (Operational
   Configuration).
 

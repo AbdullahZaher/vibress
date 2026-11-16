@@ -4,6 +4,7 @@ import {
   QUEUE_NAMES,
   EmailDeliveryJob,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
   assertJobScope,
 } from "@vibress/queue";
 import { tracedProcessor } from "./trace-helper";
@@ -71,6 +72,7 @@ export class EmailDeliveryWorker {
       ),
       {
         connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
         concurrency: 4,
       },
     );

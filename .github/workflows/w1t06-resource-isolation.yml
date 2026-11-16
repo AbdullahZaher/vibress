@@ -1,0 +1,108 @@
+name: W1-T06 Disposable Resource Isolation
+
+on:
+  pull_request:
+    paths:
+      - "scripts/platform/resource-isolation/**"
+      - "packages/queue/src/**"
+      - "apps/worker/src/**"
+      - "apps/api/src/**"
+      - "docs/platform-roadmap/execution/W1-T06-RESOURCE-ISOLATION-VERIFICATION.md"
+      - ".github/workflows/w1t06-resource-isolation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resource-isolation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified actions/checkout v4
+
+      - name: Record PR head versus checked-out merge commit
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          declared = os.environ["WORKFLOW_COMMIT_SHA"]
+          if actual != declared:
+              raise SystemExit("CHECKOUT_SHA_MISMATCH")
+          payload = {
+              "checkout_sha": actual,
+              "workflow_commit_sha": declared,
+              "pr_head_sha": os.environ.get("PR_HEAD_SHA") or None,
+              "checkout_mode": "pull_request_merge" if os.environ.get("PR_HEAD_SHA") else "manual_dispatch",
+              "note": "Results belong to the checkout/merge commit, not automatically to the PR head",
+          }
+          pathlib.Path("artifacts/w1t06-provenance.json").write_text(
+              json.dumps(payload, indent=2) + "\n")
+          PY
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7 verified commit
+        with:
+          node-version: "24"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6 verified commit
+        with:
+          version: 11.22.0
+
+      - name: Install locked Vibress workspace dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck real Worker / Queue / Cache integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @vibress/plugin-sdk build
+          pnpm --filter @vibress/queue typecheck
+          pnpm --filter @vibress/worker typecheck
+          pnpm --filter @vibress/api typecheck
+          pnpm exec vitest run --config scripts/platform/resource-isolation/vitest.config.ts
+
+      - name: Install isolated Python dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv /tmp/w1t06-python
+          /tmp/w1t06-python/bin/python -m pip install --disable-pip-version-check --no-input redis==6.4.0 boto3==1.40.0
+
+      - name: Validate harness syntax and static contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/w1t06-python/bin/python -m py_compile scripts/platform/resource-isolation/verify.py
+          /tmp/w1t06-python/bin/python scripts/platform/resource-isolation/verify.py --self-test
+          T06_ROOT_USER=configonly T06_ROOT_PASSWORD=configonly-do-not-use T06_PG_PASSWORD=configonly-do-not-use docker compose -f scripts/platform/resource-isolation/compose.yml config --quiet
+
+      - name: Prove ACL, IAM and real BullMQ Worker negative matrix on throwaway services
+        env:
+          W1T06_DISPOSABLE: I_ACKNOWLEDGE_DISPOSABLE_ONLY
+          W1T06_REPORT: artifacts/w1t06-resource-isolation.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/w1t06-python/bin/python scripts/platform/resource-isolation/verify.py
+
+      - name: Upload non-secret evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified v4.6.2
+        with:
+          name: w1t06-resource-isolation-${{ github.run_id }}
+          path: artifacts/w1t06-*.json
+          if-no-files-found: warn
+          retention-days: 14

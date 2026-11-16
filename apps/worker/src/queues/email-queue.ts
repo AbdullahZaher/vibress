@@ -4,6 +4,7 @@ import {
   QUEUE_DEFAULTS,
   EmailDeliveryJob,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
 } from "@vibress/queue";
 
 export const EMAIL_QUEUE_NAME = QUEUE_NAMES.EMAIL_DELIVERY;
@@ -15,6 +16,7 @@ export function getEmailQueue(): Queue<EmailDeliveryJob> {
   if (!emailQueue) {
     emailQueue = new Queue<EmailDeliveryJob>(EMAIL_QUEUE_NAME, {
       connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
       defaultJobOptions: QUEUE_DEFAULTS.EMAIL,
     });
   }

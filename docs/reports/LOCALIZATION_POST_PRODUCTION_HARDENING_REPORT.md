@@ -132,9 +132,9 @@ rewrites.
 
 Comprehensive developer and administrator guides have been authored:
 
-1. [Theme Localization Guide](/vibress/docs/development/THEME_LOCALIZATION_GUIDE.md)
-2. [Plugin Localization Guide](/vibress/docs/development/PLUGIN_LOCALIZATION_GUIDE.md)
-3. [Multilingual Administration Guide](/vibress/docs/administration/MULTILINGUAL_ADMIN_GUIDE.md)
+1. [Theme Localization Guide](../development/THEME_LOCALIZATION_GUIDE.md)
+2. [Plugin Localization Guide](../development/PLUGIN_LOCALIZATION_GUIDE.md)
+3. [Multilingual Administration Guide](../administration/MULTILINGUAL_ADMIN_GUIDE.md)
 
 ---
 
