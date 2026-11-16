@@ -4,6 +4,15 @@ import { getConfig } from "@vibress/config";
 let redisClient: Redis | null = null;
 let bullMqClient: Redis | null = null;
 
+/** Log only bounded provider error codes, never raw errors or Redis URLs. */
+export function safeRedisErrorCode(error: unknown): string {
+  if (!error || typeof error !== "object") return "REDIS_ERROR";
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && /^[A-Z][A-Z_0-9]{0,40}$/.test(code)
+    ? code
+    : "REDIS_ERROR";
+}
+
 export const getRedisClient = (): Redis => {
   if (!redisClient) {
     const redisUrl = getConfig().redis.url;
@@ -21,7 +30,7 @@ export const getRedisClient = (): Redis => {
     redisClient = new Redis(redisUrl, options);
 
     redisClient.on("error", (err) => {
-      console.error("Redis Client Error:", err.message);
+      console.error("Redis Client Error:", safeRedisErrorCode(err));
     });
   }
   return redisClient;
@@ -47,7 +56,7 @@ export const getBullMqRedisConnection = (): Redis => {
     bullMqClient = new Redis(redisUrl, options);
 
     bullMqClient.on("error", (err) => {
-      console.error("BullMQ Redis Client Error:", err.message);
+      console.error("BullMQ Redis Client Error:", safeRedisErrorCode(err));
     });
   }
   return bullMqClient;

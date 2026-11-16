@@ -7,6 +7,7 @@ Requires: Docker Compose v2, Python 3.12+, redis and boto3.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -38,6 +39,21 @@ CASES = [
     "s3_signed_own_get", "s3_signed_foreign_get_denied",
     "s3_signed_expired_denied", "s3_a_revoked_denied",
     "s3_signed_revoked_denied",
+    "bullmq_a_enqueue", "bullmq_b_enqueue", "bullmq_a_worker_consumes",
+    "bullmq_b_worker_consumes", "bullmq_a_cross_enqueue_denied",
+    "bullmq_b_cross_inspect_denied", "bullmq_b_cross_worker_denied",
+    "bullmq_a_retry_completes", "bullmq_a_replay_deduplicates",
+    "bullmq_a_poison_dead_letter", "bullmq_b_cross_dead_letter_denied",
+    "s3_restore_source_read", "s3_restore_target_write",
+    "s3_restore_checksum_match", "s3_restore_foreign_read_denied",
+    "s3_backup_a_restore_bucket_denied",
+    "bullmq_real_webhook_worker_a", "bullmq_real_webhook_worker_b",
+    "pg_worker_a_own_read", "pg_worker_b_own_read",
+    "pg_worker_a_cross_database_denied", "pg_worker_b_cross_database_denied",
+    "pg_worker_a_admin_table_denied", "pg_backup_a_read_only",
+    "pg_backup_a_cross_database_denied", "pg_backup_a_write_denied",
+    "pg_backup_a_dump", "pg_restore_a_checksum",
+    "pg_restore_b_contamination_absent",
 ]
 
 
@@ -45,10 +61,10 @@ class CheckError(Exception):
     pass
 
 
-def spawn(args: list[str], *, env=None, input_text=None, check=True) -> subprocess.CompletedProcess:
+def spawn(args: list[str], *, env=None, input_text=None, check=True, timeout=120) -> subprocess.CompletedProcess:
     result = subprocess.run(
         args, env=env, input=input_text, text=True,
-        capture_output=True, timeout=120, check=False,
+        capture_output=True, timeout=timeout, check=False,
     )
     if check and result.returncode:
         # Intentionally do not include stdout/stderr (can contain credentials).
@@ -61,8 +77,10 @@ class Lab:
         self.name = "w1t06" + secrets.token_hex(5)
         self.root_user = "w1t06root"
         self.root_password = secrets.token_hex(24)
+        self.pg_password = secrets.token_hex(24)
         self.env = dict(os.environ, T06_ROOT_USER=self.root_user,
-                        T06_ROOT_PASSWORD=self.root_password)
+                        T06_ROOT_PASSWORD=self.root_password,
+                        T06_PG_PASSWORD=self.pg_password)
         self.prefix = "t06:" + self.name + ":"
         self.redis_users: list[str] = []
         self.s3_users: list[str] = []
@@ -195,12 +213,21 @@ class Lab:
         for suffix in ("a", "b", "wa", "wb"):
             user = "w1t06_" + suffix
             password = secrets.token_hex(24)
-            pattern = "~" + self.prefix + ("a:" if suffix in ("a", "wa") else "b:") + "*"
+            scoped_namespace = self.prefix + ("a:" if suffix in ("a", "wa") else "b:") + "*"
+            pattern = "~" + scoped_namespace
+            channel_pattern = "&" + scoped_namespace
             self.operator.execute_command(
                 "ACL", "SETUSER", user, "reset", "on", ">" + password,
-                pattern, "resetchannels", "+@all", "-@dangerous",
+                pattern, "resetchannels", channel_pattern, "+@all", "-@dangerous",
                 "-keys", "-scan", "-randomkey", "-dbsize", "-monitor",
                 "-flushall", "-flushdb", "-acl", "-config",
+                # BullMQ requires Lua script commands; allow only these
+                # operations (never CONFIG, ACL, FLUSH or foreign key access).
+                "+eval", "+evalsha", "+script|load", "+script|exists",
+                # BullMQ checks Redis version at initialization via INFO.
+                # Operational metadata may be visible; do NOT treat this ACL
+                # policy as a deployable multi-tenant credential contract.
+                "+info",
             )
             self.redis_passwords[suffix] = (user, password)
             self.redis_users.append(user)
@@ -270,6 +297,132 @@ class Lab:
                         lambda: client("a", rotated).ping(), authentication=True)
         for c in (a, b, wa, wb):
             c.close()
+
+    def node_case(self, port, mode, principal, installation, job_id, kind="normal"):
+        from urllib.parse import quote
+        user, password = self.redis_passwords[principal]
+        prefix = self.prefix + installation + ":bull"
+        env = dict(self.env,
+                   NODE_ENV="test",
+                   REDIS_URL=f"redis://{quote(user, safe='')}:{quote(password, safe='')}@127.0.0.1:{port}",
+                   VIBRESS_REQUIRE_INSTALLATION_ISOLATION="1",
+                   VIBRESS_QUEUE_PREFIX=prefix,
+                   VIBRESS_INSTALLATION_ID=installation,
+                   T06_JOB_ID=job_id,
+                   T06_JOB_KIND=kind)
+        script = str(Path(__file__).with_name("worker-boundary.ts"))
+        try:
+            result = spawn(["pnpm", "exec", "tsx", script, mode], env=env,
+                           check=False, timeout=40)
+        except subprocess.TimeoutExpired:
+            self.failure_stage = {"role": principal, "installation": installation,
+                                  "operation": mode, "category": "PROCESS_TIMEOUT"}
+            raise CheckError("isolated worker did not shut down within bound") from None
+        # The child process emits only a sanitized status. Errors (potentially
+        # including connection URIs) are deliberately discarded, never printed.
+        if result.returncode:
+            safe_records = [line for line in result.stdout.splitlines()
+                            if line.startswith('{"status":')]
+            category = "NO_SAFE_CHILD_RECORD"
+            if safe_records:
+                try:
+                    raw = json.loads(safe_records[-1])
+                    candidate = raw.get("category")
+                    if candidate in {"MODULE_RESOLUTION", "REDIS_AUTH",
+                                     "ACL_DENIAL", "ACL_CHANNEL", "ACL_KEY",
+                                     "ACL_COMMAND", "ACL_SCRIPT", "ACL_OTHER",
+                                     "CONNECTION", "ASSERTION", "UNKNOWN"}:
+                        category = candidate
+                    command = raw.get("deniedCommand")
+                    if isinstance(command, str) and command in {
+                        "client", "info", "eval", "evalsha", "script",
+                        "fcall", "fcall_ro", "publish", "subscribe",
+                        "psubscribe", "xadd", "zadd", "sadd", "hset",
+                        "set", "ping", "multi", "exec", "not-disclosed",
+                    }:
+                        self.denied_command = command
+                except (ValueError, TypeError):
+                    pass
+            self.failure_stage = {"role": principal, "installation": installation,
+                                  "operation": mode, "category": category,
+                                  "denied_command": getattr(self, "denied_command", None)}
+            # Only report a restricted reason code from Redis ACL audit data.
+            # ACL LOG can contain key names, usernames and client addresses:
+            # never put those records in CI output or an artifact.
+            try:
+                audit = self.operator.execute_command("ACL", "LOG", 5)
+                reasons = sorted(set(
+                    str(row.get("reason")) for row in audit if isinstance(row, dict)
+                    and row.get("reason") in {"command", "key", "channel"}
+                ))
+                self.failure_stage["acl_denial_classes"] = reasons
+            except Exception:
+                pass
+            raise CheckError("isolated worker child failed")
+        records = [line for line in result.stdout.splitlines()
+                   if line.startswith('{"status":')]
+        if len(records) != 1:
+            raise CheckError("BullMQ child did not report exactly one status")
+        payload = json.loads(records[0])
+        if not isinstance(payload, dict) or "status" not in payload:
+            raise CheckError("BullMQ child report malformed")
+        return payload
+
+    def bullmq_matrix(self, port):
+        def outcome(label, mode, principal, installation, job_id, expected, kind="normal"):
+            record = self.node_case(port, mode, principal, installation, job_id, kind)
+            if record.get("status") != expected:
+                raise CheckError(label + " returned unexpected worker outcome")
+            self.cases[label] = expected + "_OBSERVED"
+            return record
+
+        outcome("bullmq_a_enqueue", "producer", "a", "a",
+                "normal-a", "ENQUEUED")
+        outcome("bullmq_b_enqueue", "producer", "b", "b",
+                "normal-b", "ENQUEUED")
+        outcome("bullmq_a_cross_enqueue_denied", "producer-denied", "a", "b",
+                "foreign-b", "ENQUEUE_NOPERM")
+        outcome("bullmq_b_cross_inspect_denied", "inspect-denied", "b", "a",
+                "normal-a", "INSPECT_NOPERM")
+        # A foreign Worker must receive an actual Redis script ACL error.
+        # The waiting job must remain, then be consumed by the valid Worker.
+        outcome("bullmq_b_cross_worker_denied", "worker-denied", "wb", "a",
+                "normal-a", "WORKER_NOPERM")
+        outcome("bullmq_a_worker_consumes", "worker", "wa", "a",
+                "normal-a", "CONSUMED")
+        outcome("bullmq_b_worker_consumes", "worker", "wb", "b",
+                "normal-b", "CONSUMED")
+        self.node_case(port, "producer", "a", "a", "domain-a")
+        outcome("bullmq_real_webhook_worker_a", "domain-worker", "wa", "a",
+                "domain-a", "DOMAIN_CONSUMED")
+        self.node_case(port, "producer", "b", "b", "domain-b")
+        outcome("bullmq_real_webhook_worker_b", "domain-worker", "wb", "b",
+                "domain-b", "DOMAIN_CONSUMED")
+        outcome("bullmq_a_retry_completes", "producer", "a", "a",
+                "retry-a", "ENQUEUED", "retry")
+        result = self.node_case(port, "worker", "wa", "a", "retry-a", "retry")
+        if result.get("status") != "CONSUMED" or result.get("attempts") != 2:
+            raise CheckError("retry job did not complete in two attempts")
+        self.cases["bullmq_a_retry_completes"] = "RETRY_2_ATTEMPTS_OBSERVED"
+
+        # Replaying a BullMQ jobId must not create an independently
+        # deliverable second job. This is a queue-level, not domain-side proof.
+        outcome("bullmq_a_replay_deduplicates", "producer", "a", "a",
+                "normal-a", "ENQUEUED")
+        state = self.node_case(port, "inspect", "a", "a", "normal-a")
+        if state.get("state") != "completed" or state.get("attemptsMade") != 1:
+            raise CheckError("duplicate job replayed or mutated terminal state")
+        self.cases["bullmq_a_replay_deduplicates"] = "DEDUPLICATED_OBSERVED"
+
+        self.node_case(port, "producer", "a", "a", "poison-a", "poison")
+        result = self.node_case(port, "worker", "wa", "a", "poison-a", "poison")
+        state = self.node_case(port, "inspect", "a", "a", "poison-a")
+        if result.get("status") != "POISON_BLOCKED" or state.get("state") != "failed" or \
+           result.get("sideEffects") != 0:
+            raise CheckError("poison job was not rejected before side effect")
+        self.cases["bullmq_a_poison_dead_letter"] = "FAILED_QUEUE_ISOLATED_OBSERVED"
+        outcome("bullmq_b_cross_dead_letter_denied", "inspect-denied", "b", "a",
+                "poison-a", "INSPECT_NOPERM")
 
     def s3_matrix(self, port):
         root = self.s3(self.root_user, self.root_password, port)
@@ -345,6 +498,185 @@ class Lab:
         self.deny_s3("s3_a_revoked_denied", lambda: a.get_object(Bucket=ba, Key="own.txt"))
         self.deny_url("s3_signed_revoked_denied", revoked_signed)
 
+    def recovery_matrix(self, port):
+        # Object-storage-only recovery into a NEW isolated bucket. PostgreSQL
+        # recovery is explicitly not represented by these tests.
+        root = self.s3(self.root_user, self.root_password, port)
+        backup = self.s3(*self.s3_passwords["backup_a"], port)
+        source_bucket = self.bucket_a
+        bucket = "t06-" + self.name + "-restore"
+        user = "t06" + self.name + "restore"
+        policy = "p" + user
+        password = secrets.token_hex(24)
+        self.mc("mb", "local/" + bucket)
+        self.buckets.append(bucket)
+        path = self.policy_file(policy, self.s3_policy(bucket))
+        self.mc("admin", "policy", "create", "local", policy, path)
+        self.s3_policies.append(policy)
+        self.mc("admin", "user", "add", "local", user, password)
+        self.s3_users.append(user)
+        self.mc("admin", "policy", "attach", "local", policy, "--user", user)
+        restore = self.s3(user, password, port)
+
+        # The snapshot content is read by the read-only backup identity, not
+        # by a privileged root used to provision IAM.
+        started = time.monotonic()
+        snapshot_at = time.time()
+        body = backup.get_object(Bucket=source_bucket, Key="own.txt")["Body"].read()
+        if body != b"own":
+            raise CheckError("source backup content unexpected")
+        digest = hashlib.sha256(body).hexdigest()
+        self.cases["s3_restore_source_read"] = "BACKUP_READ_OBSERVED"
+        restore.put_object(Bucket=bucket, Key="own.txt", Body=body)
+        self.cases["s3_restore_target_write"] = "ISOLATED_RESTORE_WRITE_OBSERVED"
+
+        recovered = restore.get_object(Bucket=bucket, Key="own.txt")["Body"].read()
+        objects = restore.list_objects_v2(Bucket=bucket).get("Contents", [])
+        if hashlib.sha256(recovered).hexdigest() != digest or \
+           sorted(x["Key"] for x in objects) != ["own.txt"]:
+            raise CheckError("object restore checksum mismatch or foreign data present")
+        self.cases["s3_restore_checksum_match"] = "CHECKSUM_MATCH_OBSERVED"
+        self.deny_s3("s3_restore_foreign_read_denied",
+                     lambda: restore.get_object(Bucket=self.bucket_b, Key="private.txt"))
+        self.deny_s3("s3_backup_a_restore_bucket_denied",
+                     lambda: backup.get_object(Bucket=bucket, Key="own.txt"))
+        self.recovery_metrics = {
+            "object_restore_seconds": round(time.monotonic() - started, 3),
+            "snapshot_age_seconds_at_end": round(time.time() - snapshot_at, 3),
+            "postgres_restore": "NOT_EXECUTED",
+            "owner_approved_rpo_target": None,
+            "owner_approved_rto_target": None,
+            "full_recovery_certified": False,
+        }
+
+    def pg_admin(self, database: str, sql: str):
+        return self.compose("exec", "-T", "postgres", "psql", "-X", "-At",
+                            "-U", "t06admin", "-d", database,
+                            "-v", "ON_ERROR_STOP=1", check=True,
+                            input_text=sql).stdout.strip()
+
+    def pg_as(self, role: str, database: str, sql: str, *, dump=False):
+        # No password or secret is passed on process command-line arguments.
+        # Temporary pgpass file is in the self-owned disposable container.
+        if dump:
+            return self.compose("exec", "-T", "-e", "PGPASSFILE=/tmp/t06.pgpass",
+                                "postgres", "pg_dump", "-h", "127.0.0.1",
+                                "-U", role, "-d", database,
+                                "--data-only", "--column-inserts",
+                                "--table=public.worker_state", check=False)
+        return self.compose("exec", "-T", "-e", "PGPASSFILE=/tmp/t06.pgpass",
+                            "postgres", "psql", "-h", "127.0.0.1",
+                            "-U", role, "-d", database, "-X", "-At",
+                            "-v", "ON_ERROR_STOP=1", "-c", sql, check=False)
+
+    def postgres_matrix(self):
+        # The disposable database superuser is strictly a setup operator.
+        # The application/worker and backup roles are non-superusers.
+        identities = {
+            "t06_worker_a": secrets.token_hex(24),
+            "t06_worker_b": secrets.token_hex(24),
+            "t06_backup_a": secrets.token_hex(24),
+            "t06_owner_a": secrets.token_hex(24),
+            "t06_owner_b": secrets.token_hex(24),
+        }
+        statements = []
+        for role, password in identities.items():
+            statements.append(
+                "CREATE ROLE " + role +
+                " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS "
+                "PASSWORD '" + password + "';")
+        self.pg_admin("postgres", "\n".join(statements))
+        for suffix in ("a", "b"):
+            self.pg_admin("postgres",
+                "CREATE DATABASE t06_db_" + suffix + " OWNER t06_owner_" + suffix + ";")
+            self.pg_admin("postgres",
+                "REVOKE ALL ON DATABASE t06_db_" + suffix + " FROM PUBLIC;"
+                "GRANT CONNECT ON DATABASE t06_db_" + suffix + " TO t06_worker_" + suffix + ";")
+            self.pg_admin("t06_db_" + suffix,
+                "CREATE TABLE public.worker_state(payload text PRIMARY KEY);"
+                "CREATE TABLE public.platform_admin_marker(secret text);"
+                "INSERT INTO public.worker_state VALUES ('" + suffix.upper() + "_MARKER');"
+                "REVOKE ALL ON public.worker_state FROM PUBLIC;"
+                "REVOKE ALL ON public.platform_admin_marker FROM PUBLIC;"
+                "GRANT SELECT ON public.worker_state TO t06_worker_" + suffix + ";")
+        self.pg_admin("postgres",
+            "GRANT CONNECT ON DATABASE t06_db_a TO t06_backup_a;")
+        self.pg_admin("t06_db_a",
+            "GRANT SELECT ON public.worker_state TO t06_backup_a;")
+        entries = []
+        for role, password in identities.items():
+            entries.append(f"127.0.0.1:5432:*:{role}:{password}")
+        self.compose("exec", "-T", "postgres", "sh", "-c",
+                     "umask 077; cat > /tmp/t06.pgpass; chmod 600 /tmp/t06.pgpass",
+                     input_text="\n".join(entries) + "\n")
+
+        for suffix in ("a", "b"):
+            role = "t06_worker_" + suffix
+            own = self.pg_as(role, "t06_db_" + suffix,
+                             "SELECT session_user || ':' || payload FROM public.worker_state")
+            if own.returncode != 0 or own.stdout.strip() != role + ":" + suffix.upper() + "_MARKER":
+                raise CheckError("Worker did not authenticate using its own DB role")
+            self.cases["pg_worker_" + suffix + "_own_read"] = "AUTHENTICATED_READ_OBSERVED"
+            foreign = "b" if suffix == "a" else "a"
+            denied = self.pg_as(role, "t06_db_" + foreign, "SELECT 1")
+            if denied.returncode == 0 or "permission denied for database" not in denied.stderr.lower():
+                raise CheckError("Foreign worker DB connection unexpectedly allowed")
+            self.cases["pg_worker_" + suffix + "_cross_database_denied"] = "DB_CONNECT_DENIED_OBSERVED"
+
+        denied = self.pg_as("t06_worker_a", "t06_db_a",
+                            "SELECT * FROM public.platform_admin_marker")
+        if denied.returncode == 0 or "permission denied" not in denied.stderr.lower():
+            raise CheckError("Worker A read privileged owner table")
+        self.cases["pg_worker_a_admin_table_denied"] = "DB_SELECT_DENIED_OBSERVED"
+
+        backup = self.pg_as("t06_backup_a", "t06_db_a",
+                            "SELECT payload FROM public.worker_state")
+        if backup.returncode or backup.stdout.strip() != "A_MARKER":
+            raise CheckError("Backup principal cannot read authorized table")
+        self.cases["pg_backup_a_read_only"] = "BACKUP_READ_OBSERVED"
+        denied = self.pg_as("t06_backup_a", "t06_db_b", "SELECT 1")
+        if denied.returncode == 0 or "permission denied for database" not in denied.stderr.lower():
+            raise CheckError("Backup A accessed DB B")
+        self.cases["pg_backup_a_cross_database_denied"] = "DB_CONNECT_DENIED_OBSERVED"
+        denied = self.pg_as("t06_backup_a", "t06_db_a",
+                            "UPDATE public.worker_state SET payload='BAD'")
+        if denied.returncode == 0 or "permission denied" not in denied.stderr.lower():
+            raise CheckError("Backup A modified its own source data")
+        self.cases["pg_backup_a_write_denied"] = "DB_WRITE_DENIED_OBSERVED"
+
+        restore_started = time.monotonic()
+        snapshot_at = time.time()
+        dump = self.pg_as("t06_backup_a", "t06_db_a", "", dump=True)
+        if dump.returncode or "A_MARKER" not in dump.stdout or "B_MARKER" in dump.stdout:
+            raise CheckError("Backup-role dump failed or crossed installation boundary")
+        self.cases["pg_backup_a_dump"] = "BACKUP_ROLE_PG_DUMP_OBSERVED"
+        self.pg_admin("postgres", "CREATE DATABASE t06_db_a_recovered OWNER t06_owner_a;"
+                      "REVOKE ALL ON DATABASE t06_db_a_recovered FROM PUBLIC;"
+                      "GRANT CONNECT ON DATABASE t06_db_a_recovered TO t06_worker_a;")
+        self.pg_admin("t06_db_a_recovered", "CREATE TABLE public.worker_state(payload text PRIMARY KEY);")
+        self.pg_admin("t06_db_a_recovered", dump.stdout)
+        original = self.pg_admin("t06_db_a",
+                                  "SELECT payload FROM public.worker_state ORDER BY payload;")
+        recovered = self.pg_admin("t06_db_a_recovered",
+                                  "SELECT payload FROM public.worker_state ORDER BY payload;")
+        if original != recovered or recovered != "A_MARKER":
+            raise CheckError("PostgreSQL restored state differs from installation A backup")
+        self.cases["pg_restore_a_checksum"] = "PG_RESTORED_ROWS_MATCH_OBSERVED"
+        absent = self.pg_admin("t06_db_a_recovered",
+                               "SELECT COUNT(*) FROM public.worker_state WHERE payload LIKE 'B_%';")
+        if absent != "0":
+            raise CheckError("Installation B row contaminated A recovery DB")
+        self.cases["pg_restore_b_contamination_absent"] = "NO_FOREIGN_ROWS_OBSERVED"
+        self.pg_recovery_metrics = {
+            "table_level_pg_restore_seconds": round(time.monotonic() - restore_started, 3),
+            "snapshot_age_seconds_at_end": round(time.time() - snapshot_at, 3),
+            "recovery_type": "disposable single-table SQL data-only replay",
+            "full_vibress_backup_restore": "NOT_EXECUTED",
+            "owner_approved_rpo_target": None,
+            "owner_approved_rto_target": None,
+            "production_rpo_rto_certified": False,
+        }
+
     def teardown(self):
         # This stack was created under a random dedicated project name; never
         # run cleanup against host-wide or shared infrastructure.
@@ -398,8 +730,11 @@ class Lab:
             self.compose("up", "-d", "--wait")
             redis_port, s3_port = self.port("redis", 6379), self.port("minio", 9000)
             self.provision(redis_port, s3_port)
+            self.postgres_matrix()
+            self.bullmq_matrix(redis_port)
             self.redis_matrix(redis_port)
             self.s3_matrix(s3_port)
+            self.recovery_matrix(s3_port)
         except Exception as exc:
             # No exception body from external SDK/CLI ever enters the report.
             fatal = type(exc).__name__
@@ -421,10 +756,13 @@ class Lab:
                   "unexecuted": sorted(expected - passed),
                   "cleanup": self.cleanup, "error_class": fatal,
                   "service_versions": getattr(self, "service_versions", {}),
-                  "scope": "disposable local Redis and S3 only",
-                  "limits": ["Not an application-process identity integration test",
-                             "Queue operations use real Redis ACL commands, not BullMQ Worker runtime",
-                             "Not a production backup restore or capacity test"]}
+                  "recovery_metrics": getattr(self, "recovery_metrics", {}),
+                  "pg_recovery_metrics": getattr(self, "pg_recovery_metrics", {}),
+                  "failure_stage": getattr(self, "failure_stage", None),
+                  "scope": "disposable Redis/S3 and real BullMQ processes only",
+                  "limits": ["Real WebhookDeliveryWorker with mocked outbound side effect; not a complete Webhook/DB integration",
+                             "Domain-level installation admission and DB privileges still unverified",
+                             "Disposable PG table-level and S3 object recovery are not full platform restore or approved RPO/RTO"]}
         REPORT.parent.mkdir(parents=True, exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(json.dumps(report, sort_keys=True))
@@ -435,6 +773,7 @@ def main():
     if "--self-test" in sys.argv:
         assert len(set(CASES)) == len(CASES)
         assert COMPOSE.exists()
+        assert Path(__file__).with_name("worker-boundary.ts").exists()
         assert "secrets" not in str(CASES).lower()
         print("SELF_TEST_PASS (static contracts only; no deny tests executed)")
         return 0

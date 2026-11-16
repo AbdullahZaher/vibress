@@ -5,6 +5,7 @@ import {
   WebhookDeliveryJob,
   enqueueTraced,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
   assertJobScope,
 } from "@vibress/queue";
 import { WebhooksService, DrizzleWebhookRepository } from "@vibress/webhooks";
@@ -19,6 +20,7 @@ class BullMqDispatcher {
     if (!this.queue) {
       this.queue = new Queue<WebhookDeliveryJob>(WEBHOOK_QUEUE_NAME, {
         connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
         defaultJobOptions: {
           attempts: 1, // retries handled by the domain (bounded, backoff)
           removeOnComplete: 500,
@@ -78,6 +80,7 @@ export class WebhookDeliveryWorker {
       }),
       {
         connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
         concurrency: 4,
       },
     );

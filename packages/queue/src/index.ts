@@ -19,6 +19,35 @@ function buildTraceparent(traceCtx: {
 }
 export type { Processor, QueueOptions, WorkerOptions };
 
+// W1-T06: The deployment operator (not an incoming job) defines the
+// installation's BullMQ namespace. A Redis ACL on the corresponding service
+// identity is the enforcing boundary; this prefix is *not* authorization.
+export function getQueueIsolationOptions(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): { readonly prefix?: string } {
+  const mode = env.VIBRESS_REQUIRE_INSTALLATION_ISOLATION;
+  if (mode !== undefined && mode !== "0" && mode !== "1") {
+    throw new Error("Invalid installation isolation mode");
+  }
+  const prefix = env.VIBRESS_QUEUE_PREFIX;
+  const installation = env.VIBRESS_INSTALLATION_ID;
+  if (mode === "1" && (!prefix || !installation)) {
+    throw new Error("Installation-scoped queue identity and prefix are required");
+  }
+  if (prefix !== undefined) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9:_-]{2,127}$/.test(prefix)) {
+      throw new Error("Invalid installation queue prefix");
+    }
+    if (!installation || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(installation) ||
+        !prefix.endsWith(`:${installation}:bull`)) {
+      throw new Error("Queue prefix must be bound to the operator installation identity");
+    }
+  } else if (installation && mode === "1") {
+    throw new Error("Missing installation queue prefix");
+  }
+  return prefix === undefined ? {} : { prefix };
+}
+
 export const QUEUE_NAMES = {
   EMAIL_DELIVERY: "vibress-email-delivery",
   WEBHOOK_DELIVERY: "vibress-webhook-delivery",
@@ -150,6 +179,7 @@ export function createQueue<T = unknown>(
 ): Queue<T> {
   return new Queue<T>(queueName, {
     connection: getBullMqRedisConnection(),
+    ...getQueueIsolationOptions(),
     defaultJobOptions: defaultJobOptions ?? QUEUE_DEFAULTS.STANDARD,
   });
 }
@@ -163,6 +193,7 @@ export function createWorker<T = unknown>(
     connection: getBullMqRedisConnection(),
     concurrency: 1,
     ...options,
+    ...getQueueIsolationOptions(),
   });
 }
 
