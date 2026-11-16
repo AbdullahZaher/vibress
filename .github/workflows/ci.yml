@@ -4,7 +4,7 @@ on:
   push:
     # Temporarily suspended for docs/native-admin-ui-plan-20261025 during local-only validation session.
     # RESTORATION PROCEDURE: Re-add 'docs/native-admin-ui-plan-20261025' to the push.branches list below before final release approval.
-    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116]
+    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116, security/agent03-integrated-f012-r35-fastify-20261116]
   pull_request:
     branches: [main]
   workflow_dispatch:
