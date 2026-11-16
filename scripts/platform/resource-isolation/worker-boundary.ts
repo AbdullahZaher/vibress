@@ -126,7 +126,12 @@ async function execute(): Promise<void> {
         const message = error instanceof Error ? error.message : "";
         // Classify only known Redis errors; never emit the original message.
         if (/NOPERM|ACL failure in script|permission denied/i.test(message)) {
-          throw new Error("REDIS_ACL_NOPERm");
+          const cause = /\bchannel\b/i.test(message) ? "ACL_CHANNEL" :
+            /no permissions? to access a key|\bkey\b/i.test(message) ? "ACL_KEY" :
+            /command or subcommand|has no permissions? to run|\bcommand\b/i.test(message) ? "ACL_COMMAND" :
+            /ACL failure in script|\bscript\b/i.test(message) ? "ACL_SCRIPT" :
+            "ACL_OTHER";
+          throw new Error(cause);
         }
         if (/NOAUTH|WRONGPASS|invalid username-password/i.test(message)) {
           throw new Error("REDIS_AUTH_FAILURE");
@@ -229,6 +234,11 @@ async function execute(): Promise<void> {
 execute().catch((error: unknown) => {
   const msg = error instanceof Error ? error.message : "";
   const category =
+    /ACL_CHANNEL/.test(msg) ? "ACL_CHANNEL" :
+    /ACL_KEY/.test(msg) ? "ACL_KEY" :
+    /ACL_COMMAND/.test(msg) ? "ACL_COMMAND" :
+    /ACL_SCRIPT/.test(msg) ? "ACL_SCRIPT" :
+    /ACL_OTHER/.test(msg) ? "ACL_OTHER" :
     /module not found|cannot find module|ERR_MODULE_NOT_FOUND/i.test(msg) ? "MODULE_RESOLUTION" :
     /NOAUTH|WRONGPASS|invalid username-password/i.test(msg) ? "REDIS_AUTH" :
     /NOPERM|permission denied/i.test(msg) ? "ACL_DENIAL" :
