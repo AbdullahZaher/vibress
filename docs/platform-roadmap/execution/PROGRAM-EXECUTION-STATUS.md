@@ -212,3 +212,12 @@ this documentation update. For any report whose header states a former
 verified source head, this addendum records the **later governance baseline**
 without overwriting the prior source/date history.
 
+
+
+## Six-agent integration addendum — 2026-11-16 (technical evidence, NO-GO)
+
+A separate integration candidate was assembled on branch integration/wave1-agents-01-06-20261116 from #166 HEAD 3c55c5b0a1bcbd9093ade62c5b6f738acbe42021. Exact specialist sources: #171 9ee1d2b3, #172 d149804e, #173 e97ff02d and #174 bf1a63ce. The combined code/evidence path through 108ae9497974217948fd1a273044198553b33243 adds AG06-05 transactional role provisioning and fault tests, R35 foreign-table denial, offline membership-enriched OIDC (not production-wired), disposable Redis/S3 harness, and a reference CRM Playwright CI job. This document update is a further SHA change and requires final-head CI.
+
+No R26 proposal was applied; F-012 remains undecided; actual BullMQ worker, production IdP and patched production PostgreSQL are unverified; image provenance and restoration remain open. The last independent Agent 06 review predates integration; 22 #166 threads and all required human signatures remain outstanding. Github main was reported unprotected by branch API; administrator policy change is not authorized by this addendum. Preserve the recorded 8.3/10 until independent reassessment. No merge, Wave 2, release or risk exception is authorized.
+
+Full decision-ready evidence, role matrix and mandatory remaining gates: WAVE-01-SIX-AGENT-INTEGRATION-2026-11-16.md.
