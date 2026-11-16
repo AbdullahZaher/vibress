@@ -1,5 +1,7 @@
 # F-012 — INDEPENDENT APPLICATION SECURITY RECOMMENDATION
 
+> **Final integrated decision criteria (2026-11-16):** see [F-012-FINAL-DECISION-PACKAGE.md](F-012-FINAL-DECISION-PACKAGE.md). This recommendation is NOT owner acceptance of Option B.
+
 > Agent 03 AI-assisted recommendation, 2026-11-16. Reviewed PR #166 baseline `a96ea073767e303b02121d87558adbd12ce111f3`. **No risk acceptance or human sign-off is implied.**
 
 ## Recommendation and security boundary

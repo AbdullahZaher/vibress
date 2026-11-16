@@ -26,3 +26,16 @@
 No risk acceptance, no signature and no expiry date for accepting a P1/P0 risk are recorded. **Final recommendation: BLOCKED / WAVE 1 NO-GO.** This register is an input to Agent 06, not a substitute for independence.
 
 Sources researched/accessed 2026-11-16: [PostgreSQL RLS](https://www.postgresql.org/docs/16/ddl-rowsecurity.html), [CREATE FUNCTION](https://www.postgresql.org/docs/16/sql-createfunction.html), [OWASP API 2023](https://api-security.owasp.org/editions/2023/en/0x11-t10/), [Fastify GHSA](https://github.com/fastify/fastify/security/advisories/GHSA-3qgw-9275-xf8w), [OSV CVE-2026-120216](https://osv.dev/vulnerability/CVE-2026-120216), [NIST SSDF](https://csrc.nist.gov/pubs/sp/800/218/final).
+
+## Integrated findings added 2026-11-16 (PR #176)
+
+| ID | Priority and evidence | Remediation / state | Owner; gate |
+| --- | --- | --- | --- |
+| AG03-07 | **P1 functional blocker**, source-confirmed: OIDC returns empty principal grants; executor `PolicyEngine` checks those grants after membership check, so active membership is rejected | Focused membership-derived grant hydration + positive/negative tests authored on Agent 03 branch; **NOT VERIFIED CLOSED** | Agent 05 + Agent 06; exact integrated CI and live auth evidence before GO |
+| AG03-08 | **P1 potential**, production worker/producer identities not separated; Redis/S3 test 38/38 applies only to disposable synthetic primitives | Actual BullMQ process/worker replay, ACL, S3 DENY tests **OPEN** | Agent 04 + Agent 05; before GO |
+| AG03-09 | **P1 scope**, Agent 02 seven-role design not deployed; API/worker broad legacy grants and R26 Scope B remain | DB catalog and functional/regression proof **OPEN** | Agent 02 + 06; before GO |
+| AG03-10 | **P1 architecture residual**, unsupported CMS topology not proven to fail-close outside reference process | F-012 owner decision and full process gate **BLOCKED** | Agent 01 + DB owner + AppSec + Agent 06; before GO |
+| AG03-11 | **P2 conditional DoS**, vendor GHSA affects 5.12.7 + streamed media but no nonzero handlerTimeout found | Explicit 0 and static negative test authored, patched package/lock still pending | Agent 03 + dependency maintainer; CI on exact SHA |
+| AG03-12 | **P1 unknown**, R35 runtime-only contract excludes non-runtime reporting SQL | Catalog deny matrix + independent review **BLOCKED** | Agent 02 + Agent 06; before GO |
+
+*No new entry is an accepted risk or confirmed exploit.* Read [PR #176 AppSec integrated recommendation](WAVE-01-APPSEC-INTEGRATED-PR176-RECOMMENDATION.md), [R35 verification](R35-INTEGRATED-APPSEC-VERIFICATION.md), [F-012 final package](F-012-FINAL-DECISION-PACKAGE.md) and [Fastify disposition](FASTIFY-ADVISORY-DISPOSITION-2026-11-16.md). New tests have not been run by this reviewer.

@@ -1,5 +1,7 @@
 # R35 — Runtime view and materialized-view policy
 
+> **Integrated update 2026-11-16:** PR #176 imports Agent 03 PR #171's runtime-contract `foreign_table` **rejection** (as well as `materialized_view` rejection). Historical residual row below describes the **pre-integration state** and is superseded for the runtime contract only. Non-runtime foreign/reporting access remains OPEN. See [R35-INTEGRATED-APPSEC-VERIFICATION.md](R35-INTEGRATED-APPSEC-VERIFICATION.md).
+
 > **Status: IMPLEMENTED at the runtime-contract boundary (2026-11-15).** The
 > code and tests below are enforced on every provisioning and boot. This record
 > does not clear the R35 residual for relations accessed outside the runtime
