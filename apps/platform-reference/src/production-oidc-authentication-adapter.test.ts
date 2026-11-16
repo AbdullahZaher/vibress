@@ -170,7 +170,7 @@ describe("W1-T07 production OIDC candidate", () => {
   });
   it("rejects missing, empty, malformed and ambiguous JWT IDs", async () => {
     for (const changes of [{ jti: "" }, { jti: null }, { jti: 123 },
-      { jti: "x".repeat(257) }, { jti: "bad\\nidentifier" }]) {
+      { jti: "x".repeat(257) }, { jti: "bad\nidentifier" }]) {
       await deny(fixture().adapter.authenticate(req(token(changes))), "invalid_token_profile");
     }
     const raw = token();
