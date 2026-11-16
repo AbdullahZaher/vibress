@@ -25,7 +25,7 @@ function token(
   const b = (x: unknown) => Buffer.from(JSON.stringify(x)).toString("base64url");
   const jwt = b({ typ: "at+jwt", alg: "RS256", kid: "one", ...head }) + "." +
     b({ iss: issuer, aud: audience, sub: "user-1", iat: NOW - 2,
-      nbf: NOW - 1, exp: NOW + 300, client_id: client,
+      nbf: NOW - 1, exp: NOW + 300, jti: "fixture-token-1", client_id: client,
       vib_application_id: app, vib_installation_id: installation, ...changes });
   return jwt + "." + sign("sha256", Buffer.from(jwt), pair.privateKey).toString("base64url");
 }
@@ -99,6 +99,21 @@ describe("W1-T07 production OIDC candidate", () => {
       { jwk: {} }, { b64: false }, { cty: "JWT" }]) {
       await deny(fixture().adapter.authenticate(req(token({}, head))), "invalid_token_profile");
     }
+  });
+  it("rejects missing, empty and ambiguous JWT IDs", async () => {
+    for (const changes of [{ jti: "" }, { jti: null }, { jti: 123 },
+      { jti: "x".repeat(257) }, { jti: "bad\\nidentifier" }]) {
+      await deny(fixture().adapter.authenticate(req(token(changes))), "invalid_token_profile");
+    }
+    const raw = token();
+    const [h, p] = raw.split(".");
+    const payload = JSON.parse(Buffer.from(p!, "base64url").toString("utf8")) as Record<string, unknown>;
+    delete payload.jti;
+    const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
+    const signingInput = h + "." + encoded;
+    const missingJti = signingInput + "." +
+      sign("sha256", Buffer.from(signingInput), first.privateKey).toString("base64url");
+    await deny(fixture().adapter.authenticate(req(missingJti)), "invalid_token_profile");
   });
   it("rejects client confusion, multiple audiences, excessive lifetime", async () => {
     await deny(fixture().adapter.authenticate(req(token({ client_id: "intruder" }))), "wrong_client");
