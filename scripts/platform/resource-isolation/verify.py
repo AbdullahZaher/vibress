@@ -61,10 +61,10 @@ class CheckError(Exception):
     pass
 
 
-def spawn(args: list[str], *, env=None, input_text=None, check=True) -> subprocess.CompletedProcess:
+def spawn(args: list[str], *, env=None, input_text=None, check=True, timeout=120) -> subprocess.CompletedProcess:
     result = subprocess.run(
         args, env=env, input=input_text, text=True,
-        capture_output=True, timeout=120, check=False,
+        capture_output=True, timeout=timeout, check=False,
     )
     if check and result.returncode:
         # Intentionally do not include stdout/stderr (can contain credentials).
@@ -311,7 +311,13 @@ class Lab:
                    T06_JOB_ID=job_id,
                    T06_JOB_KIND=kind)
         script = str(Path(__file__).with_name("worker-boundary.ts"))
-        result = spawn(["pnpm", "exec", "tsx", script, mode], env=env, check=False)
+        try:
+            result = spawn(["pnpm", "exec", "tsx", script, mode], env=env,
+                           check=False, timeout=40)
+        except subprocess.TimeoutExpired:
+            self.failure_stage = {"role": principal, "installation": installation,
+                                  "operation": mode, "category": "PROCESS_TIMEOUT"}
+            raise CheckError("isolated worker did not shut down within bound") from None
         # The child process emits only a sanitized status. Errors (potentially
         # including connection URIs) are deliberately discarded, never printed.
         if result.returncode:
