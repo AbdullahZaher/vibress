@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asApplicationId, asTenantId } from "@vibress/platform-kernel";
+import { asApplicationId, asPrincipalId, asTenantId } from "@vibress/platform-kernel";
 import { resolveVerifiedScope, type ScopeResolver } from "@vibress/tenancy";
 import {
   IdentityDeniedError, ProductionOidcAuthenticationAdapter,
@@ -79,6 +79,45 @@ describe("W1-T07 production OIDC candidate", () => {
       applicationId: asApplicationId(app), policyVersion: "p1",
     });
     expect(scope.authorization.permissions).toEqual(["customers:read"]);
+  });
+  it("denies a tenant action when membership is removed after authentication", async () => {
+    let active = true;
+    const membership: ScopeResolver = {
+      async resolve(principalId, applicationId, tenantId) {
+        return { principalId, applicationId, tenantId, active,
+          roles: [], permissions: ["customers:read"] };
+      },
+    };
+    const config: ProductionOidcConfig = {
+      issuer, audience, clientId: client, applicationId: app,
+      installationId: installation, now: () => NOW,
+      jwksSource: { async load() { return { keys: [jwk(first, "one")] }; } },
+      revocation: { async isActive() { return true; } },
+      membership,
+    };
+    const principal = await new ProductionOidcAuthenticationAdapter(config)
+      .authenticate(req(token()));
+    active = false;
+    await expect(resolveVerifiedScope(membership, {
+      principal, applicationId: asApplicationId(app),
+      tenantId: asTenantId("tenant-a"), policyVersion: "p1",
+    })).rejects.toThrow("membership is not active");
+  });
+  it("rejects ambiguous principal-to-membership binding", async () => {
+    const membership: ScopeResolver = {
+      async resolve(_principalId, applicationId, tenantId) {
+        return { principalId: asPrincipalId("another-principal"), applicationId,
+          tenantId, active: true, roles: ["admin"], permissions: ["*"] };
+      },
+    };
+    const adapter = new ProductionOidcAuthenticationAdapter({
+      issuer, audience, clientId: client, applicationId: app,
+      installationId: installation, now: () => NOW,
+      jwksSource: { async load() { return { keys: [jwk(first, "one")] }; } },
+      revocation: { async isActive() { return true; } },
+      membership,
+    });
+    await deny(adapter.authenticate(req(token())), "tenant_denied");
   });
   it("rejects unknown tenants and revoked memberships", async () => {
     await deny(fixture().adapter.authenticate(req(token(), "tenant-b")), "tenant_denied");
