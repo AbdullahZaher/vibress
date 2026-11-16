@@ -252,6 +252,7 @@ function resourceManifest(resource: CanonicalResource): ManifestResource {
 }
 
 export function createSchemaManifest(input: CanonicalSchemaIR): SchemaManifest {
+  assertSerializable(input, "canonicalIr");
   const ir = parseCanonicalSchemaIR(input);
   const resources = Object.freeze(ir.resources.map(resourceManifest));
   const tableNames = new Set(resources.map((resource) => resource.tableName));
@@ -376,6 +377,7 @@ export function planSchemaChanges(
   if ((before?.digest ?? null) !== expectedDigest) {
     fail("DRIFT_DETECTED", "options.expectedCurrentDigest", "stale or unexpected accepted manifest");
   }
+  assertSerializable(proposed, "proposed");
   const after = createSchemaManifest(parseCanonicalSchemaIR(proposed));
   if (after.applicationId !== applicationId || after.installationId !== installationId ||
     (before !== null &&

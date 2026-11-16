@@ -114,10 +114,44 @@ describe("M03-S02 canonical PostgreSQL 16 schema manifest", () => {
     const accessor = { ...source };
     Object.defineProperty(accessor, "ownership", { get() { throw new Error("getter called"); } });
     expect(() => parseResourceDefinition(accessor)).toThrow(/hidden or accessor/);
+    let reads = 0;
+    const accessorField = { id: "name", type: "text", required: true };
+    Object.defineProperty(accessorField, "id", {
+      enumerable: true,
+      get() { reads++; return "name"; },
+    });
+    expect(() => parseResourceDefinition({ ...source, fields: [accessorField] }))
+      .toThrow(/hidden or accessor/);
+    expect(reads).toBe(0);
   });
 });
 
 describe("M03-S02 deterministic non-executing change planning", () => {
+  it("rejects hostile IR accessors before invocation", () => {
+    const ir = compile();
+    const customer = ir.resources.find((resource) => resource.id === "customers");
+    if (!customer) throw new Error("missing fixture customer");
+    const first = customer.fields[0];
+    if (!first) throw new Error("missing fixture field");
+    const poison = { ...first };
+    let calls = 0;
+    Object.defineProperty(poison, "required", {
+      enumerable: true,
+      get() { calls++; return false; },
+    });
+    const hostile = {
+      ...ir,
+      resources: ir.resources.map((resource) =>
+        resource.id === "customers" ? {
+          ...resource, fields: [poison, ...resource.fields.slice(1)],
+        } : resource),
+    };
+    expect(() => planSchemaChanges(null, hostile, {
+      scope: crmScope, expectedCurrentDigest: null,
+    })).toThrow(SchemaPlanningError);
+    expect(calls).toBe(0);
+  });
+
   it("produces explicit review-required CREATE_RESOURCE and stable operation IDs", () => {
     const first: SchemaChangePlan = plan(null, compile());
     const reversed = plan(null, compile([crmDeals(), crmCustomers()]));

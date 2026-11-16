@@ -202,6 +202,8 @@ function compareResourceIds(a: { readonly id: string }, b: { readonly id: string
 
 function normalizeField(value: unknown, path: string): FieldDefinition {
   const input = record(value, path);
+  // Reject accessors and hidden properties before reading any field values.
+  onlyKeys(input, ["id", "type", "required", "default", "values", "targetResource"], path);
   const id = identifier(input.id, path + ".id");
   const required = requiredFlag(input.required, path + ".required");
   const hasDefault = Object.prototype.hasOwnProperty.call(input, "default");
