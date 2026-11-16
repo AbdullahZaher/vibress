@@ -219,6 +219,9 @@ class Lab:
                 pattern, "resetchannels", "+@all", "-@dangerous",
                 "-keys", "-scan", "-randomkey", "-dbsize", "-monitor",
                 "-flushall", "-flushdb", "-acl", "-config",
+                # BullMQ requires Lua script commands; allow only these
+                # operations (never CONFIG, ACL, FLUSH or foreign key access).
+                "+eval", "+evalsha", "+script|load", "+script|exists",
             )
             self.redis_passwords[suffix] = (user, password)
             self.redis_users.append(user)
