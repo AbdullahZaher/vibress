@@ -174,7 +174,7 @@ class Lab:
         self.op_pass = secrets.token_hex(24)
         bootstrap.execute_command("ACL", "SETUSER", "w1t06op", "reset", "on",
                                   ">" + self.op_pass, "~*", "&*", "+@all")
-        bootstrap.execute_command("ACL", "SETUSER", "default", "off")
+        bootstrap.execute_command("ACL", "SETUSER", "default", "reset", "on", "nopass", "+ping")
         bootstrap.close()
         self.operator = redis.Redis(host="127.0.0.1", port=redis_port,
                                     username="w1t06op", password=self.op_pass,
