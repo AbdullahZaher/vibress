@@ -9,12 +9,16 @@
 import { createQueue, createWorker, assertJobScope, QUEUE_NAMES,
   getQueueIsolationOptions } from "@vibress/queue";
 import { closeRedisClient } from "@vibress/cache";
+import { WebhookDeliveryWorker } from "../../../apps/worker/src/processors/webhook-delivery-worker";
+import type { Worker } from "@vibress/queue";
 
 type TestData = {
   scope: "publication";
   publicationId: string;
   installationId: string;
   kind: "normal" | "retry" | "poison";
+  deliveryId: string;
+  endpointId: string;
 };
 const mode = process.argv[2];
 const installation = process.env.VIBRESS_INSTALLATION_ID || "";
@@ -29,6 +33,44 @@ async function execute(): Promise<void> {
   if (!prefix || !installation || !id || !process.env.REDIS_URL ||
       process.env.VIBRESS_REQUIRE_INSTALLATION_ISOLATION !== "1") {
     throw new Error("Isolated worker process config required");
+  }
+
+  // Exercise the concrete Vibress WebhookDeliveryWorker startup and event
+  // processing path, replacing only its external webhook delivery side effect
+  // with a sentinel. No mail/HTTP delivery, PG writes or production secrets.
+  if (mode === "domain-worker") {
+    const domain = new WebhookDeliveryWorker();
+    let delivered = 0;
+    const replacement = domain as unknown as {
+      webhooksService: { deliver: (deliveryId: string) => Promise<void> };
+      worker: Worker<TestData> | null;
+    };
+    replacement.webhooksService = {
+      deliver: async (deliveryId: string) => {
+        if (deliveryId !== id) throw new Error("unmatched delivery identity");
+        delivered += 1;
+      },
+    };
+    await domain.start();
+    try {
+      const internal = replacement.worker;
+      if (!internal) throw new Error("domain worker did not start");
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("domain worker timeout")), 12000);
+        internal.on("completed", job => {
+          if (job.id === id) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+        internal.on("error", () => { /* do not log sensitive errors */ });
+      });
+      if (delivered !== 1) throw new Error("incorrect domain Worker side effects");
+      result("DOMAIN_CONSUMED", { deliveries: delivered });
+    } finally {
+      await domain.stop();
+    }
+    return;
   }
 
   if (mode === "worker-denied") {
@@ -65,6 +107,8 @@ async function execute(): Promise<void> {
         publicationId: "isolated-pub",
         installationId: kind === "poison" ? "foreign-installation" : installation,
         kind: kind === "retry" || kind === "poison" ? kind : "normal",
+        deliveryId: id,
+        endpointId: "isolated-test-endpoint",
       };
       try {
         const job = await queue.add("deliver", data, { jobId: id });
