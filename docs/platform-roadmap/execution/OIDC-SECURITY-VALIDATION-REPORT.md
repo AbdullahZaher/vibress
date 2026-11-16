@@ -12,6 +12,8 @@ IAM-03 MEDIUM / token confusion: baseline verifier does not enforce access-token
 IAM-04 MEDIUM / key rotation: static JWKS cannot track production kid changes; candidate adds injected bounded snapshot cache and refresh, but the approved secure network transport has not been supplied. Verify outage, key rollover and forced removal in IdP test environment.
 IAM-05 MEDIUM / account/session lifecycle: no browser session, logout, refresh rotation or user-disable propagation; requires owner decision, implementation and evidence.
 
+IAM-06 MEDIUM / conditional dependency advisory: pnpm-lock.yaml on the candidate pins fastify@5.12.7. CVE-2026-120216 (GHSA-3qgw-9275-xf8w; published 2026-11-02) affects Fastify 5.8.0 through 5.12.7 if a nonzero handlerTimeout and streaming response coincide; fixed in 5.12.8. No exploitability assertion is made for platform-reference (its Fastify constructor does not configure a nonzero handlerTimeout). Agent 03 must confirm actual deployment config and schedule lockfile upgrade/retest; no dependency update in Agent 05 scope. Source: https://osv.dev/vulnerability/CVE-2026-120216 (checked 2026-11-16).
+
 ## Offline deny matrix — tests authored, EXECUTION PENDING
 - malformed/invalid signature/alg/kid, wrong issuer/audience, exp/nbf/iat, application/installation -> reject.
 - ID token typ, JOSE crit/jku/x5u/jwk/b64/cty, wrong client_id/azp, multi-audience and excess token lifespan -> reject.
