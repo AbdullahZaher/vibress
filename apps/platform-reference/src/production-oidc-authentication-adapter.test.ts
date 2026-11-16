@@ -1,8 +1,11 @@
 // @vitest-environment node
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { asApplicationId, asTenantId } from "@vibress/platform-kernel";
-import { resolveVerifiedScope, type ScopeResolver } from "@vibress/tenancy";
+import {
+  asApplicationId, asInstallationId, asTenantId,
+  defineAction, defineApplication, InMemoryApplicationRegistry,
+} from "@vibress/platform-kernel";
+import { PolicyEngine, RouteExecutor, resolveVerifiedScope, type ScopeResolver } from "@vibress/tenancy";
 import {
   IdentityDeniedError, ProductionOidcAuthenticationAdapter,
   type ProductionOidcConfig,
@@ -40,7 +43,7 @@ function fixture(opts: {
       if (opts.membershipDown) throw new Error("db-outage");
       if (tenantId !== asTenantId("tenant-a")) return null;
       return { principalId, applicationId, tenantId, active: opts.active ?? true,
-        roles: ["admin"], permissions: ["customers:read"] };
+        roles: ["admin"], permissions: ["customers.read"] };
     },
   };
   const config: ProductionOidcConfig = {
@@ -73,12 +76,77 @@ describe("W1-T07 production OIDC candidate", () => {
     })));
     expect(principal.tenantIds).toEqual(["tenant-a"]);
     expect(principal.roles).toEqual([]);
-    expect(principal.permissions).toEqual([]);
+    expect(principal.permissions).toEqual(["customers.read"]);
     const scope = await resolveVerifiedScope(membership, {
       principal, tenantId: asTenantId("tenant-a"),
       applicationId: asApplicationId(app), policyVersion: "p1",
     });
-    expect(scope.authorization.permissions).toEqual(["customers:read"]);
+    expect(scope.authorization.permissions).toEqual(["customers.read"]);
+  });
+  it("authorizes only server-side membership grants and rechecks revocation at action time", async () => {
+    const state = { active: true };
+    const { adapter, membership } = fixture(state);
+    const principal = await adapter.authenticate(req(token({
+      tenantIds: ["tenant-b"], roles: ["root"],
+      permissions: ["*"],
+    })));
+    expect(principal.roles).toEqual([]);
+    expect(principal.permissions).toEqual(["customers.read"]);
+
+    const application = defineApplication({
+      id: asApplicationId(app),
+      name: "OIDC authorization contract probe",
+      version: "1.0.0",
+      actions: {
+        read: defineAction({
+          name: "read", permission: "customers.read",
+          input: () => null,
+          handler: async ({ context }) => ({ tenant: context.tenantId }),
+        }),
+        write: defineAction({
+          name: "write", permission: "customers.write",
+          input: () => null,
+          handler: async () => ({ unsafe: true }),
+        }),
+      },
+      http: [
+        { method: "GET", path: "/records", action: "read", auth: "member" },
+        { method: "POST", path: "/records", action: "write", auth: "member" },
+      ],
+    });
+    const executor = new RouteExecutor({
+      registry: new InMemoryApplicationRegistry([application]),
+      policy: new PolicyEngine([{ id: "allow-probe", action: "*", effect: "allow" }]),
+      scopeResolver: membership,
+      policyVersion: "server-membership-v1",
+      unitOfWork: {
+        async run(scope, work) {
+          return work({
+            scope,
+            query: async () => ({ rows: [], rowCount: 0 }),
+            markRollbackOnly: () => {},
+          });
+        },
+      },
+    });
+    const base = {
+      principal,
+      tenantId: asTenantId("tenant-a"),
+      installationId: asInstallationId(installation),
+      requestId: "oidc-policy-probe",
+      path: "/records",
+    };
+    const allowed = await executor.execute({ ...base, method: "GET" });
+    expect(allowed.status).toBe(200);
+    expect(allowed.body).toEqual({ tenant: asTenantId("tenant-a") });
+    const forgedWildcard = await executor.execute({ ...base, method: "POST" });
+    expect(forgedWildcard.status).toBe(403);
+    state.active = false;
+    const revokedAfterAuthentication = await executor.execute({ ...base, method: "GET" });
+    expect(revokedAfterAuthentication.status).toBe(403);
+    expect(revokedAfterAuthentication.body).toMatchObject({
+      error: { code: "scope_denied" },
+    });
   });
   it("rejects unknown tenants and revoked memberships", async () => {
     await deny(fixture().adapter.authenticate(req(token(), "tenant-b")), "tenant_denied");

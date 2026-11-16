@@ -58,3 +58,12 @@ The platform reference's verified runtime contract **does not** wrap the legacy 
 ## Sources accessed 2026-11-16
 
 [OWASP API Top 10 2023](https://api-security.owasp.org/editions/2023/en/0x11-t10/); [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html); [PostgreSQL 16 RLS](https://www.postgresql.org/docs/16/ddl-rowsecurity.html); [NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final).
+
+## Integrated risk update — 2026-11-16 (PR #176)
+
+- **OIDC → policy trust-boundary mismatch (AG03-07):** an IAM adapter that returns a server-confirmed tenant but no principal permissions is denied by `PolicyEngine` even if `RouteExecutor` finds an active grant. Proposed code change hydrates only trusted membership grants and RouteExecutor independently re-resolves and checks current membership. Test forged JWT wildcard and removal between verification and execution; new code needs Agent 05 and Agent 06 review.
+- **Worker / Queue / DB permission disagreement (AG03-08/09):** Agent 04's 38-case ACL lab proves disposable primitives but not the actual BullMQ process identity, while Agent 02's 7-role topology is target design and integrated provisioning manages only three roles. An attacker with a legacy worker credential can still reach a broad CMS SQL surface; no production deployment claim.
+- **Fastify conditional DoS:** streamed media response exists; nonzero handlerTimeout was not observed on the two serving Fastify constructors. Explicit 0 and source guard proposed; fixed >=5.12.8 recommended. Threat is availability, not data leakage. See [Fastify disposition](FASTIFY-ADVISORY-DISPOSITION-2026-11-16.md).
+- **R35:** contract blocks foreign/materialized sources, but SECURITY DEFINER, views and reporters outside the platform runtime require independent catalog proofs. See [R35 verification](R35-INTEGRATED-APPSEC-VERIFICATION.md).
+
+No new remote exploit was performed and no live production identity was accessed. All conclusions above are source analysis, not execution evidence.

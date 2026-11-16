@@ -171,11 +171,14 @@ export class ProductionOidcAuthenticationAdapter {
         membership.applicationId !== this.#application || membership.tenantId !== tenant) {
       throw new IdentityDeniedError("tenant_denied");
     }
-    // The only tenant claim in this returned principal is server-confirmed.
-    // Do not copy membership permissions or user-supplied role claims here.
+    // Both the tenant and grants come from the trusted membership directory.
+    // JWT roles/permissions are NEVER copied. RouteExecutor re-resolves
+    // membership and intersects these grants with the latest snapshot before
+    // PolicyEngine allows the action; a revoked permission therefore fails.
     return Object.freeze({
       ...principal, tenantIds: Object.freeze([tenant]),
-      roles: Object.freeze([]), permissions: Object.freeze([]),
+      roles: Object.freeze([]),
+      permissions: Object.freeze([...membership.permissions]),
     });
   }
 
