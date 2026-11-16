@@ -180,6 +180,17 @@ class Lab:
                                     username="w1t06op", password=self.op_pass,
                                     decode_responses=True, socket_timeout=5)
         self.operator.ping()
+        # Redis 7.4.11 fixes published ACL key-selection bypasses affecting
+        # SORT and XREAD; older images cannot certify ACL isolation.
+        version = str(self.operator.info("server").get("redis_version", ""))
+        try:
+            parsed = tuple(int(part) for part in version.split(".")[:3])
+        except ValueError:
+            raise CheckError("Redis version could not be verified") from None
+        if len(parsed) != 3 or parsed[0] != 7 or parsed < (7, 4, 11):
+            raise CheckError("Redis server lacks required 7.4.11 ACL fixes")
+        self.service_versions = {"redis": version,
+                                 "minio_container_image": "pgsty/silo:RELEASE.2026-09-16"}
         self.redis_passwords = {}
         for suffix in ("a", "b", "wa", "wb"):
             user = "w1t06_" + suffix
@@ -409,6 +420,7 @@ class Lab:
                   "cases": self.cases,
                   "unexecuted": sorted(expected - passed),
                   "cleanup": self.cleanup, "error_class": fatal,
+                  "service_versions": getattr(self, "service_versions", {}),
                   "scope": "disposable local Redis and S3 only",
                   "limits": ["Not an application-process identity integration test",
                              "Queue operations use real Redis ACL commands, not BullMQ Worker runtime",
