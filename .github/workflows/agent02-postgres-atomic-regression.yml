@@ -27,6 +27,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Typecheck complete workspace on exact SHA
+        run: pnpm typecheck
       - name: Boot disposable PostgreSQL only
         run: docker compose -f compose.dev.yml up -d --wait postgres
       - name: Require PostgreSQL 16.16+ patched fixture

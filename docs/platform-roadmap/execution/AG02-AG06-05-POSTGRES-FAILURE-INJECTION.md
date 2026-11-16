@@ -1,7 +1,7 @@
 # Agent 02 — AG06-05 Atomic PostgreSQL Failure-Injection Report
 
 **Assessment date:** 2026-11-16; **base integration PR:** #176; **reviewed source SHA:** `b52ca3f4c0a740d7ff6b1ad784d9e3100b34e899`.  
-**Status at initial commit:** FIX PREPARED, TESTS PENDING. No independent live Postgres results until GitHub Actions publishes run logs.  
+**Status:** SOURCE-LEVEL REMEDIATED; **65/65 real PostgreSQL tests VERIFIED IN ISOLATED CI ON SOURCE SHA \`65dc13b38f3789da125e318af6e006ba8acffc23\`**; deployed production topology and R26 authorization remain BLOCKED. This is an AI-assisted assessment; Agent 06 and human DBA sign-off are not implied.  
 **Author:** AI-assisted Agent 02 technical delegate, **not** human DBA signature or Agent 06 concurrence.
 
 ## Confirmed defects from code review
@@ -26,17 +26,17 @@
 | Requirement | Test | Initial status |
 | --- | --- | --- |
 | Successful creation of three roles | original `commits a complete ...` | source observed; pending exact SHA run |
-| Failure before provisioning | original `before creating ...`; new BEGIN-ack loss | pending |
-| Failure during runtime configuration | original `rejected runtime ...` | pending |
-| Failure during reader configuration | original `membership reader fails` | pending |
-| Failure during verifier configuration | original `verifier provisioning fails` | pending |
-| Existing ACL rollback | original TRUNCATE + new TRUNCATE/UPDATE/SCHEMA/FUNCTION + membership snapshot | pending |
-| Safe retry | original retry after confirmed rollback | pending |
-| Advisory lock/concurrency | original competing callers + new `pg_try_advisory_xact_lock` hold/release | pending |
-| Lost pre-COMMIT connection | new disconnect at after_validation | pending |
-| Unknown COMMIT outcome | new successful server COMMIT followed by lost client response; independent catalog proof | pending |
-| ROLLBACK failure | new injected ROLLBACK transport error; destructor and independent catalog proof | pending |
-| Privilege reconciliation | new effective ACL snapshots and independent observer role inventory | pending |
+| Failure before provisioning | original `before creating ...`; new BEGIN-ack loss | **PASS on CI 43874307271**, disposal-only |
+| Failure during runtime configuration | original `rejected runtime ...` | **PASS on CI 43874307271**, disposal-only |
+| Failure during reader configuration | original `membership reader fails` | **PASS on CI 43874307271**, disposal-only |
+| Failure during verifier configuration | original `verifier provisioning fails` | **PASS on CI 43874307271**, disposal-only |
+| Existing ACL rollback | original TRUNCATE + new TRUNCATE/UPDATE/SCHEMA/FUNCTION + membership snapshot | **PASS on CI 43874307271**, disposal-only |
+| Safe retry | original retry after confirmed rollback | **PASS on CI 43874307271**, disposal-only |
+| Advisory lock/concurrency | original competing callers + new `pg_try_advisory_xact_lock` hold/release | **PASS on CI 43874307271**, disposal-only |
+| Lost pre-COMMIT connection | new disconnect at after_validation | **PASS on CI 43874307271**, disposal-only |
+| Unknown COMMIT outcome | new successful server COMMIT followed by lost client response; independent catalog proof | **PASS on CI 43874307271**, disposal-only |
+| ROLLBACK failure | new injected ROLLBACK transport error; destructor and independent catalog proof | **PASS on CI 43874307271**, disposal-only |
+| Privilege reconciliation | new effective ACL snapshots and independent observer role inventory | **PASS on CI 43874307271**, disposal-only |
 
 ## Remaining safeguards not certified
 
@@ -53,3 +53,14 @@
 - PostgreSQL 16 release 16.16 (2026-11-12): https://www.postgresql.org/docs/16/release-16-16.html
 - PostgreSQL privileges and defaults: https://www.postgresql.org/docs/16/ddl-priv.html
 - PR #176: https://github.com/AbdullahZaher/vibress/pull/176
+
+
+## Verified disposable PostgreSQL execution — exact source build
+
+**Run:** https://github.com/AbdullahZaher/vibress/actions/runs/43874307271  
+**Commit:** `65dc13b38f3789da125e318af6e006ba8acffc23`  
+**Date/time:** 2026-11-16 UTC. **Environment:** isolated GitHub-hosted runner, Node 24, PostgreSQL `server_version_num=160016` (`16.16`), `compose.dev.yml` with Docker volume removed after tests.
+
+From job 133323218079 logs: migrations success; changed-file ESLint success; atomic/R26 test group `22 passed / 0 failed` (18 atomic + 4 R26); real-role RLS/installation/view test group `43 passed / 0 failed` (24 tenant, 8 installation, 8 production topology, 3 R35); **total 65/65** in 6 files. Explicit `AG02_DISPOSABLE_PG_CONFIRMED=1` is set by the isolated workflow, not any production deployment. No skipped test is shown in the group summaries.
+
+**Caveat:** the release-level CI for the integrated candidate remains separately required; Node/TypeScript full-workspace typecheck was not part of 43874307271 and is scheduled in the next exact-HEAD CI run. Operator production R26 Scope A/B, non-superuser owner transition, worker DB identity separation and restore remain BLOCKED.
