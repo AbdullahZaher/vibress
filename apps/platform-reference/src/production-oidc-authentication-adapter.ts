@@ -139,6 +139,11 @@ export class ProductionOidcAuthenticationAdapter {
           claims.aud[0] === this.#config.audience)) {
       throw new IdentityDeniedError("invalid_token_profile");
     }
+    // RFC 9068 requires a bounded jti. This does not itself prevent replay.
+    if (typeof claims.jti !== "string" || claims.jti.trim() === "" ||
+        claims.jti.length > 256 || [...claims.jti].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)) {
+      throw new IdentityDeniedError("invalid_token_profile");
+    }
     if (typeof claims.exp !== "number" || typeof claims.iat !== "number" ||
         claims.exp <= claims.iat ||
         claims.exp - claims.iat > this.#maxLifetime) {
@@ -171,11 +176,14 @@ export class ProductionOidcAuthenticationAdapter {
         membership.applicationId !== this.#application || membership.tenantId !== tenant) {
       throw new IdentityDeniedError("tenant_denied");
     }
-    // The only tenant claim in this returned principal is server-confirmed.
-    // Do not copy membership permissions or user-supplied role claims here.
+    // Both the tenant and grants come from the trusted membership directory.
+    // JWT roles/permissions are NEVER copied. RouteExecutor re-resolves
+    // membership and intersects these grants with the latest snapshot before
+    // PolicyEngine allows the action; a revoked permission therefore fails.
     return Object.freeze({
       ...principal, tenantIds: Object.freeze([tenant]),
-      roles: Object.freeze([]), permissions: Object.freeze([]),
+      roles: Object.freeze([]),
+      permissions: Object.freeze([...membership.permissions]),
     });
   }
 
