@@ -32,7 +32,7 @@ CASES = [
     "s3_a_own_upload", "s3_b_own_upload", "s3_a_own_download",
     "s3_b_own_list", "s3_a_foreign_list_denied", "s3_a_foreign_get_denied",
     "s3_a_foreign_put_denied", "s3_a_foreign_delete_denied",
-    "s3_b_foreign_get_denied", "s3_global_list_denied",
+    "s3_b_foreign_get_denied", "s3_global_list_scoped_or_denied",
     "s3_backup_a_own_get", "s3_backup_a_foreign_get_denied",
     "s3_backup_a_write_denied", "s3_backup_a_delete_denied",
     "s3_signed_own_get", "s3_signed_foreign_get_denied",
@@ -286,7 +286,25 @@ class Lab:
                      lambda: a.delete_object(Bucket=bb, Key="private.txt"))
         self.deny_s3("s3_b_foreign_get_denied",
                      lambda: b.get_object(Bucket=ba, Key="own.txt"))
-        self.deny_s3("s3_global_list_denied", a.list_buckets)
+        # MinIO may return a filtered ListBuckets response (HTTP 200) rather
+        # than HTTP 403. Both are acceptable ONLY if bucket B is not exposed.
+        # The explicit cross-bucket ListObjects denial was measured above.
+        def global_list_scope():
+            from botocore.exceptions import ClientError
+            try:
+                response = a.list_buckets()
+            except ClientError as exc:
+                if str(exc.response.get("Error", {}).get("Code", "")) in {
+                    "AccessDenied", "AllAccessDisabled", "InvalidAccessKeyId", "403"
+                }:
+                    self.cases["s3_global_list_scoped_or_denied"] = "S3_403_OBSERVED"
+                    return
+                raise CheckError("unexpected global bucket listing error")
+            listed = {item["Name"] for item in response.get("Buckets", [])}
+            if bb in listed or not listed.issubset({ba}):
+                raise CheckError("global bucket listing leaked a foreign bucket")
+            self.cases["s3_global_list_scoped_or_denied"] = "S3_SCOPED_LIST_OBSERVED"
+        global_list_scope()
         self.allow("s3_backup_a_own_get",
                    lambda: backup.get_object(Bucket=ba, Key="own.txt")["Body"].read())
         self.deny_s3("s3_backup_a_foreign_get_denied",
