@@ -83,6 +83,10 @@ No actual reviewer identity, signature or approved conditional risk acceptance w
 5. Receive signed full Agent 02–05 reports, adjudicate their conflicts through Agent 06, and close/address review threads. The Project Owner then issues written **GO / GO WITH CONDITIONS / NO-GO** decision tied to final SHA/image digest, conditions and expiry.
 6. Only after all applicable gates: separately authorize PR merge, deployment and Wave 2. No GO is delegated to this coordinator.
 
+## 6.1. Draft roadmap authority mapping (evidence, not sign-off)
+
+PR #151 is **Draft and unmerged** at the pinned SHA `c9997a9353a229a4287256f5ba3b94d718e3a5d9`. It explicitly defines [A1–A8](https://github.com/AbdullahZaher/vibress/blob/c9997a9353a229a4287256f5ba3b94d718e3a5d9/docs/platform-roadmap/FINAL-DESIGN-BASELINE-APPROVAL.md) (architecture authority, version/disclosure, SSDF/ASVS scope, provenance/operations, product quality/accessibility, CMS/Studio/SDK compatibility, resourcing/owners, immutable final CI) and [G0–G7](https://github.com/AbdullahZaher/vibress/blob/c9997a9353a229a4287256f5ba3b94d718e3a5d9/docs/platform-roadmap/RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) (application/publication topology; scoped transaction/RLS and G1b isolation; schema-generated API; CMS and G3b external CRM; module/events/upgrades; full recovery; version/support; independent GA). These definitions are mapped individually in the [approval register](WAVE-01-APPROVAL-REGISTER.md), but **none is accepted merely because its text exists**. G0 is unsigned and later-wave G2–G7 are not falsely counted as a Wave 1 completed gate.
+
 ## 7. Quantitative quality rubric (historical, unchanged)
 
 | Dimension | Weight | Recorded score | Evidence shortfall |
