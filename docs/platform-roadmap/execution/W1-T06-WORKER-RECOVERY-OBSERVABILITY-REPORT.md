@@ -2,7 +2,7 @@
 
 **Owner:** Agent 04 (AI-assisted specialist engineering; independent Agent 06 review required).  
 **Review date:** 2026-11-16. **Integration PR:** #176. **Specialist PR:** #174.  
-**Current certification:** BLOCKED for production; scope-limited disposable tests require final CI evidence on exact checked-out merge SHA.
+**Current certification:** DISPOSABLE LAB VERIFIED for CI #43877919712 on a historical commit; BLOCKED for staging/production, requiring fresh CI on the latest head, complete deployment integration and independent review.
 
 ## 1. Actual runtime path now under test
 
@@ -35,13 +35,23 @@ The self-describing JSON report includes `recovery_metrics`, `pg_recovery_metric
 | Gate | To claim VERIFIED | Current certification |
 | --- | --- | --- |
 | Redis/S3 primitive boundary | Previously executed 38/38, exact run/commit | DISPOSABLE LAB VERIFIED on CI #43870171678 (user-provided baseline; reconcile merge SHA) |
-| Live Worker/Queue execution | Node process uses actual package Worker and restricted ACL, negative codes recorded, code compiled | **PENDING FINAL HEAD CI EVIDENCE** |
-| Actual webhook domain Worker | `WebhookDeliveryWorker` starts with separate identities, one mocked delivery per authorized job | **PENDING FINAL HEAD CI EVIDENCE** |
-| S3 recovery | Bucket restoration checksum and negative IAM verification with measured duration | **PENDING FINAL HEAD CI EVIDENCE** |
-| PostgreSQL role and table restore | Actual SQL ROLE/CONNECT and dump/restore tests; both deny and success verified | **PENDING FINAL HEAD CI EVIDENCE** |
+| Live Worker/Queue execution | Node process uses actual package Worker and restricted ACL, negative codes recorded, code compiled | **DISPOSABLE LAB VERIFIED on #43877919712; final HEAD pending** |
+| Actual webhook domain Worker | `WebhookDeliveryWorker` starts with separate identities, one mocked delivery per authorized job | **DISPOSABLE LAB VERIFIED with mocked delivery on #43877919712; live DB delivery not executed** |
+| S3 recovery | Bucket restoration checksum and negative IAM verification with measured duration | **DISPOSABLE LAB VERIFIED on #43877919712; full platform restore not executed** |
+| PostgreSQL role and table restore | Actual SQL ROLE/CONNECT and dump/restore tests; both deny and success verified | **DISPOSABLE LAB VERIFIED on #43877919712; only test-table restore** |
 | Full production-shaped multi-service restore | Run application against two real provisioned DBs, Redis, S3 and real jobs, then failover | BLOCKED |
 | Staging | Dedicated approved staging identities; no shared/production resources | NOT EXECUTED |
 | Production | Operational sign-off and controlled rollout | NOT EXECUTED |
+
+## 3A. Live CI evidence — 67/67 (historical commit)
+
+- [GitHub Actions #43877919712](https://github.com/AbdullahZaher/vibress/actions/runs/43877919712): **SUCCESS**, `github.event.pull_request.head.sha` / PR head `b72ed1e60660c0a6bf29a57c921366e97d46e954`. Its exact checkout is the GitHub-generated PR merge commit, whose SHA is recorded separately in the workflow's `w1t06-provenance.json` artifact. Do **not** treat the PR head SHA as the exact checked-out tree.
+- Sanitized execution report: `status=PASS`, `67/67` completed, `0` unexecuted, expected result categories and cleanup confirmed.
+- Case groups: **13 BullMQ**, **11 PostgreSQL**, **19 Redis**, **24 S3**. Actual BullMQ enqueue, authorized Worker consumption, crossed enqueue/inspection/consumer denial, retry (two attempts), replay idempotency by Job ID, poison job in failed state, actual `WebhookDeliveryWorker` A/B process with mocked delivery. PostgreSQL role/grants and table-level backup/restore, S3 bucket restore and checksum, expiration and revocation of signed URLs.
+- Cleanup: `redis_users_and_keys_removed`, `s3_users_policies_buckets_removed`, and `compose_removed`. All test roles and DB rows were inside the disposable PostgreSQL container which was destroyed by the `docker compose down --volumes` teardown.
+- Component timings measured: PostgreSQL single-table replay `0.582 s`, object-store test copy and checksum `0.015 s`. These are **not** platform RTO/RPO. No owner-approved target exists.
+- Verified Redis runtime `7.4.11` and scoped ACL `+info` requirement for BullMQ startup; `INFO` metadata exposure is a shared-infrastructure residual risk requiring Agent 05 and Agent 06 review before carrying the policy into staging. Redis ACL patterns and service credentials must remain separate.
+- Remaining facts: main production `apps/worker/src/main.ts` with fully operational database-backed processors, durable events, actual provider effects, full DB/PITR and media recovery, alerts and staging IAM were **NOT** certified. The latest branch has subsequent log-redaction, diagnostics and workflow updates, so the above PASS cannot certify them without a final rerun.
 
 ## 4. Monitoring and rollback requirements
 
