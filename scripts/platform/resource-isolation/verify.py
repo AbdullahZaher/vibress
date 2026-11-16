@@ -38,6 +38,11 @@ CASES = [
     "s3_signed_own_get", "s3_signed_foreign_get_denied",
     "s3_signed_expired_denied", "s3_a_revoked_denied",
     "s3_signed_revoked_denied",
+    "bullmq_a_enqueue", "bullmq_b_enqueue", "bullmq_a_worker_consumes",
+    "bullmq_b_worker_consumes", "bullmq_a_cross_enqueue_denied",
+    "bullmq_b_cross_inspect_denied", "bullmq_b_cross_worker_denied",
+    "bullmq_a_retry_completes", "bullmq_a_replay_deduplicates",
+    "bullmq_a_poison_dead_letter", "bullmq_b_cross_dead_letter_denied",
 ]
 
 
@@ -271,6 +276,83 @@ class Lab:
         for c in (a, b, wa, wb):
             c.close()
 
+    def node_case(self, port, mode, principal, installation, job_id, kind="normal"):
+        from urllib.parse import quote
+        user, password = self.redis_passwords[principal]
+        prefix = self.prefix + installation + ":bull"
+        env = dict(self.env,
+                   NODE_ENV="test",
+                   REDIS_URL=f"redis://{quote(user, safe='')}:{quote(password, safe='')}@127.0.0.1:{port}",
+                   VIBRESS_REQUIRE_INSTALLATION_ISOLATION="1",
+                   VIBRESS_QUEUE_PREFIX=prefix,
+                   VIBRESS_INSTALLATION_ID=installation,
+                   T06_JOB_ID=job_id,
+                   T06_JOB_KIND=kind)
+        script = str(Path(__file__).with_name("worker-boundary.ts"))
+        result = spawn(["pnpm", "exec", "tsx", script, mode], env=env, check=False)
+        # The child process emits only a sanitized status. Errors (potentially
+        # including connection URIs) are deliberately discarded, never printed.
+        if result.returncode:
+            raise CheckError("BullMQ isolated child failed: " + mode)
+        records = [line for line in result.stdout.splitlines()
+                   if line.startswith('{"status":')]
+        if len(records) != 1:
+            raise CheckError("BullMQ child did not report exactly one status")
+        payload = json.loads(records[0])
+        if not isinstance(payload, dict) or "status" not in payload:
+            raise CheckError("BullMQ child report malformed")
+        return payload
+
+    def bullmq_matrix(self, port):
+        def outcome(label, mode, principal, installation, job_id, expected, kind="normal"):
+            record = self.node_case(port, mode, principal, installation, job_id, kind)
+            if record.get("status") != expected:
+                raise CheckError(label + " returned unexpected worker outcome")
+            self.cases[label] = expected + "_OBSERVED"
+            return record
+
+        outcome("bullmq_a_enqueue", "producer", "a", "a",
+                "normal-a", "ENQUEUED")
+        outcome("bullmq_b_enqueue", "producer", "b", "b",
+                "normal-b", "ENQUEUED")
+        outcome("bullmq_a_cross_enqueue_denied", "producer-denied", "a", "b",
+                "foreign-b", "ENQUEUE_NOPERM")
+        outcome("bullmq_b_cross_inspect_denied", "inspect-denied", "b", "a",
+                "normal-a", "INSPECT_NOPERM")
+        # A foreign Worker must receive an actual Redis script ACL error.
+        # The waiting job must remain, then be consumed by the valid Worker.
+        outcome("bullmq_b_cross_worker_denied", "worker-denied", "wb", "a",
+                "normal-a", "WORKER_NOPERM")
+        outcome("bullmq_a_worker_consumes", "worker", "wa", "a",
+                "normal-a", "CONSUMED")
+        outcome("bullmq_b_worker_consumes", "worker", "wb", "b",
+                "normal-b", "CONSUMED")
+        outcome("bullmq_a_retry_completes", "producer", "a", "a",
+                "retry-a", "ENQUEUED", "retry")
+        result = self.node_case(port, "worker", "wa", "a", "retry-a", "retry")
+        if result.get("status") != "CONSUMED" or result.get("attempts") != 2:
+            raise CheckError("retry job did not complete in two attempts")
+        self.cases["bullmq_a_retry_completes"] = "RETRY_2_ATTEMPTS_OBSERVED"
+
+        # Replaying a BullMQ jobId must not create an independently
+        # deliverable second job. This is a queue-level, not domain-side proof.
+        outcome("bullmq_a_replay_deduplicates", "producer", "a", "a",
+                "normal-a", "ENQUEUED")
+        state = self.node_case(port, "inspect", "a", "a", "normal-a")
+        if state.get("state") != "completed" or state.get("attemptsMade") != 1:
+            raise CheckError("duplicate job replayed or mutated terminal state")
+        self.cases["bullmq_a_replay_deduplicates"] = "DEDUPLICATED_OBSERVED"
+
+        self.node_case(port, "producer", "a", "a", "poison-a", "poison")
+        result = self.node_case(port, "worker", "wa", "a", "poison-a", "poison")
+        state = self.node_case(port, "inspect", "a", "a", "poison-a")
+        if result.get("status") != "POISON_BLOCKED" or state.get("state") != "failed" or \
+           result.get("sideEffects") != 0:
+            raise CheckError("poison job was not rejected before side effect")
+        self.cases["bullmq_a_poison_dead_letter"] = "FAILED_QUEUE_ISOLATED_OBSERVED"
+        outcome("bullmq_b_cross_dead_letter_denied", "inspect-denied", "b", "a",
+                "poison-a", "INSPECT_NOPERM")
+
     def s3_matrix(self, port):
         root = self.s3(self.root_user, self.root_password, port)
         a = self.s3(*self.s3_passwords["a"], port)
@@ -398,6 +480,7 @@ class Lab:
             self.compose("up", "-d", "--wait")
             redis_port, s3_port = self.port("redis", 6379), self.port("minio", 9000)
             self.provision(redis_port, s3_port)
+            self.bullmq_matrix(redis_port)
             self.redis_matrix(redis_port)
             self.s3_matrix(s3_port)
         except Exception as exc:
@@ -421,9 +504,9 @@ class Lab:
                   "unexecuted": sorted(expected - passed),
                   "cleanup": self.cleanup, "error_class": fatal,
                   "service_versions": getattr(self, "service_versions", {}),
-                  "scope": "disposable local Redis and S3 only",
-                  "limits": ["Not an application-process identity integration test",
-                             "Queue operations use real Redis ACL commands, not BullMQ Worker runtime",
+                  "scope": "disposable Redis/S3 and real BullMQ processes only",
+                  "limits": ["Real @vibress/queue BullMQ API/Worker processes, not full domain workers",
+                             "Domain-level installation admission and DB privileges still unverified",
                              "Not a production backup restore or capacity test"]}
         REPORT.parent.mkdir(parents=True, exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
@@ -435,6 +518,7 @@ def main():
     if "--self-test" in sys.argv:
         assert len(set(CASES)) == len(CASES)
         assert COMPOSE.exists()
+        assert Path(__file__).with_name("worker-boundary.ts").exists()
         assert "secrets" not in str(CASES).lower()
         print("SELF_TEST_PASS (static contracts only; no deny tests executed)")
         return 0
