@@ -1671,6 +1671,22 @@ importers:
         specifier: ^5.5.3
         version: 5.9.3
 
+  packages/schema-engine:
+    dependencies:
+      '@vibress/platform-kernel':
+        specifier: workspace:*
+        version: link:../platform-kernel
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      typescript:
+        specifier: ^5.5.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.12
+        version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(jsdom@24.1.3(supports-color@7.2.0))(vite@8.2.4(@types/node@26.6.5)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.0))
+
   packages/security:
     dependencies:
       '@vibress/config':
