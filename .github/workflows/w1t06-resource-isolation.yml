@@ -22,6 +22,34 @@ jobs:
       - name: Checkout reviewed source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified actions/checkout v4
 
+      - name: Record PR head versus checked-out merge commit
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          declared = os.environ["WORKFLOW_COMMIT_SHA"]
+          if actual != declared:
+              raise SystemExit("CHECKOUT_SHA_MISMATCH")
+          payload = {
+              "checkout_sha": actual,
+              "workflow_commit_sha": declared,
+              "pr_head_sha": os.environ.get("PR_HEAD_SHA") or None,
+              "checkout_mode": "pull_request_merge" if os.environ.get("PR_HEAD_SHA") else "manual_dispatch",
+              "note": "Results belong to the checkout/merge commit, not automatically to the PR head",
+          }
+          pathlib.Path("artifacts/w1t06-provenance.json").write_text(
+              json.dumps(payload, indent=2) + "\n")
+          PY
+
       - name: Set up Node.js 24
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7 verified commit
         with:
@@ -75,6 +103,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified v4.6.2
         with:
           name: w1t06-resource-isolation-${{ github.run_id }}
-          path: artifacts/w1t06-resource-isolation.json
+          path: artifacts/w1t06-*.json
           if-no-files-found: warn
           retention-days: 14
