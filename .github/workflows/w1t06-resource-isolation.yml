@@ -43,6 +43,7 @@ jobs:
           pnpm --filter @vibress/queue typecheck
           pnpm --filter @vibress/worker typecheck
           pnpm --filter @vibress/api typecheck
+          pnpm exec vitest run packages/queue/src/__tests__/installation-isolation.test.ts
 
       - name: Install isolated Python dependencies
         shell: bash
