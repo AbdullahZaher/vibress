@@ -306,7 +306,21 @@ class Lab:
         # The child process emits only a sanitized status. Errors (potentially
         # including connection URIs) are deliberately discarded, never printed.
         if result.returncode:
-            raise CheckError("BullMQ isolated child failed: " + mode)
+            safe_records = [line for line in result.stdout.splitlines()
+                            if line.startswith('{"status":')]
+            category = "NO_SAFE_CHILD_RECORD"
+            if safe_records:
+                try:
+                    raw = json.loads(safe_records[-1])
+                    candidate = raw.get("category")
+                    if candidate in {"MODULE_RESOLUTION", "REDIS_AUTH",
+                                     "ACL_DENIAL", "CONNECTION", "ASSERTION", "UNKNOWN"}:
+                        category = candidate
+                except (ValueError, TypeError):
+                    pass
+            self.failure_stage = {"role": principal, "installation": installation,
+                                  "operation": mode, "category": category}
+            raise CheckError("isolated worker child failed")
         records = [line for line in result.stdout.splitlines()
                    if line.startswith('{"status":')]
         if len(records) != 1:
@@ -706,6 +720,7 @@ class Lab:
                   "service_versions": getattr(self, "service_versions", {}),
                   "recovery_metrics": getattr(self, "recovery_metrics", {}),
                   "pg_recovery_metrics": getattr(self, "pg_recovery_metrics", {}),
+                  "failure_stage": getattr(self, "failure_stage", None),
                   "scope": "disposable Redis/S3 and real BullMQ processes only",
                   "limits": ["Real WebhookDeliveryWorker with mocked outbound side effect; not a complete Webhook/DB integration",
                              "Domain-level installation admission and DB privileges still unverified",
