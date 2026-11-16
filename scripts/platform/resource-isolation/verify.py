@@ -319,7 +319,9 @@ class Lab:
                     raw = json.loads(safe_records[-1])
                     candidate = raw.get("category")
                     if candidate in {"MODULE_RESOLUTION", "REDIS_AUTH",
-                                     "ACL_DENIAL", "CONNECTION", "ASSERTION", "UNKNOWN"}:
+                                     "ACL_DENIAL", "ACL_CHANNEL", "ACL_KEY",
+                                     "ACL_COMMAND", "ACL_SCRIPT", "ACL_OTHER",
+                                     "CONNECTION", "ASSERTION", "UNKNOWN"}:
                         category = candidate
                 except (ValueError, TypeError):
                     pass
