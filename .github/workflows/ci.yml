@@ -358,6 +358,12 @@ jobs:
       - name: Start disposable PostgreSQL
         run: docker compose -f compose.dev.yml up -d --wait postgres
 
+      - name: Verify patched PostgreSQL 16 fixture
+        run: |
+          version=$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc "SHOW server_version_num")
+          echo "PostgreSQL server_version_num=$version"
+          test "$version" -ge 160016 && test "$version" -lt 170000
+
       - name: Apply additive migrations on fresh install
         env:
           DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"

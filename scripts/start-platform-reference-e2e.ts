@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import {
-  provisionPlatformDeploymentVerifierRole,
-  provisionPlatformMembershipReaderRole,
-  provisionPlatformRuntimeRole,
-  REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
-} from "@vibress/database";
+import { REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT } from "@vibress/database";
+import { provisionPlatformRolesAtomically } from "./lib/provision-platform-roles-atomic";
 import {
   asInstallationId,
   type TenantId,
@@ -101,25 +97,19 @@ async function main(): Promise<void> {
     await requireMigrated(ownerPool);
 
     const provisioning = await ownerPool.connect();
+    let provisioningFailed = false;
     try {
-      await provisionPlatformRuntimeRole(
-        provisioning,
-        {
-          roleName: runtimeRole,
-          password: runtimePassword,
-        },
-        REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
-      );
-      await provisionPlatformMembershipReaderRole(provisioning, {
-        roleName: readerRole,
-        password: readerPassword,
+      await provisionPlatformRolesAtomically(provisioning, {
+        runtime: { roleName: runtimeRole, password: runtimePassword },
+        reader: { roleName: readerRole, password: readerPassword },
+        verifier: { roleName: verifierRole, password: verifierPassword },
       });
-      await provisionPlatformDeploymentVerifierRole(provisioning, {
-        roleName: verifierRole,
-        password: verifierPassword,
-      });
+    } catch (error) {
+      provisioningFailed = true;
+      throw error;
     } finally {
-      provisioning.release();
+      // Do not recycle a connection whose rollback/commit state is unknown.
+      provisioning.release(provisioningFailed);
     }
 
     writeE2eState(state);
