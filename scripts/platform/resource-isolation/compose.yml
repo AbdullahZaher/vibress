@@ -40,3 +40,24 @@ services:
       - no-new-privileges:true
     tmpfs:
       - /data
+
+  postgres:
+    # Official PostgreSQL 16.16 multi-arch manifest digest, Docker Hub
+    # verified 2026-11-16. Disposable local database, never existing data.
+    image: postgres:16.16-alpine@sha256:0adbf25a9e96d38823bb813f3ac0ed41fadb665c88f1df7fe6dbfb060cbdc106
+    environment:
+      POSTGRES_USER: t06admin
+      POSTGRES_PASSWORD: ${T06_PG_PASSWORD:?disposable PG password required}
+      POSTGRES_DB: postgres
+    ports:
+      - target: 5432
+        host_ip: 127.0.0.1
+        protocol: tcp
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U t06admin -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
