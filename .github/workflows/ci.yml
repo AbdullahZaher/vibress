@@ -4,7 +4,7 @@ on:
   push:
     # Temporarily suspended for docs/native-admin-ui-plan-20261025 during local-only validation session.
     # RESTORATION PROCEDURE: Re-add 'docs/native-admin-ui-plan-20261025' to the push.branches list below before final release approval.
-    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024]
+    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -329,3 +329,48 @@ jobs:
             test-results/**/design-*.png
           if-no-files-found: ignore
           retention-days: 7
+
+
+  # Mandatory Wave 1 reference CRM browser acceptance, independent from
+  # the legacy CMS browser smoke suite. Uses a disposable PostgreSQL fixture.
+  platform-reference-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build
+    steps:
+      - name: Checkout candidate source
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start disposable PostgreSQL
+        run: docker compose -f compose.dev.yml up -d --wait postgres
+
+      - name: Apply additive migrations on fresh install
+        env:
+          DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
+        run: pnpm db:migrate
+
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium --with-deps
+
+      - name: Reference CRM HTTP + RLS + browser E2E
+        env:
+          DATABASE_URL: "postgresql://vibress:vibress@127.0.0.1:5433/vibress"
+        run: pnpm test:e2e:platform-reference
+
+      - name: Tear down disposable database
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes
