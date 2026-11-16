@@ -122,6 +122,8 @@ jobs:
           tags: vibress-api:scan
           push: false
           load: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -133,6 +135,8 @@ jobs:
           tags: vibress-worker:scan
           push: false
           load: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -153,6 +157,149 @@ jobs:
           exit-code: "1"
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+      - name: Wave 1 Gate 5 — smoke the same scanned API and Worker images
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          PROJECT="w1gate5$GITHUB_RUN_ID$GITHUB_RUN_ATTEMPT"
+          NETWORK="$PROJECT"_default
+          API="$PROJECT-api"
+          WORKER="$PROJECT-worker"
+          COMPOSE_STARTED=0
+          export GATE5_RESULT=FAIL GATE5_CLEANUP=NOT_RUN GATE5_API_READY=FAIL GATE5_WORKER_READY=FAIL
+          export GATE5_API_SHUTDOWN=FAIL GATE5_WORKER_SHUTDOWN=FAIL GATE5_API_IMAGE_ID="" GATE5_WORKER_IMAGE_ID=""
+          export GATE5_API_NODE="" GATE5_WORKER_NODE="" GATE5_PG_VERSION="" GATE5_CHECKOUT="$(git rev-parse HEAD)"
+          mkdir -p artifacts
+          report() {
+            python3 - <<'PY'
+          import json, os
+          names = ["RESULT", "CLEANUP", "API_READY", "WORKER_READY", "API_SHUTDOWN", "WORKER_SHUTDOWN",
+                   "API_IMAGE_ID", "WORKER_IMAGE_ID", "API_NODE", "WORKER_NODE", "PG_VERSION", "CHECKOUT"]
+          data = {name.lower(): os.getenv("GATE5_" + name, "") for name in names}
+          data["images"] = ["vibress-api:scan", "vibress-worker:scan"]
+          data["profile"] = "isolated disposable nonproduction development configuration"
+          data["entrypoint"] = "image CMD: node dist/main.js"
+          data["source_binding"] = "OCI image revision verified against actual checked-out commit"
+          with open("artifacts/wave1-gate5-smoke.json", "w", encoding="utf8") as f:
+              json.dump(data, f, indent=2, sort_keys=True)
+              f.write("\n")
+          PY
+          }
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            clean=1
+            for name in "$API" "$WORKER"; do
+              if docker container inspect "$name" >/dev/null 2>&1; then
+                docker rm -fv "$name" >/dev/null 2>&1 || clean=0
+              fi
+            done
+            if [ "$COMPOSE_STARTED" = 1 ]; then
+              docker compose -p "$PROJECT" -f compose.dev.yml down --volumes --remove-orphans >/dev/null 2>&1 || clean=0
+            fi
+            if docker network inspect "$NETWORK" >/dev/null 2>&1; then clean=0; fi
+            if [ -n "$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")" ]; then clean=0; fi
+            if [ "$clean" = 1 ]; then GATE5_CLEANUP=PASS; else GATE5_CLEANUP=FAIL; fi
+            if [ "$rc" = 0 ] && [ "$GATE5_CLEANUP" = PASS ] &&
+               [ "$GATE5_API_READY" = PASS ] && [ "$GATE5_WORKER_READY" = PASS ] &&
+               [ "$GATE5_API_SHUTDOWN" = PASS ] && [ "$GATE5_WORKER_SHUTDOWN" = PASS ]; then
+              GATE5_RESULT=PASS
+            fi
+            report
+            unset APP_PASSWORD ENCRYPTION_KEY UNSUB_SECRET SETUP_TOKEN POSTGRES_APP_PASSWORD DATABASE_URL
+            echo "GATE5_RESULT=$GATE5_RESULT CLEANUP=$GATE5_CLEANUP"
+            if [ "$GATE5_RESULT" != PASS ]; then exit 1; fi
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          test "$GATE5_CHECKOUT" = "$GITHUB_SHA" || { echo "::error::Checkout SHA mismatch"; exit 1; }
+          for role in API WORKER; do
+            if [ "$role" = API ]; then image=vibress-api:scan; else image=vibress-worker:scan; fi
+            revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image")"
+            test "$revision" = "$GATE5_CHECKOUT" || { echo "::error::$role image revision mismatch"; exit 1; }
+            id="$(docker image inspect -f '{{.Id}}' "$image")"
+            version="$(docker run --rm --entrypoint node "$image" --version)"
+            case "$version" in v24.*) ;; *) echo "::error::$role image is not Node 24"; exit 1 ;; esac
+            if [ "$role" = API ]; then GATE5_API_IMAGE_ID="$id"; GATE5_API_NODE="$version"
+            else GATE5_WORKER_IMAGE_ID="$id"; GATE5_WORKER_NODE="$version"; fi
+            echo "$role image_id=$id node=$version source=$revision"
+          done
+          COMPOSE_STARTED=1
+          docker compose -p "$PROJECT" -f compose.dev.yml up -d --wait postgres redis
+          PG_CONTAINER="$(docker compose -p "$PROJECT" -f compose.dev.yml ps -q postgres)"
+          GATE5_PG_VERSION="$(docker exec "$PG_CONTAINER" psql -U vibress -d vibress -Atqc 'SHOW server_version_num')"
+          test "$GATE5_PG_VERSION" -ge 160016 && test "$GATE5_PG_VERSION" -lt 170000 ||
+            { echo "::error::Disposable PostgreSQL is not patched PG16"; exit 1; }
+          APP_PASSWORD="$(openssl rand -hex 24)"
+          ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          UNSUB_SECRET="$(openssl rand -hex 32)"
+          SETUP_TOKEN="$(openssl rand -hex 24)"
+          export POSTGRES_APP_PASSWORD="$APP_PASSWORD" POSTGRES_APP_USER=vibress_app
+          export DATABASE_URL=postgresql://vibress:vibress@postgres:5432/vibress
+          docker run --rm --network "$NETWORK" --entrypoint node \
+            -e NODE_ENV=development -e DATABASE_URL -e POSTGRES_APP_USER -e POSTGRES_APP_PASSWORD \
+            vibress-api:scan dist/migrate.js
+          flags="$(docker exec "$PG_CONTAINER" psql -U vibress -d vibress -Atqc \
+            "SELECT NOT rolsuper AND NOT rolcreatedb AND NOT rolcreaterole AND NOT rolbypassrls FROM pg_roles WHERE rolname='vibress_app'")"
+          test "$flags" = t || { echo "::error::Missing or privileged serving DB role"; exit 1; }
+          DATABASE_URL="postgresql://vibress_app:$APP_PASSWORD@postgres:5432/vibress"
+          args=(-e NODE_ENV=development -e "DATABASE_URL=$DATABASE_URL" -e REDIS_URL=redis://redis:6379
+            -e "VIBRESS_ENCRYPTION_KEY=$ENCRYPTION_KEY" -e "NEWSLETTER_UNSUBSCRIBE_SECRET=$UNSUB_SECRET"
+            -e "VIBRESS_SETUP_TOKEN=$SETUP_TOKEN" -e SITE_URL=http://localhost:7777
+            -e ADMIN_ORIGIN=http://localhost:7777 -e PORTAL_ORIGIN=http://localhost:7777
+            -e CORS_ORIGINS=http://localhost:7777 -e STRIPE_SECRET_KEY=sk_test_gate5_synthetic
+            -e STRIPE_WEBHOOK_SECRET=whsec_gate5_synthetic -e SMTP_HOST=127.0.0.1
+            -e SMTP_PORT=1025 -e SMTP_FROM=gate5@example.invalid)
+          docker run -d --network "$NETWORK" --name "$API" ${args[@]} vibress-api:scan >/dev/null
+          docker run -d --network "$NETWORK" --name "$WORKER" ${args[@]} vibress-worker:scan >/dev/null
+          ready() {
+            docker exec "$1" node -e '
+              const [port, role] = process.argv.slice(1);
+              fetch("http://127.0.0.1:" + port + "/health/ready").then(async r => {
+                const value = await r.json();
+                const ok = role === "worker" ? "ok" : "up";
+                if (r.status !== 200 || value.checks?.database !== ok ||
+                    value.checks?.redis !== ok || (role === "worker" && value.checks?.pluginEvents !== "ok"))
+                  process.exitCode = 1;
+              }).catch(() => { process.exitCode = 1; });
+            ' "$2" "$3" >/dev/null 2>&1
+          }
+          for role in api worker; do
+            if [ "$role" = api ]; then container="$API"; port=7780; else container="$WORKER"; port=7782; fi
+            healthy=0
+            for attempt in $(seq 1 60); do
+              if [ "$(docker inspect -f '{{.State.Running}}' "$container")" != true ]; then break; fi
+              if ready "$container" "$port" "$role"; then healthy=1; break; fi
+              sleep 2
+            done
+            test "$healthy" = 1 || { echo "::error::$role did not reach readiness within 120s"; exit 1; }
+            sleep 2
+            ready "$container" "$port" "$role" || { echo "::error::$role readiness was lost"; exit 1; }
+            if docker logs "$container" 2>&1 | grep -Eiq 'FATAL|uncaughtException|unhandledRejection|Failed to start|Error during shutdown|permission denied|EACCES'; then
+              echo "::error::$role startup reported a fatal error"; exit 1
+            fi
+            if [ "$role" = api ]; then GATE5_API_READY=PASS; else GATE5_WORKER_READY=PASS; fi
+            echo "$role readiness=PASS database=PASS redis=PASS"
+          done
+          for role in API WORKER; do
+            if [ "$role" = API ]; then container="$API"; else container="$WORKER"; fi
+            docker stop --time 25 "$container" >/dev/null
+            code="$(docker inspect -f '{{.State.ExitCode}}' "$container")"
+            test "$code" = 0 || { echo "::error::$role failed graceful SIGTERM shutdown (exit=$code)"; exit 1; }
+            if [ "$role" = API ]; then GATE5_API_SHUTDOWN=PASS; else GATE5_WORKER_SHUTDOWN=PASS; fi
+          done
+          echo "GATE5_STARTUP_SHUTDOWN_OK checkout=$GATE5_CHECKOUT"
+
+      - name: Upload sanitized Gate 5 runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: wave1-gate5-${{ github.run_id }}
+          path: artifacts/wave1-gate5-smoke.json
+          if-no-files-found: warn
+          retention-days: 14
   # PR gate: gateway smoke + media streaming, image picker, and traversal checks.
   # Main and Studio Beta PR #141: full Playwright suite including fresh-install wizard.
   e2e:
