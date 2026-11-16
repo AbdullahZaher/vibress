@@ -323,10 +323,19 @@ class Lab:
                                      "ACL_COMMAND", "ACL_SCRIPT", "ACL_OTHER",
                                      "CONNECTION", "ASSERTION", "UNKNOWN"}:
                         category = candidate
+                    command = raw.get("deniedCommand")
+                    if isinstance(command, str) and command in {
+                        "client", "info", "eval", "evalsha", "script",
+                        "fcall", "fcall_ro", "publish", "subscribe",
+                        "psubscribe", "xadd", "zadd", "sadd", "hset",
+                        "set", "ping", "multi", "exec", "not-disclosed",
+                    }:
+                        self.denied_command = command
                 except (ValueError, TypeError):
                     pass
             self.failure_stage = {"role": principal, "installation": installation,
-                                  "operation": mode, "category": category}
+                                  "operation": mode, "category": category,
+                                  "denied_command": getattr(self, "denied_command", None)}
             # Only report a restricted reason code from Redis ACL audit data.
             # ACL LOG can contain key names, usernames and client addresses:
             # never put those records in CI output or an artifact.
