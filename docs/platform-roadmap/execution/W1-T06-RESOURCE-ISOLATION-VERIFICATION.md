@@ -27,7 +27,7 @@ Files:
 - `scripts/platform/resource-isolation/verify.py` — provisions separate Redis principals `a`, `b`, `worker-a`, `worker-b`, operator; separate S3 `a`, `b`, `backup-a` identities and two dedicated buckets. Credentials are generated per run and never reported.
 - `.github/workflows/w1t06-resource-isolation.yml` — no production secrets, read-only GitHub token permissions, Python dependency pinning, reproducible run and short-lived sanitized evidence artifact.
 
-Redis operator provisions `~t06:<run>:a:*` and `~t06:<run>:b:*` access patterns (cache, queue wait/retry/failed) and disables anonymous `default`. Explicitly denied enumeration, host-wide and ACL/configuration commands. Worker identities are distinct from request/producer identities.
+Redis operator provisions `~t06:<run>:a:*` and `~t06:<run>:b:*` access patterns (cache, queue wait/retry/failed) and restricts the anonymous `default` identity to the health-check PING command only (no key access). Explicitly denied enumeration, host-wide and ACL/configuration commands. Worker identities are distinct from request/producer identities.
 
 S3 policies allow bucket list + object actions only on their **own** bucket; backup A is read-only on bucket A. Other buckets, global bucket listing and writes from backup identity are outside their grants. Test actor credentials do not possess root credentials.
 
