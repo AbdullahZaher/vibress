@@ -135,7 +135,17 @@ async function execute(): Promise<void> {
             /command or subcommand|has no permissions? to run|\bcommand\b/i.test(message) ? "ACL_COMMAND" :
             /ACL failure in script|\bscript\b/i.test(message) ? "ACL_SCRIPT" :
             "ACL_OTHER";
-          throw new Error(cause);
+          // Whitelist known Redis command identifiers; never emit arbitrary
+          // server text, key names, service URLs, usernames or credentials.
+          const match = /permissions? to run the ['"]([a-z_]+)['"] command/i.exec(message);
+          const allowed = new Set([
+            "client", "info", "eval", "evalsha", "script", "fcall",
+            "fcall_ro", "publish", "subscribe", "psubscribe", "xadd",
+            "zadd", "sadd", "hset", "set", "ping", "multi", "exec",
+          ]);
+          const deniedCommand = match && allowed.has(match[1]?.toLowerCase() ?? "")
+            ? match[1]!.toLowerCase() : "not-disclosed";
+          throw new Error(cause + ":" + deniedCommand);
         }
         if (/NOAUTH|WRONGPASS|invalid username-password/i.test(message)) {
           throw new Error("REDIS_AUTH_FAILURE");
@@ -250,7 +260,8 @@ execute().catch((error: unknown) => {
     /unexpected|missing|did not|failed/i.test(msg) ? "ASSERTION" :
     "UNKNOWN";
   // Controlled error category only; raw errors may contain credentials.
-  result("FAILED", { category });
+  const deniedCommand = /^ACL_[A-Z]+:([a-z_]+|not-disclosed)$/.exec(msg)?.[1] ?? null;
+  result("FAILED", { category, deniedCommand });
   process.exitCode = 2;
 }).finally(() => closeRedisClient().catch(() => {
   process.exitCode = 2;
