@@ -4,6 +4,7 @@ import {
   canonicalSchemaDigest,
   compileResourceSchema,
   parseResourceDefinition,
+  ResourceSchemaError,
   type CanonicalSchemaIR,
   type SchemaCompilationScope,
 } from "../schema";
@@ -269,12 +270,20 @@ describe("M03-S02 deterministic non-executing change planning", () => {
     expect(() => compileResourceSchema([
       crmCustomers(), { ...crmDeals(), installationId: asInstallationId("other-install") },
     ], crmScope)).toThrow(/another application or installation/);
-    expect(() => compileResourceSchema([
-      crmCustomers(), { ...crmDeals(), fields: [
-        { id: "customer", type: "relation", required: false,
-          targetResource: "customers", targetInstallationId: "other-install" },
-      ] },
-    ], crmScope)).toThrow();
+    try {
+      parseResourceDefinition({
+        ...crmDeals(),
+        fields: [{
+          id: "customer", type: "relation", required: false,
+          targetResource: "customers", targetInstallationId: "other-install",
+        }],
+      });
+      throw new Error("expected unsupported relation property rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResourceSchemaError);
+      if (!(error instanceof ResourceSchemaError)) throw error;
+      expect(error.code).toBe("UNSAFE_DEFINITION");
+    }
     expect(() => planSchemaChanges(createSchemaManifest(relational), relational, {
       expectedCurrentDigest: createSchemaManifest(relational).digest,
       scope: crmScope,
