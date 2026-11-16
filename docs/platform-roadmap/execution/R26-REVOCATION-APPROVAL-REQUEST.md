@@ -240,11 +240,12 @@ SELECT p.oid::regprocedure AS signature
      SELECT 1 FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) a
       WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE');
 
--- Default function ACLs for the owner in public (expect one revoke row)
+-- GLOBAL default function ACL for migration owner (expect one revoke row)
+-- Schema-scoped checks miss the required global default ACL.
 SELECT pg_get_userbyid(defaclrole) AS owner,
-       defaclobjtype, defaclacl
+       defaclobjtype, defaclnamespace, defaclacl
   FROM pg_default_acl
- WHERE defaclnamespace = 'public'::regnamespace;
+ WHERE defaclnamespace = 0 AND defaclobjtype = 'f';
 ```
 
 ## 9. Rollback

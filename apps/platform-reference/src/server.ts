@@ -66,7 +66,9 @@ export async function createReferenceServer(
       : {}),
   });
 
-  const app = Fastify({ logger: false, bodyLimit: 64 * 1024 });
+  // A nonzero handlerTimeout is unsafe for streamed responses in Fastify
+  // versions <5.12.8 (GHSA-3qgw-9275-xf8w).
+  const app = Fastify({ logger: false, bodyLimit: 64 * 1024, handlerTimeout: 0 });
   app.all("/*", async (request, reply) => {
     let tenantId: TenantId | null = null;
     const rawTenant = request.headers["x-tenant-id"];

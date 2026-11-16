@@ -1,5 +1,6 @@
 import {
   Queue, QUEUE_NAMES, getBullMqRedisConnection,
+  getQueueIsolationOptions,
 } from "@vibress/queue";
 import {
   pluginEventLedger, pluginEventJobId, pluginEventEnvelopeHash,
@@ -154,6 +155,7 @@ function getFailedEventQueue(): Queue<PluginWorkerEventJob> {
   if (!failedEventQueue) {
     failedEventQueue = new Queue<PluginWorkerEventJob>(QUEUE_NAMES.PLUGIN_EVENTS, {
       connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
     });
   }
   return failedEventQueue;

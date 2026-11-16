@@ -3,6 +3,7 @@ import {
   Job,
   QUEUE_NAMES,
   getBullMqRedisConnection,
+  getQueueIsolationOptions,
   assertJobScope,
 } from "@vibress/queue";
 import { tracedProcessor } from "./trace-helper";
@@ -38,7 +39,8 @@ export class AnalyticsWorker {
     this.worker = new Worker<AnalyticsJob>(
       ANALYTICS_QUEUE_NAME,
       tracedProcessor("worker.job.analytics", (job) => this.process(job)),
-      { connection: getBullMqRedisConnection(), concurrency: 2 },
+      { connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(), concurrency: 2 },
     );
     this.worker.on("failed", (job, err) => {
       console.error(
