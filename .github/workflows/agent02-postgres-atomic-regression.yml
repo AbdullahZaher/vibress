@@ -48,6 +48,13 @@ jobs:
         run: |
           git rev-parse HEAD
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-role-atomic-provisioning.test.ts tests/integration/platform-r26-revocation.test.ts
+      - name: AG02 real-role RLS, installation and view negative matrix
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          PLATFORM_TEST_DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+        run: |
+          git rev-parse HEAD
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-tenant-isolation.test.ts tests/integration/platform-installation-isolation.test.ts tests/integration/platform-production-topology.test.ts tests/integration/platform-view-surface.test.ts
       - name: Teardown disposable PG and role state
         if: always()
         run: docker compose -f compose.dev.yml down --volumes

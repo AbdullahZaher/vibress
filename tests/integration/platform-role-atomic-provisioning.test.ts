@@ -378,6 +378,64 @@ describeDisposable("AG06-05 failure injection: unsafe transport and privilege re
     }
   });
 
+  it("enforces SET ROLE denial and narrow reader/verifier authority through real role sessions", async () => {
+    requireDisposable();
+    const input = config();
+    await provisionPlatformRolesAtomically(owner, input);
+    const ownerIdentity = (await owner.query<{ name: string }>(
+      "SELECT current_user AS name",
+    )).rows[0]?.name;
+    expect(ownerIdentity).toBeDefined();
+    for (const entry of [input.runtime, input.reader, input.verifier]) {
+      const url = new URL(databaseUrl);
+      url.username = entry.roleName;
+      url.password = entry.password;
+      const service = new Client({ connectionString: url.toString() });
+      await service.connect();
+      try {
+        const attributes = await service.query<{
+          current_user: string;
+          rolsuper: boolean;
+          rolbypassrls: boolean;
+        }>(
+          `SELECT current_user, rolsuper, rolbypassrls
+             FROM pg_roles WHERE rolname = current_user`,
+        );
+        expect(attributes.rows[0]).toMatchObject({
+          current_user: entry.roleName,
+          rolsuper: false,
+          rolbypassrls: false,
+        });
+        await expect(service.query(
+          "SET ROLE " + service.escapeIdentifier(ownerIdentity!),
+        )).rejects.toMatchObject({ code: "42501" });
+        await expect(service.query(
+          "CREATE TABLE public.ag02_unauthorized_probe (id text)",
+        )).rejects.toMatchObject({ code: "42501" });
+        if (entry.roleName === input.runtime.roleName) {
+          await expect(service.query("SELECT id FROM platform_installations"))
+            .rejects.toMatchObject({ code: "42501" });
+          const customers = await service.query("SELECT id FROM platform_crm_customers");
+          expect(customers.rowCount).toBe(0);
+        }
+        if (entry.roleName === input.reader.roleName) {
+          await expect(service.query("UPDATE platform_memberships SET active = active"))
+            .rejects.toMatchObject({ code: "42501" });
+          await expect(service.query("SELECT id FROM platform_crm_customers"))
+            .rejects.toMatchObject({ code: "42501" });
+        }
+        if (entry.roleName === input.verifier.roleName) {
+          await expect(service.query("UPDATE platform_installations SET environment = environment"))
+            .rejects.toMatchObject({ code: "42501" });
+          await expect(service.query("SELECT application_id FROM platform_memberships"))
+            .rejects.toMatchObject({ code: "42501" });
+        }
+      } finally {
+        await service.end();
+      }
+    }
+  });
+
   it("rejects a reused serving role that already owns a non-system object", async () => {
     requireDisposable();
     const input = config();
