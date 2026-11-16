@@ -123,6 +123,17 @@ async function execute(): Promise<void> {
           result("ENQUEUE_NOPERM");
           return;
         }
+        const message = error instanceof Error ? error.message : "";
+        // Classify only known Redis errors; never emit the original message.
+        if (/NOPERM|ACL failure in script|permission denied/i.test(message)) {
+          throw new Error("REDIS_ACL_NOPERm");
+        }
+        if (/NOAUTH|WRONGPASS|invalid username-password/i.test(message)) {
+          throw new Error("REDIS_AUTH_FAILURE");
+        }
+        if (/queue|job|lock|script|eval/i.test(message)) {
+          throw new Error("QUEUE_SCRIPT_FAILURE");
+        }
         throw new Error("producer job operation failed");
       }
       return;
