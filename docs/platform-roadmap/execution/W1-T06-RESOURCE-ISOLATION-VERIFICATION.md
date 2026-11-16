@@ -1,6 +1,6 @@
 # W1-T06 — Resource Isolation Verification (Agent 04)
 
-**Assessment:** BLOCKED / NOT CERTIFIED. **Wave 1 recommendation:** NO-GO until reviewed live results exist.  
+**Assessment:** BLOCKED / NOT CERTIFIED for production. **Wave 1 recommendation:** NO-GO until app/worker and recovery gates close; the disposable infrastructure primitive tests have passed.  
 **Review date:** 2026-11-16 UTC. **Baseline:** PR #166 HEAD `a96ea073767e303b02121d87558adbd12ce111f3`.  
 **Implementation:** branch `feat/w1-t06-resource-isolation-harness-20261116` (a separate, unmerged change).  
 **Review nature:** AI-assisted infrastructure design and testing work, **not** independent Agent 06 concurrence or human sign-off.
@@ -39,17 +39,25 @@ S3 policies allow bucket list + object actions only on their **own** bucket; bac
 
 | Test group | Required observed result | Current result |
 | --- | --- | --- |
-| Redis cache A/B own access | SET succeeds for own principal | **NOT EXECUTED** locally |
-| Redis cross-read/write/delete | Redis `NOPERM` for foreign principal | **NOT EXECUTED** locally |
-| Redis global SCAN | Redis `NOPERM` (prevents foreign key enumeration) | **NOT EXECUTED** locally |
-| Redis queue enqueue, consume, retry, failed keys | Own succeeds, foreign `NOPERM`; separate worker principals | **NOT EXECUTED** locally |
-| Redis credential rotation/revocation | Old password rejected, replacement works, disabled account rejected | **NOT EXECUTED** locally |
-| S3 A/B upload/download/list | Own allowed, foreign `AccessDenied`/HTTP 403 | **NOT EXECUTED** locally |
-| Backup A | Own read allowed, foreign read and own write/delete denied | **NOT EXECUTED** locally |
-| Presigned URLs | Own valid, cross-bucket denied, expired and revoked URLs denied | **NOT EXECUTED** locally |
-| Teardown | No test users, policies, objects, buckets, keys or running Compose services remain | **NOT EXECUTED** locally |
+| Redis cache A/B own access | SET succeeds for own principal | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Redis cross-read/write/delete | Redis `NOPERM` for foreign principal | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Redis global SCAN | Redis `NOPERM` (prevents foreign key enumeration) | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Redis queue enqueue, consume, retry, failed keys | Own succeeds, foreign `NOPERM`; separate worker principals | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Redis credential rotation/revocation | Old password rejected, replacement works, disabled account rejected | **PASS** in disposable CI #43863295874 (historical SHA) |
+| S3 A/B upload/download/list | Own allowed, foreign `AccessDenied`/HTTP 403 | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Backup A | Own read allowed, foreign read and own write/delete denied | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Presigned URLs | Own valid, cross-bucket denied, expired and revoked URLs denied | **PASS** in disposable CI #43863295874 (historical SHA) |
+| Teardown | No test users, policies, objects, buckets, keys or running Compose services remain | **PASS** in disposable CI #43863295874 (historical SHA) |
 
 The harness fails closed: a missing case, unexpected allow, wrong denial error, provisioning error, missing teardown verification or runtime exception => exit nonzero. It generates `artifacts/w1t06-resource-isolation.json`, with no credentials, object contents or signed URLs.
+
+## 3A. Executed evidence (NOT production certification)
+
+- **First attempt:** [GitHub Actions #43863089624](https://github.com/AbdullahZaher/vibress/actions/runs/43863089624), head `8c533054b3a64a86163322294c2e888c2b686467`, **FAIL**. Redis/S3 negative cases recorded up to global bucket listing; MinIO returned a scoped HTTP 200 list rather than denying ListBuckets outright. All attempted disposable cleanup checks succeeded. Historical failure is intentionally retained.
+- **Corrected attempt:** [GitHub Actions #43863295874](https://github.com/AbdullahZaher/vibress/actions/runs/43863295874), head `3b42f3659f10d5bbc8210b2fcc320138c015d438`, **SUCCESS**. **38/38** required operations executed with their expected outcomes, **0 unexecuted**, and all three verified cleanup markers: `redis_users_and_keys_removed`, `s3_users_policies_buckets_removed`, `compose_removed`. The S3 global bucket list was specifically observed to be **filtered to authorized bucket(s)**; A still received actual 403 responses listing B's objects.
+- **Subsequent hardening:** Redis image and third-party GitHub Actions references were pinned; the harness now rejects Redis versions below **7.4.11**, which addresses published ACL bypasses involving `SORT` and `XREAD`. These changes require a new CI run at the **final branch HEAD** before certification; never reuse the earlier PASS as evidence of untested code.
+
+These outcomes establish only test-service ACL/IAM enforcement, not production or real-app role integration. Full CI evidence URL, resulting sanitized artifact and `head_sha` must be recorded in the release decision package. No secret values, full signed URLs or object bytes were uploaded to evidence.
 
 **Execution prerequisite:** Docker Compose v2, Python 3.12+ plus `redis==6.4.0` and `boto3==1.40.0`. In this agent environment Docker and access to a local Redis/MinIO daemon are unavailable. Thus this report does not claim a passing runtime result. GitHub Actions results must be linked by `run_id`, `head_sha`, time, failure logs and sanitized artifact.
 
@@ -62,7 +70,9 @@ The harness fails closed: a missing case, unexpected allow, wrong denial error, 
 | T06-03 | HIGH: job execution across installation risk / requires trusted runtime boundary failure | Fixed BullMQ queue names; current payload checks publication rather than install | Add authenticated installation binding at enqueue/worker execution and real BullMQ retry/replay/DLQ negative tests; Agent 03 + 04 |
 | T06-04 | MEDIUM: recovery material unavailable or over-authorized / operational exposure | Backup scripts exist; no independently checked installation-scoped restore | Restore to disposable installation, prove non-superuser restore and backup read scope, measure RPO/RTO; Agent 04 + 02 |
 | T06-05 | MEDIUM: detection / response gap | General health/metrics exist but target alert wiring not verified | Configure alerts for ACL failures, S3 403 anomalies, queue poison jobs, restore drift and error budgets; SRE |
-| T06-06 | MEDIUM: supply-chain gap in this new CI | `redis:7-alpine`, `actions/checkout@v4` and `actions/upload-artifact@v4` are version tags rather than image/action digests | Pin and validate digests/SHAs against official release, re-test, and run vulnerability review; Agent 03/04 |
+| T06-06 | MEDIUM (mitigated in new branch): CI supply-chain provenance | Initially Redis/Actions used mutable version tags; digest and action commit SHAs now pinned | Re-run at final head; independently verify pinned image, transitive Python packages and SCA output; Agent 03/04 |
+
+| T06-07 | HIGH if unpatched Redis server is deployed: published ACL key-selection bypass / requires vulnerable server + foothold | Redis 7.4.11 vendor release notes document fixes to ACL checks for `SORT`, `XREAD` and related commands | Harness now requires Redis 7.4.11+ and image digest pin; verify deployed server version/build, monitor advisories; Agent 04/06 |
 
 No finding has been risk-accepted or independently closed. Reproduction paths reflect source-visible potential, not a claim of a confirmed live exploit.
 
@@ -78,7 +88,7 @@ No finding has been risk-accepted or independently closed. Reproduction paths re
 
 ## 6. Primary external sources (consulted 2026-11-16 UTC)
 
-- Redis ACL key/command isolation: https://redis.io/docs/latest/management/security/acl/
+- Redis ACL key/command isolation: https://redis.io/docs/latest/management/security/acl/\n- Redis 7.4.11 official security release notes (August 2026): https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/release-notes/redisce/redisce-7.4-release-notes/\n- GitHub Actions secure use / pinning: https://docs.github.com/en/actions/reference/security/secure-use
 - Redis ACL command and key patterns: https://redis.io/docs/latest/manual/security/acl/
 - MinIO policy management and deny semantics: https://docs.min.io/aistor/administration/iam/access/
 - MinIO policy attach: https://docs.min.io/aistor/reference/cli/admin/mc-admin-policy/mc-admin-policy-attach/
