@@ -344,7 +344,7 @@ export function planSchemaChanges(
   if (typeof options !== "object" || options === null ||
     Reflect.ownKeys(options).length !== 2 ||
     !Object.prototype.hasOwnProperty.call(options, "expectedCurrentDigest") ||
-    !Object.prototype.hasOwnProperty.call(options, "scope") {
+    !Object.prototype.hasOwnProperty.call(options, "scope")) {
     fail("INVALID_INPUT", "options", "expected current digest and trusted scope");
   }
   const rawScope = options.scope;
