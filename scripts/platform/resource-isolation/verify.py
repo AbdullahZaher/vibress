@@ -323,6 +323,18 @@ class Lab:
                     pass
             self.failure_stage = {"role": principal, "installation": installation,
                                   "operation": mode, "category": category}
+            # Only report a restricted reason code from Redis ACL audit data.
+            # ACL LOG can contain key names, usernames and client addresses:
+            # never put those records in CI output or an artifact.
+            try:
+                audit = self.operator.execute_command("ACL", "LOG", 5)
+                reasons = sorted(set(
+                    str(row.get("reason")) for row in audit if isinstance(row, dict)
+                    and row.get("reason") in {"command", "key", "channel"}
+                ))
+                self.failure_stage["acl_denial_classes"] = reasons
+            except Exception:
+                pass
             raise CheckError("isolated worker child failed")
         records = [line for line in result.stdout.splitlines()
                    if line.startswith('{"status":')]
