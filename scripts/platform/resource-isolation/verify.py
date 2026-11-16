@@ -213,10 +213,12 @@ class Lab:
         for suffix in ("a", "b", "wa", "wb"):
             user = "w1t06_" + suffix
             password = secrets.token_hex(24)
-            pattern = "~" + self.prefix + ("a:" if suffix in ("a", "wa") else "b:") + "*"
+            scoped_namespace = self.prefix + ("a:" if suffix in ("a", "wa") else "b:") + "*"
+            pattern = "~" + scoped_namespace
+            channel_pattern = "&" + scoped_namespace
             self.operator.execute_command(
                 "ACL", "SETUSER", user, "reset", "on", ">" + password,
-                pattern, "resetchannels", "+@all", "-@dangerous",
+                pattern, "resetchannels", channel_pattern, "+@all", "-@dangerous",
                 "-keys", "-scan", "-randomkey", "-dbsize", "-monitor",
                 "-flushall", "-flushdb", "-acl", "-config",
                 # BullMQ requires Lua script commands; allow only these
