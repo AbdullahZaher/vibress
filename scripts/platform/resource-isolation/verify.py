@@ -47,6 +47,7 @@ CASES = [
     "s3_restore_source_read", "s3_restore_target_write",
     "s3_restore_checksum_match", "s3_restore_foreign_read_denied",
     "s3_backup_a_restore_bucket_denied",
+    "bullmq_real_webhook_worker_a", "bullmq_real_webhook_worker_b",
 ]
 
 
@@ -331,6 +332,12 @@ class Lab:
                 "normal-a", "CONSUMED")
         outcome("bullmq_b_worker_consumes", "worker", "wb", "b",
                 "normal-b", "CONSUMED")
+        self.node_case(port, "producer", "a", "a", "domain-a")
+        outcome("bullmq_real_webhook_worker_a", "domain-worker", "wa", "a",
+                "domain-a", "DOMAIN_CONSUMED")
+        self.node_case(port, "producer", "b", "b", "domain-b")
+        outcome("bullmq_real_webhook_worker_b", "domain-worker", "wb", "b",
+                "domain-b", "DOMAIN_CONSUMED")
         outcome("bullmq_a_retry_completes", "producer", "a", "a",
                 "retry-a", "ENQUEUED", "retry")
         result = self.node_case(port, "worker", "wa", "a", "retry-a", "retry")
@@ -562,7 +569,7 @@ class Lab:
                   "service_versions": getattr(self, "service_versions", {}),
                   "recovery_metrics": getattr(self, "recovery_metrics", {}),
                   "scope": "disposable Redis/S3 and real BullMQ processes only",
-                  "limits": ["Real @vibress/queue BullMQ API/Worker processes, not full domain workers",
+                  "limits": ["Real WebhookDeliveryWorker with mocked outbound side effect; not a complete Webhook/DB integration",
                              "Domain-level installation admission and DB privileges still unverified",
                              "No PostgreSQL restore; S3 recovery is disposable only, not RPO/RTO approval"]}
         REPORT.parent.mkdir(parents=True, exist_ok=True)
