@@ -48,6 +48,12 @@ CASES = [
     "s3_restore_checksum_match", "s3_restore_foreign_read_denied",
     "s3_backup_a_restore_bucket_denied",
     "bullmq_real_webhook_worker_a", "bullmq_real_webhook_worker_b",
+    "pg_worker_a_own_read", "pg_worker_b_own_read",
+    "pg_worker_a_cross_database_denied", "pg_worker_b_cross_database_denied",
+    "pg_worker_a_admin_table_denied", "pg_backup_a_read_only",
+    "pg_backup_a_cross_database_denied", "pg_backup_a_write_denied",
+    "pg_backup_a_dump", "pg_restore_a_checksum",
+    "pg_restore_b_contamination_absent",
 ]
 
 
@@ -71,8 +77,10 @@ class Lab:
         self.name = "w1t06" + secrets.token_hex(5)
         self.root_user = "w1t06root"
         self.root_password = secrets.token_hex(24)
+        self.pg_password = secrets.token_hex(24)
         self.env = dict(os.environ, T06_ROOT_USER=self.root_user,
-                        T06_ROOT_PASSWORD=self.root_password)
+                        T06_ROOT_PASSWORD=self.root_password,
+                        T06_PG_PASSWORD=self.pg_password)
         self.prefix = "t06:" + self.name + ":"
         self.redis_users: list[str] = []
         self.s3_users: list[str] = []
@@ -489,6 +497,134 @@ class Lab:
             "full_recovery_certified": False,
         }
 
+    def pg_admin(self, database: str, sql: str):
+        return self.compose("exec", "-T", "postgres", "psql", "-X", "-At",
+                            "-U", "t06admin", "-d", database,
+                            "-v", "ON_ERROR_STOP=1", check=True,
+                            input_text=sql).stdout.strip()
+
+    def pg_as(self, role: str, database: str, sql: str, *, dump=False):
+        # No password or secret is passed on process command-line arguments.
+        # Temporary pgpass file is in the self-owned disposable container.
+        if dump:
+            return self.compose("exec", "-T", "-e", "PGPASSFILE=/tmp/t06.pgpass",
+                                "postgres", "pg_dump", "-h", "127.0.0.1",
+                                "-U", role, "-d", database,
+                                "--data-only", "--column-inserts",
+                                "--table=public.worker_state", check=False)
+        return self.compose("exec", "-T", "-e", "PGPASSFILE=/tmp/t06.pgpass",
+                            "postgres", "psql", "-h", "127.0.0.1",
+                            "-U", role, "-d", database, "-X", "-At",
+                            "-v", "ON_ERROR_STOP=1", "-c", sql, check=False)
+
+    def postgres_matrix(self):
+        # The disposable database superuser is strictly a setup operator.
+        # The application/worker and backup roles are non-superusers.
+        identities = {
+            "t06_worker_a": secrets.token_hex(24),
+            "t06_worker_b": secrets.token_hex(24),
+            "t06_backup_a": secrets.token_hex(24),
+            "t06_owner_a": secrets.token_hex(24),
+            "t06_owner_b": secrets.token_hex(24),
+        }
+        statements = []
+        for role, password in identities.items():
+            statements.append(
+                "CREATE ROLE " + role +
+                " LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS "
+                "PASSWORD '" + password + "';")
+        self.pg_admin("postgres", "\n".join(statements))
+        for suffix in ("a", "b"):
+            self.pg_admin("postgres",
+                "CREATE DATABASE t06_db_" + suffix + " OWNER t06_owner_" + suffix + ";")
+            self.pg_admin("postgres",
+                "REVOKE ALL ON DATABASE t06_db_" + suffix + " FROM PUBLIC;"
+                "GRANT CONNECT ON DATABASE t06_db_" + suffix + " TO t06_worker_" + suffix + ";")
+            self.pg_admin("t06_db_" + suffix,
+                "CREATE TABLE public.worker_state(payload text PRIMARY KEY);"
+                "CREATE TABLE public.platform_admin_marker(secret text);"
+                "INSERT INTO public.worker_state VALUES ('" + suffix.upper() + "_MARKER');"
+                "REVOKE ALL ON public.worker_state FROM PUBLIC;"
+                "REVOKE ALL ON public.platform_admin_marker FROM PUBLIC;"
+                "GRANT SELECT ON public.worker_state TO t06_worker_" + suffix + ";")
+        self.pg_admin("postgres",
+            "GRANT CONNECT ON DATABASE t06_db_a TO t06_backup_a;")
+        self.pg_admin("t06_db_a",
+            "GRANT SELECT ON public.worker_state TO t06_backup_a;")
+        entries = []
+        for role, password in identities.items():
+            entries.append(f"127.0.0.1:5432:*:{role}:{password}")
+        self.compose("exec", "-T", "postgres", "sh", "-c",
+                     "umask 077; cat > /tmp/t06.pgpass; chmod 600 /tmp/t06.pgpass",
+                     input_text="\n".join(entries) + "\n")
+
+        for suffix in ("a", "b"):
+            role = "t06_worker_" + suffix
+            own = self.pg_as(role, "t06_db_" + suffix,
+                             "SELECT session_user || ':' || payload FROM public.worker_state")
+            if own.returncode != 0 or own.stdout.strip() != role + ":" + suffix.upper() + "_MARKER":
+                raise CheckError("Worker did not authenticate using its own DB role")
+            self.cases["pg_worker_" + suffix + "_own_read"] = "AUTHENTICATED_READ_OBSERVED"
+            foreign = "b" if suffix == "a" else "a"
+            denied = self.pg_as(role, "t06_db_" + foreign, "SELECT 1")
+            if denied.returncode == 0 or "permission denied for database" not in denied.stderr.lower():
+                raise CheckError("Foreign worker DB connection unexpectedly allowed")
+            self.cases["pg_worker_" + suffix + "_cross_database_denied"] = "DB_CONNECT_DENIED_OBSERVED"
+
+        denied = self.pg_as("t06_worker_a", "t06_db_a",
+                            "SELECT * FROM public.platform_admin_marker")
+        if denied.returncode == 0 or "permission denied" not in denied.stderr.lower():
+            raise CheckError("Worker A read privileged owner table")
+        self.cases["pg_worker_a_admin_table_denied"] = "DB_SELECT_DENIED_OBSERVED"
+
+        backup = self.pg_as("t06_backup_a", "t06_db_a",
+                            "SELECT payload FROM public.worker_state")
+        if backup.returncode or backup.stdout.strip() != "A_MARKER":
+            raise CheckError("Backup principal cannot read authorized table")
+        self.cases["pg_backup_a_read_only"] = "BACKUP_READ_OBSERVED"
+        denied = self.pg_as("t06_backup_a", "t06_db_b", "SELECT 1")
+        if denied.returncode == 0 or "permission denied for database" not in denied.stderr.lower():
+            raise CheckError("Backup A accessed DB B")
+        self.cases["pg_backup_a_cross_database_denied"] = "DB_CONNECT_DENIED_OBSERVED"
+        denied = self.pg_as("t06_backup_a", "t06_db_a",
+                            "UPDATE public.worker_state SET payload='BAD'")
+        if denied.returncode == 0 or "permission denied" not in denied.stderr.lower():
+            raise CheckError("Backup A modified its own source data")
+        self.cases["pg_backup_a_write_denied"] = "DB_WRITE_DENIED_OBSERVED"
+
+        restore_started = time.monotonic()
+        snapshot_at = time.time()
+        dump = self.pg_as("t06_backup_a", "t06_db_a", "", dump=True)
+        if dump.returncode or "A_MARKER" not in dump.stdout or "B_MARKER" in dump.stdout:
+            raise CheckError("Backup-role dump failed or crossed installation boundary")
+        self.cases["pg_backup_a_dump"] = "BACKUP_ROLE_PG_DUMP_OBSERVED"
+        self.pg_admin("postgres", "CREATE DATABASE t06_db_a_recovered OWNER t06_owner_a;"
+                      "REVOKE ALL ON DATABASE t06_db_a_recovered FROM PUBLIC;"
+                      "GRANT CONNECT ON DATABASE t06_db_a_recovered TO t06_worker_a;")
+        self.pg_admin("t06_db_a_recovered", "CREATE TABLE public.worker_state(payload text PRIMARY KEY);")
+        self.pg_admin("t06_db_a_recovered", dump.stdout)
+        original = self.pg_admin("t06_db_a",
+                                  "SELECT payload FROM public.worker_state ORDER BY payload;")
+        recovered = self.pg_admin("t06_db_a_recovered",
+                                  "SELECT payload FROM public.worker_state ORDER BY payload;")
+        if original != recovered or recovered != "A_MARKER":
+            raise CheckError("PostgreSQL restored state differs from installation A backup")
+        self.cases["pg_restore_a_checksum"] = "PG_RESTORED_ROWS_MATCH_OBSERVED"
+        absent = self.pg_admin("t06_db_a_recovered",
+                               "SELECT COUNT(*) FROM public.worker_state WHERE payload LIKE 'B_%';")
+        if absent != "0":
+            raise CheckError("Installation B row contaminated A recovery DB")
+        self.cases["pg_restore_b_contamination_absent"] = "NO_FOREIGN_ROWS_OBSERVED"
+        self.pg_recovery_metrics = {
+            "table_level_pg_restore_seconds": round(time.monotonic() - restore_started, 3),
+            "snapshot_age_seconds_at_end": round(time.time() - snapshot_at, 3),
+            "recovery_type": "disposable single-table SQL data-only replay",
+            "full_vibress_backup_restore": "NOT_EXECUTED",
+            "owner_approved_rpo_target": None,
+            "owner_approved_rto_target": None,
+            "production_rpo_rto_certified": False,
+        }
+
     def teardown(self):
         # This stack was created under a random dedicated project name; never
         # run cleanup against host-wide or shared infrastructure.
@@ -542,6 +678,7 @@ class Lab:
             self.compose("up", "-d", "--wait")
             redis_port, s3_port = self.port("redis", 6379), self.port("minio", 9000)
             self.provision(redis_port, s3_port)
+            self.postgres_matrix()
             self.bullmq_matrix(redis_port)
             self.redis_matrix(redis_port)
             self.s3_matrix(s3_port)
@@ -568,10 +705,11 @@ class Lab:
                   "cleanup": self.cleanup, "error_class": fatal,
                   "service_versions": getattr(self, "service_versions", {}),
                   "recovery_metrics": getattr(self, "recovery_metrics", {}),
+                  "pg_recovery_metrics": getattr(self, "pg_recovery_metrics", {}),
                   "scope": "disposable Redis/S3 and real BullMQ processes only",
                   "limits": ["Real WebhookDeliveryWorker with mocked outbound side effect; not a complete Webhook/DB integration",
                              "Domain-level installation admission and DB privileges still unverified",
-                             "No PostgreSQL restore; S3 recovery is disposable only, not RPO/RTO approval"]}
+                             "Disposable PG table-level and S3 object recovery are not full platform restore or approved RPO/RTO"]}
         REPORT.parent.mkdir(parents=True, exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(json.dumps(report, sort_keys=True))
