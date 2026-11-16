@@ -139,6 +139,13 @@ export class ProductionOidcAuthenticationAdapter {
           claims.aud[0] === this.#config.audience)) {
       throw new IdentityDeniedError("invalid_token_profile");
     }
+    // RFC 9068 requires jti; reject ambiguous/non-unique token identifiers.
+    // Token replay prevention still requires an approved authoritative session
+    // or sender-constrained token service (not supplied by this offline adapter).
+    if (typeof claims.jti !== "string" || claims.jti.trim() === "" ||
+        claims.jti.length > 256 || /[\\u0000-\\u001f\\u007f]/.test(claims.jti)) {
+      throw new IdentityDeniedError("invalid_token_profile");
+    }
     if (typeof claims.exp !== "number" || typeof claims.iat !== "number" ||
         claims.exp <= claims.iat ||
         claims.exp - claims.iat > this.#maxLifetime) {
