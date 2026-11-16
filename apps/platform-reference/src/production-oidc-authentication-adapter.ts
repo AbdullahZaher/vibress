@@ -143,7 +143,7 @@ export class ProductionOidcAuthenticationAdapter {
     // Token replay prevention still requires an approved authoritative session
     // or sender-constrained token service (not supplied by this offline adapter).
     if (typeof claims.jti !== "string" || claims.jti.trim() === "" ||
-        claims.jti.length > 256 || /[\\u0000-\\u001f\\u007f]/.test(claims.jti)) {
+        claims.jti.length > 256 || [...claims.jti].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)) {
       throw new IdentityDeniedError("invalid_token_profile");
     }
     if (typeof claims.exp !== "number" || typeof claims.iat !== "number" ||
