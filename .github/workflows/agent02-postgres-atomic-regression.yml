@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/agent02-ag06-05-atomic-20261116
+      - integration/wave1-final-remediation-20261116
   workflow_dispatch:
 
 permissions:
