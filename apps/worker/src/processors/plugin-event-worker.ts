@@ -1,5 +1,6 @@
 import {
-  Worker, Queue, QUEUE_NAMES, getBullMqRedisConnection, enqueueTraced,
+  Worker, Queue, QUEUE_NAMES, getBullMqRedisConnection,
+  getQueueIsolationOptions, enqueueTraced,
 } from "@vibress/queue";
 import {
   PluginWorkerEventJobSchema, type PluginWorkerEventJob,
@@ -197,6 +198,7 @@ export class PluginEventWorker {
     await pluginEventLedger.assertReady();
     this.producer = new Queue<PluginWorkerEventJob>(QUEUE_NAMES.PLUGIN_EVENTS, {
       connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
     });
     this.worker = new Worker<PluginWorkerEventJob>(
       QUEUE_NAMES.PLUGIN_EVENTS,
@@ -214,6 +216,7 @@ export class PluginEventWorker {
       }),
       {
         connection: getBullMqRedisConnection(),
+        ...getQueueIsolationOptions(),
         concurrency: 2,
       },
     );
