@@ -7,6 +7,7 @@ Requires: Docker Compose v2, Python 3.12+, redis and boto3.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -43,6 +44,9 @@ CASES = [
     "bullmq_b_cross_inspect_denied", "bullmq_b_cross_worker_denied",
     "bullmq_a_retry_completes", "bullmq_a_replay_deduplicates",
     "bullmq_a_poison_dead_letter", "bullmq_b_cross_dead_letter_denied",
+    "s3_restore_source_read", "s3_restore_target_write",
+    "s3_restore_checksum_match", "s3_restore_foreign_read_denied",
+    "s3_backup_a_restore_bucket_denied",
 ]
 
 
@@ -427,6 +431,57 @@ class Lab:
         self.deny_s3("s3_a_revoked_denied", lambda: a.get_object(Bucket=ba, Key="own.txt"))
         self.deny_url("s3_signed_revoked_denied", revoked_signed)
 
+    def recovery_matrix(self, port):
+        # Object-storage-only recovery into a NEW isolated bucket. PostgreSQL
+        # recovery is explicitly not represented by these tests.
+        root = self.s3(self.root_user, self.root_password, port)
+        backup = self.s3(*self.s3_passwords["backup_a"], port)
+        source_bucket = self.bucket_a
+        bucket = "t06-" + self.name + "-restore"
+        user = "t06" + self.name + "restore"
+        policy = "p" + user
+        password = secrets.token_hex(24)
+        self.mc("mb", "local/" + bucket)
+        self.buckets.append(bucket)
+        path = self.policy_file(policy, self.s3_policy(bucket))
+        self.mc("admin", "policy", "create", "local", policy, path)
+        self.s3_policies.append(policy)
+        self.mc("admin", "user", "add", "local", user, password)
+        self.s3_users.append(user)
+        self.mc("admin", "policy", "attach", "local", policy, "--user", user)
+        restore = self.s3(user, password, port)
+
+        # The snapshot content is read by the read-only backup identity, not
+        # by a privileged root used to provision IAM.
+        started = time.monotonic()
+        snapshot_at = time.time()
+        body = backup.get_object(Bucket=source_bucket, Key="own.txt")["Body"].read()
+        if body != b"own":
+            raise CheckError("source backup content unexpected")
+        digest = hashlib.sha256(body).hexdigest()
+        self.cases["s3_restore_source_read"] = "BACKUP_READ_OBSERVED"
+        restore.put_object(Bucket=bucket, Key="own.txt", Body=body)
+        self.cases["s3_restore_target_write"] = "ISOLATED_RESTORE_WRITE_OBSERVED"
+
+        recovered = restore.get_object(Bucket=bucket, Key="own.txt")["Body"].read()
+        objects = restore.list_objects_v2(Bucket=bucket).get("Contents", [])
+        if hashlib.sha256(recovered).hexdigest() != digest or \
+           sorted(x["Key"] for x in objects) != ["own.txt"]:
+            raise CheckError("object restore checksum mismatch or foreign data present")
+        self.cases["s3_restore_checksum_match"] = "CHECKSUM_MATCH_OBSERVED"
+        self.deny_s3("s3_restore_foreign_read_denied",
+                     lambda: restore.get_object(Bucket=self.bucket_b, Key="private.txt"))
+        self.deny_s3("s3_backup_a_restore_bucket_denied",
+                     lambda: backup.get_object(Bucket=bucket, Key="own.txt"))
+        self.recovery_metrics = {
+            "object_restore_seconds": round(time.monotonic() - started, 3),
+            "snapshot_age_seconds_at_end": round(time.time() - snapshot_at, 3),
+            "postgres_restore": "NOT_EXECUTED",
+            "owner_approved_rpo_target": None,
+            "owner_approved_rto_target": None,
+            "full_recovery_certified": False,
+        }
+
     def teardown(self):
         # This stack was created under a random dedicated project name; never
         # run cleanup against host-wide or shared infrastructure.
@@ -483,6 +538,7 @@ class Lab:
             self.bullmq_matrix(redis_port)
             self.redis_matrix(redis_port)
             self.s3_matrix(s3_port)
+            self.recovery_matrix(s3_port)
         except Exception as exc:
             # No exception body from external SDK/CLI ever enters the report.
             fatal = type(exc).__name__
@@ -504,10 +560,11 @@ class Lab:
                   "unexecuted": sorted(expected - passed),
                   "cleanup": self.cleanup, "error_class": fatal,
                   "service_versions": getattr(self, "service_versions", {}),
+                  "recovery_metrics": getattr(self, "recovery_metrics", {}),
                   "scope": "disposable Redis/S3 and real BullMQ processes only",
                   "limits": ["Real @vibress/queue BullMQ API/Worker processes, not full domain workers",
                              "Domain-level installation admission and DB privileges still unverified",
-                             "Not a production backup restore or capacity test"]}
+                             "No PostgreSQL restore; S3 recovery is disposable only, not RPO/RTO approval"]}
         REPORT.parent.mkdir(parents=True, exist_ok=True)
         REPORT.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(json.dumps(report, sort_keys=True))
