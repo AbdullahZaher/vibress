@@ -83,3 +83,18 @@ Keep the recorded 8.3/10 baseline. No independent evidence yet justifies a new n
 ## G. Final technical recommendation
 
 WAVE 1 — NO-GO. An isolated reviewable integration candidate and several safe remediations exist, but final combined CI, updated independent technical review, real production-shaped infrastructure and identity isolation, R26/F-012 dispositions, governance approvals and a human security sign-off are still mandatory. Do not merge #166, deploy to production, dismiss review findings or start Wave 2.
+
+
+## Integration continuation — Agent 01 (2026-11-16, PR #189)
+
+**NO-GO. Engineering evidence only; no human security signature.**
+
+- Source base PR #176 `3df799b365f8933d8cea234c403beb189a139335`. Dedicated nonproduction branch `integration/wave1-final-remediation-20261116`, Draft PR #189 targeting Wave 1 PR #166 branch. No merges or production operations.
+- Imported Agent 02 PR #187 at `dfcedbf1da72601261015876bd823da05b834784`: 5 files, commit `5661386ea550ef139769e21fcffd7a42652938e0`.
+- Imported Agent 04 PR #174 at `e5a43dc1e736dc7e9dd64843f6e25fbbfc113d23`: 21 files, same commit. Disposable 67-case proof is historical, not staging or full-platform DR.
+- Imported Agent 03 PR #188 at `ae7b6eb4a8ca9a09c6518e6bfc4a66b0a8942a4c`: 12 files, excluding its PR-specific CI branch trigger and conflicting OIDC adapter. Commit `d2f4c4f3ba39649a1b1aceed26ba38658c664796`.
+- Imported Agent 05 PR #173 at `99549c687678a2fe3581359eca2e5ec32e959a67`: four identity decision documents; OIDC code reconciled in `429913c5d84131917bc8da07268da8f276358617`.
+- Reconciliation preserves trusted membership-derived `permissions` from Agent 03 and RFC 9068 `jti` enforcement from Agent 05; adds negative malformed/missing jti tests. RouteExecutor must recheck current membership; jti is not itself replay prevention.
+- Branch-scoped full CI trigger committed `491fe26b03c670b5c635e7be477d2ea862614e8a`; workflow #43896862303 triggered; status must be refreshed and actual checkout SHA recorded.
+- Outstanding: Node 25 Docker mismatch against Node 24 engines and immutable image digest; Fastify >=5.12.8 lockfile upgrade (handlerTimeout=0 is mitigation only); artifact attestations/SBOM/provenance; R26 A/B; F-012 A/B; full Worker/DB/PITR restore, staging IdP and identities; human approvals; independent Agent 06 re-audit.
+- Original quality score remains **8.3/10**. No release GO, merge, risk acceptance or Wave 2.
