@@ -159,3 +159,10 @@ Full decision-ready evidence, role matrix and mandatory remaining gates: WAVE-01
 ### CI observation refresh — 2026-11-16 (post-integration documentation)
 
 At a subsequent direct read of [run 43870098128](https://github.com/AbdullahZaher/vibress/actions/runs/43870098128) on `63c47b3adda183d816727edc7b590979b2a8c2da`, the workflow was still **IN PROGRESS**: `build SUCCESS`, `platform-reference-e2e SUCCESS`, `e2e IN PROGRESS`, and **`container-scan CANCELLED`**. The independent `resource-isolation` check had returned SUCCESS on this SHA. The cancellation means the run cannot be counted as all mandatory checks passing even if later jobs complete. Inspect cancellation reason and rerun with proper attribution; do not hide historical cancellation. The governance-doc HEAD at this inspection was `2f46aa3f64afe11238af289a3fc0b3959e998aae`; this new packet edit changes it again. **No PASS claim for any later HEAD**.
+
+
+### Agent 01 integration execution addendum — PR #189 (2026-11-16)
+
+**NO-GO / NOT APPROVED.** Dedicated branch `integration/wave1-final-remediation-20261116` was created from PR #176 HEAD `3df799b365f8933d8cea234c403beb189a139335`. Imported Agent 02 PR #187 `dfcedbf1d`, Agent 04 PR #174 `e5a43dc1`, scoped Agent 03 PR #188 `ae7b6eb4`, and Agent 05 PR #173 identity evidence `99549c68`. The OIDC adapter reconciles server-side membership permissions with required `jti` validation and negative tests. See [six-agent integration record](WAVE-01-SIX-AGENT-INTEGRATION-2026-11-16.md) and [Draft PR #189](https://github.com/AbdullahZaher/vibress/pull/189).
+
+CI #43896862303 was triggered on initial integration commit `491fe26b03c670b5c635e7be477d2ea862614e8a`; its result is **not certified for this subsequent documentation HEAD**. Node 24 immutable image, Fastify patched lockfile, artifact provenance, R26 A/B, F-012 A/B, IdP/staging authorization, full restore, branch protection and human/Agent 06 reviews remain BLOCKED. Quality baseline **8.3/10**, no risk acceptance, no GO/merge/Wave 2.
