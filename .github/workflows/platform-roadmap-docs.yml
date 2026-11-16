@@ -1,0 +1,39 @@
+name: Platform Roadmap Documentation
+
+on:
+  pull_request:
+    paths:
+      - 'docs/platform-roadmap/**'
+      - 'docs/README.md'
+      - 'scripts/verify-platform-roadmap.mjs'
+      - '.github/workflows/platform-roadmap-docs.yml'
+  push:
+    branches:
+      - main
+      - 'docs/universal-platform-master-roadmap-*'
+    paths:
+      - 'docs/platform-roadmap/**'
+      - 'docs/README.md'
+      - 'scripts/verify-platform-roadmap.mjs'
+      - '.github/workflows/platform-roadmap-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-roadmap-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-roadmap:
+    name: Validate links, milestones, epics and rubric
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Check roadmap document consistency (no network or secrets)
+        run: node scripts/verify-platform-roadmap.mjs

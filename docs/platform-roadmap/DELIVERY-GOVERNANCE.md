@@ -1,0 +1,94 @@
+# Delivery Governance, GitHub Organization and Definition of Done
+
+> **PROPOSED / NOT CERTIFIED** · 2026-11-14 · Based on `main` at `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`.
+>
+> Planning content only: existence of a document or issue does **not** mean code shipped or production was approved. New `M00–M12` IDs do not replace the existing Plugin Platform `M0–M6` roadmap.
+
+## Hierarchy
+
+Wave → master milestone (`M00`–`M12`) → epic (`M03-E02`) → engineering Issue → PR → immutable CI/evidence → owner sign-off. Existing plugin milestone `M0–M6` IDs remain unchanged. The 13 master milestone tracker Issues are **not** native GitHub Milestones unless separately created through supported permissions/tooling.
+
+## Work item template
+
+- **Problem / desired outcome**, acceptance criteria and explicit non-goals.
+- **Existing code** and ADR references, public contract changes and expected dependencies.
+- **Security model**: affected app/tenant/principal/permission and denied operations.
+- **Data migration and versioning**: expand-contract, operator approval, rollback or forward-fix.
+- **Tests and evidence**: unit, integration, real PG, security, E2E, accessibility, clean consumer, fault injections.
+- **Operational impact**: feature flag, monitoring, logs, runbook and restoration.
+- **Change record**: PR, immutable SHA, CI logs, reviewer and decision.
+
+Naming: `[Platform M03][E02] Resource registry — canonical IR`. Suggested labels after checking existence: `area:kernel`, `area:tenancy`, `area:schema`, `area:plugins`, `area:builder`, `area:ai`, `priority:P0`, `type:security`.
+
+## Definition of Ready
+
+Scope and non-goals agreed; dependencies named; API/Schema ADR drafted; threat/tenant model clear; migration and compatibility plans specified; test fixtures and reviewers assigned.
+
+## PR-level Definition of Done
+
+- Build, strict typecheck, lint, unit, integration and required contracts pass at immutable SHA.
+- Tenant/authorization negative tests for affected runtime surfaces; secrets/dependency/container scans as appropriate.
+- Actual PostgreSQL migration and backfill tests for persistence changes; no edited released migrations.
+- CMS/Studio compatibility fixtures and E2E where impacted; RTL/a11y tests for UI.
+- No new forbidden imports; public SDK documented and semver decisions explained.
+- Restore/rollback or forward-fix defined; accepted alerts/metrics and sign-off linked.
+
+## Milestone closure
+
+Every mandatory epic closed with direct evidence, immutable CI links, pinned DB/runtime fixtures, reviewer, accepted exceptions and explicit milestone decision. A checkbox is not evidence of production certification. Separate independent audit acceptance is compulsory for M08 GA.
+
+## Working rules
+
+Keep plan on a separate documentation branch and Draft PR until reviewed. Make small implementation PRs on focused branches; never rewrite old evidence ledgers or deploy automatically from roadmap merge. Do not invent calendars, budgets, teams, claimed quality scores or a completion percentage. Deliver runnable code-first application framework before building Wix-style editor or PaaS.
+
+
+## Review-driven mandatory gates (addition)
+
+- **G0 design (M00 → M01):** record ownership and status of ADR-PLAT-001..010; **approve 001/002 and review the 003 security transaction spike before kernel extraction**. ADR-PLAT-004/005/009 are decision gates for M03/M04, 006 for M05, and 007/008/010 for M08; do not block early isolated prototyping on speculative sign-off of later features. Any unresolved *applicable* ADR blocks the affected release; an ADR is not runtime evidence.
+- **G1 early security:** before M01 is enabled for external consumers, topology and identity are accepted; prototypes use isolated dev environments. M02 requires a real Postgres RLS/transaction proof before any tenant production onboarding.
+- **G2 compiler:** M03/M04 cannot release generated SQL/endpoints without schema input trust policy, scoped execution, negative policy tests, unsafe migration denial and independent consumer fixtures.
+- **G3 v1 cut:** M07/M08 require an independent **custom endpoint/action and end-user CRM page**, plus **CMS + CRM** as mandatory Golden Apps; the three other full Golden Apps are later product acceptance tracks. MVP minimum event/workflow/Module SDK is specified in [v1 scope](V1-SCOPE-AND-RELEASE-CRITERIA.md).
+- **G4 release:** M08 is a GA GO/NO-GO decision with independently reviewed evidence and no automatic certificate; rollback is only promised for tested reversible/compatible changes.
+
+## Evidence schema (required per ticket)
+
+`{ requirementId, issue, PR, codeCommitSHA, testName, testRunURL, environment, postgresVersion, fixtureSHA, negativeCase, migrationPlanSHA?, runtimeArtifactDigest?, reviewer, reviewedAt, decision, exceptions? }`.
+
+Review high-risk findings in [PR review register](REVIEW-FINDINGS-2026-11-14.md). A docs-only PR does not satisfy code/testing gates. Assign a DR/security owner and a durable evidence location before closing M00.
+
+## Roadmap assessment and risk handoff
+
+The [second-review scored assessment](SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) rates this written plan **8.0/10**, not Vibress software or CI readiness. R17–R25 are documented corrections with unresolved implementation obligations; document/Issue acceptance is distinct from production verification. Owners, actual capacity/sequence, budget, SLIs/SLOs and the evidence schema must be agreed before milestone closure.
+
+## R26–R34 acceptance and product-development proof
+
+The [third review and current 8.0/10 editorial score](THIRD-REVIEW-AND-RATING-2026-11-14.md) **do not increase** the earlier score merely for expanding docs. DB/architecture owner must explicitly accept PUBLIC/inherited function ACL and RLS policy-composition tests; operations owners must prove per-installation PostgreSQL/Redis/object-storage access denial; trusted runtime owners must document custom code boundaries; release lead must own the [rolling compatibility matrix](UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+Define *one measurable first-adopter hypothesis* for the code-first CRM, actual developer interviews/installation trials, comparator-matched tasks and an owner/capacity/decision log before promising competitive superiority. Planned project dates cannot be invented from M/L/XL/XXL sizes.
+
+This PR's manual link/ID check is **not** the CI documentation validator. M00 must implement and attach SHA-specific evidence for the repo-wide link, heading, epic ID, ADR cross-reference, release-scope and scorecard checker. Escalate failure or ownerless blockers rather than marking issues done.
+
+## Fourth-pass implementation prioritization and bounded backlog
+
+Use the [Execution-First Slice](EXECUTION-FIRST-SLICE.md) as the recommended M00-to-v1 P0 design/P0 GA ordering. The 140 existing milestone Epic IDs already cover R35–R39: **do not create a new Epic merely because a reviewer found another acceptance test**. Map PostgreSQL view access, scoped backups, nested transaction failure, existing CMS identity migration and developer adoption to M00–M08 owners and small implementation PRs.
+
+A review finding is **documented**, not **resolved**, until the affected runtime/SQL/Studio fixture has an immutable implementation SHA, negative test, repeatable environment and owner decision. Real owners, capacity and schedules must be assigned separately. The previous roadmap **8.0/10** remains a qualitative editorial assessment and conveys no GA authorization.
+
+
+## Documentation automation and proof separation
+
+A deterministic, no-dependency [roadmap validator](../../scripts/verify-platform-roadmap.mjs) and [GitHub Actions workflow](../../.github/workflows/platform-roadmap-docs.yml) are now included in the PR. It verifies local file/heading links, milestone coverage, unique Epic IDs, tracker issue numbering, v1 CMS+CRM scope markers and **historical** weighted score arithmetic. The check is **documentation-only**, not RLS, tenant, Studio, migration or runtime certification. Cite a **successful run on the final PR SHA**, not a green run from an earlier commit.
+
+**Required evidence and versioning:** use [Release Evidence & GO/NO-GO Ledger](RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) and [Runtime Version Matrix](RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md). Runtime owner sign-off and actual implementation artifact tests are separate. New Program-level date/owner/status claims must be backed by evidence.
+
+## International design control sign-off (conditional)
+
+The [Final Design Baseline Review](FINAL-DESIGN-BASELINE-APPROVAL.md) recommends approval **only as an M00 implementation-planning baseline**. It lists **A1–A8 OPEN** decisions for topology, release versions, AppSec/ASVS, SSDF vulnerability response, SLSA provenance, accessibility, CMS/Studio compatibility, resourcing and final CI/owner review. An AI-assisted editorial recommendation is not a signed Architecture Review Board decision.
+
+Use the [standards alignment](INTERNATIONAL-STANDARDS-ALIGNMENT.md) as a *traceability and verification plan* for NIST SSDF, OWASP ASVS 5.0.0, ISO 27001/25010, SLSA 1.2 and WCAG 2.2. No ISO certification, ASVS level, SLSA level or WCAG conformance has been established. Existing [SECURITY.md](../../SECURITY.md) remains the live disclosure policy until an authorized maintainer updates its version support.
+
+Do not change PR #151 from Draft or merge it by inference from this review. Record explicit human sign-offs and re-run CI on the final immutable SHA before organizational approval.
+
+## Documentation CI requirement
+
+The initial automated local-link/heading, milestone/Epic ID, issue-number and score arithmetic checker is implemented in this PR; GitHub Actions must **pass on the final commit**. **Remaining enhancements:** remote GitHub issue-body parity, reference link styles, full orphan-document indexing, signed ADR status and runtime evidence validation need separate work; do not claim the first checker covers these.

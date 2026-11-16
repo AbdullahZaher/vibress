@@ -115,3 +115,34 @@ vibress-ecosystem/
 - `13-roadmap/` — recommended implementation phases
 
 This documentation defines **Architecture v1** for Vibress.
+
+## Universal Application Platform — proposed master roadmap (2026-11-14)
+
+**Third-pass review and rating (English canonical):** [R26–R34 and 8.0/10 assessment](platform-roadmap/THIRD-REVIEW-AND-RATING-2026-11-14.md) · [PostgreSQL effective ACL/RLS controls](platform-roadmap/POSTGRES-PRIVILEGE-AND-RLS-THREAT-MODEL.md) · [App installation trust and integration](platform-roadmap/APP-INSTALLATION-TRUST-AND-OPERATIONS.md) · [Version-skew/upgrade matrix](platform-roadmap/UPGRADE-COMPATIBILITY-AND-DEPLOYMENT.md).
+
+**Second-pass review and rating (English canonical):** [8.0/10 roadmap assessment and findings R17–R25](platform-roadmap/SECOND-REVIEW-AND-SCORECARD-2026-11-14.md) · [General code-first app runtime](platform-roadmap/APPLICATION-RUNTIME-AND-EXTENSIBILITY.md) · [Data lifecycle and operations](platform-roadmap/DATA-LIFECYCLE-AND-OPERATIONS.md).
+
+**Security/architecture review:** [2026-11-14 PR #151 findings and revised English program gates](platform-roadmap/REVIEW-FINDINGS-2026-11-14.md) · [Architecture decisions](platform-roadmap/ARCHITECTURE-DECISION-GATES.md) · [RLS and migration authority](platform-roadmap/DATA-ISOLATION-AND-MIGRATIONS.md) · [v1 release cut](platform-roadmap/V1-SCOPE-AND-RELEASE-CRITERIA.md). The English plan is currently authoritative; the older Arabic summary remains informational until translated and reconciled.
+
+The new [Vibress Universal Application Platform master roadmap](platform-roadmap/README.md) proposes **five waves and 13 master milestones (M00–M12)** to evolve Vibress beyond publishing into a general, self-hostable application development platform. See the [Arabic overview](platform-roadmap/README.ar.md), [architecture](platform-roadmap/PLATFORM-ARCHITECTURE.md), [security/release gates](platform-roadmap/SECURITY-AND-RELEASE-GATES.md), [existing-asset traceability](platform-roadmap/EXISTING-ASSETS.md), and [GitHub tracking issues](platform-roadmap/MILESTONE-TRACKER.md).
+
+**Status: proposal on Draft PR #151; not an implementation or release certification.** This program does not supersede the existing Plugin Platform v3 M0–M6 implementation evidence or the current Studio/source security reports.
+
+
+## Program execution directive — five gated Waves
+
+The project requester adopted the [Vibress Universal Platform M00–M12 plan for controlled implementation](platform-roadmap/ROADMAP-EXECUTION-ADOPTION-2026-11-14.md) and published a [detailed English engineering/security execution prompt](platform-roadmap/FIVE-WAVE-ENGINEERING-SECURITY-MASTER-PROMPT.md). The team must implement Wave 1 through Wave 5 sequentially, complete all required tests, publish an English report after each Wave and proceed only after an approved GO; architectural, security and production release approvals remain independent.
+
+## Final internationally benchmarked roadmap design review
+
+The [Final Design Baseline Acceptance Record](platform-roadmap/FINAL-DESIGN-BASELINE-APPROVAL.md) **conditionally recommends** the written M00–M12 program as an implementation-planning baseline. The [International Standards Alignment Matrix](platform-roadmap/INTERNATIONAL-STANDARDS-ALIGNMENT.md) maps NIST SSDF v1.1, OWASP ASVS v5.0.0, ISO/IEC 27001/25010, SLSA v1.2 and WCAG 2.2 to future verification gates. **No independent organizational certification or production GO is implied**; human A1–A8 approvals and actual runtime G0–G7 evidence remain pending.
+
+## PR #151 — Conditional 9+ roadmap review and reproducible documentation checks
+
+[Current English roadmap](platform-roadmap/README.md) · [9.1/10 conditional design-quality assessment](platform-roadmap/QUALITY-9-PLUS-ASSESSMENT.md) · [Platform GA versioning / support matrix](platform-roadmap/RELEASE-VERSIONING-AND-SUPPORT-MATRIX.md) · [Release evidence and GO/NO-GO register](platform-roadmap/RELEASE-EVIDENCE-AND-DECISION-REGISTER.md) · [Offline documentation validator](../scripts/verify-platform-roadmap.mjs).
+
+**Scope:** 9.1 is a provisional written-plan score, not a runtime security or production certificate. M08 code-first GA artifact version remains undecided pending [ADR-013](14-decisions/release-versioning-strategy.md) compatibility review, and no application code was remediated in this documentation PR.
+
+## PR #151 — Fourth-pass universal-platform plan review
+
+The [English fourth-pass review (R35–R39)](platform-roadmap/FOURTH-PASS-REVIEW-2026-11-14.md) extends the proposed Platform master roadmap with [PostgreSQL RLS views, backup and nested-transaction tests](platform-roadmap/RLS-VIEWS-BACKUP-AND-TRANSACTIONS.md), [legacy multi-publication CMS migration mapping](platform-roadmap/LEGACY-CMS-IDENTITY-AND-MIGRATION.md), and an [execution-first P0/P1 slice](platform-roadmap/EXECUTION-FIRST-SLICE.md). These are **planning-only documents**; the roadmap's editorial 8.0/10 is not a software release/security certification.
