@@ -46,8 +46,8 @@ export interface RuntimeFunctionGrant {
  * sequence or owner-defined function; there is no implicit allow.
  *
  * R35: a declared `view` must exist with `security_invoker=true` (boot rejects
- * it otherwise) and `materialized_view` is rejected outright, because stored
- * materialized rows cannot be filtered by the caller's row-level security.
+ * it otherwise) while both `materialized_view` and `foreign_table` are rejected outright:
+ * neither provides local, caller-scoped row-level security under this contract.
  */
 export interface PlatformRuntimePrivilegeContract {
   readonly version: 2;
@@ -120,6 +120,14 @@ export function assertValidRuntimePrivilegeContract(
     if (!RELATION_KINDS.includes(grant.kind)) {
       throw new Error(
         `Runtime privilege contract has an invalid relation kind '${String(grant.kind)}' for ${grant.schema}.${grant.relation}`,
+      );
+    }
+    // R35: PostgreSQL does not apply local row-level security to a foreign
+    // table. A foreign server's credentials and policies are not proven by
+    // this contract; fail closed until a separately reviewed FDW model exists.
+    if (grant.kind === "foreign_table") {
+      throw new Error(
+        `Runtime privilege contract declares '${grant.schema}.${grant.relation}' as a foreign table; caller-scoped PostgreSQL row-level security is not enforced on foreign tables, so foreign tables are excluded from the runtime contract (R35)`,
       );
     }
     if (grant.kind === "materialized_view") {
