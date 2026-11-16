@@ -146,6 +146,20 @@ describe("M03-S01 canonical schema compiler", () => {
       .toThrow(ResourceSchemaError);
   });
 
+  it("reports typed boundary errors with the offending resource path", () => {
+    try {
+      compileResourceSchema([
+        { ...customers(), installationId: asInstallationId("foreign-installation") },
+      ], scope);
+      throw new Error("expected boundary rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResourceSchemaError);
+      if (!(error instanceof ResourceSchemaError)) throw error;
+      expect(error.code).toBe("BOUNDARY_VIOLATION");
+      expect(error.path).toBe("resources.customers");
+    }
+  });
+
   it("blocks resource declarations outside the authoritative installation or app", () => {
     expect(() => compileResourceSchema([
       customers(), { ...deals(), installationId: asInstallationId("other-installation") },
@@ -184,7 +198,7 @@ describe("M03-S01 canonical schema compiler", () => {
       default: "NOW(); DROP TABLE clients;",
     });
     expect(() => parseResourceDefinition({
-      ...customers(), fields: [{ id: "updated_at", type: "datetime", required: true, default: "now()" }],
+      ...customers(), fields: [{ id: "event_time", type: "datetime", required: true, default: "now()" }],
     })).toThrow(ResourceSchemaError);
   });
 });

@@ -119,14 +119,14 @@ const RESERVED = new Set([
   "session_user", "information_schema",
 ]);
 
-function identifier(value: unknown, path: string, field = false): string {
+function identifier(value: unknown, path: string): string {
   if (
     typeof value !== "string" ||
     !NAME_PATTERN.test(value) ||
     value.includes("__") ||
     value.startsWith("pg_") ||
     value.startsWith("vibress_") ||
-    RESERVED.has(value) && (field || value !== "id")
+    RESERVED.has(value)
   ) {
     return fail(
       "INVALID_IDENTIFIER",
@@ -192,9 +192,13 @@ function timestampLiteral(value: unknown, path: string): string {
   return canonical;
 }
 
+function compareResourceIds(a: { readonly id: string }, b: { readonly id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 function normalizeField(value: unknown, path: string): FieldDefinition {
   const input = record(value, path);
-  const id = identifier(input.id, path + ".id", true);
+  const id = identifier(input.id, path + ".id");
   const required = requiredFlag(input.required, path + ".required");
   const hasDefault = Object.prototype.hasOwnProperty.call(input, "default");
   switch (input.type) {
@@ -282,7 +286,7 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
     }
     ids.add(field.id);
   }
-  fields.sort((a, b) => a.id.localeCompare(b.id, "en"));
+  fields.sort(compareResourceIds);
   return Object.freeze({
     id, applicationId: appId, installationId: installId,
     ownership: source.ownership,
@@ -337,7 +341,7 @@ export function compileResourceSchema(
     }
   }
   const ordered = normalized
-    .sort((a, b) => a.id.localeCompare(b.id, "en"))
+    .sort(compareResourceIds)
     .map((resource): CanonicalResource => Object.freeze({
       id: resource.id, ownership: resource.ownership, fields: resource.fields,
     }));
