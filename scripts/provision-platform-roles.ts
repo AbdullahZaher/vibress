@@ -10,14 +10,11 @@
  */
 import { Client } from "pg";
 import {
-  provisionPlatformDeploymentVerifierRole,
-  provisionPlatformMembershipReaderRole,
-  provisionPlatformRuntimeRole,
   readPlatformDeploymentVerifierConfig,
   readPlatformMembershipReaderConfig,
   readPlatformRuntimeRoleConfig,
-  REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
 } from "@vibress/database";
+import { provisionPlatformRolesAtomically } from "./lib/provision-platform-roles-atomic";
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL?.trim();
@@ -61,33 +58,11 @@ async function main(): Promise<void> {
       `Provisioning platform roles as '${identity}' (runtime: ${runtime.roleName}, reader: ${reader.roleName}, verifier: ${verifier.roleName})`,
     );
 
-    await provisionPlatformRuntimeRole(
-      client,
+    await provisionPlatformRolesAtomically(client, {
       runtime,
-      REFERENCE_CRM_RUNTIME_PRIVILEGE_CONTRACT,
-    );
-    await provisionPlatformMembershipReaderRole(client, reader);
-    await provisionPlatformDeploymentVerifierRole(client, verifier);
-
-    const roles = await client.query<{
-      rolname: string;
-      rolsuper: boolean;
-      rolbypassrls: boolean;
-    }>(
-      `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles
-        WHERE rolname = ANY($1) ORDER BY rolname`,
-      [[runtime.roleName, reader.roleName, verifier.roleName]],
-    );
-    for (const role of roles.rows) {
-      if (role.rolsuper || role.rolbypassrls) {
-        throw new Error(
-          `Role '${role.rolname}' is privileged after provisioning; refusing to report success`,
-        );
-      }
-    }
-    if (roles.rows.length !== 3) {
-      throw new Error("Expected exactly three provisioned roles");
-    }
+      reader,
+      verifier,
+    });
     console.log(
       "Platform roles provisioned; connect as them to run the boot assertions.",
     );
