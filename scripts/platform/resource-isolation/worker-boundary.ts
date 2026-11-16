@@ -215,8 +215,17 @@ async function execute(): Promise<void> {
   }
 }
 
-execute().catch(() => {
-  result("FAILED");
+execute().catch((error: unknown) => {
+  const msg = error instanceof Error ? error.message : "";
+  const category =
+    /module not found|cannot find module|ERR_MODULE_NOT_FOUND/i.test(msg) ? "MODULE_RESOLUTION" :
+    /NOAUTH|WRONGPASS|invalid username-password/i.test(msg) ? "REDIS_AUTH" :
+    /NOPERM|permission denied/i.test(msg) ? "ACL_DENIAL" :
+    /connect|ECONNREFUSED|timeout/i.test(msg) ? "CONNECTION" :
+    /unexpected|missing|did not|failed/i.test(msg) ? "ASSERTION" :
+    "UNKNOWN";
+  // Controlled error category only; raw errors may contain credentials.
+  result("FAILED", { category });
   process.exitCode = 2;
 }).finally(() => closeRedisClient().catch(() => {
   process.exitCode = 2;
