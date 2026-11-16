@@ -224,6 +224,10 @@ class Lab:
                 # BullMQ requires Lua script commands; allow only these
                 # operations (never CONFIG, ACL, FLUSH or foreign key access).
                 "+eval", "+evalsha", "+script|load", "+script|exists",
+                # BullMQ checks Redis version at initialization via INFO.
+                # Operational metadata may be visible; do NOT treat this ACL
+                # policy as a deployable multi-tenant credential contract.
+                "+info",
             )
             self.redis_passwords[suffix] = (user, password)
             self.redis_users.append(user)
