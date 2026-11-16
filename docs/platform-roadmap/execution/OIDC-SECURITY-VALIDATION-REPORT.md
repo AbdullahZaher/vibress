@@ -32,3 +32,12 @@ References checked 2026-11-16:
 https://www.rfc-editor.org/rfc/rfc8725.html
 https://www.rfc-editor.org/rfc/rfc9068.html
 https://openid.net/specs/openid-connect-core-1_0-errata2.html
+
+## AG06-04 follow-up — 2026-11-16 (candidate head after patch)
+- VERIFIED BY CODE INSPECTION: integration PR #176 head 63c47b3adda183d816727edc7b590979b2a8c2da contains the original candidate adapter blob ab5641ab4ce665744a4d75e23bb3e600a78848f0. It checks server membership and hydrates only that tenant; RouteExecutor separately invokes resolveVerifiedScope and checks membership permission + policy before a tenant transaction. Reference production auth-mode guard remains fail-closed.
+- REMEDIATION ON PR #173 ONLY: added RFC 9068 mandatory jti validation and missing/malformed jti negatives; added post-auth membership-removal and principal-binding mismatch regression tests. The original #176 integrated copy does NOT contain these later changes until the integration owner incorporates the new #173 head and reruns CI.
+- IAM-07 MEDIUM: RFC 9068 requires jti; initial candidate did not enforce it. Patch added. jti presence alone does NOT prevent bearer replay; sender-constrained tokens or authoritative per-session replay/revocation policy must be approved and verified.
+- AG06-04 residual HIGH: no actual HTTP gateway integration, no executable RouteExecutor + real DB negative suite run on the integrated candidate, no live IdP, no independent Agent 06 verdict on the amended SHA. Candidate tests are authored but execution is NOT VERIFIED.
+- Coordination: Agent 02 to verify reader role only has effective SELECT on platform_memberships including inherited/default privileges and RLS; Agent 04 to verify dedicated nonproduction service identity, secret-manager delivery, egress, JWKS cache/outage and rollback; Agent 03 to independently threat-model JWT confusion, account disable and cross-tenant boundaries. No signatures inferred from comments.
+- Verification commands: pnpm exec vitest run apps/platform-reference/src/oidc-principal-verifier.test.ts apps/platform-reference/src/production-oidc-authentication-adapter.test.ts ; pnpm --filter @vibress/platform-reference typecheck ; pnpm --filter @vibress/platform-reference lint ; execute tenant integration tests and inspect exit codes on exact SHA.
+- Additional primary source checked 2026-11-16: RFC 9068 section 2.2 requires jti: https://www.rfc-editor.org/rfc/rfc9068.html .
