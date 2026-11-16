@@ -32,7 +32,7 @@ jobs:
           set -euo pipefail
           /tmp/w1t06-python/bin/python -m py_compile scripts/platform/resource-isolation/verify.py
           /tmp/w1t06-python/bin/python scripts/platform/resource-isolation/verify.py --self-test
-          docker compose -f scripts/platform/resource-isolation/compose.yml config --quiet
+          T06_ROOT_USER=configonly T06_ROOT_PASSWORD=configonly-do-not-use docker compose -f scripts/platform/resource-isolation/compose.yml config --quiet
 
       - name: Prove ACL and IAM negative matrix on throwaway services
         env:
