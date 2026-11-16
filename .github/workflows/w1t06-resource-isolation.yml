@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout reviewed source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # verified actions/checkout v4
 
       - name: Install isolated Python dependencies
         shell: bash
@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload non-secret evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # verified v4.6.2
         with:
           name: w1t06-resource-isolation-${{ github.run_id }}
           path: artifacts/w1t06-resource-isolation.json
