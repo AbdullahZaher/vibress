@@ -323,7 +323,9 @@ export async function executeApprovedAdditiveColumn(
       "SELECT operation_id, approver, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
       "FROM public.platform_schema_approvals " +
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
+      // Lock the approval until the DDL + journal transaction commits.
+      // Revocation must UPDATE this same row and must never bypass the row lock.
+      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3 FOR UPDATE",
       [request.installationId, request.planDigest, ddl.operationId],
     )).rows[0];
     if (!approval || approval.approver === planRecord.author ||
