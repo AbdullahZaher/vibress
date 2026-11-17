@@ -33,17 +33,21 @@ function example() {
   return { current, plan, proposed };
 }
 
+function persisted(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value));
+}
+
 describe("M03-S03 trusted plan reconstruction and SQL boundary", () => {
   it("reconstructs a canonical persisted plan and deterministic one-column SQL", () => {
     const { current, plan } = example();
-    const persisted: unknown = JSON.parse(JSON.stringify(plan));
-    const rebuilt = rehydrateSchemaChangePlan(persisted, current, scope);
+    const stored = persisted(plan);
+    const rebuilt = rehydrateSchemaChangePlan(stored, current, scope);
     expect(rebuilt).toEqual(plan);
     const ddl = renderAdditiveColumn(rebuilt, current);
     expect(ddl.operationId).toBe(plan.operations[0]?.id);
     expect(ddl.planDigest).toBe(plan.digest);
     expect(ddl.sql).toMatch(/^ALTER TABLE "public"\."vr_catalog_[0-9a-f]{12}" ADD COLUMN "website" text$/);
-    expect(renderTrustedAdditiveColumn(persisted, current, scope).ddl).toEqual(ddl);
+    expect(renderTrustedAdditiveColumn(stored, current, scope).ddl).toEqual(ddl);
     expect(ddl.sql).not.toMatch(/;|DROP|CREATE|DEFAULT|IF NOT EXISTS/);
   });
 
@@ -59,7 +63,7 @@ describe("M03-S03 trusted plan reconstruction and SQL boundary", () => {
       { planVersion: 2 },
       { extra: "unknown" },
     ]) {
-      expect(() => rehydrateSchemaChangePlan({ ...plan, ...patch }, current, scope))
+      expect(() => rehydrateSchemaChangePlan(persisted({ ...plan, ...patch }), current, scope))
         .toThrow();
     }
   });
@@ -69,12 +73,12 @@ describe("M03-S03 trusted plan reconstruction and SQL boundary", () => {
     const otherScope: SchemaCompilationScope = {
       ...scope, installationId: asInstallationId("other-local"),
     };
-    expect(() => rehydrateSchemaChangePlan(plan, current, otherScope)).toThrow();
-    expect(() => rehydrateSchemaChangePlan(plan, null, scope)).toThrow();
-    expect(() => rehydrateSchemaChangePlan({
+    expect(() => rehydrateSchemaChangePlan(persisted(plan), current, otherScope)).toThrow();
+    expect(() => rehydrateSchemaChangePlan(persisted(plan), null, scope)).toThrow();
+    expect(() => rehydrateSchemaChangePlan(persisted({
       ...plan,
       preconditions: { ...plan.preconditions, expectedCurrentDigest: null },
-    }, current, scope)).toThrow(SchemaExecutionContractError);
+    }), current, scope)).toThrow(SchemaExecutionContractError);
   });
 
   it("rejects Proxies, symbols, accessors, prototypes and sparse operations before invoking getters", () => {
@@ -120,7 +124,8 @@ describe("M03-S03 trusted plan reconstruction and SQL boundary", () => {
     }], scope);
     const plan = planSchemaChanges(current, proposed, { scope, expectedCurrentDigest: current.digest });
     expect(plan.disposition).toBe("PLANNED");
-    expect(() => renderTrustedAdditiveColumn(plan, current, scope))
+    const validated = rehydrateSchemaChangePlan(persisted(plan), current, scope);
+    expect(() => renderAdditiveColumn(validated, current))
       .toThrow(SchemaExecutionContractError);
   });
 
@@ -143,17 +148,17 @@ describe("M03-S03 trusted plan reconstruction and SQL boundary", () => {
       const candidate = planSchemaChanges(current, proposed, {
         scope, expectedCurrentDigest: current.digest,
       });
-      expect(() => renderTrustedAdditiveColumn(candidate, current, scope)).toThrow();
+      expect(() => renderTrustedAdditiveColumn(persisted(candidate), current, scope)).toThrow();
     }
-    expect(() => renderTrustedAdditiveColumn({
+    expect(() => renderTrustedAdditiveColumn(persisted({
       ...plan,
       operations: [{ ...plan.operations[0], type: "DROP_TABLE" }],
-    }, current, scope)).toThrow();
+    }), current, scope)).toThrow();
   });
 
   it("keeps manifests and plans byte-stable across semantically equivalent declaration order", () => {
     const { current, plan } = example();
-    expect(rehydrateSchemaChangePlan(plan, current, scope).digest).toBe(plan.digest);
+    expect(rehydrateSchemaChangePlan(persisted(plan), current, scope).digest).toBe(plan.digest);
     const before = JSON.stringify(current);
     const after = JSON.stringify(rehydrateSchemaChangePlan(JSON.parse(JSON.stringify(plan)), current, scope));
     expect(before).toBe(JSON.stringify(createSchemaManifest(current.canonicalIr)));
