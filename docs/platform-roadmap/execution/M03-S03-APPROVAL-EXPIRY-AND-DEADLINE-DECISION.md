@@ -16,6 +16,7 @@
 ## P04. Superseding Project Owner Numeric Deadline Decision — D1 / 2517ms (2026-11-17)
 
 **Formal decision ID:** `M03-S03-SDR-AG06-S03-08-2026-11-17-P04`  
+**Published decision audit relay:** [Issue #197 comment #6959358323](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6959358323), recorded by Agent 01 as the user's expressed decision, **not a direct verified human signature in GitHub**.  
 **Decision authority/source:** Project Owner expressly provided an authorization in the current conversation, dated 2026-11-17 (Asia/Riyadh): **"Decision: APPROVE D1 — 2,517 ms for restricted development and disposable testing only"**. The same instruction reiterates prior approval of **Policy A — FINAL_PRE_DDL**. This is a first-party owner instruction as provided to Agent 01, **not an independently verifiable GitHub human signature**. GitHub author identity on a relayed comment does not substitute for direct human IAM/DBA or project-owner signature if required by separate repository governance. Do not invent a more precise original instruction timestamp.
 
 ### P04.1. Exactly what the Project Owner approved
