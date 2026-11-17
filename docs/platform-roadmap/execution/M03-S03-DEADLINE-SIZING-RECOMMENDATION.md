@@ -83,6 +83,17 @@ The newer cancellation tail exceeds Run2's **5.045/0.252ms**; thus retain the **
 
 Note: the third-run raw timeline reported T15 as a separate clock read slightly after total elapsed_ms in many rows. This was caught by independent raw-data validation and corrected in the subsequent benchmark harness. **Do not treat T15-T0 and the earlier elapsed_ms as bit-identical on Run3; the difference is measurement instrumentation overhead, not PostgreSQL latency.** A frozen numeric-candidate validation run now also asserts T15 equals the reported total for each profile.
 
+
+### Final frozen numerical-candidate CI evidence — PASS
+
+[**CI #44155976796**](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796) completed **SUCCESS** on exact tested PR #204 HEAD `66af2e217b565ae552832a0399b6a96cd3259728` and synthetic checkout `08dd3097ce015c2583b16aba8b18209e9588670f`; raw [**Artifact #14361431684**](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796/artifacts/14361431684), ZIP SHA-256 `dc0038d09ef839cf521b94f9133b4123871c01d4149dd60310641d62095b43db`. Actual Node `v24.22.3`, PostgreSQL `16.16` / `160016`, disposable Docker image ID `sha256:3cbd775daa28461ef484ed88ca1e5a5a72ff126e196deeebce6fec764edf1200`.
+
+Recomputed directly from **1,375/1,375 unique raw attempt IDs**, with **0 provenance mismatches, 0 T15-vs-elapsed timing mismatches**, sanitized six artifact files and CI cleanup/teardown PASS. 1,000/1,000 normal migrations succeeded (p99 **24.6277ms**), 90/100 contended succeeded (success-only p99 **926.8647ms**), 10 forced 55P03 locks failed closed, and socket 30ms each way p99 **2287.4318ms** (12 samples). Lost COMMIT ACK 8/8 INDETERMINATE and fresh reconciliation, cancellations 20/20 and backend terminations 10/10 independently verified.
+
+**Held-out fixed values — not derived from this CI:** Candidate A **2408ms**: **8/8** normal APPLIED, **8/8** actual 500ms blocked table-lock APPLIED, **4/4** over-budget refusals with zero journal/DDL. Candidate B **2517ms**: same **8/8 + 8/8 + 4/4 PASS**. On the same new CI's 1,164 eligible preselected successes, **0/1164** exceeded either fixed candidate. This adds one new separate validation run to the earlier *in-sample* 3,492 records, but **n=12 network-tail and n=16 successful fixed-value samples per candidate remain statistically insufficient** to establish a true <=1% false-timeout risk. Deliberate expiry cases returned from cleanup **later than** the numeric duration; watchdog physical completion timing is NOT certified.
+
+The final recommended **2517ms (Candidate B)** is still **conditional laboratory-only**, NOT approved; the owner SLO, independent IAM/DBA human signatures, production deadline supervisor, exact canonical integration and Agent06 independent review are all **PENDING / NO-GO**. This successful source test belongs to the benchmark branch, not PR #198.
+
 ## 4. New lab topology
 
 Disposable GitHub ubuntu-24.04 with Node 24.22.3, Docker PostgreSQL 16 (verify full patch in logs), pnpm 11.22.0, real migration 0059/0060, one self-contained PostgreSQL database created at 127.0.0.1:5433 with owner-installed application, distinct authenticated individual AUTHOR and APPROVER, separately restricted OPERATOR and RUNTIME. Genuine canonical plan/manifest, optional mapped scalar ADD_FIELD website without default, physical table and seed checksum. One hot table and repeated admin reset outside measured intervals make it a synthetic microbenchmark, not equivalent to 1000 independently installed customers.
