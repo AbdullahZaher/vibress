@@ -21,6 +21,35 @@ Each fixture has separate `s03_author_<letter>_<hex-id>`, `s03_approver_<letter>
 3. Confirm the existing application-owned physical table's complete column set and row counts; no tenant-owned execution, unsafe defaults, unreviewed constraints or relation rewrites are supported. Do not use the old broad legacy CMS runtime role.
 4. Execute only from the isolated database operator process; never load privileged credentials in API, worker, Fastify handlers or plugins.
 
+## Agent 04 expanded fault laboratories (not part of original four)
+
+The separate `platform-schema-migration-fault-injection.test.ts` file creates **one fresh fixture per case**, keys **E–Y**, with the same `vibress_s03_<letter>_<random-id>` naming convention and four distinct roles each. The original file still creates four labs A–D. Tests require separate disposable databases; they are not authorized to reuse an application production/staging database. Each test's before/after SQL stage or termination mechanism is named in its `it(...)` title, and the [Agent 04 evidence report](M03-S03-AG04-FAULT-RECOVERY-REPORT.md) retains failed and passing attempts.
+
+**Reproducible setup (disposable development lab ONLY):**
+
+~~~bash
+# Requires Docker, pnpm@11.22.0 and Node.js v24.22.3.
+test "$(node --version)" = "v24.22.3"
+pnpm install --frozen-lockfile
+pnpm --filter @vibress/plugin-sdk build
+docker compose -f compose.dev.yml up -d --wait postgres
+
+# Fail closed unless the connection is exactly the test-only loopback fixture.
+DATABASE_URL='postgresql://vibress:vibress@127.0.0.1:5433/vibress' \
+pnpm exec vitest run --no-file-parallelism \
+  tests/integration/platform-schema-migration-fault-injection.test.ts
+
+docker compose -f compose.dev.yml down --volumes --remove-orphans
+~~~
+
+The test verifies server version is PostgreSQL **16.x**, that the fixture admin is a superuser **only inside disposable PostgreSQL**, and that the target URL has the precise expected database, username, password, port and loopback host. No production operator DSN is accepted. No production secrets enter CI. **Do not execute the Compose teardown on a shared Compose project or resource namespace.**
+
+**Explicit cleanup:** Before `afterAll` finishes, it checks `pg_database` and `pg_roles` for the **exact random names created by the suite**. Any surviving fixture marks the run failed. The CI job subsequently removes the dedicated Compose services/volumes. The parent SIGKILL test explicitly waits for process termination and the wire proxy closes its own localhost listener. If cleanup fails, inspect/terminate only the exact test-owned resources; do not use wildcard DROP on unknown databases/roles.
+
+**COMMIT uncertainty:** The test-only `pg-wire-proxy.ts` recognizes the PostgreSQL protocol `CommandComplete` for COMMIT, drops it before reaching the client and closes the TCP socket; the independent `read-only-reconcile.ts` compares registry, journal, full manifest, live physical columns and the seeded row checksum under a fresh `REPEATABLE READ READ ONLY` snapshot. `COMMITTED` means only idempotent `ALREADY_APPLIED`; `ROLLED_BACK` requires fresh authorization; any mixed state returns `HALT_UNRECONCILABLE`. Neither file is imported into runtime.
+
+**Version baseline:** Node.js **v24.22.3** is the verified security-patched 24.x release dated 2026-11-11 (https://nodejs.org/en/blog/release/v24.22.3). The reviewed pre-fix integration used v24.22.2; the new CI run must record `node --version` and `current_setting('server_version_num')`. Only the supported Node24 line is updated; the unrelated Node25 Web/SPA development Dockerfiles were left untouched and need a separate compatibility review.
+
 ## CLI syntax (illustrative; never paste real secrets into logs)
 
 ~~~bash
