@@ -50,10 +50,17 @@ interface PlanRow {
   expected_manifest: string;
   plan: string;
   author: string;
+  author_login: string | null;
+  author_principal_id: string | null;
+  author_application_id: string | null;
+  author_environment: string | null;
 }
 interface ApprovalRow {
   operation_id: string;
   approver: string;
+  approver_login: string | null;
+  approver_principal_id: string | null;
+  approved_application_id: string | null;
   operator_role: string;
   environment: string;
   approved_at: Date;
@@ -304,7 +311,11 @@ export async function executeApprovedAdditiveColumn(
       "WHERE installation_id = $1 AND plan_digest = $2",
       [request.installationId, request.planDigest],
     )).rows[0];
-    if (!planRecord || planRecord.plan_digest !== request.planDigest) {
+    if (!planRecord || planRecord.plan_digest !== request.planDigest ||
+      !planRecord.author_login || !planRecord.author_principal_id ||
+      planRecord.author !== planRecord.author_login ||
+      planRecord.author_application_id !== registry.application_id ||
+      planRecord.author_environment !== registry.environment) {
       deny("UNAUTHORIZED", "operator plan was not registered");
     }
     const scope = {
@@ -320,15 +331,21 @@ export async function executeApprovedAdditiveColumn(
       deny("UNAUTHORIZED", "registered plan did not rehydrate");
     }
     const approval = (await db.query<ApprovalRow>(
-      "SELECT operation_id, approver, operator_role, environment, " +
+      "SELECT operation_id, approver, approver_login, approver_principal_id, " +
+      "approved_application_id, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
       "FROM public.platform_schema_approvals " +
-      // Lock the approval until the DDL + journal transaction commits.
-      // Revocation must UPDATE this same row and must never bypass the row lock.
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3 FOR UPDATE",
+      // FOR SHARE blocks revocation UPDATE through transaction end without
+      // granting approval UPDATE rights to the migration operator.
+      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3 FOR SHARE",
       [request.installationId, request.planDigest, ddl.operationId],
     )).rows[0];
-    if (!approval || approval.approver === planRecord.author ||
+    if (!approval || !approval.approver_login || !approval.approver_principal_id ||
+      approval.approver !== approval.approver_login ||
+      approval.approved_application_id !== registry.application_id ||
+      approval.approver_login === planRecord.author_login ||
+      approval.approver_principal_id === planRecord.author_principal_id ||
+      approval.approver === planRecord.author ||
       approval.approver === identity.current_user ||
       approval.operator_role !== identity.current_user ||
       approval.environment !== registry.environment ||
@@ -336,6 +353,29 @@ export async function executeApprovedAdditiveColumn(
       approval.approved_at > approval.server_now ||
       approval.expires_at <= approval.server_now) {
       deny("UNAUTHORIZED", "independent plan approval is absent, revoked or expired");
+    }
+    // The owner-provisioned identity registry is trusted only for individually
+    // authenticated PostgreSQL logins; pooled service accounts are not humans.
+    // Legacy 0059 approvals without captured provenance always fail closed.
+    const actors = await db.query<{
+      login_name: string; principal_id: string; actor_kind: string;
+      identity_mode: string; active: boolean;
+    }>(
+      "SELECT login_name, principal_id, actor_kind, identity_mode, active " +
+      "FROM public.platform_schema_trusted_actors " +
+      "WHERE login_name = $1 OR login_name = $2 FOR SHARE",
+      [planRecord.author_login, approval.approver_login],
+    );
+    const authored = actors.rows.find(row => row.login_name === planRecord.author_login);
+    const approved = actors.rows.find(row => row.login_name === approval.approver_login);
+    if (!authored || !approved || actors.rows.length !== 2 ||
+      authored.principal_id !== planRecord.author_principal_id ||
+      approved.principal_id !== approval.approver_principal_id ||
+      authored.actor_kind !== "AUTHOR" || approved.actor_kind !== "APPROVER" ||
+      authored.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
+      approved.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
+      !authored.active || !approved.active) {
+      deny("UNAUTHORIZED", "trusted independent approval provenance unavailable");
     }
     const resource = current.resources.find(item => item.tableName === ddl.tableName);
     const next = plan.proposedManifest.resources.find(item => item.tableName === ddl.tableName);
@@ -394,7 +434,8 @@ export async function executeApprovedAdditiveColumn(
       [
         request.installationId, ddl.operationId, request.planDigest,
         current.digest, plan.proposedManifest.digest,
-        approval.approver + ":" + approval.approved_at.toISOString(),
+        approval.approver_principal_id + ":" + approval.approver_login + ":" +
+          approval.approved_at.toISOString(),
         identity.current_user,
         JSON.stringify({ operation: "ADD_FIELD", table: ddl.tableName,
           column: ddl.columnName, beforeRows, afterRows, postgres: 16 }),
