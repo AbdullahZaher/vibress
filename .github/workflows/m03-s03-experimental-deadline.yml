@@ -58,7 +58,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "EXP-BUDGET"
+          for n in 1 2 3 4 5; do
+            echo "EXPERIMENT_BUDGET_REPETITION=$n"
+            pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "EXP-BUDGET"
+          done
       - name: Retest all original operator and Agent04 recovery cases unchanged
         shell: bash
         run: |
