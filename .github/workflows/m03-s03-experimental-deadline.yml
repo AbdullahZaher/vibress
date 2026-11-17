@@ -1,0 +1,76 @@
+name: M03-S03 Unapproved Whole Operation Budget Experiment
+
+on:
+  push:
+    branches:
+      - experiment/m03-s03-unapproved-whole-operation-budget-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-pg16-budget-experiment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      BASE_REMEDIATION_SHA: 6bf94cc45babd7c73593295900d791a2f03f7a72
+      BASE_OPERATOR_BLOB: 31b1e862f594434944fec516f768265baf794525
+      APPROVAL_MIGRATION_BLOB: d8b1e50a0a4dd347fde235ae7cb1a12468249719
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Assert no existing operator or approval source modified
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$BASE_OPERATOR_BLOB"
+          test "$(git hash-object packages/database/migrations/0060_platform_schema_authenticated_approvals.sql)" = "$APPROVAL_MIGRATION_BLOB"
+          echo "EXPERIMENT_ONLY_NO_POLICY_OR_DEADLINE_APPROVAL=TRUE"
+          echo "COMMIT=$(git rev-parse HEAD)"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Install and verify TypeScript, lint, dependency pinning
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.22.3"
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+          pnpm exec eslint packages/database/src/platform-schema-operation-budget-experiment.ts tests/integration/platform-schema-migration-operator.test.ts
+          pnpm typecheck
+      - name: Start truly disposable PostgreSQL 16 lab
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml up -d --wait postgres
+          v="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          test "$v" -ge 160016 && test "$v" -lt 170000
+          echo "EXPERIMENT_PG_VERSION=$v"
+      - name: Test five real PG budget and cancellation cases
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "EXP-BUDGET"
+      - name: Retest all original operator and Agent04 recovery cases unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$BASE_OPERATOR_BLOB"
+          test "$(git hash-object packages/database/migrations/0060_platform_schema_authenticated_approvals.sql)" = "$APPROVAL_MIGRATION_BLOB"
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+      - name: Destroy isolated lab and named volumes
+        if: always()
+        shell: bash
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans
