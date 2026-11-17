@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1526,4 +1526,320 @@ describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)
     expect(journal.rows[0]?.completion_after_expiry).toBe(true);
     await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   }, 15000);
+});
+
+/**
+ * Agent 02 independent D1 fault-injection: real disposable PostgreSQL.
+ * Historical operator kept byte-identical: these tests EXPOSE the missing
+ * production D1 supervisor and prove physical rollback independently.
+ * No numeric pre-COMMIT margin is assumed, no production privileges granted.
+ */
+describe("AG02-D1 independent PostgreSQL 16 cancellation and 2517ms safety review", () => {
+  const LAB_D1_MS = 2517; // owner P04: isolated laboratory D1 only
+
+  async function readBackendIdentity(lab: Lab) {
+    const r = await lab.dbAdmin.query<{ backend_start: string }>(
+      "SELECT backend_start::text AS backend_start FROM pg_stat_activity " +
+      "WHERE pid=$1 AND usename=$2 AND datname=current_database()",
+      [lab.operator.processID ?? -1, lab.operatorRole],
+    );
+    expect(r.rows).toHaveLength(1);
+    return r.rows[0]!.backend_start;
+  }
+
+  async function controlBackend(lab: Lab, action: "cancel" | "terminate"): Promise<boolean> {
+    const backendStart = await readBackendIdentity(lab);
+    const functionName = action === "cancel" ? "pg_cancel_backend" : "pg_terminate_backend";
+    const r = await lab.dbAdmin.query<{ signaled: boolean }>(
+      "SELECT " + functionName + "(pid) AS signaled FROM pg_stat_activity " +
+      "WHERE pid=$1 AND usename=$2 AND datname=current_database() " +
+      "AND backend_start::text=$3",
+      [lab.operator.processID ?? -1, lab.operatorRole, backendStart],
+    );
+    return r.rows[0]?.signaled === true;
+  }
+
+  async function actualBackendWait(lab: Lab, part: string, kind: string): Promise<void> {
+    let observed = false;
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const r = await lab.dbAdmin.query<{ wait_event_type: string | null; query: string | null }>(
+        "SELECT wait_event_type, query FROM pg_stat_activity WHERE pid=$1",
+        [lab.operator.processID ?? -1],
+      );
+      if (r.rows[0]?.wait_event_type === kind && r.rows[0]?.query?.includes(part)) {
+        observed = true;
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 12));
+    }
+    expect(observed, "must observe real backend wait before injecting failure").toBe(true);
+  }
+
+  async function physicalRollback(lab: Lab, checksum: string): Promise<void> {
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    const registry = await lab.dbAdmin.query<{ manifest_digest: string }>(
+      "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    const journal = await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(0);
+  }
+
+  function observedSqlstates(lab: Lab): { query: ClientBase; states: string[] } {
+    const states: string[] = [];
+    const query = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: unknown[]) => {
+            try {
+              return params ? await target.query(sql, params) : await target.query(sql);
+            } catch (error) {
+              const code = (error as { code?: string }).code;
+              if (code) states.push(code);
+              throw error;
+            }
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    return { query, states };
+  }
+
+  it("D1-PG01 registry FOR UPDATE: real cancellation 57014, acknowledged rollback, no DDL", async () => {
+    const lab = await createLab("o"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const { query, states } = observedSqlstates(lab);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        "SELECT installation_id FROM public.platform_schema_registry " +
+        "WHERE installation_id=$1 FOR UPDATE",
+        [lab.installationId],
+      );
+      const pending = executeApprovedAdditiveColumn(query, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      void pending.catch(() => undefined);
+      await actualBackendWait(lab, "platform_schema_registry", "Lock");
+      expect(await controlBackend(lab, "cancel")).toBe(true);
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(states).toContain("57014");
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+    }
+    await physicalRollback(lab, checksum);
+  }, 16000);
+
+  it("D1-PG02 approval advisory fence: real cancellation, proven rollback", async () => {
+    const lab = await createLab("p"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const { query, states } = observedSqlstates(lab);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      const pending = executeApprovedAdditiveColumn(query, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      void pending.catch(() => undefined);
+      await actualBackendWait(lab, "vibress_m03s03_approval", "Lock");
+      expect(await controlBackend(lab, "cancel")).toBe(true);
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(states).toContain("57014");
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+    }
+    await physicalRollback(lab, checksum);
+  }, 16000);
+
+  it("D1-PG03 catalog phase slow SQL: out-of-band cancellation, atomic physical rollback", async () => {
+    const lab = await createLab("q"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let injected = false;
+    const codes: string[] = [];
+    const hooked = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: unknown[]) => {
+            if (!injected && sql.includes("pg_attribute") &&
+              !sql.includes("platform_schema_")) {
+              injected = true;
+              try {
+                // Test-only REAL PG16 SQL on the exact dedicated operator backend.
+                await target.query("SELECT pg_sleep(8)");
+              } catch (error) {
+                const code = (error as { code?: string }).code;
+                if (code) codes.push(code);
+                throw error;
+              }
+            }
+            return params ? target.query(sql, params) : target.query(sql);
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const pending = executeApprovedAdditiveColumn(hooked, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    void pending.catch(() => undefined);
+    await actualBackendWait(lab, "pg_sleep(8)", "Timeout");
+    expect(injected).toBe(true);
+    expect(await controlBackend(lab, "cancel")).toBe(true);
+    await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(codes).toContain("57014");
+    await physicalRollback(lab, checksum);
+  }, 16000);
+
+  it("D1-PG04 after physical DDL and journal BEFORE COMMIT: cancellation rolls back both", async () => {
+    const lab = await createLab("r"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let journalInserted = false;
+    const codes: string[] = [];
+    const hooked = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: unknown[]) => {
+            const result = params ? await target.query(sql, params) : await target.query(sql);
+            if (!journalInserted &&
+              sql.startsWith("INSERT INTO public.platform_schema_migration_journal")) {
+              journalInserted = true; // inside uncommitted transaction
+              try {
+                await target.query("SELECT pg_sleep(8)");
+              } catch (error) {
+                const code = (error as { code?: string }).code;
+                if (code) codes.push(code);
+                throw error;
+              }
+            }
+            return result;
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const pending = executeApprovedAdditiveColumn(hooked, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    void pending.catch(() => undefined);
+    await actualBackendWait(lab, "pg_sleep(8)", "Timeout");
+    expect(journalInserted).toBe(true);
+    expect(await controlBackend(lab, "cancel")).toBe(true);
+    await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(codes).toContain("57014");
+    await physicalRollback(lab, checksum);
+  }, 16000);
+
+  it("D1-PG05 backend TERMINATE while waiting table: fail uncertain, fence, fresh state intact", async () => {
+    const lab = await createLab("s"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    lab.operator.on("error", () => undefined);
+    const blocker = await connect(lab.name);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const pending = run(lab);
+      void pending.catch(() => undefined);
+      await actualBackendWait(lab, "LOCK TABLE ONLY", "Lock");
+      // No elevated permission to application runtime.
+      await expect(lab.runtime.query(
+        "SELECT pg_terminate_backend($1)", [lab.operator.processID ?? -1],
+      )).rejects.toMatchObject({ code: "42501" });
+      expect(await controlBackend(lab, "terminate")).toBe(true);
+      await expect(pending).rejects.toMatchObject({ code: "INDETERMINATE" });
+      let backendGone = false;
+      for (let i = 0; i < 60; i += 1) {
+        const r = await lab.dbAdmin.query<{ count: number }>(
+          "SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (r.rows[0]?.count === 0) { backendGone = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(backendGone).toBe(true);
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+    }
+    await physicalRollback(lab, checksum);
+  }, 16000);
+
+  it("D1-PG06 explicitly proves original CLI/operator lacks 2517ms late-ACK classification", async () => {
+    const lab = await createLab("t"); labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let reached!: () => void;
+    let released!: () => void;
+    const actualCommit = new Promise<void>(resolve => { reached = resolve; });
+    const heldClientResponse = new Promise<void>(resolve => { released = resolve; });
+    const hooked = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: unknown[]) => {
+            const result = params ? await target.query(sql, params) : await target.query(sql);
+            if (sql === "COMMIT") {
+              reached(); // physical PG16 COMMIT already acknowledged on inner client
+              await heldClientResponse; // TEST-ONLY delayed wrapper response
+            }
+            return result;
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const startedNs = process.hrtime.bigint();
+    const pending = executeApprovedAdditiveColumn(hooked, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    void pending.catch(() => undefined);
+    try {
+      await Promise.race([
+        actualCommit,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("did not reach physical COMMIT in fixture")), 2000)),
+      ]);
+      // Deliberately force T14 past owner D1, without changing operator code.
+      await lab.dbAdmin.query("SELECT pg_sleep(2.6)");
+    } finally {
+      released();
+    }
+    const result = await pending;
+    const t14Ms = Number(process.hrtime.bigint() - startedNs) / 1e6;
+    expect(result.status).toBe("APPLIED"); // this is the EXISTING D1 defect
+    expect(t14Ms).toBeGreaterThan(LAB_D1_MS);
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    const journal = await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(1);
+    // Must prevent promoting this operator as D1 compliant; the next
+    // reviewed supervisor needs a HARD late-ACK classification test.
+  }, 18000);
 });
