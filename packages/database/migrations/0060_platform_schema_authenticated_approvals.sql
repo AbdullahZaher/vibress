@@ -100,7 +100,10 @@ BEGIN
   END IF;
   SELECT principal_id, actor_kind, active INTO actor
     FROM public.platform_schema_trusted_actors WHERE login_name = session_user;
-  IF NOT FOUND OR NOT actor.active OR actor.actor_kind <> 'AUTHOR' THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'unregistered plan author' USING ERRCODE = '42501';
+  END IF;
+  IF NOT actor.active OR actor.actor_kind <> 'AUTHOR' THEN
     RAISE EXCEPTION 'untrusted plan author' USING ERRCODE = '42501';
   END IF;
   IF NEW.author IS DISTINCT FROM session_user OR NEW.author_login IS NOT NULL
@@ -108,11 +111,15 @@ BEGIN
      OR NEW.author_environment IS NOT NULL THEN
     RAISE EXCEPTION 'forged plan author provenance' USING ERRCODE = '42501';
   END IF;
-  SELECT application_id, environment INTO scope
+  SELECT application_id, environment, operator_role, runtime_role INTO scope
     FROM public.platform_schema_registry
     WHERE installation_id = NEW.installation_id FOR SHARE;
-  IF NOT FOUND OR scope.environment NOT IN ('test','development') THEN
-    RAISE EXCEPTION 'untrusted plan installation' USING ERRCODE = '42501';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'missing author registry' USING ERRCODE = '42501';
+  END IF;
+  IF scope.environment NOT IN ('test','development')
+      OR session_user IN (scope.operator_role,scope.runtime_role) THEN
+    RAISE EXCEPTION 'untrusted plan installation or runtime actor' USING ERRCODE = '42501';
   END IF;
   NEW.author_login := session_user;
   NEW.author_principal_id := actor.principal_id;
@@ -149,7 +156,10 @@ BEGIN
   END IF;
   SELECT principal_id, actor_kind, active INTO actor
     FROM public.platform_schema_trusted_actors WHERE login_name = session_user;
-  IF NOT FOUND OR NOT actor.active OR actor.actor_kind <> 'APPROVER' THEN
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'unregistered approval actor' USING ERRCODE = '42501';
+  END IF;
+  IF NOT actor.active OR actor.actor_kind <> 'APPROVER' THEN
     RAISE EXCEPTION 'untrusted approval actor' USING ERRCODE = '42501';
   END IF;
   IF TG_OP = 'DELETE' THEN
@@ -178,7 +188,10 @@ BEGIN
     INTO plan_actor FROM public.platform_schema_plans
     WHERE installation_id = NEW.installation_id AND plan_digest = NEW.plan_digest
     FOR SHARE;
-  IF NOT FOUND OR plan_actor.author_login IS NULL
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'missing approval plan' USING ERRCODE = '42501';
+  END IF;
+  IF plan_actor.author_login IS NULL
      OR plan_actor.author_principal_id IS NULL
      OR plan_actor.author_principal_id = actor.principal_id
      OR plan_actor.author_login = session_user
@@ -187,10 +200,14 @@ BEGIN
     RAISE EXCEPTION 'self-approval or legacy unauthenticated plan'
       USING ERRCODE = '42501';
   END IF;
-  SELECT application_id, environment, operator_role INTO scope
+  SELECT application_id, environment, operator_role, runtime_role INTO scope
     FROM public.platform_schema_registry
     WHERE installation_id = NEW.installation_id FOR SHARE;
-  IF NOT FOUND OR scope.application_id IS DISTINCT FROM plan_actor.author_application_id
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'missing approval registry' USING ERRCODE = '42501';
+  END IF;
+  IF session_user IN (scope.operator_role,scope.runtime_role)
+     OR scope.application_id IS DISTINCT FROM plan_actor.author_application_id
      OR scope.environment IS DISTINCT FROM plan_actor.author_environment
      OR scope.environment NOT IN ('test','development')
      OR NEW.environment IS DISTINCT FROM scope.environment
