@@ -1283,4 +1283,72 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
       "SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(1);
     expect(await contentChecksum(lab)).toBe(before);
   },30000);
+  it("AUTH-23: registry-first order prevents direct INSERT/advisory lock inversion", async () => {
+    const lab = e(); // Approved, not yet executed; isolated from Agent02 cases.
+    const actor = await connect(lab.name, lab.approver);
+    const grantRole = lab.dbAdmin.escapeIdentifier(lab.approver);
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " + grantRole);
+    let signal!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>(resolve => { signal = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const proxied = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = await lab.operator.query(sql, params);
+        if (sql.includes("FROM public.platform_schema_registry WHERE installation_id") &&
+            sql.includes("FOR UPDATE")) {
+          signal(); // The operator holds the registry row before approval lock.
+          await released;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const execution = executeApprovedAdditiveColumn(proxied, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    let inserted: Promise<unknown> | undefined;
+    try {
+      await Promise.race([
+        locked,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("REGISTRY_LOCK_BARRIER_TIMEOUT")), 5000)),
+      ]);
+      // Deliberately misgrant raw INSERT to a genuine independent approver.
+      // A duplicate approval follows exactly the same advisory key as the
+      // operator. Registry-first acquisition must make INSERT wait here.
+      inserted = actor.query(
+        "INSERT INTO platform_schema_approvals " +
+        "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+        "VALUES($1,$2,$3,$4,$5,'test',clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,operation(lab),lab.approver,lab.operatorRole],
+      );
+      let waiting = false;
+      for (let n = 0; n < 40; n += 1) {
+        const state = await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [actor.processID ?? -1],
+        );
+        if (state.rows[0]?.wait_event_type === "Lock") {
+          waiting = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      expect(waiting, "Direct INSERT must wait for registry row lock, not approval lock")
+        .toBe(true);
+      release();
+      expect((await execution).status).toBe("APPLIED");
+      await expect(inserted).rejects.toMatchObject({code:"23505"});
+      expect(await hasWebsite(lab)).toBe(true);
+      expect((await lab.dbAdmin.query(
+        "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
+    } finally {
+      release();
+      await Promise.allSettled([execution,inserted ?? Promise.resolve()]);
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM " + grantRole);
+    }
+  },20000);
+
 });
