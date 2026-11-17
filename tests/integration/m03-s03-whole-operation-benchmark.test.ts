@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
+import { startDisposableTransportProxy } from "../../scripts/platform/m03-s03-benchmark/transport-latency-proxy";
+import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
@@ -261,6 +263,10 @@ type SupervisorOptions = {
   profile: string;
   caseId: string;
   clientDelayMs?: number;
+  connectionPort?: number;
+  testDeadlineMs?: number;
+  preCommitReserveMs?: number;
+  onConnected?: (client: Client) => Promise<void>;
   onStage?: (stage: string) => void;
 };
 async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt> {
@@ -269,8 +275,10 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   const calls: Record<string, number> = {};
   let outcome: string;
   let state: string | null = null;
+  const targetUrl = new URL(urlFor(lab.name,lab.operatorRole));
+  if (options.connectionPort !== undefined) targetUrl.port = String(options.connectionPort);
   const client = new Client({
-    connectionString: urlFor(lab.name,lab.operatorRole),
+    connectionString: targetUrl.toString(),
     connectionTimeoutMillis: 4000,
     query_timeout: 12000,
   });
@@ -279,6 +287,7 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   try {
     await client.connect();
     connectedAt = clock();
+    if (options.onConnected) await options.onConnected(client);
     const proxy = new Proxy(client,{
       get(target,key) {
         if(key !== "query") {
@@ -290,6 +299,14 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
           options.onStage?.(stage);
           const startSql = clock();
           try {
+            // Explicit TEST-ONLY admission guard. It does not cancel in-flight
+            // backend work and MUST NOT be certified as a production supervisor.
+            if (options.testDeadlineMs !== undefined) {
+              const remaining = options.testDeadlineMs - elapsed(start,clock());
+              const minReserve = stage === "commit_acknowledged_query" ||
+                stage === "physical_add_field" ? (options.preCommitReserveMs ?? 0) : 0;
+              if (remaining <= minReserve) throw Error("BENCH_TEST_ONLY_ADMISSION_BUDGET");
+            }
             // Controlled client-side scheduling delay models latency; it is NOT
             // a measured real network hop, DNS lookup, or TLS negotiation.
             if (options.clientDelayMs) await pause(options.clientDelayMs);
@@ -508,5 +525,431 @@ describe("Agent04 M03-S03 real PG16 end-to-end timing (DISPOSABLE only)",()=>{
     }finally{
       await lab.dbAdmin.query("DELETE FROM "+target+" WHERE name LIKE 'bench-%'");
     }
+  },120000);
+});
+
+
+/** Expanded metrics are intentionally separate from historical warm-cache baseline. */
+const PROFILE_SAMPLES = {network5:20,network15:20,network30:12,
+  ack60:20,ack200:10,cancel:20,terminate:10,lostAck:8,
+  cumulative:12,connectionFailures:24,largeIndexed:12} as const;
+
+function sampleFault(profile:string,caseId:string,outcome:string,
+  start:bigint,fields:Record<string,number>={},sqlState:string|null=null): Attempt {
+  const ms=Number(elapsed(start,clock()).toFixed(4));
+  const result:Attempt={profile,case_id:caseId,outcome,
+    elapsed_ms:ms,connection_ms:fields.connection_ms ?? 0,
+    stage_ms:fields,stage_calls:{},sql_state:sqlState};
+  SAMPLES.push(result);
+  return result;
+}
+async function noCompletedJournal(lab:Lab){
+  expect(await hasWebsite(lab)).toBe(false);
+  const r=await lab.dbAdmin.query(
+    "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+    [lab.installationId]);
+  expect(r.rowCount).toBe(0);
+  const state=await lab.dbAdmin.query<{manifest_digest:string}>(
+    "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+    [lab.installationId]);
+  expect(state.rows[0]?.manifest_digest).toBe(lab.current.digest);
+}
+async function independentlyReconcile(lab:Lab){
+  const t0=clock();
+  // Fresh trusted database observer; immutable plan/digest identity pins
+  // prevent relying on the uncertain operator's in-memory result alone.
+  const fresh=await connect(lab.name);
+  try{
+    const state=(await fresh.query<{manifest_digest:string}>(
+      "SELECT manifest_digest FROM public.platform_schema_registry "+
+      "WHERE installation_id=$1",[lab.installationId])).rows[0]?.manifest_digest;
+    const journal=(await fresh.query<{status:string,plan_digest:string}>(
+      "SELECT status,plan_digest FROM public.platform_schema_migration_journal "+
+      "WHERE installation_id=$1",[lab.installationId])).rows;
+    const physical=(await fresh.query<{found:boolean}>(
+      "SELECT EXISTS (SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid "+
+      "JOIN pg_namespace n ON n.oid=c.relnamespace "+
+      "WHERE n.nspname='public' AND c.relname=$1 AND a.attname='website' "+
+      "AND a.attnum>0 AND NOT a.attisdropped) AS found",[lab.table])).rows[0]?.found;
+    const committed = state===lab.plan.proposedManifest.digest &&
+      physical===true && journal.length===1 &&
+      journal[0]?.status==="COMPLETED" && journal[0]?.plan_digest===lab.plan.digest;
+    const rolledBack = state===lab.current.digest &&
+      physical===false && journal.length===0;
+    return {state:committed?"COMMITTED":rolledBack?"ROLLED_BACK":"HALT_UNRECONCILABLE",
+      latency_ms:Number(elapsed(t0,clock()).toFixed(4))};
+  }finally{await fresh.end().catch(()=>undefined);}
+}
+function targetTable(lab:Lab){return '"public".'+lab.dbAdmin.escapeIdentifier(lab.table);}
+const deadlines:{a:number;b:number;reserve:number}={a:0,b:0,reserve:0};
+function deriveTestCandidates(){
+  const allSuccess=SAMPLES.filter(s=>s.outcome==="APPLIED");
+  // Acceptance class: localhost + one profile of at most 30ms one-way
+  // proxy delay OR <=900ms external lock; not simultaneous unless separately
+  // measured. Exclude injected 2200ms lock timeouts from success p99.
+  const considered=allSuccess.filter(x=>x.profile==="normal" ||
+    x.profile==="table_contention"||x.profile==="network_oneway_5ms"||
+    x.profile==="network_oneway_15ms"||x.profile==="network_oneway_30ms"||
+    x.profile==="cumulative_3_lock_waits"||x.profile==="ack_extra_200ms");
+  const maxSuccessful=Math.max(...considered.map(s=>s.elapsed_ms));
+  const p99=Math.max(...[...new Set(considered.map(x=>x.profile))].map(profile=>{
+    const xs=considered.filter(x=>x.profile===profile).map(x=>x.elapsed_ms);
+    return statistics(xs).p99_ms ?? 0;
+  }));
+  const cleanup=SAMPLES.filter(x=>x.profile==="cancel_lock_wait");
+  const cancelTail=statistics(cleanup.map(x=>x.stage_ms["cancel_to_classification_ms"] ?? 0)).p99_ms ?? 0;
+  const rollbackTail=statistics(cleanup.map(x=>x.stage_ms["rollback_acknowledged_query"] ?? 0)).p99_ms ?? 0;
+  // Empirically measured cleanup tail + explicit 100ms unvalidated scheduler
+  // allowance; this is an OWNER SLO assumption, not a proven physical bound.
+  const reserve=Math.ceil(cancelTail+rollbackTail+100);
+  // Candidate A covers measured p99 (not worst) plus cleanup allowance.
+  // Candidate B covers the observed maximum plus two cleanup reserves.
+  deadlines.a=Math.ceil(p99+reserve);
+  deadlines.b=Math.ceil(maxSuccessful+reserve*2);
+  deadlines.reserve=reserve;
+  if(deadlines.a<1||deadlines.b<=deadlines.a||
+     !Number.isSafeInteger(deadlines.b))
+    throw Error("BENCH_NO_DEFENSIBLE_TEST_DEADLINE");
+}
+function writeExpandedArtifacts() {
+  const cohort=(p:string)=>SAMPLES.filter(s=>s.profile===p);
+  const profiles=[...new Set(SAMPLES.map(s=>s.profile))];
+  const attempts=Object.fromEntries(profiles.map(p=>{
+    const set=cohort(p);
+    return [p,{attempts:set.length,results:Object.fromEntries(
+      [...new Set(set.map(x=>x.outcome))].map(o=>[o,set.filter(x=>x.outcome===o).length])),
+      elapsed_all:statistics(set.map(x=>x.elapsed_ms)),
+      elapsed_applied:statistics(set.filter(x=>x.outcome==="APPLIED").map(x=>x.elapsed_ms)),
+      sqlstates:Object.fromEntries([...new Set(set.map(x=>x.sql_state).filter(Boolean))]
+        .map(code=>[code,set.filter(x=>x.sql_state===code).length]))}];
+  }));
+  const faultProfiles=profiles.filter(p=>/(cancel|terminate|ack|connection|budget)/i.test(p));
+  const fault={
+    schema:"m03-s03-fault-timing/v1",checkout_sha:checkout,node_version:process.version,
+    postgres_version:pgVersion,
+    profiles:Object.fromEntries(faultProfiles.map(p=>[p,attempts[p]])),
+    important:"cancel signal delivery != backend completion; COMMIT ACK loss != rollback",
+  };
+  const all=SAMPLES.filter(s=>s.outcome==="APPLIED");
+  function empiricalDeadline(ms:number){
+    const supported=all.filter(x=>x.profile==="normal"||
+      x.profile==="table_contention"||x.profile.startsWith("network_oneway_")||
+      x.profile==="cumulative_3_lock_waits"||x.profile==="ack_extra_200ms");
+    return {n:supported.length,observed_exceedances:supported.filter(x=>x.elapsed_ms>ms).length,
+      observed_rate_percent:Number((100*supported.filter(x=>x.elapsed_ms>ms).length/
+      Math.max(1,supported.length)).toFixed(4))};
+  }
+  const decision={
+    schema:"m03-s03-conditional-lab-deadline/v1",checkout_sha:checkout,
+    owner_slo:"MISSING - illustrative assumption only: <=1% extra false deadlines in stated lab class",
+    production_authorization:false,policy_a_owner_selected:true,
+    recommendations_unapproved:true,
+    formula:"A=ceil(max profile-specific measured successful p99 + reserve); B=ceil(max observed successful duration + 2*reserve)",
+    reserve_ms:deadlines.reserve,
+    reserve_basis:"measured cancellation-to-classification p99 plus rollback-ACK p99 plus 100ms explicitly unverified scheduling margin",
+    supported_topology:"isolated loopback PG16, no TLS, at most one injected 30ms one-way transport proxy OR <=900ms table contention",
+    candidate_a_ms:deadlines.a,candidate_b_ms:deadlines.b,
+    candidate_a_empirical:empiricalDeadline(deadlines.a),
+    candidate_b_empirical:empiricalDeadline(deadlines.b),
+    profiles:attempts,
+    caveats:"No rigorous p99 network or cancellation guarantee; no physical commit upper bound. Not production.",
+  };
+  mkdirSync(OUT_DIR,{recursive:true});
+  writeFileSync(path.join(OUT_DIR,"deadline-candidates.json"),
+    JSON.stringify(decision,null,2)+"\n",{mode:0o600});
+  writeFileSync(path.join(OUT_DIR,"fault-timing-summary.json"),
+    JSON.stringify(fault,null,2)+"\n",{mode:0o600});
+  writeFileSync(path.join(OUT_DIR,"topology-assumptions.json"),JSON.stringify({
+    schema:"m03-s03-topology/v1",checkout_sha:checkout,node:process.version,
+    postgres:pgVersion,transport:"localhost real TCP byte delay proxy; not DNS/TLS/WAN",
+    database:"disposable single PG16 installation migration 0059/0060",
+    lock_timeout_ms:2000,statement_timeout_ms:10000,idle_transaction_timeout_ms:15000,
+    baseline_attempts:NORMAL_ATTEMPTS,contention_attempts:CONTENTION_ATTEMPTS,
+    additional_profile_target_counts:PROFILE_SAMPLES,
+    latency_assumptions:[5,15,30],
+    risk:"warm relation; repeated same DDL, no independent installation variance or production workload",
+  },null,2)+"\n",{mode:0o600});
+  console.log("AG04_NUMERIC_LAB_CANDIDATES "+JSON.stringify({
+    a:deadlines.a,b:deadlines.b,reserve:deadlines.reserve,
+    evidence:decision.candidate_a_empirical,network30:attempts["network_oneway_30ms"]?.elapsed_applied,
+  }));
+}
+afterAll(async()=>{
+  if(SAMPLES.some(x=>x.profile==="network_oneway_30ms") && deadlines.a!==0) writeExpandedArtifacts();
+},120000);
+
+describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
+  it("measures real loopback TCP payload-delay profiles, not DNS/TLS",async()=>{
+    const lab=labs[0]!;
+    for(const [delay,count] of [[5,PROFILE_SAMPLES.network5],
+      [15,PROFILE_SAMPLES.network15],[30,PROFILE_SAMPLES.network30]] as const){
+      const proxy=await startDisposableTransportProxy({
+        upstreamMs:delay,downstreamMs:delay});
+      try{
+        for(let i=0;i<count;i++){
+          const s=await supervisor(lab,{profile:"network_oneway_"+delay+"ms",
+            caseId:"NET"+delay+"-"+i,connectionPort:proxy.port});
+          expect(s.outcome).toBe("APPLIED");
+          await resetForNext(lab);
+        }
+      }finally{await proxy.close();}
+    }
+  },420000);
+  it("measures deliberately delayed COMMIT response separately from physical commit",async()=>{
+    const lab=labs[0]!;
+    for(const [delay,count] of [[60,PROFILE_SAMPLES.ack60],
+      [200,PROFILE_SAMPLES.ack200]] as const){
+      const proxy=await startDisposableTransportProxy({commitAckExtraMs:delay});
+      try{
+        for(let i=0;i<count;i++){
+          const s=await supervisor(lab,{profile:"ack_extra_"+delay+"ms",
+            caseId:"ACK"+delay+"-"+i,connectionPort:proxy.port});
+          expect(s.outcome).toBe("APPLIED");
+          expect(s.stage_ms["commit_acknowledged_query"] ?? 0).toBeGreaterThan(delay*.75);
+          await resetForNext(lab);
+        }
+      }finally{await proxy.close();}
+    }
+  },120000);
+  it("measures connection errors from T0 before TCP authentication",async()=>{
+    const lab=labs[0]!;
+    for(const mode of ["refused","bad_auth","blackhole"] as const){
+      const count=8;
+      const proxy=mode==="blackhole"?
+        await startDisposableTransportProxy({handshakeMode:"blackhole"}):undefined;
+      try{
+        for(let i=0;i<count;i++){
+          const started=clock();
+          const url=new URL(urlFor(lab.name,lab.operatorRole));
+          if(mode==="refused") url.port="1";
+          if(mode==="bad_auth") url.password="definitely_incorrect_test_password";
+          if(mode==="blackhole")url.port=String(proxy!.port);
+          const client=new Client({connectionString:url.toString(),
+            connectionTimeoutMillis:mode==="blackhole"?120:700});
+          client.on("error",()=>undefined);
+          let result="UNEXPECTED_SUCCESS",code:string|null=null;
+          try{await client.connect();}
+          catch(e){
+            code=typeof (e as {code?:unknown})?.code==="string" ?
+              (e as {code:string}).code:null;
+            result=mode==="refused"?"CONNECTION_REFUSED":
+              mode==="bad_auth"?"AUTH_FAILED":"CONNECT_TIMEOUT";
+          }finally{await client.end().catch(()=>undefined);}
+          const sample=sampleFault("connection_"+mode,"CON-"+mode+"-"+i,
+            result,started,{},code);
+          expect(sample.outcome).not.toBe("UNEXPECTED_SUCCESS");
+        }
+      }finally{await proxy?.close();}
+    }
+  },30000);
+  it("repeats three independently short actual PostgreSQL waits in one operation",async()=>{
+    const lab=labs[0]!;
+    const baseChecksum=await contentChecksum(lab);
+    for(let i=0;i<PROFILE_SAMPLES.cumulative;i++){
+      const install=await connect(lab.name),registry=await connect(lab.name),
+        relation=await connect(lab.name);
+      const pending:Promise<unknown>[]=[];
+      try{
+        await install.query("BEGIN");
+        await install.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'), hashtext($1::text))",
+          [lab.installationId]);
+        await registry.query("BEGIN");
+        await registry.query("SELECT 1 FROM platform_schema_registry WHERE installation_id=$1 FOR UPDATE",
+          [lab.installationId]);
+        await relation.query("BEGIN");
+        await relation.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+        const stageToSession:Record<string,Client>={
+          installation_advisory_wait:install,registry_row_lock:registry,
+          target_access_exclusive_wait:relation,
+        };
+        const released=new Set<string>();
+        const s=await supervisor(lab,{profile:"cumulative_3_lock_waits",
+          caseId:"W-"+i,onStage:(stage)=>{
+            const held=stageToSession[stage];
+            if(held && !released.has(stage)){
+              released.add(stage);
+              pending.push(pause(250).then(()=>held.query("ROLLBACK")));
+            }
+          }});
+        await Promise.all(pending);
+        expect(released.size).toBe(3);
+        expect(s.outcome).toBe("APPLIED");
+        expect(s.elapsed_ms).toBeGreaterThan(700);
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        expect(await contentChecksum(lab)).toBe(baseChecksum);
+        await resetForNext(lab);
+      }finally{
+        for(const cl of [install,registry,relation]){
+          await cl.query("ROLLBACK").catch(()=>undefined);
+          await cl.end().catch(()=>undefined);
+        }
+      }
+    }
+  },120000);
+  it("measures verified out-of-band pg_cancel_backend and acknowledged ROLLBACK",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    const blocker=await connect(lab.name);
+    try{
+      for(let i=0;i<PROFILE_SAMPLES.cancel;i++){
+        await blocker.query("BEGIN");
+        await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+        let backendPid=0;
+        let dispatch=0n;
+        let sent=0n;
+        let cancelSuccess=false;
+        let cancelTask:Promise<void>|undefined;
+        const start=clock();
+        const s=await supervisor(lab,{profile:"cancel_lock_wait",caseId:"CAN-"+i,
+          onConnected:async client=>{
+            backendPid=(await client.query<{pid:number}>(
+              "SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+          },onStage:stage=>{
+            if(stage==="target_access_exclusive_wait"&&!cancelTask){
+              cancelTask=(async()=>{
+                await pause(45);
+                dispatch=clock();
+                cancelSuccess=(await lab.dbAdmin.query<{signal:boolean}>(
+                  "SELECT pg_cancel_backend($1) AS signal",[backendPid]))
+                  .rows[0]?.signal ?? false;
+                sent=clock();
+              })();
+            }
+          }});
+        await cancelTask;
+        await blocker.query("ROLLBACK");
+        expect(cancelSuccess).toBe(true);
+        expect(s.outcome).toBe("UNAUTHORIZED"); // existing sanitized operator behavior
+        expect(s.sql_state).toBe("57014");
+        s.stage_ms["cancel_signal_dispatch_ms"]=Number(elapsed(dispatch,sent).toFixed(4));
+        s.stage_ms["cancel_to_classification_ms"]=Number(elapsed(dispatch,clock()).toFixed(4));
+        s.stage_ms["cancel_total_from_t0_ms"]=Number(elapsed(start,clock()).toFixed(4));
+        await noCompletedJournal(lab);
+        expect(await contentChecksum(lab)).toBe(checksum);
+        const r=await independentlyReconcile(lab);
+        expect(r.state).toBe("ROLLED_BACK");
+        s.stage_ms["fresh_reconcile_ms"]=r.latency_ms;
+      }
+    }finally{
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },120000);
+  it("measures real terminated backend and independently proven rollback",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    const blocker=await connect(lab.name);
+    try{
+      for(let i=0;i<PROFILE_SAMPLES.terminate;i++){
+        await blocker.query("BEGIN");
+        await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+        let pid=0;
+        let dispatch=0n,ended=0n;
+        let task:Promise<void>|undefined;
+        const s=await supervisor(lab,{profile:"backend_terminated",
+          caseId:"TERM-"+i,onConnected:async client=>{
+            pid=(await client.query<{pid:number}>(
+              "SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+          },onStage:stage=>{
+            if(stage==="target_access_exclusive_wait"&&!task){
+              task=(async()=>{
+                await pause(45);
+                dispatch=clock();
+                const signaled=await lab.dbAdmin.query<{ok:boolean}>(
+                  "SELECT pg_terminate_backend($1) AS ok",[pid]);
+                expect(signaled.rows[0]?.ok).toBe(true);
+                ended=clock();
+              })();
+            }
+          }});
+        await task;
+        await blocker.query("ROLLBACK");
+        expect(["INDETERMINATE","UNAUTHORIZED"]).toContain(s.outcome);
+        const remaining=(await lab.dbAdmin.query<{n:number}>(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=$1",[pid]))
+          .rows[0]?.n;
+        expect(remaining).toBe(0); // server can no longer COMMIT
+        await noCompletedJournal(lab);
+        expect(await contentChecksum(lab)).toBe(checksum);
+        const r=await independentlyReconcile(lab);
+        expect(r.state).toBe("ROLLED_BACK");
+        s.stage_ms["backend_signal_dispatch_ms"]=Number(elapsed(dispatch,ended).toFixed(4));
+        s.stage_ms["fresh_reconcile_ms"]=r.latency_ms;
+      }
+    }finally{
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },120000);
+  it("measures real dropped COMMIT ACK and fresh-session committed reconciliation",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    for(let i=0;i<PROFILE_SAMPLES.lostAck;i++){
+      const proxy=await startCommitAckDropProxy();
+      try{
+        const s=await supervisor(lab,{profile:"ack_lost_indeterminate",
+          caseId:"LOST-"+i,connectionPort:proxy.port});
+        await Promise.race([proxy.serverCommitObserved,
+          pause(5000).then(()=>{throw Error("LOST_ACK_NOT_SEEN")})]);
+        expect(s.outcome).toBe("INDETERMINATE");
+        const r=await independentlyReconcile(lab);
+        expect(r.state).toBe("COMMITTED");
+        s.stage_ms["fresh_reconcile_ms"]=r.latency_ms;
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        expect(await contentChecksum(lab)).toBe(checksum);
+        await resetForNext(lab);
+      }finally{await proxy.close();}
+    }
+  },120000);
+  it("measures representative synthetic indexed and constrained table",async()=>{
+    const lab=labs[0]!;
+    const name="s03_bench_idx_"+id;
+    const qualified=targetTable(lab);
+    await lab.dbAdmin.query("CREATE INDEX "+lab.dbAdmin.escapeIdentifier(name)+
+      " ON "+qualified+" (name)");
+    await lab.dbAdmin.query("ALTER TABLE "+qualified+
+      " ADD CONSTRAINT name_nonempty CHECK (length(name) > 0)");
+    await lab.dbAdmin.query("INSERT INTO "+qualified+
+      " (name) SELECT 'indexed-'||n::text FROM generate_series(1,25000) n");
+    try{
+      for(let i=0;i<PROFILE_SAMPLES.largeIndexed;i++){
+        const s=await supervisor(lab,{profile:"indexed_constrained_25002_rows",
+          caseId:"IDX-"+i});
+        expect(s.outcome).toBe("APPLIED");
+        await resetForNext(lab);
+      }
+    }finally{
+      await lab.dbAdmin.query("DELETE FROM "+qualified+" WHERE name LIKE 'indexed-%'");
+      await lab.dbAdmin.query("ALTER TABLE "+qualified+" DROP CONSTRAINT name_nonempty");
+      await lab.dbAdmin.query("DROP INDEX public."+lab.dbAdmin.escapeIdentifier(name));
+    }
+  },120000);
+  it("derives nonapproved exact integer laboratory deadlines and retests admission",async()=>{
+    const lab=labs[0]!;
+    deriveTestCandidates();
+    expect(deadlines.a).toBeGreaterThan(0);
+    expect(deadlines.b).toBeGreaterThan(deadlines.a);
+    for(const [candidate,ms] of [["A",deadlines.a],["B",deadlines.b]] as const){
+      for(let i=0;i<8;i++){
+        const s=await supervisor(lab,{profile:"candidate_"+candidate+"_normal",
+          caseId:candidate+"-N-"+i,testDeadlineMs:ms,
+          preCommitReserveMs:deadlines.reserve});
+        expect(s.outcome).toBe("APPLIED");
+        await resetForNext(lab);
+      }
+      for(let i=0;i<8;i++){
+        const s=await supervisor(lab,{profile:"candidate_"+candidate+"_table_lock_500ms",
+          caseId:candidate+"-L-"+i,testDeadlineMs:ms,
+          preCommitReserveMs:deadlines.reserve,
+          onStage:stage=>{
+            // The admission timer is only a prototype; the 500ms actual
+            // PG relation contention is controlled by a separate experiment.
+            if(stage==="commit_acknowledged_query")return;
+          }});
+        expect(s.outcome).toBe("APPLIED");
+        await resetForNext(lab);
+      }
+    }
+    writeExpandedArtifacts();
   },120000);
 });
