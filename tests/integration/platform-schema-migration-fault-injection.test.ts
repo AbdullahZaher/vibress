@@ -3,6 +3,9 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { reconcileReadOnly, type RecoveryExpected } from "../../scripts/platform/m03-s03-fault/read-only-reconcile";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -234,14 +237,22 @@ afterAll(async () => {
           .catch(() => undefined);
       }
     }
-    await cluster.end().catch(() => undefined);
+    // A teardown that silently leaves credentials or test databases is FAIL.
+    // Compare only the exact random names created by this test process.
+    const allRoles = labs.flatMap(l => [l.author, l.approver, l.operatorRole, l.runtimeRole]);
+    const remainingDb = await cluster.query<{ name: string }>(
+      "SELECT datname AS name FROM pg_database WHERE datname = ANY($1::text[])",
+      [labs.map(l => l.name)]);
+    const remainingRoles = await cluster.query<{ name: string }>(
+      "SELECT rolname AS name FROM pg_roles WHERE rolname = ANY($1::text[])",
+      [allRoles]);
+    await cluster.end();
+    if (remainingDb.rows.length > 0 || remainingRoles.rows.length > 0) {
+      throw Error("DISPOSABLE_FIXTURE_CLEANUP_INCOMPLETE");
+    }
   }
 });
 
-
-import { spawn } from "node:child_process";
-import { once } from "node:events";
-import { reconcileReadOnly, type RecoveryExpected } from "../../scripts/platform/m03-s03-fault/read-only-reconcile";
 
 type FaultMoment = "before" | "after";
 
