@@ -1,7 +1,7 @@
 # M03-S03 — Approval Expiry and Whole-Operation Deadline Decision
 
 **Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P02
-**Decision date (proposal):** 2026-11-17, Asia/Riyadh
+**Decision record first published:** 2026-11-17T19:55:41+03:00 (GitHub commit 36338377fa0dd288f60f97cf6d9b0d9d6ef56475, 2026-11-17T16:55:41Z). **Formal approval timestamp: NOT SET.**
 **Status:** PROPOSED / PENDING ACCOUNTABLE APPROVAL — NOT AN APPROVED EXECUTION CONTRACT
 **Finding:** AG06-S03-08, P2 BLOCKING / OPEN
 **Canonical PR:** https://github.com/AbdullahZaher/vibress/pull/198 (b5cfc0687076c86a7450a8a785a072f6e63ad289, Draft)
