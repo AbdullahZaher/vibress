@@ -266,7 +266,7 @@ export async function executeApprovedAdditiveColumn(
   let began = false;
   let commitAttempted = false;
   try {
-    await db.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+    await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
     began = true;
     await db.query("SET LOCAL lock_timeout = '2000ms'");
     await db.query("SET LOCAL statement_timeout = '10000ms'");
@@ -330,13 +330,22 @@ export async function executeApprovedAdditiveColumn(
       current.installationId !== scope.installationId) {
       deny("UNAUTHORIZED", "registered plan did not rehydrate");
     }
+    // SERIALIZED AUTHORIZATION BOUNDARY: this advisory transaction lock must
+    // be acquired before the approval read. The 0060 approval DML trigger
+    // takes the identical key on INSERT/UPDATE/DELETE, including misgranted
+    // direct DML. With READ COMMITTED the following statement sees the most
+    // recently committed revocation. No approval UPDATE ACL is granted.
+    await db.query(
+      "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+      "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+      [request.installationId, request.planDigest, ddl.operationId],
+    );
     const approval = (await db.query<ApprovalRow>(
       "SELECT operation_id, approver, approver_login, approver_principal_id, " +
       "approved_application_id, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
-      // Trusted definer does SELECT FOR SHARE under a fixed search_path.
-      // Caller has EXECUTE but no UPDATE privilege on approval data.
-      "FROM public.platform_schema_lock_approval($1,$2,$3)",
+      "FROM public.platform_schema_approvals " +
+      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
       [request.installationId, request.planDigest, ddl.operationId],
     )).rows[0];
     if (!approval || !approval.approver_login || !approval.approver_principal_id ||
