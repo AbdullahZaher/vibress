@@ -241,6 +241,7 @@ afterAll(async () => {
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { reconcileReadOnly, type RecoveryExpected } from "../../scripts/platform/m03-s03-fault/read-only-reconcile";
 
 type FaultMoment = "before" | "after";
 
@@ -604,5 +605,77 @@ describe("M03-S03 Agent 04 process crash and competing plans", () => {
     }
     expect((await run(lab)).status).toBe("ALREADY_APPLIED");
     await assertCommitted(lab, checksum);
+  });
+});
+
+function pinnedRecoveryEvidence(lab: Lab, seedChecksum: string): RecoveryExpected {
+  const before = lab.current.resources.find(x => x.tableName === lab.table);
+  const after = lab.plan.proposedManifest.resources.find(x => x.tableName === lab.table);
+  if (!before || !after || !lab.plan.operations[0]) throw Error("MISSING_TRUSTED_MANIFEST");
+  return {
+    database: lab.name,
+    installationId: lab.installationId,
+    operationId: lab.plan.operations[0].id,
+    planDigest: lab.plan.digest,
+    operatorRole: lab.operatorRole,
+    tableName: lab.table,
+    columnName: "website",
+    beforeDigest: lab.current.digest,
+    afterDigest: lab.plan.proposedManifest.digest,
+    beforeManifestText: JSON.stringify(lab.current),
+    afterManifestText: JSON.stringify(lab.plan.proposedManifest),
+    expectedSeedChecksum: seedChecksum,
+    beforeColumns: before.fields.map(x => ({
+      name: x.id, type: x.postgresType, required: x.required,
+    })),
+    afterColumns: after.fields.map(x => ({
+      name: x.id, type: x.postgresType, required: x.required,
+    })),
+  };
+}
+async function independentReconcile(lab: Lab, checksum: string) {
+  const inspector = await connect(lab.name);
+  try {
+    return await reconcileReadOnly(inspector, pinnedRecoveryEvidence(lab, checksum));
+  } finally {
+    await inspector.end().catch(() => undefined);
+  }
+}
+
+describe("M03-S03 fresh-session recovery state machine", () => {
+  it("old state requires reauthorization, committed state prohibits physical replay", async () => {
+    const lab = await isolated("u");
+    const checksum = await contentChecksum(lab);
+    expect(await independentReconcile(lab, checksum)).toEqual({
+      state: "ROLLED_BACK", retry: "REQUIRES_NEW_AUTHORIZATION_CHECK",
+    });
+    expect((await run(lab)).status).toBe("APPLIED");
+    expect(await independentReconcile(lab, checksum)).toEqual({
+      state: "COMMITTED", retry: "ALREADY_APPLIED_ONLY",
+    });
+    expect((await run(lab)).status).toBe("ALREADY_APPLIED");
+  });
+  it("contradictory digest/catalog/journal evidence halts replay", async () => {
+    const lab = await isolated("v"), checksum = await contentChecksum(lab);
+    const expected = pinnedRecoveryEvidence(lab, checksum);
+    // A fabricated new-registry digest without its transactionally
+    // committed journal/DDL is not a successful migration.
+    await lab.dbAdmin.query("UPDATE platform_schema_registry SET " +
+      "manifest_digest=$1,manifest=$2 WHERE installation_id=$3", [
+        expected.afterDigest, expected.afterManifestText, lab.installationId,
+      ]);
+    try {
+      expect(await independentReconcile(lab, checksum)).toEqual({
+        state: "HALT_UNRECONCILABLE", retry: "DENIED",
+      });
+    } finally {
+      await lab.dbAdmin.query("UPDATE platform_schema_registry SET " +
+        "manifest_digest=$1,manifest=$2 WHERE installation_id=$3", [
+          expected.beforeDigest, expected.beforeManifestText, lab.installationId,
+        ]);
+    }
+    expect(await independentReconcile(lab, checksum)).toEqual({
+      state: "ROLLED_BACK", retry: "REQUIRES_NEW_AUTHORIZATION_CHECK",
+    });
   });
 });
