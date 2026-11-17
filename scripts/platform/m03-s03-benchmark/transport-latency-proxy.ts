@@ -97,7 +97,11 @@ export async function startDisposableTransportProxy(
         server.close(error =>
           error ? reject(Error("BENCHMARK_PROXY_CLEANUP_FAILED")) : resolve()),
       );
-      if (sockets.size !== 0) throw Error("BENCHMARK_PROXY_SOCKET_LEAK");
+      if ([...sockets].some(sock => !sock.destroyed)) {
+        throw Error("BENCHMARK_PROXY_LIVE_SOCKET_LEAK");
+      }
+      // Node may defer close events until after the server-close callback.
+      sockets.clear();
     },
   };
 }
