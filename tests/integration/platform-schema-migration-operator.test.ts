@@ -187,10 +187,21 @@ async function hasWebsite(lab: Lab): Promise<boolean> {
   return r.rows[0]?.present ?? false;
 }
 
+async function contentChecksum(lab: Lab): Promise<string> {
+  const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+  const result = await lab.dbAdmin.query<{ digest: string }>(
+    "SELECT md5(string_agg(name, ',' ORDER BY name)) AS digest FROM " + qualified,
+  );
+  const value = result.rows[0]?.digest;
+  if (!value) throw new Error("fixture content checksum unavailable");
+  return value;
+}
+
 beforeAll(async () => {
   const url = new URL(BASE_URL);
   if (!["127.0.0.1", "localhost"].includes(url.hostname) ||
-    url.port !== "5433" || url.pathname !== "/vibress") {
+    url.port !== "5433" || url.pathname !== "/vibress" ||
+    url.username !== "vibress" || url.password !== "vibress" || url.search !== "") {
     throw new Error("Refusing migration integration tests outside disposable loopback fixture");
   }
   cluster = await connect("vibress");
@@ -202,6 +213,7 @@ beforeAll(async () => {
   if (!db?.rolsuper || db.ver < 160000 || db.ver >= 170000) {
     throw new Error("Disposable PostgreSQL 16 superuser lab required");
   }
+  console.info("M03-S03 disposable lab: Node=" + process.version + " PostgreSQL server_version_num=" + db.ver);
   labs.push(await createLab("a"));
   labs.push(await createLab("b"));
 }, 120000);
@@ -287,8 +299,30 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     expect(await hasWebsite(lab)).toBe(false);
   });
 
+  it("rejects overprivileged migration identities despite valid plan approval", async () => {
+    const lab = labs[0]!;
+    const role = lab.dbAdmin.escapeIdentifier(lab.operatorRole);
+    await lab.dbAdmin.query("GRANT CREATE ON SCHEMA public TO " + role);
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE CREATE ON SCHEMA public FROM " + role);
+    }
+    await lab.dbAdmin.query("GRANT CREATE ON DATABASE " +
+      lab.dbAdmin.escapeIdentifier(lab.name) + " TO " + role);
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE CREATE ON DATABASE " +
+        lab.dbAdmin.escapeIdentifier(lab.name) + " FROM " + role);
+    }
+  });
+
   it("serializes concurrent operators and deterministically prevents reapplication", async () => {
     const lab = labs[0]!;
+    const originalChecksum = await contentChecksum(lab);
     const second = await connect(lab.name, lab.operatorRole);
     try {
       const results = await Promise.allSettled([
@@ -301,6 +335,7 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
         r.value.status === "APPLIED");
       expect(applied).toHaveLength(1);
       expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(originalChecksum);
       const retry = await run(lab);
       expect(retry.status).toBe("ALREADY_APPLIED");
       expect(retry.afterRows).toBe("2");
