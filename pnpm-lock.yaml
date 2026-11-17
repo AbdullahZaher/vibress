@@ -657,6 +657,9 @@ importers:
       '@vibress/config':
         specifier: workspace:*
         version: link:../config
+      '@vibress/schema-engine':
+        specifier: workspace:*
+        version: link:../schema-engine
       '@vibress/observability':
         specifier: workspace:*
         version: link:../observability
