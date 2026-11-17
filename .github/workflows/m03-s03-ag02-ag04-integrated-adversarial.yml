@@ -1,0 +1,160 @@
+name: M03-S03 Independent Integrated PG16 Adversarial Repetition
+
+on:
+  push:
+    branches:
+      - audit/m03-s03-ag02-ag04-integrated-adversarial-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-adversarial:
+    name: Exact candidate PostgreSQL 16 independently repeated negatives
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      EXPECTED_INTEGRATED_SHA: b5cfc0687076c86a7450a8a785a072f6e63ad289
+      EXPECTED_INTEGRATED_TREE: 4808788688120b147fcab3fdd8a730021ec51516
+      EXPECTED_OPERATOR_BLOB: 5b323911157fbffca3f48d0bcd604da0312609f8
+      HISTORICAL_AGENT04_SHA: c79aa458b14a88dc543a6e954ec13e3531605480
+      REPEAT_COUNT: "5"
+    steps:
+      - name: Checkout EXACT integrated PR source (not auditor branch)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: b5cfc0687076c86a7450a8a785a072f6e63ad289
+          persist-credentials: false
+      - name: Verify candidate SHA, tree and operator blob byte-for-byte
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_INTEGRATED_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$EXPECTED_INTEGRATED_TREE"
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$EXPECTED_OPERATOR_BLOB"
+          mkdir -p artifacts
+          printf "suite\titeration\tresult\n" > artifacts/m03-s03-integrated-attempts.tsv
+          printf 'INTEGRATED_SHA=%s\nTREE=%s\nOPERATOR_BLOB=%s\n' \
+            "$EXPECTED_INTEGRATED_SHA" "$EXPECTED_INTEGRATED_TREE" "$EXPECTED_OPERATOR_BLOB" \
+            > artifacts/m03-s03-integrated-source.txt
+      - name: Setup pnpm 11.22.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - name: Setup patched Node 24.22.3
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Install locked dependencies
+        run: |
+          test "$(node --version)" = "v24.22.3"
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Boot ONLY isolated disposable PostgreSQL 16
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml up -d --wait postgres
+          version="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          echo "DISPOSABLE_POSTGRESQL_VERSION=$version"
+          test "$version" -ge 160016
+          test "$version" -lt 170000
+      - name: Replay ORIGINAL Agent04 assertion byte-for-byte as test-only overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$HISTORICAL_AGENT04_SHA"
+          git show "$HISTORICAL_AGENT04_SHA:tests/integration/platform-schema-migration-fault-injection.test.ts" > "$RUNNER_TEMP/m03-original-regression.ts"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const name = '  it("noncooperating ALTER TABLE after advisory fence: no fabricated journal success"';
+          const next = '  it("transaction lock held by noncooperating DDL session: bounded failure, retry"';
+          const file = 'tests/integration/platform-schema-migration-fault-injection.test.ts';
+          const original = readFileSync(process.env.RUNNER_TEMP + '/m03-original-regression.ts', 'utf8');
+          const integrated = readFileSync(file, 'utf8');
+          const get = (s) => {
+            const a = s.indexOf(name); const b = s.indexOf(next, a);
+            if (a < 0 || b <= a) throw Error('AG04_ORIGINAL_REGRESSION_NOT_FOUND');
+            return { a, b, text: s.slice(a,b) };
+          };
+          const before = get(original), now = get(integrated);
+          if (!before.text.includes('await expect(withOperator') || !before.text.includes(')).rejects.toThrow();')) {
+            throw Error('ORIGINAL_ASSERTION_MISSING');
+          }
+          const digest = createHash('sha256').update(before.text).digest('hex');
+          writeFileSync(process.env.GITHUB_WORKSPACE + '/artifacts/original-regression-sha256.txt', digest + '\n');
+          writeFileSync(file, integrated.slice(0, now.a) + before.text + integrated.slice(now.b));
+          const reapplied = get(readFileSync(file,'utf8'));
+          if (reapplied.text !== before.text) throw Error('HISTORICAL_ASSERTION_ALTERED');
+          process.stdout.write('ORIGINAL_AGENT04_REGRESSION_BYTES_SHA256=' + digest + '\n');
+          NODE
+      - name: Repeat ORIGINAL unchanged Agent04 adversarial catalog regression 5 times
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 "$REPEAT_COUNT"); do
+            echo "ORIGINAL_REGRESSION_ITERATION=$n"
+            if pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts \
+              -t "noncooperating ALTER TABLE after advisory fence: no fabricated journal success" \
+              > "$RUNNER_TEMP/original-$n.log" 2>&1; then
+              printf "original_unchanged\t%s\tPASS\n" "$n" >> artifacts/m03-s03-integrated-attempts.tsv
+              tail -n 12 "$RUNNER_TEMP/original-$n.log"
+            else
+              printf "original_unchanged\t%s\tFAIL\n" "$n" >> artifacts/m03-s03-integrated-attempts.tsv
+              tail -n 80 "$RUNNER_TEMP/original-$n.log"
+              exit 1
+            fi
+          done
+      - name: Restore the EXACT integrated test suite after test-only overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -- tests/integration/platform-schema-migration-fault-injection.test.ts
+          git diff --exit-code
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$EXPECTED_OPERATOR_BLOB"
+          test "$(git hash-object tests/integration/platform-schema-migration-fault-injection.test.ts)" = f5bd100fd8f473cd7e1c0a6eca1df36ca707bc1f
+      - name: Repeat BOTH original-source PostgreSQL suites 5 times each
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 "$REPEAT_COUNT"); do
+            for suite in platform-schema-migration-fault-injection platform-schema-migration-operator; do
+              echo "INTEGRATED_SUITE=$suite ITERATION=$n SHA=$EXPECTED_INTEGRATED_SHA"
+              if pnpm exec vitest run --no-file-parallelism "tests/integration/$suite.test.ts" \
+                > "$RUNNER_TEMP/$suite-$n.log" 2>&1; then
+                printf "%s\t%s\tPASS\n" "$suite" "$n" >> artifacts/m03-s03-integrated-attempts.tsv
+                tail -n 12 "$RUNNER_TEMP/$suite-$n.log"
+              else
+                printf "%s\t%s\tFAIL\n" "$suite" "$n" >> artifacts/m03-s03-integrated-attempts.tsv
+                tail -n 80 "$RUNNER_TEMP/$suite-$n.log"
+                exit 1
+              fi
+            done
+          done
+      - name: Verify full test-lab teardown, source unmodified and exact attempt count
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$EXPECTED_OPERATOR_BLOB"
+          test "$(wc -l < artifacts/m03-s03-integrated-attempts.tsv)" -eq 16
+          test "$(grep -c $'\tPASS$' artifacts/m03-s03-integrated-attempts.tsv)" -eq 15
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress \
+            -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+          git status --short
+      - name: Teardown disposable DB volumes and containers
+        if: always()
+        shell: bash
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans
+      - name: Publish source and repetition evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-integrated-adversarial-repeat
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
