@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1526,4 +1526,466 @@ describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)
     expect(journal.rows[0]?.completion_after_expiry).toBe(true);
     await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   }, 15000);
+});
+
+
+/**
+ * AG05 + AG03: test-only PostgreSQL 16 adversarial actor-state and watchdog
+ * evidence. No production watchdog, privilege grant, DDL interface or policy
+ * alteration. An observed APPLIED while an actor was deactivated is
+ * CONTRACT_DEPENDENT until owner/IAM decide privileged roster semantics.
+ */
+describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
+  async function assertNoWrite(lab: Lab, before: string): Promise<void> {
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    const journal = await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(0);
+    const registry = await lab.dbAdmin.query<{manifest_digest:string}>(
+      "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+  }
+
+  // A separate real PG session owns ACCESS EXCLUSIVE, so the operator is
+  // confirmed to be waiting at the exact boundary, not merely JS-delayed.
+  async function deactivateDuringTargetWait(
+    key: "o" | "p", kind: "AUTHOR" | "APPROVER",
+  ): Promise<void> {
+    const lab = await createLab(key);
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const original = kind === "AUTHOR" ? lab.author : lab.approver;
+    const blocker = await connect(lab.name);
+    let pending: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    let signal!: () => void;
+    const aboutToLock = new Promise<void>(resolve => { signal = resolve; });
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const proxied = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          if (sql.startsWith("LOCK TABLE ONLY")) signal();
+          return params ? lab.operator.query(sql, params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      pending = executeApprovedAdditiveColumn(proxied, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        aboutToLock,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("ACTOR_TARGET_LOCK_BARRIER_TIMEOUT")), 2500)),
+      ]);
+      let observedWait = false;
+      for (let i = 0; i < 45; i += 1) {
+        const wait = await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (wait.rows[0]?.wait_event_type === "Lock") {
+          observedWait = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 15));
+      }
+      expect(observedWait, "actual PostgreSQL relation lock wait must be observed")
+        .toBe(true);
+      // The actor roster guard allows only owner/superuser. The fixture admin
+      // acts exclusively as disposable owner; ordinary actors cannot do this.
+      await lab.dbAdmin.query("BEGIN");
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1 AND actor_kind=$2",
+        [original, kind],
+      );
+      await lab.dbAdmin.query("COMMIT");
+      const committed = await lab.dbAdmin.query<{observed_at:Date}>(
+        "SELECT clock_timestamp() AS observed_at",
+      );
+      const deactivatedAt = committed.rows[0]!.observed_at;
+      const state = await lab.dbAdmin.query<{active:boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [original],
+      );
+      expect(state.rows[0]?.active).toBe(false);
+      // Release independent blocker only AFTER deactivation is committed.
+      await blocker.query("ROLLBACK");
+      const result = await pending;
+      expect(result.status).toBe("APPLIED");
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(before);
+      const journal = await lab.dbAdmin.query<{
+        after_deactivation:boolean; policy:string;
+      }>(
+        "SELECT (catalog_evidence->>'finalAuthorizedAt')::timestamptz " +
+        "> $1::timestamptz AS after_deactivation, " +
+        "catalog_evidence->>'authorizationPolicy' AS policy " +
+        "FROM public.platform_schema_migration_journal WHERE installation_id=$2",
+        [deactivatedAt, lab.installationId],
+      );
+      expect(journal.rows).toHaveLength(1);
+      expect(journal.rows[0]?.after_deactivation).toBe(true);
+      expect(journal.rows[0]?.policy).toBe("FINAL_PRE_DDL");
+      // This proves a time-ordered behavior, NOT a policy violation:
+      // privileged roster deactivation's in-flight semantics are UNDECIDED.
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+      await Promise.allSettled([pending ?? Promise.resolve()]);
+    }
+  }
+
+  it("IAM-RACE-01A: approver deactivated/committed during actual table wait, current code still APPLIES", async () => {
+    await deactivateDuringTargetWait("o", "APPROVER");
+  }, 30000);
+
+  it("IAM-RACE-01B: author deactivated/committed during actual table wait, current code still APPLIES", async () => {
+    await deactivateDuringTargetWait("p", "AUTHOR");
+  }, 30000);
+
+  it("IAM-RACE-01C: privileged actor deactivated before initial roster read must DENY without DDL", async () => {
+    const lab = await createLab("q");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await assertNoWrite(lab, checksum);
+  }, 30000);
+
+  it("IAM-RACE-01D: queued immediately after approval advisory lock but before roster read, deactivation denies", async () => {
+    const lab = await createLab("r");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let notify!: () => void;
+    let release!: () => void;
+    const atFence = new Promise<void>(resolve => { notify = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const wrapped = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql:string, params?:unknown[]) => {
+        const result = params ? await lab.operator.query(sql, params) :
+          await lab.operator.query(sql);
+        if (sql.includes("vibress_m03s03_approval")) {
+          notify();
+          await gate;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const pending = executeApprovedAdditiveColumn(wrapped, {
+      installationId:lab.installationId,planDigest:lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        atFence,
+        new Promise<never>((_,reject) =>
+          setTimeout(() => reject(Error("ACTOR_ADVISORY_BARRIER_TIMEOUT")), 2500)),
+      ]);
+      // Unlike approval revocation, roster deactivation does not acquire
+      // the approval-specific advisory lock; it commits while fence is held.
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+    } finally {
+      release();
+    }
+    await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await assertNoWrite(lab,checksum);
+  }, 30000);
+
+  it("IAM-RACE-01E: deactivate-then-reactivate before first roster check is allowed by present schema", async () => {
+    const lab = await createLab("s");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    expect((await run(lab)).status).toBe("APPLIED");
+    expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal"
+    )).rowCount).toBe(1);
+    // No generation/epoch field exists today: a later active=true masks the
+    // earlier privileged deactivation. A policy decision is required.
+  }, 30000);
+});
+
+/**
+ * IAM-WD-01 READ-ONLY OBSERVATION PROTOTYPE. This is deliberately NOT an
+ * authorization to call pg_cancel_backend: separate PID lookup then signal
+ * has a TOCTOU window, and pg_stat_activity lacks current SET ROLE state.
+ */
+describe("M03-S03 IAM-WD-01 real PostgreSQL backend-binding negatives (observation only)", () => {
+  type Probe = {
+    pid: number;
+    backend_start: string;
+    database_oid: string;
+    database_name: string;
+    login_name: string;
+    backend_type: string;
+  };
+  type Binding = Probe & {
+    operationId: string;
+    createdAtNs: bigint;
+    leaseMs: number;
+    dedicated: boolean;
+    eligible: boolean;
+  };
+  async function observe(lab: Lab, pid: number): Promise<Probe | undefined> {
+    const result = await lab.dbAdmin.query<Probe>(
+      "SELECT pid, backend_start::text AS backend_start, " +
+      "datid::text AS database_oid, datname AS database_name, " +
+      "usename::text AS login_name, backend_type " +
+      "FROM pg_catalog.pg_stat_activity WHERE pid=$1",
+      [pid],
+    );
+    return result.rows[0];
+  }
+  async function matchObservation(
+    lab: Lab, binding: Binding | undefined, claimedOperationId: string,
+  ): Promise<boolean> {
+    if (!binding || !binding.dedicated || !binding.eligible ||
+        !binding.operationId || binding.operationId !== claimedOperationId ||
+        binding.leaseMs <= 0 ||
+        process.hrtime.bigint() - binding.createdAtNs >=
+          BigInt(binding.leaseMs) * 1_000_000n) return false;
+    const current = await observe(lab, binding.pid);
+    return !!current && current.pid === binding.pid &&
+      current.backend_start === binding.backend_start &&
+      current.database_oid === binding.database_oid &&
+      current.database_name === binding.database_name &&
+      current.login_name === binding.login_name &&
+      current.backend_type === "client backend";
+  }
+
+  it("IAM-WD-01A: wrong PID/start/database/OID/login/token/pool/expiry all DENY, correct server snapshot matches", async () => {
+    const lab = await createLab("t");
+    labs.push(lab);
+    const probe = await observe(lab,lab.operator.processID ?? -1);
+    expect(probe).toBeDefined();
+    expect(probe?.login_name).toBe(lab.operatorRole);
+    const binding: Binding = {...probe!,operationId:"opaque-test-only-" + id,
+      createdAtNs:process.hrtime.bigint(),leaseMs:2517,
+      dedicated:true,eligible:true};
+    expect(await matchObservation(lab,binding,binding.operationId)).toBe(true);
+    expect(await matchObservation(lab,{...binding,pid:lab.runtime.processID ?? -1},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,backend_start:"2000-01-01 00:00:00+00"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,database_oid:"0"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,database_name:"wrong_fixture"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,login_name:lab.runtimeRole},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,binding,"forged-operation")).toBe(false);
+    expect(await matchObservation(lab,{...binding,dedicated:false},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,eligible:false},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,
+      createdAtNs:process.hrtime.bigint()-3_000_000_000n},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,undefined,binding.operationId)).toBe(false);
+    // No pg_cancel_backend or privileged mutation occurs on an accepted
+    // observation. Acceptance is NOT atomic cancel/termination permission.
+  },30000);
+
+  it("IAM-WD-01B: independent runtime cannot cancel or terminate operator; replaced backend denies stale binding", async () => {
+    const lab = await createLab("u");
+    labs.push(lab);
+    await expect(lab.runtime.query(
+      "SELECT pg_catalog.pg_cancel_backend($1)",[lab.operator.processID ?? -1],
+    )).rejects.toMatchObject({code:"42501"});
+    await expect(lab.runtime.query(
+      "SELECT pg_catalog.pg_terminate_backend($1)",[lab.operator.processID ?? -1],
+    )).rejects.toMatchObject({code:"42501"});
+    // Real session replacement must invalidate the old pid/start binding.
+    const previous = await connect(lab.name,lab.operatorRole);
+    const previousProbe = await observe(lab,previous.processID ?? -1);
+    expect(previousProbe).toBeDefined();
+    await previous.end();
+    const replacement = await connect(lab.name,lab.operatorRole);
+    try {
+      const replacementProbe = await observe(lab,replacement.processID ?? -1);
+      expect(replacementProbe).toBeDefined();
+      expect(
+        previousProbe?.pid === replacementProbe?.pid &&
+        previousProbe?.backend_start === replacementProbe?.backend_start,
+      ).toBe(false);
+    } finally {
+      await replacement.end();
+    }
+  },30000);
+});
+
+
+describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures", () => {
+  it("IAM-RACE-01F: aborted privileged actor deactivation is not a committed policy change", async () => {
+    const lab = await createLab("v");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+      expect((await lab.dbAdmin.query<{active:boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      )).rows[0]?.active).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK");
+    }
+    expect((await lab.dbAdmin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    )).rows[0]?.active).toBe(true);
+    expect((await run(lab)).status).toBe("APPLIED");
+    expect(await contentChecksum(lab)).toBe(checksum);
+  },30000);
+
+  it("IAM-RACE-01G: concurrent committed roster change does not bypass approval-revocation fence", async () => {
+    const lab = await createLab("w");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const revoker = await connect(lab.name, lab.approver);
+    let ready!: () => void;
+    const atTable = new Promise<void>(resolve => { ready = resolve; });
+    let migrating: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    let revoking: Promise<unknown> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql:string, params?:unknown[]) => {
+          if (sql.startsWith("LOCK TABLE ONLY")) ready();
+          return params ? lab.operator.query(sql,params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked,{
+        installationId:lab.installationId,planDigest:lab.plan.digest,
+      });
+      await Promise.race([
+        atTable,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("ACTOR_REVOKER_TARGET_BARRIER_TIMEOUT")),2500)),
+      ]);
+      let waitingOnTable=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){waitingOnTable=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(waitingOnTable).toBe(true);
+      revoking=revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      );
+      let revocationWaiting=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [revoker.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){revocationWaiting=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(revocationWaiting).toBe(true);
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      await blocker.query("ROLLBACK");
+      expect((await migrating).status).toBe("APPLIED");
+      await revoking;
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(1);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_revocation_audit"
+      )).rowCount).toBe(1);
+    } finally {
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([migrating ?? Promise.resolve(),revoking ?? Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },30000);
+
+  it("AG06-S03-10: real SQLSTATE 55P03 lock timeout is incorrectly classified UNAUTHORIZED", async () => {
+    const lab=await createLab("x");
+    labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const blocker=await connect(lab.name);
+    const waiter=await connect(lab.name,lab.operatorRole);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      await waiter.query("BEGIN");
+      await waiter.query("SET LOCAL lock_timeout='100ms'");
+      await expect(waiter.query(
+        'LOCK TABLE ONLY "public".' + waiter.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      )).rejects.toMatchObject({code:"55P03"});
+      await waiter.query("ROLLBACK");
+      // The same held real table lock triggers operator's 2000ms cap.
+      // Current catch wrongly turns this operational PG error into IAM denial.
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // The external ACCESS EXCLUSIVE lock also blocks checksum SELECT.
+      // Release it before postconditions; its waiter already timed out safely.
+      await blocker.query("ROLLBACK");
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(0);
+    } finally {
+      await waiter.query("ROLLBACK").catch(()=>undefined);
+      await waiter.end().catch(()=>undefined);
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },15000);
 });
