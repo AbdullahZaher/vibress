@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1840,4 +1840,149 @@ describe("M03-S03 IAM-WD-01 real PostgreSQL backend-binding negatives (observati
       await replacement.end();
     }
   },30000);
+});
+
+
+describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures", () => {
+  it("IAM-RACE-01F: aborted privileged actor deactivation is not a committed policy change", async () => {
+    const lab = await createLab("v");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+      expect((await lab.dbAdmin.query<{active:boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      )).rows[0]?.active).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK");
+    }
+    expect((await lab.dbAdmin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    )).rows[0]?.active).toBe(true);
+    expect((await run(lab)).status).toBe("APPLIED");
+    expect(await contentChecksum(lab)).toBe(checksum);
+  },30000);
+
+  it("IAM-RACE-01G: concurrent committed roster change does not bypass approval-revocation fence", async () => {
+    const lab = await createLab("w");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const revoker = await connect(lab.name, lab.approver);
+    let ready!: () => void;
+    const atTable = new Promise<void>(resolve => { ready = resolve; });
+    let migrating: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    let revoking: Promise<unknown> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql:string, params?:unknown[]) => {
+          if (sql.startsWith("LOCK TABLE ONLY")) ready();
+          return params ? lab.operator.query(sql,params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked,{
+        installationId:lab.installationId,planDigest:lab.plan.digest,
+      });
+      await Promise.race([
+        atTable,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("ACTOR_REVOKER_TARGET_BARRIER_TIMEOUT")),2500)),
+      ]);
+      let waitingOnTable=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){waitingOnTable=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(waitingOnTable).toBe(true);
+      revoking=revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      );
+      let revocationWaiting=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [revoker.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){revocationWaiting=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(revocationWaiting).toBe(true);
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      await blocker.query("ROLLBACK");
+      expect((await migrating).status).toBe("APPLIED");
+      await revoking;
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(1);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_revocation_audit"
+      )).rowCount).toBe(1);
+    } finally {
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([migrating ?? Promise.resolve(),revoking ?? Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },30000);
+
+  it("AG06-S03-10: real SQLSTATE 55P03 lock timeout is incorrectly classified UNAUTHORIZED", async () => {
+    const lab=await createLab("x");
+    labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const blocker=await connect(lab.name);
+    const waiter=await connect(lab.name,lab.operatorRole);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      await waiter.query("BEGIN");
+      await waiter.query("SET LOCAL lock_timeout='100ms'");
+      await expect(waiter.query(
+        'LOCK TABLE ONLY "public".' + waiter.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      )).rejects.toMatchObject({code:"55P03"});
+      await waiter.query("ROLLBACK");
+      // The same held real table lock triggers operator's 2000ms cap.
+      // Current catch wrongly turns this operational PG error into IAM denial.
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(0);
+    } finally {
+      await waiter.query("ROLLBACK").catch(()=>undefined);
+      await waiter.end().catch(()=>undefined);
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },15000);
 });
