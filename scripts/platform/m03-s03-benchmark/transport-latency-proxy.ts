@@ -17,6 +17,8 @@ export interface TransportProfile {
   readonly upstreamMs?: number;
   readonly downstreamMs?: number;
   readonly commitAckExtraMs?: number;
+  /** Test-only loopback chaining for real on-wire COMMIT-ACK loss. */
+  readonly upstreamPort?: number;
   readonly handshakeMode?: HandshakeMode;
 }
 export interface DisposableTransportProxy {
@@ -32,6 +34,11 @@ export async function startDisposableTransportProxy(
     if (!Number.isSafeInteger(delay) || delay < 0 || delay > 1000) {
       throw Error("BENCHMARK_TRANSPORT_DELAY_OUT_OF_BOUNDS");
     }
+  }
+  if (profile.upstreamPort !== undefined &&
+    (!Number.isSafeInteger(profile.upstreamPort) || profile.upstreamPort < 1 ||
+      profile.upstreamPort > 65535)) {
+    throw Error("BENCHMARK_UPSTREAM_PORT_INVALID");
   }
   const sockets = new Set<Socket>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -56,7 +63,7 @@ export async function startDisposableTransportProxy(
       return;
     }
     const upstream = net.createConnection({
-      host: "127.0.0.1", port: 5433,
+      host: "127.0.0.1", port: profile.upstreamPort ?? 5433,
     });
     sockets.add(upstream);
     upstream.on("error", () => downstream.destroy());
