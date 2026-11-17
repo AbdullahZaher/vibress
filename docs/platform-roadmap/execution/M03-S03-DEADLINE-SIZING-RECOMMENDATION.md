@@ -151,7 +151,7 @@ AG06-S03-08 remains **P2 OPEN**: no authorized numeric whole-operation deadline 
 
 Workflow: [.github/workflows/m03-s03-whole-operation-benchmark.yml](https://github.com/AbdullahZaher/vibress/actions/workflows/m03-s03-whole-operation-benchmark.yml). On an **exclusively disposable runner**: install frozen dependencies; start docker compose -f compose.dev.yml up -d --wait postgres; run pnpm --filter @vibress/database typecheck and eslint for test/proxy; then pnpm exec vitest run --no-file-parallelism tests/integration/m03-s03-whole-operation-benchmark.test.ts --testTimeout=900000 --hookTimeout=120000. Workflow tears down disposable Docker volumes; NEVER do this on a shared host.
 
-Must retain provenance.json, raw-attempts.jsonl, summary.json, deadline-candidates.json, fault-timing-summary.json, topology-assumptions.json; all contain test SHA and sanitized relative timings. CI must verify expected counts/outcomes and no leaked fixtures before uploading. Exact final execution URL/artifact/exit code to be added after independent validation.
+Must retain provenance.json, raw-attempts.jsonl, summary.json, deadline-candidates.json, fault-timing-summary.json, topology-assumptions.json; each raw timing record is bound to the checkout SHA and observed runtime. Provenance must contain verified PostgreSQL server_version_num and resolved immutable Docker image ID, not a guessed floating-tag digest. All output is sanitized relative timings. CI must verify expected counts/outcomes and no leaked fixtures before uploading. Exact final execution URL/artifact/exit code to be added after independent validation.
 
 ## 22. Implementation and release handoff
 
