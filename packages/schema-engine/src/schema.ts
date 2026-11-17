@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
 import {
   asApplicationId,
   asInstallationId,
@@ -85,6 +86,10 @@ function fail(code: SchemaErrorCode, path: string, reason: string): never {
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
+  // Reject Proxy before getPrototypeOf/ownKeys; otherwise its traps are executable.
+  if (value !== null && typeof value === "object" && nodeTypes.isProxy(value)) {
+    return fail("UNSAFE_DEFINITION", path, "Proxy objects are not accepted");
+  }
   if (
     typeof value !== "object" ||
     value === null ||
@@ -102,36 +107,107 @@ function onlyKeys(
   allowed: readonly string[],
   path: string,
 ): void {
-  for (const key of Object.keys(source)) {
-    if (!allowed.includes(key)) {
-      fail("UNSAFE_DEFINITION", path + "." + key, "unsupported property");
+  for (const key of Reflect.ownKeys(source)) {
+    if (typeof key !== "string" || !allowed.includes(key)) {
+      fail("UNSAFE_DEFINITION", path + "." + String(key), "unsupported property");
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      fail("UNSAFE_DEFINITION", path + "." + key, "hidden or accessor property");
     }
   }
 }
 
-const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
-const RESERVED = new Set([
-  "id", "application_id", "installation_id", "tenant_id", "created_at",
-  "updated_at", "select", "from", "where", "join", "table", "create",
-  "drop", "alter", "delete", "insert", "update", "grant", "revoke",
-  "user", "index", "constraint", "primary", "foreign", "references",
-  "null", "true", "false", "default", "schema", "public", "current_user",
-  "session_user", "information_schema",
+
+/**
+ * Parser-boundary snapshot of an ordinary, dense Array. The copy is populated
+ * from own *data descriptors* and never invokes caller-supplied .map(),
+ * iterators or index getters. Array subclasses, altered prototypes, holes,
+ * decorated arrays, symbols and accessor entries all fail closed.
+ *
+ * Node util.types.isProxy rejects proxies without running their traps.
+ * Global intrinsic monkey-patching and other arbitrary in-process executable
+ * code remain outside this data-parser trust boundary. Prefer parsed JSON.
+ */
+function plainArray(value: unknown, path: string, min: number, max: number): readonly unknown[] {
+  if (nodeTypes.isProxy(value)) {
+    return fail("UNSAFE_DEFINITION", path, "Proxy arrays are not accepted");
+  }
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    return fail("UNSAFE_DEFINITION", path, "expected an ordinary Array prototype");
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, "length");
+  const length: unknown = descriptor?.value;
+  if (typeof length !== "number" || !Number.isInteger(length) ||
+      length < min || length > max) {
+    return fail("INVALID_DEFINITION", path, "array length is outside permitted bounds");
+  }
+  // A dense ordinary Array must own exactly length numeric entries and 'length'.
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1) {
+    return fail("UNSAFE_DEFINITION", path, "sparse or decorated array");
+  }
+  const copy: unknown[] = new Array<unknown>(length);
+  for (let i = 0; i < length; i++) {
+    const entry = Object.getOwnPropertyDescriptor(value, String(i));
+    if (!entry || !entry.enumerable || !("value" in entry)) {
+      return fail("UNSAFE_DEFINITION", path + "[" + i + "]", "missing, hidden or accessor array entry");
+    }
+    copy[i] = entry.value;
+  }
+  return copy;
+}
+
+// PostgreSQL 16 parser RESERVED_KEYWORD entries (catcode 'R'), derived from
+// PostgreSQL's upstream src/include/parser/kwlist.h (REL_16_STABLE).
+// Do not classify all PostgreSQL keywords as reserved: e.g. UPDATE and INDEX
+// are non-reserved in PG16, although the schema-engine policy separately bans them.
+// https://www.postgresql.org/docs/16/sql-keywords-appendix.html
+const POSTGRESQL16_RESERVED = new Set([
+  "all", "analyse", "analyze", "and", "any",
+  "array", "as", "asc", "asymmetric", "both",
+  "case", "cast", "check", "collate", "column",
+  "constraint", "create", "current_catalog", "current_date", "current_role",
+  "current_time", "current_timestamp", "current_user", "default", "deferrable",
+  "desc", "distinct", "do", "else", "end",
+  "except", "false", "fetch", "for", "foreign",
+  "from", "grant", "group", "having", "in",
+  "initially", "intersect", "into", "lateral", "leading",
+  "limit", "localtime", "localtimestamp", "not", "null",
+  "offset", "on", "only", "or", "order",
+  "placing", "primary", "references", "returning", "select",
+  "session_user", "some", "symmetric", "system_user", "table",
+  "then", "to", "trailing", "true", "union",
+  "unique", "user", "using", "variadic", "when",
+  "where", "window", "with",
 ]);
+
+// Existing Canonical IR v1 restrictions: protected columns, namespaces and
+// intentionally stricter engine policy. Keep these separate from parser classes.
+const ENGINE_RESERVED = new Set([
+  "id", "application_id", "installation_id", "tenant_id", "created_at",
+  "updated_at", "join", "drop", "alter", "delete",
+  "insert", "update", "revoke", "index", "schema",
+  "public", "information_schema",
+]);
+
+const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
 function identifier(value: unknown, path: string): string {
   if (
     typeof value !== "string" ||
     !NAME_PATTERN.test(value) ||
+    Buffer.byteLength(value, "utf8") > 63 ||
     value.includes("__") ||
     value.startsWith("pg_") ||
     value.startsWith("vibress_") ||
-    RESERVED.has(value)
+    POSTGRESQL16_RESERVED.has(value) ||
+    ENGINE_RESERVED.has(value)
   ) {
     return fail(
       "INVALID_IDENTIFIER",
       path,
-      "expected an unreserved lowercase SQL-safe identifier (1-63 characters)",
+      "expected a lowercase ASCII unquoted PostgreSQL 16 identifier (1-63 bytes), not a reserved keyword or protected name",
     );
   }
   return value;
@@ -198,6 +274,8 @@ function compareResourceIds(a: { readonly id: string }, b: { readonly id: string
 
 function normalizeField(value: unknown, path: string): FieldDefinition {
   const input = record(value, path);
+  // Reject accessors and hidden properties before reading any field values.
+  onlyKeys(input, ["id", "type", "required", "default", "values", "targetResource"], path);
   const id = identifier(input.id, path + ".id");
   const required = requiredFlag(input.required, path + ".required");
   const hasDefault = Object.prototype.hasOwnProperty.call(input, "default");
@@ -231,12 +309,11 @@ function normalizeField(value: unknown, path: string): FieldDefinition {
       });
     case "enum": {
       onlyKeys(input, ["id", "type", "required", "values", "default"], path);
-      if (!Array.isArray(input.values) || input.values.length < 1 || input.values.length > 64) {
-        fail("INVALID_DEFINITION", path + ".values", "expected 1-64 enum values");
+      const rawValues = plainArray(input.values, path + ".values", 1, 64);
+      const values: string[] = [];
+      for (let i = 0; i < rawValues.length; i++) {
+        values[i] = identifier(rawValues[i], path + ".values[" + i + "]");
       }
-      const values = input.values.map((entry: unknown, i: number) =>
-        identifier(entry, path + ".values[" + i + "]"),
-      );
       if (new Set(values).size !== values.length) {
         fail("DUPLICATE_IDENTIFIER", path + ".values", "duplicate enum value");
       }
@@ -273,12 +350,11 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
   if (source.ownership !== "tenant" && source.ownership !== "application") {
     fail("INVALID_DEFINITION", "resource.ownership", "expected tenant or application");
   }
-  if (!Array.isArray(source.fields) || source.fields.length < 1 || source.fields.length > 128) {
-    fail("INVALID_DEFINITION", "resource.fields", "expected 1-128 fields");
+  const rawFields = plainArray(source.fields, "resource.fields", 1, 128);
+  const fields: FieldDefinition[] = [];
+  for (let i = 0; i < rawFields.length; i++) {
+    fields[i] = normalizeField(rawFields[i], "resource.fields[" + i + "]");
   }
-  const fields = source.fields.map((field: unknown, i: number) =>
-    normalizeField(field, "resource.fields[" + i + "]"),
-  );
   const ids = new Set<string>();
   for (const field of fields) {
     if (ids.has(field.id)) {
@@ -311,11 +387,11 @@ export function compileResourceSchema(
   onlyKeys(context, ["applicationId", "installationId"], "scope");
   const appId = applicationId(context.applicationId, "scope.applicationId");
   const installId = installationId(context.installationId, "scope.installationId");
-  if (!Array.isArray(resources) || resources.length < 1 || resources.length > 128) {
-    fail("INVALID_DEFINITION", "resources", "expected 1-128 resources");
+  const rawResources = plainArray(resources, "resources", 1, 128);
+  const normalized: ResourceDefinition[] = [];
+  for (let i = 0; i < rawResources.length; i++) {
+    normalized[i] = parseResourceDefinition(rawResources[i]);
   }
-
-  const normalized = resources.map((resource) => parseResourceDefinition(resource));
   const byId = new Map<string, ResourceDefinition>();
   for (const resource of normalized) {
     if (resource.applicationId !== appId || resource.installationId !== installId) {
@@ -366,18 +442,17 @@ export function parseCanonicalSchemaIR(value: unknown): CanonicalSchemaIR {
   }
   const appId = applicationId(source.applicationId, "ir.applicationId");
   const installId = installationId(source.installationId, "ir.installationId");
-  if (!Array.isArray(source.resources)) {
-    fail("INVALID_DEFINITION", "ir.resources", "expected an array");
-  }
-  const resources = source.resources.map((value: unknown, i: number) => {
-    const entry = record(value, "ir.resources[" + i + "]");
+  const rawResources = plainArray(source.resources, "ir.resources", 0, 128);
+  const resources: ResourceDefinition[] = [];
+  for (let i = 0; i < rawResources.length; i++) {
+    const entry = record(rawResources[i], "ir.resources[" + i + "]");
     onlyKeys(entry, ["id", "ownership", "fields"], "ir.resources[" + i + "]");
-    return parseResourceDefinition({
+    resources[i] = parseResourceDefinition({
       ...entry,
       applicationId: appId,
       installationId: installId,
     });
-  });
+  }
   const compiled = compileResourceSchema(resources, {
     applicationId: appId, installationId: installId,
   });

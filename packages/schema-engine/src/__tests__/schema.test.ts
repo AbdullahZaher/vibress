@@ -202,3 +202,92 @@ describe("M03-S01 canonical schema compiler", () => {
     })).toThrow(ResourceSchemaError);
   });
 });
+
+
+describe("AG06-S02-02 PostgreSQL 16 unquoted identifier safety", () => {
+  it("rejects all 78 PostgreSQL 16 RESERVED_KEYWORD tokens for resources and fields", () => {
+    // Authoritative PG16 kwlist.h RESERVED_KEYWORD (catcode R), not the broader
+    // PostgreSQL keyword universe. A PG16 keyword-classification test runs in CI.
+    const pg16Reserved = [
+      "all", "analyse", "analyze", "and", "any", "array", "as", "asc", "asymmetric", "both", "case", "cast", "check",
+      "collate", "column", "constraint", "create", "current_catalog", "current_date", "current_role", "current_time", "current_timestamp", "current_user", "default", "deferrable", "desc",
+      "distinct", "do", "else", "end", "except", "false", "fetch", "for", "foreign", "from", "grant", "group", "having",
+      "in", "initially", "intersect", "into", "lateral", "leading", "limit", "localtime", "localtimestamp", "not", "null", "offset", "on",
+      "only", "or", "order", "placing", "primary", "references", "returning", "select", "session_user", "some", "symmetric", "system_user", "table",
+      "then", "to", "trailing", "true", "union", "unique", "user", "using", "variadic", "when", "where", "window", "with",
+    ];
+    expect(pg16Reserved).toHaveLength(78);
+    for (const id of pg16Reserved) {
+      expect(() => parseResourceDefinition({ ...customers(), id })).toThrow(ResourceSchemaError);
+      expect(() => parseResourceDefinition({
+        ...customers(), fields: [{ id, type: "text", required: false }],
+      })).toThrow(ResourceSchemaError);
+    }
+  });
+
+  it("distinguishes parser-reserved names from additional protected project names", () => {
+    for (const id of ["order", "select", "user", "group", "window", "with"]) {
+      expect(() => parseResourceDefinition({ ...customers(), id }))
+        .toThrow(ResourceSchemaError);
+    }
+    // PG16 'update', 'index' and 'schema' are NON-RESERVED but remain banned
+    // by the earlier Canonical IR v1 project-specific policy.
+    for (const id of ["update", "index", "schema", "tenant_id"]) {
+      expect(() => parseResourceDefinition({ ...customers(), id }))
+        .toThrow(ResourceSchemaError);
+    }
+    // PG16 non-reserved tokens not restricted by the engine remain legal.
+    for (const id of ["name", "role", "status", "sql", "customers"]) {
+      expect(parseResourceDefinition({ ...customers(), id }).id).toBe(id);
+    }
+  });
+
+  it("accepts 63-byte ordinary ASCII identifiers without changing case or spelling", () => {
+    const max = "a" + "b".repeat(62);
+    expect(Buffer.byteLength(max, "utf8")).toBe(63);
+    expect(parseResourceDefinition({ ...customers(), id: max }).id).toBe(max);
+    expect(parseResourceDefinition({
+      ...customers(), fields: [{ id: max, type: "text", required: false }],
+    }).fields[0]?.id).toBe(max);
+  });
+
+  it("rejects oversized, Unicode, mixed-case and malformed identifiers before normalization/truncation", () => {
+    const max = "a" + "b".repeat(62);
+    for (const id of [
+      max + "x", max + "y", "a" + "é".repeat(32), "é", "数据",
+      "Name", "NAME", "Order", "ORDER", "a__b", "pg_table",
+      "vibress_records", "a-b", "a\"b", "a b", "a;b", "a\u0000b", "",
+      "_hidden", "7name",
+    ]) {
+      expect(() => parseResourceDefinition({ ...customers(), id }))
+        .toThrow(ResourceSchemaError);
+    }
+  });
+
+  it("rejects case-folding and truncation aliases rather than silently creating collisions", () => {
+    const base = "a" + "z".repeat(62);
+    expect(() => compileResourceSchema([
+      { ...customers(), id: "name" },
+      { ...deals(), id: "Name" },
+    ], scope)).toThrow(ResourceSchemaError);
+    expect(() => compileResourceSchema([
+      { ...customers(), id: base + "x" },
+      { ...deals(), id: base + "y" },
+    ], scope)).toThrow(ResourceSchemaError);
+    expect(() => compileResourceSchema([
+      { ...customers(), id: "name" },
+      { ...deals(), id: "name" },
+    ], scope)).toThrow(/duplicate resource/);
+  });
+
+  it("enforces the same safe policy for enum tokens and relation targets", () => {
+    expect(() => parseResourceDefinition({
+      ...customers(),
+      fields: [{ id: "stage", type: "enum", required: false, values: ["order"] }],
+    })).toThrow(ResourceSchemaError);
+    expect(() => parseResourceDefinition({
+      ...deals(),
+      fields: [{ id: "relation", type: "relation", required: false, targetResource: "select" }],
+    })).toThrow(ResourceSchemaError);
+  });
+});
