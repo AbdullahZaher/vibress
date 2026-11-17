@@ -1,15 +1,49 @@
 # M03-S03 — Approval Expiry and Whole-Operation Deadline Decision
 
 **Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P02
-**Decision record first published:** 2026-11-17T19:55:41+03:00 (GitHub commit 36338377fa0dd288f60f97cf6d9b0d9d6ef56475, 2026-11-17T16:55:41Z). **Formal approval timestamp: NOT SET.**
-**Status:** PROPOSED / PENDING ACCOUNTABLE APPROVAL — NOT AN APPROVED EXECUTION CONTRACT
+**Decision record first published:** 2026-11-17T19:55:41+03:00 (GitHub commit 36338377fa0dd288f60f97cf6d9b0d9d6ef56475, 2026-11-17T16:55:41Z). **New Project Owner policy decision:** 2026-11-17 (Asia/Riyadh), communicated explicitly in the owner-authored chat directive; exact chat message timestamp and independent GitHub human signature NOT verified. **Whole-operation deadline approval timestamp: NOT SET.**
+**Status:** **Policy A SELECTED AND APPROVED BY PROJECT OWNER (direct chat instruction)**; **IAM/DBA independent approvals PENDING**, **whole-operation numeric deadline NOT APPROVED**, **final implementation/release contract BLOCKED**. This is NOT an Agent 06 sign-off or production authorization.
 **Finding:** AG06-S03-08, P2 BLOCKING / OPEN
 **Canonical PR:** https://github.com/AbdullahZaher/vibress/pull/198 (b5cfc0687076c86a7450a8a785a072f6e63ad289, Draft)
 **Isolated Policy A source:** https://github.com/AbdullahZaher/vibress/pull/203 (reviewed implementation SHA 2c31ed9119b88a7aff0ae8bd4c16638294a74cda)
 **Tracking and historical proposal:** https://github.com/AbdullahZaher/vibress/issues/197 and issue comment 6953244253
 **Independent Agent 06:** https://github.com/AbdullahZaher/vibress/pull/198#pullrequestreview-5942420824 (REQUEST CHANGES)
 
-**Owner intent:** The Project Owner has expressed consent conditional on verified passage of required checks; this is NOT a scope-specific signed choice between Policy A/B, NOT a numeric deadline decision, and NOT IAM or DBA sign-off. Do not use this file as a credential, human signature, or release authorization.
+**Owner decision provenance:** An explicit Project Owner instruction in the current conversation supersedes earlier conditional intent and selects Policy A with exact restricted semantics and scope. It is primary-source owner authorization *for policy selection only*. This GitHub record is relayed by Agent 01; the GitHub comment author/commit author are NOT themselves independent proof that the human owner signed on GitHub. Do not misstate IAM, DBA, deadline, merge, deployment, or production approvals.
+
+
+## 0. Superseding Project Owner policy decision — 2026-11-17
+
+**Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P02 / OWNER-POLICY-A-01  
+**Authority and origin:** The human user acting as Project Owner expressly stated in the current conversation: **"Decision: APPROVE Policy A — FINAL_PRE_DDL"** and restricted the approval to the single existing optional scalar ADD_FIELD operation. **This is owner approval of security-policy selection only.** Agent 01 is publishing the user's stated decision, **not signing or impersonating the owner**. A separate human-attributable GitHub endorsement is not yet verified; the forthcoming Issue #197 relay permalink is the audit index, not proof of direct GitHub signing.
+
+**Explicitly approved authorization semantics and exact scope:**
+- Only one approved optional scalar ADD_FIELD **without default** against an existing application-owned PostgreSQL table, in **development/disposable testing** environments. No CREATE_RESOURCE, tenant-owned DDL, destructive changes, ALTER beyond this operation, production/real-tenant actions or new privileged runtime entrypoint.
+- Final authorization must be valid when PostgreSQL **clock_timestamp()** is checked **after** the necessary registry/approval/advisory and ACCESS EXCLUSIVE table locks, authoritative catalog and row checks, **immediately before DDL**.
+- Approval expiry or an effectively committed/serialized revocation **before** that final point denies the operation with no physical schema change or completed journal; subject to the existing migration 0060 revocation advisory-lock order.
+- Expiry **strictly after** a valid final pre-DDL authorization is **nonretroactive**: it does not automatically void a transaction that later commits. Approval timing and the **mandatory independent whole-operation deadline** must never be conflated.
+- Registry compare-and-swap, physical DDL and a completed journal remain transactional/atomic. COMMIT acknowledgment uncertainty still requires a fresh trusted, fenced reconciliation before retry.
+- Policy B VALID_THROUGH_FINALIZATION is **not selected**, remains not implemented or approved.
+
+**Security decision risk assessment:** The narrowly bounded design avoids accepting authorization that expires during a table-lock wait; remaining risk includes nonretroactive expiry after final authorization, PostgreSQL table-owner DDL power broader than the renderer, delayed/revoked approval concurrency, and COMMIT uncertainty. These are **not** waived; the finite whole-operation deadline, human IAM/DBA concurrence and exact-source PostgreSQL fault regression remain mandatory. This decision **does not accept any Critical/High security risk**.
+
+**Rollback and change scope:** This is a **documentation-only policy-record change**: no operator execution, DB migration, grant, branch merge or production release. If IAM/DBA rejects the chosen semantics or independent Agent 06 identifies a safety failure, **hold the implementation and amend the decision by a new dated, attributable record**, never retroactively claim successful rollback of executed DDL. PostgreSQL transactional rollback and uncertain-COMMIT reconciliation remain mandatory once implementation is later authorized.
+
+**Release gates after this owner decision:**
+
+| Gate | Verified decision state |
+| --- | --- |
+| Project Owner — Policy A & restricted expiry/revocation semantics | **APPROVED — directly stated by human user in this conversation (2026-11-17)** |
+| Direct GitHub human Owner endorsement | **NOT INDEPENDENTLY VERIFIED** (Agent 01 relay must not be construed as an owner signature) |
+| Independent IAM approval (named human, scoped) | **PENDING / MISSING** |
+| Independent DBA approval (named human, scoped) | **PENDING / MISSING** |
+| Whole-operation finite duration / unit | **NOT APPROVED / NONE** |
+| Whole-operation supervisor implementation and deadline negative tests | **BLOCKED / NOT CERTIFIED** |
+| PR #198 final integrated SHA and exact-source CI | **NONE / NOT RUN** |
+| Independent Agent 06 final verdict | **PENDING; prior REQUEST CHANGES** |
+| AG06-S03-08 / merge / production | **OPEN P2 / NOT AUTHORIZED / NO-GO** |
+
+**Required next action:** IAM and DBA independently review this exact owner-selected Policy A contract, with attributable GitHub decision references; DBA and Owner approve an evidence-derived integer whole-operation deadline (milliseconds) only after SLO, representative timing, cancellation and COMMIT-reconciliation reserves are proven. Agents 02/05 may then complete a scoped implementation; no integration/release approval follows merely from this policy selection.
 
 ## 1. Verified evidence versus unresolved conditions
 
@@ -23,7 +57,7 @@
 
 ## 2. Policy comparison and technical recommendation
 
-| Contract | Policy A: FINAL_PRE_DDL (RECOMMEND; NOT APPROVED) | Policy B: VALID_THROUGH_FINALIZATION (ALTERNATIVE; NOT IMPLEMENTED) |
+| Contract | Policy A: FINAL_PRE_DDL (OWNER SELECTED; IAM/DBA REVIEW PENDING) | Policy B: VALID_THROUGH_FINALIZATION (NOT SELECTED; NOT IMPLEMENTED) |
 | --- | --- | --- |
 | Authorization linearization | Fresh PostgreSQL clock_timestamp AFTER installation advisory, registry FOR UPDATE, approval advisory, target ACCESS EXCLUSIVE, live catalog/ACL and row checks; IMMEDIATELY BEFORE DDL | Second fresh PostgreSQL approval time check AFTER DDL/CAS/journal, immediately before COMMIT |
 | Expiry before the check | DENY, ROLLBACK; no column or completed journal | DENY, ROLLBACK of all transactional DDL/registry/journal changes |
@@ -32,7 +66,7 @@
 | Strengths | Explicit, reproducible one-point authorization; five real-PG wait-crossing cases tested; simpler audit/recovery for exactly one bounded operation | Tighter validity window before COMMIT; favors strict approval lifespan |
 | Tradeoffs | May commit after approval expiry; only sound if this nonretroactivity and independent deadline are explicitly accepted | May waste completed DDL/CAS work if expiry occurs before last check; additional failure/rollback tests, timeout and post-check COMMIT uncertainty |
 | Current evidence | Technical proposal tested in isolated PR #203; NOT approved or integrated | Not implemented, NOT tested |
-| Owner decision | PENDING | PENDING |
+| Owner decision | **APPROVED in direct Project Owner instruction, 2026-11-17; scope restricted** | **NOT SELECTED** |
 
 **Recommended Policy A restricted scope:** one PLANNED optional scalar ADD_FIELD without default to an EXISTING application-owned table in test/development disposable PostgreSQL 16; independently authenticated author, approver and operator; no CREATE_RESOURCE, tenant-owned DDL, destructive operations, default/backfill/rename/type changes, shared/production schema changes or API/worker/plugin DDL entrypoint. Technical recommendation assumes acceptance that expiry strictly after the final pre-DDL timestamp is nonretroactive.
 
@@ -80,12 +114,12 @@
 
 | Required authority/decision | Actual status and evidence |
 | --- | --- |
-| Accountable Project Owner: selects A or B and scope | **PENDING.** User has signaled conditional intent; no GitHub-verifiable signed selection for A or B, explicit nonretroactivity, numeric deadline or duration. Approval reference NONE. |
+| Accountable Project Owner: selects A or B and scope | **APPROVED Policy A** by direct Project Owner decision in conversation on 2026-11-17; expressly accepts nonretroactive expiry after valid final authorization and restricts to one optional scalar ADD_FIELD without default on existing application-owned tables in disposable development/test only. A human-posted GitHub signature remains unverified; Agent 01 relays the decision. **Numeric duration NOT APPROVED.** |
 | Designated human IAM authority: approval/revocation and provenance semantics | **MISSING / NOT NAMED**. Agent 05's proposed code and technical report are NOT a qualified human signature. |
 | Designated human PostgreSQL DBA: deadline, locks, recovery, rollback and server constraints | **MISSING / NOT NAMED**. Agent 02's 350 repeated executions are evidence, NOT a human release sign-off. |
 | Agent 06 independent certification on combined final SHA | **PENDING**. Existing review #5942420824 states REQUEST CHANGES. |
-| Approved Policy A/B | **NONE**. Recommendation: Policy A only for restricted disposable scope. |
-| Approved authorization linearization point | **NONE** (technical definition above is a proposal). |
+| Approved Policy A/B | **Policy A — Project Owner APPROVED (direct instruction), independently co-signed IAM/DBA PENDING**. Policy B NOT SELECTED. |
+| Approved authorization linearization point | **Project Owner APPROVED for Policy A**: PostgreSQL clock_timestamp after all necessary locks and catalog verification, immediately pre-DDL; independent IAM/DBA review remains mandatory. |
 | Approved whole-operation deadline value/unit | **NONE / NOT SET**. |
 | Approved start/completion/cancellation/reconciliation semantics | **NONE** (proposed, NOT authoritative). |
 | Actual authorization timestamp and identities | **NOT RECORDED / NOT VERIFIED**. |
@@ -99,7 +133,7 @@
 
 **Residual risks:** operator table ownership can confer broader native DDL power than the renderer; shared database service identities cannot attest a human; hard transaction/ACK timing cannot be guaranteed under network partition; external DDL deadlocks; partial supervisor failure; off-transaction denied-attempt audit, backup/PITR and production RBAC remain outside current approval. These risks are NOT accepted for a production release.
 
-**Final state — 2026-11-17:** Policy **PENDING**; Deadline Value **NOT APPROVED**; Deadline Semantics **DEFINED AS PROPOSAL / NOT APPROVED**; Human Approval Evidence **MISSING**; Implementation Contract **BLOCKED**; AG06-S03-08 **OPEN**; Merge **NOT AUTHORIZED**; Production **NO-GO**.
+**Final state — updated 2026-11-17 after explicit owner instruction:** Policy A **OWNER APPROVED; IAM/DBA PENDING**; Deadline Value **NOT APPROVED**; Deadline Semantics **DEFINED AS PROPOSAL / NOT APPROVED**; Owner chat decision **RECEIVED; direct GitHub human sign-off not independently verified**; IAM/DBA approvals **MISSING**; Implementation Contract **BLOCKED**; AG06-S03-08 **OPEN**; Merge **NOT AUTHORIZED**; Production **NO-GO**.
 
 ## Official sources (reviewed 2026-11-17)
 
@@ -113,7 +147,7 @@
 
 ## 7. Final Agent 04 measured evidence — source-pinned assessment (2026-11-17)
 
-**Decision remains PROPOSED / NOT APPROVED. Nothing in this section sets or pre-approves an execution timeout, delegates Owner authority, authorizes IAM/DBA privileges, or permits merge/production.** The earlier policy recommendation remains Policy A / FINAL_PRE_DDL for the explicitly restricted test/development ADD_FIELD operation; Policy B remains unimplemented and unverified. No new security-risk acceptance.
+**This Agent04 benchmark section predates the Project Owner's explicit Policy A approval and preserves historically accurate measurement status. It DOES NOT approve any numeric timeout, IAM/DBA authority, merge or production.** Policy A / FINAL_PRE_DDL is now owner-selected for the restricted test/development ADD_FIELD operation. Policy B remains unimplemented and unselected. No security-risk acceptance.
 
 ### 7.1. Exact provenance and independently recomputed samples
 
@@ -168,12 +202,12 @@ A separate [test-only report](https://github.com/AbdullahZaher/vibress/blob/docs
 
 | Decision field | Current status / evidence |
 | --- | --- |
-| **Policy A / FINAL_PRE_DDL** | **TECHNICALLY RECOMMENDED, FORMAL APPROVAL PENDING** |
+| **Policy A / FINAL_PRE_DDL** | **PROJECT OWNER APPROVED by explicit chat decision; independent IAM/DBA approvals PENDING** |
 | Policy B | Not selected, not implemented |
 | Approved milliseconds | **NOT APPROVED / NONE** |
 | Whole-operation semantics | **DEFINED IN THIS PROPOSAL, NOT AUTHORIZED** |
 | Owner SLO and projected production false-timeout rate | **MISSING / UNKNOWN** |
-| Project Owner formal Policy A and numeric deadline sign-off | **MISSING** (conditional intent is not an exact authorization) |
+| Project Owner formal Policy A and numeric deadline sign-off | **Policy A OWNER APPROVED** in direct chat on 2026-11-17; **numeric deadline NOT APPROVED**; independently attributable GitHub human signature unverified |
 | Identified independent IAM Security Authority and signed decision | **MISSING** |
 | Identified independent PostgreSQL DBA Authority and signed decision | **MISSING** |
 | Production or representative-network cancellation / COMMIT / recovery latency | **INCOMPLETE** |
@@ -184,7 +218,7 @@ A separate [test-only report](https://github.com/AbdullahZaher/vibress/blob/docs
 | **Finding AG06-S03-08** | **OPEN / P2 BLOCKING** |
 | Merge / production | **BLOCKED / NO-GO** |
 
-**Actual approver identity, GitHub signature/permalink, decision timestamp, exact approved scope and deadline value are NOT VERIFIED.** Request individually attributable authorization on [Issue #197](https://github.com/AbdullahZaher/vibress/issues/197): Project Owner selects A (explicit nonretroactive expiry after final pre-DDL) or B; states supported internal environment, desired maximum user-visible latency/SLO and accepted false-timeout ceiling; designated human IAM authority accepts approval/revocation protocol; designated human DBA authority records reproducible benchmark/source and measured operational margin including cancellation and COMMIT ambiguity, then recommends an **integer duration in ms** for formal Owner acceptance. On approval, amend this document **with real dated GitHub references** (not inferred signatures), issue Agents 05/02 a numeric and testable implementation contract, freeze new canonical #198 SHA, retest, and require Agent 06 independent technical verdict.
+**Owner policy selection and exact scope are provided directly by the Project Owner in chat dated 2026-11-17; the authenticated legal identity / independent GitHub human signature and exact original message timestamp are NOT independently verified. IAM/DBA approver identities and approval timestamps, and the numeric deadline value, remain MISSING.** Request individually attributable authorization on [Issue #197](https://github.com/AbdullahZaher/vibress/issues/197): Project Owner selects A (explicit nonretroactive expiry after final pre-DDL) or B; states supported internal environment, desired maximum user-visible latency/SLO and accepted false-timeout ceiling; designated human IAM authority accepts approval/revocation protocol; designated human DBA authority records reproducible benchmark/source and measured operational margin including cancellation and COMMIT ambiguity, then recommends an **integer duration in ms** for formal Owner acceptance. On approval, amend this document **with real dated GitHub references** (not inferred signatures), issue Agents 05/02 a numeric and testable implementation contract, freeze new canonical #198 SHA, retest, and require Agent 06 independent technical verdict.
 
 **Timestamp of this benchmark reassessment:** 2026-11-17, Asia/Riyadh. This addendum does not modify operator code, migrate a database, grant privileges, close an issue, merge a PR, or authorize production deployment.
 
