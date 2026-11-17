@@ -334,10 +334,9 @@ export async function executeApprovedAdditiveColumn(
       "SELECT operation_id, approver, approver_login, approver_principal_id, " +
       "approved_application_id, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
-      "FROM public.platform_schema_approvals " +
-      // FOR SHARE blocks revocation UPDATE through transaction end without
-      // granting approval UPDATE rights to the migration operator.
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3 FOR SHARE",
+      // Trusted definer does SELECT FOR SHARE under a fixed search_path.
+      // Caller has EXECUTE but no UPDATE privilege on approval data.
+      "FROM public.platform_schema_lock_approval($1,$2,$3)",
       [request.installationId, request.planDigest, ddl.operationId],
     )).rows[0];
     if (!approval || !approval.approver_login || !approval.approver_principal_id ||
@@ -363,7 +362,7 @@ export async function executeApprovedAdditiveColumn(
     }>(
       "SELECT login_name, principal_id, actor_kind, identity_mode, active " +
       "FROM public.platform_schema_trusted_actors " +
-      "WHERE login_name = $1 OR login_name = $2 FOR SHARE",
+      "WHERE login_name = $1 OR login_name = $2",
       [planRecord.author_login, approval.approver_login],
     );
     const authored = actors.rows.find(row => row.login_name === planRecord.author_login);
