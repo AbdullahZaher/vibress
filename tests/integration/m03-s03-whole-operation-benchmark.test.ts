@@ -223,6 +223,9 @@ interface Attempt {
   connection_ms: number;
   stage_ms: Record<string, number>;
   stage_calls: Record<string, number>;
+  timeline_ms?: { connection_start_ms: number; connection_acquired_ms: number;
+    result_classified_ms: number; client_disposed_ms: number;
+    stages: Record<string, Array<{start_ms:number;end_ms:number}>>; };
   sql_state: string | null;
 }
 const clock = () => process.hrtime.bigint();
@@ -272,6 +275,7 @@ type SupervisorOptions = {
 async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt> {
   const start = clock(); // BEFORE connection acquisition, including libpq protocol
   const stages: Record<string, number> = {};
+  const timelineStages: Record<string, Array<{start_ms:number;end_ms:number}>> = {};
   const calls: Record<string, number> = {};
   let outcome: string;
   let state: string | null = null;
@@ -284,6 +288,8 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   });
   client.on("error", () => undefined);
   let connectedAt = start;
+  const connectStart = clock();
+  let classifiedAt = start;
   try {
     await client.connect();
     connectedAt = clock();
@@ -317,7 +323,12 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
             if(typeof code==="string" && SQLSTATE.has(code)) state=code;
             throw error;
           } finally {
-            stages[stage]=(stages[stage] ?? 0)+elapsed(startSql,clock());
+            const endSql=clock();
+            stages[stage]=(stages[stage] ?? 0)+elapsed(startSql,endSql);
+            (timelineStages[stage] ??= []).push({
+              start_ms:Number(elapsed(start,startSql).toFixed(4)),
+              end_ms:Number(elapsed(start,endSql).toFixed(4)),
+            });
             calls[stage]=(calls[stage] ?? 0)+1;
           }
         };
@@ -327,10 +338,12 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
       installationId:lab.installationId,planDigest:lab.plan.digest,
     });
     outcome=result.status;
+    classifiedAt=clock();
   } catch(error) {
     const code=(error as {code?:unknown})?.code;
     outcome = typeof code==="string" && /^[A-Z_0-9]{1,32}$/.test(code)
       ? code : "UNCLASSIFIED_FAILURE";
+    classifiedAt=clock();
   } finally {
     await client.end().catch(()=>undefined);
   }
@@ -340,6 +353,11 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
     connection_ms:Number(elapsed(start,connectedAt).toFixed(4)),
     stage_ms:Object.fromEntries(Object.entries(stages).map(([k,v])=>[k,Number(v.toFixed(4))])),
     stage_calls:calls,sql_state:state,
+    timeline_ms:{ connection_start_ms:Number(elapsed(start,connectStart).toFixed(4)),
+      connection_acquired_ms:Number(elapsed(start,connectedAt).toFixed(4)),
+      result_classified_ms:Number(elapsed(start,classifiedAt).toFixed(4)),
+      client_disposed_ms:Number(elapsed(start,clock()).toFixed(4)),
+      stages:timelineStages},
   };
   SAMPLES.push(sample);
   return sample;
