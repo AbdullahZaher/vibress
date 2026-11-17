@@ -82,7 +82,9 @@ jobs:
             combined_tcp_30_ack_60:12,combined_tcp_30_ack_200:12,
             combined_tcp_30_lock_500:5,combined_tcp_30_lock_900:5,
             combined_tcp_30_three_locks:4,combined_tcp_30_cancel_lock:5,
-            combined_tcp_30_lost_ack:4,combined_tcp30_ack200_eventloop25:5};
+            combined_tcp_30_lost_ack:4,combined_tcp30_ack200_eventloop25:5,
+            combined_tcp30_ack200_lock_500:4,combined_tcp30_ack200_lock_900:4,
+            combined_tcp30_ack200_db_cpu:3,combined_test_only_d1_precommit_denial:4};
           const total=Object.values(required).reduce((a,b)=>a+b,0);
           if(raw.length!==total||a.combined_cases!==total||a.owner_d1_ms!==2517||
             c.owner_d1_ms!==2517 ||pg.cases.length!==2)throw Error('INCOMPLETE_D1_MATRIX');
@@ -95,6 +97,11 @@ jobs:
           for(const x of raw.filter(x=>x.profile==='combined_tcp_30_cancel_lock')){
             if(!x.physical_rollback_verified||x.sql_state!=='57014'||
               x.outcome!=='UNAUTHORIZED')throw Error('CANCEL_ROLLBACK_UNPROVEN');
+          }
+          for(const x of raw.filter(x=>x.profile==='combined_test_only_d1_precommit_denial')){
+            if(x.commit_dispatched!==false || !x.physical_rollback_verified ||
+              x.outcome==='APPLIED' || !x.cleaned_after_d1)
+              throw Error('D1_COMMIT_ADMISSION_DEFECT');
           }
           for(const x of raw.filter(x=>x.profile==='combined_tcp_30_lost_ack')){
             if(x.outcome!=='INDETERMINATE'||x.reconciled!=='COMMITTED'||
