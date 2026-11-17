@@ -138,12 +138,12 @@ describe("AG06-S02-01: untrusted arrays never dispatch caller collection methods
   it("rejects array and object Proxies before any ownKeys/getPrototypeOf/get trap", () => {
     const resource = crmCustomers();
     let traps = 0;
-    const trapHandler: ProxyHandler<object> = {
+    const trapHandler = {
       get() { traps++; throw new Error("get trap executed"); },
       getPrototypeOf() { traps++; throw new Error("getPrototypeOf trap executed"); },
       ownKeys() { traps++; throw new Error("ownKeys trap executed"); },
       getOwnPropertyDescriptor() { traps++; throw new Error("descriptor trap executed"); },
-    };
+    } satisfies ProxyHandler<object>;
     const list = new Proxy([resource], trapHandler);
     const field = new Proxy({ id: "name", type: "text", required: true }, trapHandler);
     expect(() => compileResourceSchema(list, crmScope)).toThrow(ResourceSchemaError);
