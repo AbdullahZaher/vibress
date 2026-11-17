@@ -160,10 +160,13 @@ describe("AG06-S02-01: untrusted arrays never dispatch caller collection methods
 
   it("denies nested holes and changed canonical array prototypes", () => {
     const resource = crmCustomers();
+    const sparseValues = new Array<string>(3);
+    sparseValues[0] = "lead";
+    sparseValues[2] = "won";
     expect(() => parseResourceDefinition({
       ...resource, fields: [{
         id: "stage", type: "enum", required: false,
-        values: ["lead", , "won"],
+        values: sparseValues,
       }],
     })).toThrow(ResourceSchemaError);
     const ir = compileResourceSchema([resource], crmScope);
