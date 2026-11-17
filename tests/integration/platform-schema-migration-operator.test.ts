@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { Client } from "pg";
+import { Client, type ClientBase } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -85,6 +85,8 @@ async function createLab(key: Key): Promise<Lab> {
     "REFERENCES platform_applications(id), environment text NOT NULL);",
   );
   await dbAdmin.query(schema);
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -124,14 +126,22 @@ async function createLab(key: Key): Promise<Lab> {
     " TO " + dbAdmin.escapeIdentifier(runtimeRole));
   await dbAdmin.query("GRANT SELECT ON platform_installations," +
     "platform_schema_registry,platform_schema_plans,platform_schema_approvals," +
-    "platform_schema_migration_journal TO " + dbAdmin.escapeIdentifier(operatorRole));
+    "platform_schema_trusted_actors,platform_schema_migration_journal TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT UPDATE(manifest,manifest_digest,updated_at) " +
     "ON platform_schema_registry TO " + dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
     dbAdmin.escapeIdentifier(operatorRole));
-  await dbAdmin.query("GRANT INSERT ON platform_schema_plans TO " +
+  // Owner-controlled isolated database logins; no direct table DML grants.
+  await dbAdmin.query("INSERT INTO platform_schema_trusted_actors " +
+    "(login_name,principal_id,actor_kind) VALUES ($1,$2,'AUTHOR'),($3,$4,'APPROVER')",
+    [author, "individual:" + author, approver, "individual:" + approver]);
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_submit_plan(text,text,text,text) TO " +
     dbAdmin.escapeIdentifier(author));
-  await dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " +
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_approve_operation(text,text,text,timestamptz), " +
+    "public.platform_schema_revoke_operation(text,text,text) TO " +
     dbAdmin.escapeIdentifier(approver));
   await dbAdmin.query(
     "INSERT INTO platform_schema_registry " +
@@ -143,9 +153,8 @@ async function createLab(key: Key): Promise<Lab> {
   const writer = await connect(name, author);
   try {
     await writer.query(
-      "INSERT INTO platform_schema_plans " +
-      "(installation_id,plan_digest,expected_manifest,plan,author) VALUES ($1,$2,$3,$4,$5)",
-      [installationId, plan.digest, JSON.stringify(current), JSON.stringify(plan), author],
+      "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+      [installationId, plan.digest, JSON.stringify(current), JSON.stringify(plan)],
     );
   } finally {
     await writer.end();
@@ -160,11 +169,9 @@ async function approve(lab: Lab): Promise<void> {
   const actor = await connect(lab.name, lab.approver);
   try {
     await actor.query(
-      "INSERT INTO platform_schema_approvals " +
-      "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
-      "VALUES($1,$2,$3,$4,$5,'test',clock_timestamp()+interval '20 minutes')",
-      [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id,
-        lab.approver, lab.operatorRole],
+      "SELECT public.platform_schema_approve_operation(" +
+      "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+      [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
     );
   } finally {
     await actor.end();
@@ -218,6 +225,10 @@ beforeAll(async () => {
   labs.push(await createLab("b"));
   labs.push(await createLab("c")); // Dedicated concurrent execution and replay fixture.
   labs.push(await createLab("d")); // Dedicated journal failure/recovery fixture.
+  labs.push(await createLab("e")); // Agent05 identity negative fixture.
+  labs.push(await createLab("f")); // Revocation-before-lock fixture.
+  labs.push(await createLab("g")); // Execution-before-revocation fixture.
+  labs.push(await createLab("h")); // Forced rollback and replay fixture.
 }, 120000);
 
 afterAll(async () => {
@@ -512,4 +523,459 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     const replay = await run(lab);
     expect(replay.status).toBe("ALREADY_APPLIED");
   }, 30000);
+});
+
+describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG16)", () => {
+  const e = () => labs[4]!;
+  const operation = (lab: Lab) => lab.plan.operations[0]!.id;
+  const approvalSql =
+    "INSERT INTO platform_schema_approvals " +
+    "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+    "VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+interval '20 minutes')";
+
+  it("AUTH-01: records distinct authenticated author/approver from separate sessions", async () => {
+    const lab = e();
+    await approve(lab);
+    const result = await lab.dbAdmin.query<{
+      author_login: string; author_principal_id: string; approver_login: string;
+      approver_principal_id: string; approved_application_id: string;
+    }>(
+      "SELECT p.author_login,p.author_principal_id,a.approver_login," +
+      "a.approver_principal_id,a.approved_application_id FROM platform_schema_plans p " +
+      "JOIN platform_schema_approvals a USING (installation_id,plan_digest)",
+    );
+    expect(result.rows).toEqual([{
+      author_login: lab.author, author_principal_id: "individual:" + lab.author,
+      approver_login: lab.approver, approver_principal_id: "individual:" + lab.approver,
+      approved_application_id: applicationId,
+    }]);
+  });
+
+  it("AUTH-02: forged author text is rejected despite misgranted direct INSERT", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await expect(actor.query(
+        "INSERT INTO platform_schema_plans " +
+        "(installation_id,plan_digest,expected_manifest,plan,author) VALUES($1,$2,$3,$4,$5)",
+        [lab.installationId, "a".repeat(64), JSON.stringify(lab.current),
+         JSON.stringify(lab.plan), lab.approver],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-03: forged approver text is rejected even with direct INSERT", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name, lab.approver);
+    try {
+      await expect(actor.query(approvalSql, [lab.installationId,
+        lab.plan.digest, "forged", lab.author, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-04: same-login dual table grants cannot forge distinct principals", async () => {
+    const lab = e();
+    const role = lab.dbAdmin.escapeIdentifier(lab.author);
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans,platform_schema_approvals TO " + role);
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await expect(actor.query(approvalSql, [lab.installationId,
+        lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans,platform_schema_approvals FROM " + role);
+    }
+  });
+
+  it("AUTH-05: inherited dual grants do not change authenticated principal", async () => {
+    const lab = e();
+    const group = "s03_dual_" + id;
+    const quoted = lab.dbAdmin.escapeIdentifier(group);
+    await lab.dbAdmin.query("CREATE ROLE " + quoted + " NOLOGIN");
+    try {
+      await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans,platform_schema_approvals TO " + quoted);
+      await lab.dbAdmin.query("GRANT " + quoted + " TO " +
+        lab.dbAdmin.escapeIdentifier(lab.author) + " WITH INHERIT TRUE, SET TRUE");
+      const actor = await connect(lab.name, lab.author);
+      try {
+        await expect(actor.query(approvalSql, [lab.installationId,
+          lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+        ])).rejects.toMatchObject({ code: "42501" });
+      } finally { await actor.end(); }
+    } finally {
+      await lab.dbAdmin.query("REVOKE " + quoted + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans,platform_schema_approvals FROM " + quoted);
+      await lab.dbAdmin.query("DROP ROLE " + quoted);
+    }
+  });
+
+  it("AUTH-06: SET ROLE approver cannot impersonate the authenticated login", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT " + lab.dbAdmin.escapeIdentifier(lab.approver) +
+      " TO " + lab.dbAdmin.escapeIdentifier(lab.author) + " WITH SET TRUE, INHERIT FALSE");
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await actor.query("SET ROLE " + actor.escapeIdentifier(lab.approver));
+      const identities = await actor.query<{ current_user: string; session_user: string }>(
+        "SELECT current_user,session_user");
+      expect(identities.rows[0]).toMatchObject({
+        current_user: lab.approver, session_user: lab.author,
+      });
+      await expect(actor.query("SELECT public.platform_schema_approve_operation(" +
+        "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+      [lab.installationId, lab.plan.digest, operation(lab)])).rejects
+        .toMatchObject({ code: "42501" });
+    } finally {
+      await actor.query("RESET ROLE").catch(() => undefined);
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE " + lab.dbAdmin.escapeIdentifier(lab.approver) +
+        " FROM " + lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-07: a PUBLIC direct INSERT misgrant cannot create authenticated approvals", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO PUBLIC");
+    try {
+      await expect(lab.runtime.query(approvalSql, [lab.installationId,
+        lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM PUBLIC");
+    }
+  });
+
+  it("AUTH-08: runtime with misgranted EXECUTE cannot issue approvals", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_approve_operation(text,text,text,timestamptz)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(lab.runtime.query(
+        "SELECT public.platform_schema_approve_operation($1,$2,$3,clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,operation(lab)],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    }
+  });
+
+  it("AUTH-09: author cannot revoke approval even with EXECUTE misgrant", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_revoke_operation(text,text,text)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)],
+      )).rejects.toMatchObject({ code: "42501" });
+      const r = await lab.dbAdmin.query("SELECT revoked_at FROM platform_schema_approvals");
+      expect(r.rows[0]?.revoked_at).toBeNull();
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-10: operator with UPDATE misgrant cannot rewrite an approval", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    try {
+      await expect(lab.operator.query(
+        "UPDATE platform_schema_approvals SET expires_at=expires_at+interval '1 day'",
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+  });
+
+  it("AUTH-11: plan identity and canonical plan are immutable to ordinary authors", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_plans TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_plans SET author_login=$1 WHERE installation_id=$2",
+        [lab.approver,lab.installationId],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_plans FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-12: approval for a different operation is rejected at DB boundary", async () => {
+    const lab = e();
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "SELECT public.platform_schema_approve_operation(" +
+        "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,"wrong-operation"],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally { await actor.end(); }
+  });
+
+  it("AUTH-13: changed environment/operator/application binding denies execution", async () => {
+    const lab = e();
+    for (const [column,value,original] of [
+      ["environment","development","test"],
+      ["operator_role",lab.runtimeRole,lab.operatorRole],
+      ["approved_application_id","wrong-app",applicationId],
+    ]) {
+      await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+        column + "=$1 WHERE installation_id=$2", [value,lab.installationId]);
+      try {
+        await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        expect(await hasWebsite(lab)).toBe(false);
+      } finally {
+        await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+          column + "=$1 WHERE installation_id=$2", [original,lab.installationId]);
+      }
+    }
+  });
+
+  it("AUTH-14: legacy pre-0060 records without provenance fail closed", async () => {
+    const lab = e();
+    await lab.dbAdmin.query(
+      "UPDATE platform_schema_approvals SET approver_login=NULL WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET approver_login=$1 WHERE installation_id=$2",
+        [lab.approver,lab.installationId],
+      );
+    }
+  });
+
+  it("AUTH-15: expired authorization and crossed installation/digest cannot execute", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+      "approved_at=clock_timestamp()-interval '2 hours', " +
+      "expires_at=clock_timestamp()-interval '1 hour' WHERE installation_id=$1",
+      [lab.installationId]);
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    } finally {
+      await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+        "approved_at=clock_timestamp(),expires_at=clock_timestamp()+interval '20 minutes' " +
+        "WHERE installation_id=$1",[lab.installationId]);
+    }
+    const other = labs[5]!;
+    await expect(executeApprovedAdditiveColumn(lab.operator, {
+      installationId:lab.installationId,planDigest:other.plan.digest,
+    })).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    await expect(executeApprovedAdditiveColumn(lab.operator, {
+      installationId:other.installationId,planDigest:lab.plan.digest,
+    })).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+  });
+
+  it("AUTH-16: committed revocation before lock denies DDL and preserves audit", async () => {
+    const lab = labs[5]!;
+    await approve(lab);
+    const revoker = await connect(lab.name,lab.approver);
+    try {
+      await revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+      await expect(revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)])).rejects
+        .toMatchObject({ code:"42501" });
+    } finally { await revoker.end(); }
+    await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    const audit = await lab.dbAdmin.query(
+      "SELECT revoked_by_login FROM platform_schema_revocation_audit");
+    expect(audit.rows).toEqual([{ revoked_by_login: lab.approver }]);
+    expect((await lab.dbAdmin.query("SELECT * FROM platform_schema_migration_journal")).rowCount)
+      .toBe(0);
+  });
+
+  it("AUTH-17: operator transaction advisory lock wins race; revocation waits for COMMIT", async () => {
+    const lab = labs[6]!;
+    await approve(lab);
+    let signalLock!: () => void;
+    let releaseLock!: () => void;
+    const afterLock = new Promise<void>(resolve => { signalLock = resolve; });
+    const gate = new Promise<void>(resolve => { releaseLock = resolve; });
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = await lab.operator.query(sql,params);
+        if (sql.includes("vibress_m03s03_approval")) {
+          signalLock();
+          await gate;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const executing = executeApprovedAdditiveColumn(hooked,{
+      installationId:lab.installationId,planDigest:lab.plan.digest,
+    });
+    const revoker = await connect(lab.name,lab.approver);
+    let revoking: Promise<unknown> | undefined;
+    try {
+      await afterLock;
+      revoking = revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+      let observedWait = false;
+      for (let attempt=0; attempt<30; attempt+=1) {
+        const state = await lab.dbAdmin.query<{ wait_event_type:string|null }>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [revoker.processID ?? -1],
+        );
+        if (state.rows[0]?.wait_event_type === "Lock") { observedWait = true; break; }
+        await new Promise(resolve => setTimeout(resolve,25));
+      }
+      expect(observedWait).toBe(true);
+      releaseLock();
+      const applied = await executing;
+      expect(applied.status).toBe("APPLIED");
+      await revoking;
+      await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(true);
+      expect((await lab.dbAdmin.query(
+        "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
+      const audit = await lab.dbAdmin.query("SELECT revoked_by_login FROM platform_schema_revocation_audit");
+      expect(audit.rows).toEqual([{ revoked_by_login: lab.approver }]);
+    } finally {
+      releaseLock();
+      await Promise.allSettled([executing,revoking ?? Promise.resolve()]);
+      await revoker.end();
+    }
+  },30000);
+
+  it("AUTH-19: accidental actor-roster UPDATE grant cannot reclassify a principal", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_trusted_actors TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_trusted_actors SET actor_kind='APPROVER'," +
+        "principal_id=$1 WHERE login_name=$2",
+        ["forged:new-identity",lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+      const result = await lab.dbAdmin.query(
+        "SELECT actor_kind,principal_id FROM platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.author],
+      );
+      expect(result.rows).toEqual([{
+        actor_kind:"AUTHOR",principal_id:"individual:"+lab.author,
+      }]);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_trusted_actors FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-20: accidental DELETE grant cannot erase committed revocation audit", async () => {
+    const lab = labs[5]!; // AUTH-16 committed one authentic revocation here.
+    await lab.dbAdmin.query("GRANT DELETE ON platform_schema_revocation_audit TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "DELETE FROM platform_schema_revocation_audit WHERE installation_id=$1",
+        [lab.installationId],
+      )).rejects.toMatchObject({code:"42501"});
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_revocation_audit")).rowCount).toBe(1);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE DELETE ON platform_schema_revocation_audit FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-21: an unregistered runtime login cannot author through a misgranted entrypoint", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_submit_plan(text,text,text,text)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(lab.runtime.query(
+        "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+        [lab.installationId,"d".repeat(64),
+          JSON.stringify(lab.current),JSON.stringify(lab.plan)],
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    }
+  });
+
+  it("AUTH-22: a real approver cannot extend an approval using direct UPDATE", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_approvals SET expires_at=expires_at+interval '1 day'",
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-18: failed journal authorization rolls back DDL; later approval remains bounded", async () => {
+    const lab = labs[7]!;
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_migration_journal FROM " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+      const current = await lab.dbAdmin.query<{manifest_digest:string}>(
+        "SELECT manifest_digest FROM platform_schema_registry");
+      expect(current.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    } finally {
+      await lab.dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+    expect((await run(lab)).status).toBe("APPLIED");
+    const revoker = await connect(lab.name,lab.approver);
+    try {
+      await revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+    } finally { await revoker.end(); }
+    await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(1);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
 });
