@@ -1,15 +1,63 @@
 # M03-S03 — Approval Expiry and Whole-Operation Deadline Decision
 
-**Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P02
-**Decision record first published:** 2026-11-17T19:55:41+03:00 (GitHub commit 36338377fa0dd288f60f97cf6d9b0d9d6ef56475, 2026-11-17T16:55:41Z). **New Project Owner policy decision:** 2026-11-17 (Asia/Riyadh), communicated explicitly in the owner-authored chat directive; exact chat message timestamp and independent GitHub human signature NOT verified. **Whole-operation deadline approval timestamp: NOT SET.**
-**Status:** **Policy A SELECTED AND APPROVED BY PROJECT OWNER (direct chat instruction)**; **IAM/DBA independent approvals PENDING**, **whole-operation numeric deadline NOT APPROVED**, **final implementation/release contract BLOCKED**. This is NOT an Agent 06 sign-off or production authorization.
+**Current Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P04 (Owner 2517ms D1 decision); historical P02 policy and P03 numeric proposal retained below.
+**Decision record first published:** 2026-11-17T19:55:41+03:00 (GitHub commit 36338377fa0dd288f60f97cf6d9b0d9d6ef56475, 2026-11-17T16:55:41Z). **Project Owner Policy A selection:** 2026-11-17 (Asia/Riyadh). **Project Owner numeric/D1 selection:** 2026-11-17 (Asia/Riyadh), explicitly stated in current conversation; exact original chat timestamp and independently signed GitHub owner endorsement NOT verified. **IAM and DBA approval timestamps: NOT SET.**
+**CURRENT STATUS (P04): Project Owner APPROVED Policy A and D1 = 2517ms for restricted disposable development/testing ONLY.** **Independent human IAM/DBA approvals MISSING**, pre-COMMIT admission margin and separately approved T15/recovery objectives MISSING, implemented and certified supervisor MISSING, **implementation and canonical integration BLOCKED**, Merge NOT AUTHORIZED, Production NO-GO. This is NOT independent human IAM/DBA or Agent06 approval.
 **Finding:** AG06-S03-08, P2 BLOCKING / OPEN
 **Canonical PR:** https://github.com/AbdullahZaher/vibress/pull/198 (b5cfc0687076c86a7450a8a785a072f6e63ad289, Draft)
 **Isolated Policy A source:** https://github.com/AbdullahZaher/vibress/pull/203 (reviewed implementation SHA 2c31ed9119b88a7aff0ae8bd4c16638294a74cda)
 **Tracking and historical proposal:** https://github.com/AbdullahZaher/vibress/issues/197 and issue comment 6953244253
 **Independent Agent 06:** https://github.com/AbdullahZaher/vibress/pull/198#pullrequestreview-5942420824 (REQUEST CHANGES)
 
-**Owner decision provenance:** An explicit Project Owner instruction in the current conversation supersedes earlier conditional intent and selects Policy A with exact restricted semantics and scope. It is primary-source owner authorization *for policy selection only*. This GitHub record is relayed by Agent 01; the GitHub comment author/commit author are NOT themselves independent proof that the human owner signed on GitHub. Do not misstate IAM, DBA, deadline, merge, deployment, or production approvals.
+**Owner decision provenance:** Explicit direct Project Owner instructions in the conversation select **Policy A / FINAL_PRE_DDL** and **D1 / 2517ms** for the narrowly benchmarked development/disposable testing scope only. This Agent 01 record relays those selections; GitHub commit/comment authorship is NOT independent proof of direct human GitHub signature. Do not infer IAM, DBA, operational SLO, watchdog/recovery, implementation, merge, deployment, or production approvals.
+
+
+
+## P04. Superseding Project Owner Numeric Deadline Decision — D1 / 2517ms (2026-11-17)
+
+**Formal decision ID:** `M03-S03-SDR-AG06-S03-08-2026-11-17-P04`  
+**Decision authority/source:** Project Owner expressly provided an authorization in the current conversation, dated 2026-11-17 (Asia/Riyadh): **"Decision: APPROVE D1 — 2,517 ms for restricted development and disposable testing only"**. The same instruction reiterates prior approval of **Policy A — FINAL_PRE_DDL**. This is a first-party owner instruction as provided to Agent 01, **not an independently verifiable GitHub human signature**. GitHub author identity on a relayed comment does not substitute for direct human IAM/DBA or project-owner signature if required by separate repository governance. Do not invent a more precise original instruction timestamp.
+
+### P04.1. Exactly what the Project Owner approved
+
+| Field | Current decision |
+| --- | --- |
+| Owner-approved expiry/revocation policy | **Policy A — FINAL_PRE_DDL; confirmed** in the existing restricted authorization |
+| Owner-approved numerical whole-operation budget | **2517 milliseconds, integer; CONFIRMED OWNER APPROVAL for bounded development/disposable tests** |
+| Owner-approved deadline contract | **D1**, time-bound synchronous **APPLIED** admission and successful outcome classification; **D2 NOT APPROVED** |
+| T0 start | One monotonic clock **before acquiring/opening a PostgreSQL connection**; no budget reset per statement |
+| Budget applies to | Connection, approval and author/approver provenance, advisory/row/table locks, catalog verification, allowed ADD_FIELD DDL, registry CAS/journal and COMMIT dispatch/acknowledgment |
+| T13/T14 success rule | **COMMIT definitively acknowledged and APPLIED outcome classified within 2517ms**, never APPLIED merely because COMMIT was sent |
+| Exhaustion before COMMIT | Start no further DDL and do not initiate COMMIT; independently verified cancellation and transaction rollback/fencing procedures follow; attempted cancel/rollback alone is NOT success or rollback proof |
+| Expiry/lost acknowledgment after COMMIT dispatched | **INDETERMINATE if outcome genuinely unknown**; no fabricated ROLLED_BACK, no blind DDL retry; quarantine and fresh trusted connection fencing/reconciliation |
+| T15 resource cleanup/cancellation/verified rollback/reconciliation | **Mandatory safety obligations with SEPARATE reviewed/verified objectives; NOT guaranteed within 2517ms** |
+| Normal operational SLO/false-timeout target | Agent 04's illustrative >=99% timely success / <=1% additional false abort targets **NOT YET APPROVED OR VERIFIED** |
+| Independent human IAM security approval | **PENDING / MISSING** |
+| Independent human PostgreSQL DBA approval | **PENDING / MISSING** |
+| Complete implementation contract / deployable supervisor | **BLOCKED** until independent reviews and measured safeguards; no production CLI source modification authorized by this approval |
+| D2 / any production or other workload | **NOT APPROVED** |
+| Current release | **AG06-S03-08 OPEN P2; AG06-S03-10 OPEN P3; Merge NOT AUTHORIZED; Production NO-GO** |
+
+The existing single-optional-scalar-`ADD_FIELD` operation **without default** on an **existing application-owned table**, restricted to separately controlled disposable PostgreSQL development/test installations, is the entire scope. No tenant-owned/destructive DDL, real customer data, shared production role credentials, production or cloud WAN topologies, independent DNS/TLS latency assumptions, combined maximum stressors, new API/worker/operator grants, merge or deployment is authorized. **Policy A remains independently mandatory** at a fresh server `clock_timestamp()` immediately after all relevant blocking locks and authoritative catalog checks, before DDL: precheck expiry/revocation denies; strictly later expiry is nonretroactive. Completed journal and physical DDL/registry CAS must remain atomic.
+
+### P04.2. D1 is NOT a hard lifecycle deadline
+
+The approved **D1** is a **synchronous successful response admission criterion**, not a guarantee that every failure is definitively classified or that PostgreSQL physically commits, cancels, rolls back or disposes connections by T0+2517ms. The previous raw evidence showed deliberate exhausted-budget failures with T14 classification as late as ~2818ms and T15 cleanup as late as ~2821ms; the Project Owner **explicitly excluded D2**, so these observations do not authorize skipping cleanup or returning a false definite result. If T13 acknowledgment is late, that is a **deadline breach** even when fresh-session reconciliation subsequently proves COMMITTED. Preserve breach/correlation/audit timestamps and return/record INDETERMINATE until outcome is established; never erase the breach.
+
+**Mandatory separate, not-yet-authorized controls:** DBA-reviewed **measured pre-COMMIT admission margin** must be obtained (the historical 109ms trial reserve includes an *unproven* 100ms allowance and is not a guaranteed COMMIT-ACK reserve); cancel initiation and independently verified backend identity; authenticated cancellation authority without runtime privilege expansion; rollback acknowledgment/backend termination or fencing before a definite rolled-back classification; connection quarantine, leak-free cleanup, trustworthy independent post-COMMIT registry/catalog/journal reconciliation, and owner/DBA-approved cancellation/cleanup/reconciliation RTO/escalation thresholds. **Do not pretend any of those have been completed by this numerical authorization.**
+
+### P04.3. Basis and residual risks
+
+**Source basis:** [Agent04 sizing report on benchmark Draft PR #204](https://github.com/AbdullahZaher/vibress/blob/aa8d55f3e6769e877edd371bfeab6e8f5ac16a0a/docs/platform-roadmap/execution/M03-S03-DEADLINE-SIZING-RECOMMENDATION.md), [exact tested CI #44155976796](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796) at **benchmark code SHA** `66af2e217b565ae552832a0399b6a96cd3259728` (synthetic checkout `08dd3097ce015c2583b16aba8b18209e9588670f`), [raw artifact #14361431684](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796/artifacts/14361431684). The live PR #204 `aa8d55f3e6769e877edd371bfeab6e8f5ac16a0a` includes **documentation-only changes** after that executable SHA. Node v24.22.3; disposable PostgreSQL v16.16. Candidate A=2408ms was unapproved. B=2517ms had 8/8 normal and 8/8 500ms-lock success plus 4/4 pre-COMMIT exhausted-budget refusals in the **test-only harness**, not an integrated approved supervisor. The 99%/1% reliability targets were not statistically established. Single-stressor-only emulated byte-delay, hot fixture reuse, incomplete combined stressors, unknown COMMIT and absent physical cancellation bounds remain residual risks. No production risk acceptance is granted.
+
+**Preexisting specialist/independent findings:** [IAM approval request #6959197756](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6959197756) and [DBA approval request #6959199526](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6959199526) remain **unanswered by independently attributable human approvers** at this review. [Agent06 review #5944132056](https://github.com/AbdullahZaher/vibress/pull/198#pullrequestreview-5944132056) remains prior `REQUEST CHANGES` on canonical SHA `b5cfc0687076c86a7450a8a785a072f6e63ad289`; that earlier review predates this new owner numeric instruction and is not a rejection of the owner instruction, but its exact-SHA engineering blocker is still open.
+
+**Conditions to authorize implementation/integration (not met):** obtain independently attributable IAM and DBA approvals; define and verify the separate pre-COMMIT margin and cancellation/rollback/cleanup/fenced-reconciliation objectives; verify 55P03 `LOCK_TIMEOUT`, 40P01 `DEADLOCK_DETECTED`, 57014 `QUERY_CANCELED` distinct from genuine `UNAUTHORIZED`; implement and test one pre-connection monotonic D1 supervisor in the actual scoped CLI; preserve 0059/0060, Policy A lock ordering, role separation and previous seven mitigations; then integrate reviewed delta onto a NEW canonical PR #198 SHA, execute four full CI jobs and PostgreSQL fault/expiry/deadline negatives on that exact SHA and request independent Agent 06 certification. **No merge, production deploy, high/critical risk waiver, privilege elevation or DDL scope expansion is authorized**.
+
+**P04 decision risk/rollback report:** What: documentation of the owner's approved D1/2517ms test-only choice. Why: evidence-backed finite success-admission budget while Policy A remains intact. Risks: uncertain COMMIT, nonretroactive post-authorization expiry, insufficient cancellation/cleanup/production latency proof, and false-timeout SLO unknown. Rollback: this is a docs-only governance record; no database/IAM/source/runtime changes were executed. If specialist review rejects assumptions, stop; reverse or supersede approval by a new explicitly attributable owner decision and do not rewrite decision history. No operational rollback action is implied.
+
+---
+**Audit note:** Sections 3, 7 and 8 below document the *historical proposal stage* and intentionally preserve their original "NOT APPROVED / PENDING" snapshots as-of P02/P03. **This P04 section supersedes those statuses for Project Owner Policy A + 2517ms/D1 selections ONLY**; human IAM/DBA approvals, SLO and implementation readiness remain pending.
 
 
 ## 0. Superseding Project Owner policy decision — 2026-11-17
