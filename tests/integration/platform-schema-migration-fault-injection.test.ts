@@ -6,6 +6,7 @@ import { Client } from "pg";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { reconcileReadOnly, type RecoveryExpected } from "../../scripts/platform/m03-s03-fault/read-only-reconcile";
+import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -22,7 +23,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x";
+type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -743,4 +744,38 @@ describe("M03-S03 Agent04 live DDL interruption and registry boundary", () => {
     expect((await run(lab)).status).toBe("APPLIED");
     await assertCommitted(lab, checksum);
   });
+});
+
+describe("M03-S03 actual on-wire PostgreSQL COMMIT acknowledgment loss", () => {
+  it("server commits but TCP proxy drops CommandComplete before client receives it", async () => {
+    const lab = await isolated("y"), checksum = await contentChecksum(lab);
+    const proxy = await startCommitAckDropProxy();
+    const connection = new URL(urlFor(lab.name, lab.operatorRole));
+    connection.port = String(proxy.port);
+    const client = new Client({ connectionString: connection.toString(),
+      connectionTimeoutMillis: 4000, query_timeout: 12000 });
+    client.on("error", () => undefined);
+    try {
+      await client.connect();
+      // No mock rejection. The PG wire proxy destroys a real TCP socket
+      // after observing the server-side COMMIT CommandComplete packet.
+      await expect(executeApprovedAdditiveColumn(client, request(lab)))
+        .rejects.toMatchObject({ code: "INDETERMINATE" });
+      await Promise.race([
+        proxy.serverCommitObserved,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("PG_COMMIT_PACKET_NOT_OBSERVED")), 10000)),
+      ]);
+    } finally {
+      await client.end().catch(() => undefined);
+      await proxy.close();
+    }
+    // The fresh observer sees a complete journal/catalog/manifest despite
+    // the caller's lost acknowledgment, and retry must NOT run ALTER again.
+    await assertCommitted(lab, checksum);
+    expect(await independentReconcile(lab, checksum)).toEqual({
+      state: "COMMITTED", retry: "ALREADY_APPLIED_ONLY",
+    });
+    expect((await run(lab)).status).toBe("ALREADY_APPLIED");
+  }, 30000);
 });
