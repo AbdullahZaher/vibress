@@ -407,6 +407,13 @@
       "when": 1794900000005,
       "tag": "0058_platform_installation_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794900000006,
+      "tag": "0059_platform_schema_execution_registry",
+      "breakpoints": true
     }
   ]
 }
