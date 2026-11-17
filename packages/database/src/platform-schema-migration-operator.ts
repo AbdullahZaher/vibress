@@ -172,14 +172,14 @@ async function assertAuthority(
     found.relrowsecurity || found.relforcerowsecurity || found.relispartition) {
     deny("CATALOG_DRIFT", "table ownership, namespace, kind or RLS state differs");
   }
-  const tablePrivileges = await db.query<{ truncate: boolean; references: boolean; trigger: boolean }>(
-    "SELECT has_table_privilege($1, $2::oid, 'TRUNCATE') AS truncate, " +
-    "has_table_privilege($1, $2::oid, 'REFERENCES') AS references, " +
-    "has_table_privilege($1, $2::oid, 'TRIGGER') AS trigger",
+  const tablePrivileges = await db.query<{ can_truncate: boolean; can_reference: boolean; can_trigger: boolean }>(
+    "SELECT has_table_privilege($1, $2::oid, 'TRUNCATE') AS can_truncate, " +
+    "has_table_privilege($1, $2::oid, 'REFERENCES') AS can_reference, " +
+    "has_table_privilege($1, $2::oid, 'TRIGGER') AS can_trigger",
     [registry.runtime_role, found.oid],
   );
   const privileges = tablePrivileges.rows[0];
-  if (!privileges || privileges.truncate || privileges.references || privileges.trigger) {
+  if (!privileges || privileges.can_truncate || privileges.can_reference || privileges.can_trigger) {
     deny("UNAUTHORIZED", "runtime has privileged table operations");
   }
   const unexpected = await db.query<{ count: number }>(
@@ -276,7 +276,7 @@ export async function executeApprovedAdditiveColumn(
     const installation = (await db.query<InstallationRow>(
       "SELECT i.id, i.application_id, i.environment, " +
       "(SELECT count(*)::int FROM public.platform_installations) AS total " +
-      "FROM public.platform_installations i WHERE i.id = $1 FOR SHARE",
+      "FROM public.platform_installations i WHERE i.id = $1",
       [request.installationId],
     )).rows[0];
     if (!installation || installation.total !== 1 ||
@@ -296,7 +296,7 @@ export async function executeApprovedAdditiveColumn(
     }
     const planRecord = (await db.query<PlanRow>(
       "SELECT * FROM public.platform_schema_plans " +
-      "WHERE installation_id = $1 AND plan_digest = $2 FOR SHARE",
+      "WHERE installation_id = $1 AND plan_digest = $2",
       [request.installationId, request.planDigest],
     )).rows[0];
     if (!planRecord || planRecord.plan_digest !== request.planDigest) {
@@ -318,7 +318,7 @@ export async function executeApprovedAdditiveColumn(
       "SELECT operation_id, approver, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
       "FROM public.platform_schema_approvals " +
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3 FOR SHARE",
+      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
       [request.installationId, request.planDigest, ddl.operationId],
     )).rows[0];
     if (!approval || approval.approver === planRecord.author ||
@@ -337,7 +337,7 @@ export async function executeApprovedAdditiveColumn(
     const journal = (await db.query<JournalRow>(
       "SELECT plan_digest, previous_digest, new_digest, operator_role, status " +
       "FROM public.platform_schema_migration_journal " +
-      "WHERE installation_id = $1 AND operation_id = $2 FOR UPDATE",
+      "WHERE installation_id = $1 AND operation_id = $2",
       [request.installationId, ddl.operationId],
     )).rows[0];
     if (journal) {
