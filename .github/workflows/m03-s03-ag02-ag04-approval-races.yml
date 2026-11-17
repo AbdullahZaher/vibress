@@ -1,0 +1,112 @@
+name: M03-S03 Additional Independent Revocation Expiry Race Verification
+
+on:
+  push:
+    branches:
+      - audit/m03-s03-ag02-ag04-approval-race-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  authorization-races:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      SOURCE_SHA: b5cfc0687076c86a7450a8a785a072f6e63ad289
+      SOURCE_TREE: 4808788688120b147fcab3fdd8a730021ec51516
+      OPERATOR_BLOB: 5b323911157fbffca3f48d0bcd604da0312609f8
+      FRAGMENT_BLOB: 154f8c3c9074fdf1a3b7152d2372172041ac8b1f
+    steps:
+      - name: Checkout exact integrated source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: b5cfc0687076c86a7450a8a785a072f6e63ad289
+          persist-credentials: false
+      - name: Check exact SHA tree and operator blob
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+          mkdir -p artifacts
+          printf 'test\titeration\tresult\n' > artifacts/m03-s03-auth-race-results.tsv
+          printf 'candidate_sha=%s\ncandidate_tree=%s\noperator_blob=%s\n' "$SOURCE_SHA" "$SOURCE_TREE" "$OPERATOR_BLOB" > artifacts/source.txt
+      - name: Install patched Node and frozen workspace
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Install frozen dependencies
+        run: |
+          test "$(node --version)" = v24.22.3
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Start disposable PostgreSQL ONLY
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml up -d --wait postgres
+          version="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          echo "DISPOSABLE_PG_VERSION=$version"
+          test "$version" -ge 160016
+          test "$version" -lt 170000
+      - name: Overlay test-only independent race cases without touching operator
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin audit/m03-s03-ag02-ag04-approval-race-20261117
+          git show FETCH_HEAD:audit/m03-s03-approval-races.fragment.ts > "$RUNNER_TEMP/races.fragment.ts"
+          test "$(git hash-object "$RUNNER_TEMP/races.fragment.ts")" = "$FRAGMENT_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const path='tests/integration/platform-schema-migration-operator.test.ts';
+          const source=readFileSync(path,'utf8');
+          const before='type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";';
+          const after='type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m";';
+          if(!source.includes(before))throw Error('INTEGRATED_FIXTURE_KEY_CONTRACT_CHANGED');
+          const overlay=readFileSync(process.env.RUNNER_TEMP + '/races.fragment.ts','utf8');
+          if((overlay.match(/it\("AG02_AG04_ADVERSARIAL/g)||[]).length!==5)throw Error('EXPECTED_FIVE_NEGATIVES');
+          writeFileSync(path,source.replace(before,after)+overlay);
+          NODE
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+      - name: Execute 5 synchronized approval race negatives x 5 attempts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in 1 2 3 4 5; do
+            echo "AUTHORIZATION_RACE_ITERATION=$n"
+            if pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "AG02_AG04_ADVERSARIAL" > "$RUNNER_TEMP/authorization-$n.log" 2>&1; then
+              printf 'five_pg_adversarial_cases\t%s\tPASS\n' "$n" >> artifacts/m03-s03-auth-race-results.tsv
+              tail -n 18 "$RUNNER_TEMP/authorization-$n.log"
+            else
+              printf 'five_pg_adversarial_cases\t%s\tFAIL\n' "$n" >> artifacts/m03-s03-auth-race-results.tsv
+              tail -n 140 "$RUNNER_TEMP/authorization-$n.log"
+              exit 1
+            fi
+          done
+      - name: Verify clean test DB teardown, 25 tests, code unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c $'\tPASS$' artifacts/m03-s03-auth-race-results.tsv)" -eq 5
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+      - name: Destroy disposable PG volumes
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans
+      - name: Upload bounded evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-ag02-ag04-approval-races
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
