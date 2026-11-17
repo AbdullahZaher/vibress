@@ -1,0 +1,81 @@
+{
+  "schema": "m03-s03-agent04-baseline-manifest/v1",
+  "record_date": "2026-11-17",
+  "scope": "disposable PostgreSQL16 engineering measurement only, no release or deployment",
+  "sources": {
+    "canonical_pr198": {
+      "url": "https://github.com/AbdullahZaher/vibress/pull/198",
+      "head_at_intake": "b5cfc0687076c86a7450a8a785a072f6e63ad289",
+      "tree": "4808788688120b147fcab3fdd8a730021ec51516",
+      "production_operator_blob": "5b323911157fbffca3f48d0bcd604da0312609f8",
+      "merge": false
+    },
+    "policy_pr203": {
+      "url": "https://github.com/AbdullahZaher/vibress/pull/203",
+      "head_at_intake": "c373ef12532c5232a8b68003e7fc3344dd464e62",
+      "tree": "cc861196e82201d477159f87325357c6361380a2",
+      "proposed_operator_blob": "31b1e862f594434944fec516f768265baf794525"
+    },
+    "benchmark_pr204": {
+      "url": "https://github.com/AbdullahZaher/vibress/pull/204",
+      "original_head_at_intake": "927417d4c804550cec5a18479bcf9ff45450c9db",
+      "original_tree": "1f750b6a4a5009328e29adfb2317c881e88a069d",
+      "operator_blob": "31b1e862f594434944fec516f768265baf794525"
+    },
+    "test_budget_experiment": {
+      "sha": "eef874f69924cf25223ad1290e0cc958fa46e3e8",
+      "tree": "e556ab3e7188f88b50891ff75698c9d3c4a7c74b",
+      "production_integrated": false
+    }
+  },
+  "previous_raw": [
+    {
+      "run": 44139586272,
+      "sha256_zip": "a2f77fd9b8eb1d3a04adc95902a216c2df1cddcaaecbdb82232654d67f7a2b93",
+      "records": 1127,
+      "checkout_sha": "0cb905230638e889b964aeb2a0487a2cac3e9c87"
+    },
+    {
+      "run": 44139725010,
+      "sha256_zip": "8de2e0f8f9af18f5116bf6a62addb3861221f6758cd0ab049a980277a3f77f22",
+      "records": 1127,
+      "checkout_sha": "c0f6e070b0bf5e1b609523f18ab009438c7e8db3"
+    },
+    {
+      "run": 44140690893,
+      "sha256_zip": "518c81b53e94fd19fcce7c2bd692bf3122e8bf8f745f676ebef3617ec5283d16",
+      "records": 1127,
+      "checkout_sha": "151f430f5cff2ead7c1b366b803323b47852a375"
+    }
+  ],
+  "expanded_raw": [
+    {
+      "run": 44151684946,
+      "head_sha": "9e00ad92e428cb64a7f6d4a86ddb2e38e1943867",
+      "checkout_sha": "660eb29be9b703ac45eb05d268167b8c4a0f853a",
+      "artifact_id": 14359801508,
+      "sha256_zip": "1b05095eee693ce1ab943700fdf564d3e6dcdf1b14773731f1cca4da4d107538",
+      "samples": 1335,
+      "success": true
+    },
+    {
+      "run": 44151913933,
+      "head_sha": "185afb9ccad8b8ec28a8c6b923a1e69f93d98914",
+      "checkout_sha": "a748ff6a4c52e3488125960f0fc83616cde9d93a",
+      "artifact_id": 14359611993,
+      "sha256_zip": "0249f107edef20e23e9483861a5ddee296681591cc9073aefbf0d0f9474f6941",
+      "samples": 1335,
+      "success": true
+    }
+  ],
+  "postgres_server_version_num": 160016,
+  "node_version": "v24.22.3",
+  "owner_policy": "Policy A FINAL_PRE_DDL selected in user chat for restricted dev/disposable only; GitHub signed human identity unverified",
+  "owner_slo": "MISSING",
+  "iam_dba_human_signature": "PENDING",
+  "deadline_approved": false,
+  "canonical_supervisor_integrated": false,
+  "agent06_final": "PENDING",
+  "merge_authorized": false,
+  "production_authorized": false
+}

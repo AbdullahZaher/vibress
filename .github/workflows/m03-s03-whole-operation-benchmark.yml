@@ -1,0 +1,141 @@
+name: M03-S03 Whole-Operation PG16 Benchmark
+on:
+  pull_request:
+    branches:
+      - main
+      - fix/m03-s03-ag01-ag05-approval-expiry-linearization-20261117
+    paths:
+      - "tests/integration/m03-s03-whole-operation-benchmark.test.ts"
+      - "scripts/platform/m03-s03-benchmark/**"
+      - ".github/workflows/m03-s03-whole-operation-benchmark.yml"
+      - "packages/database/src/platform-schema-migration-operator.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      M03_S03_NORMAL_ATTEMPTS: "1000"
+      M03_S03_CONTENTION_ATTEMPTS: "100"
+      M03_S03_CHECKOUT_SHA: ${{ github.sha }}
+      M03_S03_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact synthetic PR merge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - name: Setup security-patched Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Verify checkout version and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.22.3"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -p artifacts/m03-s03-deadline
+          printf '{"checkout_sha":"%s","pr_head_sha":"%s","node":"%s","source":"GitHub PR synthetic merge","security":"disposable only"}\n' \
+            "$(git rev-parse HEAD)" "$M03_S03_PR_HEAD_SHA" "$(node --version)" \
+            > artifacts/m03-s03-deadline/provenance.json
+      - name: Install pinned dependency graph
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Boot disposable PostgreSQL 16 (not shared or production)
+        run: docker compose -f compose.dev.yml up -d --wait postgres
+      - name: Verify PostgreSQL patch version and immutable Docker image ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_ver="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          test "$pg_ver" = "160016"
+          container_id="$(docker compose -f compose.dev.yml ps -q postgres)"
+          image_id="$(docker inspect -f '{{.Image}}' "$container_id")"
+          PG_NUMBER="$pg_ver" PG_IMAGE="$image_id" python - <<'PY'
+          import os,json
+          from pathlib import Path
+          path=Path("artifacts/m03-s03-deadline/provenance.json")
+          d=json.loads(path.read_text())
+          d["postgres_server_version_num"]=os.environ["PG_NUMBER"]
+          d["postgres_docker_image_id"]=os.environ["PG_IMAGE"]
+          path.write_text(json.dumps(d,sort_keys=True,indent=2)+"\n")
+          print("M03_S03_PG16_VERSION",d["postgres_server_version_num"])
+          print("M03_S03_DISPOSABLE_IMAGE_SHA",d["postgres_docker_image_id"])
+          PY
+      - name: Typecheck, lint and benchmark real operator
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @vibress/database typecheck
+          pnpm exec eslint tests/integration/m03-s03-whole-operation-benchmark.test.ts scripts/platform/m03-s03-benchmark/*.ts
+          pnpm exec vitest run --no-file-parallelism tests/integration/m03-s03-whole-operation-benchmark.test.ts \
+            --testTimeout=900000 --hookTimeout=120000
+      - name: Check complete benchmark result matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const report=JSON.parse(fs.readFileSync('artifacts/m03-s03-deadline/summary.json','utf8'));
+          const fsCount=fs.readFileSync('artifacts/m03-s03-deadline/raw-attempts.jsonl','utf8').trim().split('\n').length;
+          const candidate=JSON.parse(fs.readFileSync('artifacts/m03-s03-deadline/deadline-candidates.json','utf8'));
+          const fault=JSON.parse(fs.readFileSync('artifacts/m03-s03-deadline/fault-timing-summary.json','utf8'));
+          const topology=JSON.parse(fs.readFileSync('artifacts/m03-s03-deadline/topology-assumptions.json','utf8'));
+          const required={
+            network_oneway_5ms:20,network_oneway_15ms:20,network_oneway_30ms:12,
+            ack_extra_60ms:20,ack_extra_200ms:10,
+            cancel_lock_wait:20,backend_terminated:10,ack_lost_indeterminate:8,
+            cumulative_3_lock_waits:12,connection_refused:8,connection_bad_auth:8,
+            connection_blackhole:8,indexed_constrained_25002_rows:12,
+            candidate_A_normal:8,candidate_B_normal:8,
+            candidate_A_table_lock_500ms:8,candidate_B_table_lock_500ms:8,
+            candidate_A_deadline_exhaustion:4,candidate_B_deadline_exhaustion:4,
+            frozen_candidate_A_normal:8,frozen_candidate_B_normal:8,
+            frozen_candidate_A_table_lock_500ms:8,frozen_candidate_B_table_lock_500ms:8,
+            frozen_candidate_A_deadline_exhaustion:4,frozen_candidate_B_deadline_exhaustion:4,
+          };
+          for (const [profile,count] of Object.entries(required)) {
+            if(candidate.profiles?.[profile]?.attempts!==count) throw Error("INCOMPLETE_PROFILE_"+profile);
+          }
+          if(candidate.candidate_a_ms<=0 || candidate.candidate_b_ms<=candidate.candidate_a_ms ||
+            fault.checkout_sha!==report.checkout_sha || topology.checkout_sha!==report.checkout_sha ||
+            fsCount!==1375)throw Error("CANDIDATE_OR_COUNT_INVALID");
+          console.log('M03_S03_QUANTITATIVE_CANDIDATES_UNAPPROVED',JSON.stringify({
+            a:candidate.candidate_a_ms,b:candidate.candidate_b_ms,attempts:fsCount,
+            false_timeout_a:candidate.candidate_a_empirical,
+            false_timeout_b:candidate.candidate_b_empirical}));
+          if(report.checkout_sha!==process.env.GITHUB_SHA ||
+             report.groups?.normal?.attempted!==1000 ||
+             report.groups?.table_contention?.attempted!==100 ||
+             report.groups?.normal?.outcomes?.APPLIED!==1000)
+            throw Error("INCOMPLETE_BENCHMARK_MATRIX");
+          console.log("M03_S03_BENCH_MATRIX_VERIFIED", report.samples,
+            "normal", report.groups.normal.elapsed_success,
+            "contention", report.groups.table_contention.elapsed_all);
+          NODE
+      - name: Teardown disposable PostgreSQL
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml down --volumes --remove-orphans
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=vibress)"
+      - name: Upload sanitized raw samples, summary and provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-whole-operation-benchmark
+          path: artifacts/m03-s03-deadline/
+          retention-days: 30
+          if-no-files-found: error
