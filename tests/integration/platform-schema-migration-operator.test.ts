@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b";
+type Key = "a" | "b" | "c" | "d";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -216,6 +216,8 @@ beforeAll(async () => {
   console.info("M03-S03 disposable lab: Node=" + process.version + " PostgreSQL server_version_num=" + db.ver);
   labs.push(await createLab("a"));
   labs.push(await createLab("b"));
+  labs.push(await createLab("c")); // Dedicated concurrent execution and replay fixture.
+  labs.push(await createLab("d")); // Dedicated journal failure/recovery fixture.
 }, 120000);
 
 afterAll(async () => {
@@ -267,27 +269,91 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
 
   it("rejects revoked, expired, changed or forged plan authorization", async () => {
     const lab = labs[0]!;
+    const originalChecksum = await contentChecksum(lab);
     await approve(lab);
-    await lab.dbAdmin.query(
-      "UPDATE platform_schema_approvals SET revoked_at = now() WHERE installation_id=$1",
-      [lab.installationId]);
-    await expect(run(lab)).rejects.toThrow();
-    await lab.dbAdmin.query(
-      "UPDATE platform_schema_approvals SET revoked_at = NULL," +
-      "expires_at=clock_timestamp()-interval '1 second' WHERE installation_id=$1",
-      [lab.installationId]);
-    await expect(run(lab)).rejects.toThrow();
-    await lab.dbAdmin.query(
-      "UPDATE platform_schema_approvals SET expires_at=clock_timestamp()+interval '20 minutes'" +
-      " WHERE installation_id=$1", [lab.installationId]);
-    await lab.dbAdmin.query(
-      "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id=$2",
-      [JSON.stringify({ ...lab.plan, digest: "e".repeat(64) }), lab.installationId]);
-    await expect(run(lab)).rejects.toThrow();
-    await lab.dbAdmin.query(
-      "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id=$2",
-      [JSON.stringify(lab.plan), lab.installationId]);
-    expect(await hasWebsite(lab)).toBe(false);
+    try {
+      // A revoked authorization is denied even with a valid future expiry.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = clock_timestamp() " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // An expired approval remains structurally valid: approved_at < expires_at < DB time.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL, " +
+        "approved_at = clock_timestamp() - interval '2 hours', " +
+        "expires_at = clock_timestamp() - interval '1 hour' " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      const expired = await lab.dbAdmin.query<{ valid_window: boolean; expired: boolean }>(
+        "SELECT approved_at < expires_at AS valid_window, " +
+        "expires_at < clock_timestamp() AS expired " +
+        "FROM platform_schema_approvals WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      expect(expired.rows[0]).toEqual({ valid_window: true, expired: true });
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // Preserve PostgreSQL's actual ordering constraint. A malformed window is
+      // a database error, not an alternative way to represent expiry.
+      await expect(lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET expires_at = approved_at " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      )).rejects.toMatchObject({
+        code: "23514", constraint: "platform_schema_approvals_expiry_check",
+      });
+
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET " +
+        "approved_at = clock_timestamp(), " +
+        "expires_at = clock_timestamp() + interval '20 minutes' " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+
+      // A forged target operator does not authenticate the approver's intent.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET operator_role = $1 " +
+        "WHERE installation_id = $2",
+        [lab.runtimeRole, lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET operator_role = $1 " +
+        "WHERE installation_id = $2",
+        [lab.operatorRole, lab.installationId],
+      );
+
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id = $2",
+        [JSON.stringify({ ...lab.plan, digest: "e".repeat(64) }), lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(originalChecksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal WHERE installation_id = $1",
+        [lab.installationId],
+      )).rowCount).toBe(0);
+    } finally {
+      // This fixture is reused for catalog and role-negative checks; always
+      // reset authorized metadata, even when an assertion fails.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id = $2",
+        [JSON.stringify(lab.plan), lab.installationId],
+      );
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL, " +
+        "operator_role = $1, approved_at = clock_timestamp(), " +
+        "expires_at = clock_timestamp() + interval '20 minutes' " +
+        "WHERE installation_id = $2",
+        [lab.operatorRole, lab.installationId],
+      );
+    }
   });
 
   it("fails closed on unexpected live column and then permits deliberate fixture repair", async () => {
@@ -321,9 +387,39 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
   });
 
   it("serializes concurrent operators and deterministically prevents reapplication", async () => {
-    const lab = labs[0]!;
+    // Its own installation/database means other tests cannot leave a revoked
+    // approval, drifted catalog or journal from a prior negative test.
+    const lab = labs[2]!;
+    await approve(lab);
     const originalChecksum = await contentChecksum(lab);
     const second = await connect(lab.name, lab.operatorRole);
+    try {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = clock_timestamp() " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      const denied = await Promise.allSettled([
+        run(lab),
+        executeApprovedAdditiveColumn(second, {
+          installationId: lab.installationId, planDigest: lab.plan.digest,
+        }),
+      ]);
+      expect(denied.every(result =>
+        result.status === "rejected" && result.reason?.code === "UNAUTHORIZED",
+      )).toBe(true);
+      expect(await hasWebsite(lab)).toBe(false);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal",
+      )).rowCount).toBe(0);
+    } finally {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+    }
+
     try {
       const results = await Promise.allSettled([
         run(lab),
@@ -331,9 +427,17 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
           installationId: lab.installationId, planDigest: lab.plan.digest,
         }),
       ]);
-      const applied = results.filter(r => r.status === "fulfilled" &&
-        r.value.status === "APPLIED");
-      expect(applied).toHaveLength(1);
+      // Report actual sanitized operator outcomes if neither applied, rather
+      // than weakening the requirement to accept zero migrations.
+      const outcomes = results.map(result => result.status === "fulfilled"
+        ? result.value.status
+        : result.reason?.code === undefined ? "UNEXPECTED_REJECTION" : String(result.reason.code));
+      const applied = results.filter(result => result.status === "fulfilled" &&
+        result.value.status === "APPLIED");
+      expect(applied, "Concurrent operator outcomes: " + outcomes.join(", "))
+        .toHaveLength(1);
+      expect(results.every(result => result.status === "rejected" ||
+        result.value.status === "APPLIED" || result.value.status === "ALREADY_APPLIED")).toBe(true);
       expect(await hasWebsite(lab)).toBe(true);
       expect(await contentChecksum(lab)).toBe(originalChecksum);
       const retry = await run(lab);
@@ -342,6 +446,29 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
       const journal = await lab.dbAdmin.query<{ status: string }>(
         "SELECT status FROM platform_schema_migration_journal");
       expect(journal.rows).toEqual([{ status: "COMPLETED" }]);
+
+      // A different plan may not borrow this operation's completed journal.
+      await expect(executeApprovedAdditiveColumn(second, {
+        installationId: lab.installationId, planDigest: "f".repeat(64),
+      })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // A valid-format conflicting journal checksum must never masquerade as
+      // an already-applied operation. Restore only inside this disposable lab.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_migration_journal SET new_digest = $1 " +
+        "WHERE installation_id = $2",
+        ["f".repeat(64), lab.installationId],
+      );
+      try {
+        await expect(run(lab)).rejects.toMatchObject({ code: "JOURNAL_CONFLICT" });
+      } finally {
+        await lab.dbAdmin.query(
+          "UPDATE platform_schema_migration_journal SET new_digest = $1 " +
+          "WHERE installation_id = $2",
+          [lab.plan.proposedManifest.digest, lab.installationId],
+        );
+      }
+      expect((await run(lab)).status).toBe("ALREADY_APPLIED");
     } finally {
       await second.end();
     }
@@ -366,7 +493,8 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
   }, 20000);
 
   it("rolls back ALTER if journal finalization fails, then allows a fresh authorized retry", async () => {
-    const lab = labs[1]!;
+    const lab = labs[3]!;
+    await approve(lab);
     await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_migration_journal FROM " +
       lab.dbAdmin.escapeIdentifier(lab.operatorRole));
     await expect(run(lab)).rejects.toThrow();
