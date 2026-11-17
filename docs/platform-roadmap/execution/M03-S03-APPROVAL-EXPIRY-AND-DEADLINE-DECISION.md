@@ -223,3 +223,107 @@ A separate [test-only report](https://github.com/AbdullahZaher/vibress/blob/docs
 **Timestamp of this benchmark reassessment:** 2026-11-17, Asia/Riyadh. This addendum does not modify operator code, migrate a database, grant privileges, close an issue, merge a PR, or authorize production deployment.
 
 **Official technical references inspected 2026-11-17:** [PostgreSQL 16 client timeouts](https://www.postgresql.org/docs/16/runtime-config-client.html), [live clock_timestamp](https://www.postgresql.org/docs/16/functions-datetime.html), [relation/advisory locking](https://www.postgresql.org/docs/16/explicit-locking.html), [COMMIT semantics](https://www.postgresql.org/docs/16/sql-commit.html).
+
+
+## 8. M03-S03 — Numeric Whole-Operation Deadline Authorization (2026-11-17)
+
+**Decision ID:** M03-S03-SDR-AG06-S03-08-2026-11-17-P03  
+**Status:** **NUMERIC PROPOSAL — OWNER / IAM / DBA APPROVAL PENDING; IMPLEMENTATION BLOCKED**  
+**Already approved by Project Owner:** Policy A, `FINAL_PRE_DDL`, limited to restricted development/disposable PostgreSQL testing. Owner's direct-chat decision is faithfully relayed at [Issue #197 comment #6957296137](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6957296137); this agent's GitHub relay is NOT a direct independently signed human GitHub endorsement.  
+**Numeric recommendation:** **2517 milliseconds (Candidate B, PROPOSED, NOT APPROVED)**. Alternative **2408 milliseconds (Candidate A, NOT APPROVED)**.  
+**Deadline contract:** **D1 RECOMMENDED FOR OWNER DECISION, NOT YET AUTHORIZED**. D2 hard lifecycle completion is **NOT SUPPORTED / NOT CERTIFIED**.  
+**Merge:** NOT AUTHORIZED. **Production:** NO-GO. **AG06-S03-08 P2:** OPEN. **AG06-S03-10 P3:** OPEN.
+
+### 8.1 Exact source identity and audit
+
+| Asset | Verified SHA / evidence | Scope |
+| --- | --- | --- |
+| Canonical Draft PR #198 | `b5cfc0687076c86a7450a8a785a072f6e63ad289` | Unchanged, without Policy A or runtime deadline supervisor |
+| Policy A Draft PR #203, before this documentation addition | `c373ef12532c5232a8b68003e7fc3344dd464e62` | Owner decision documented; operator previously tested at `2c31ed9119b88a7aff0ae8bd4c16638294a74cda` |
+| Benchmark PR #204 **actual tested source** | `66af2e217b565ae552832a0399b6a96cd3259728` | [Actions #44155976796](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796) SUCCESS; 1,375 raw records |
+| Actual benchmark CI synthetic merge checkout | `08dd3097ce015c2583b16aba8b18209e9588670f` | Exactly same Git tree as tested source: `35a05662079dee60006ebbce1cb575d0ab7dd63e`; parents #203 `c373ef12532c5232a8b68003e7fc3344dd464e62` and tested source |
+| Benchmark Draft PR #204 later documentation-only HEAD | `aa8d55f3e6769e877edd371bfeab6e8f5ac16a0a` | TWO report-document-only commits after tested source. Do NOT call this newer HEAD exact-source executable CI |
+| Exact raw artifact | [#14361431684](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796/artifacts/14361431684) | ZIP SHA-256 `dc0038d09ef839cf521b94f9133b4123871c01d4149dd60310641d62095b43db`. Six sanitized files, independently downloaded and recalculated |
+| Environment | Node `v24.22.3`; PostgreSQL `16.16` / `160016` | Docker image ID `sha256:3cbd775daa28461ef484ed88ca1e5a5a72ff126e196deeebce6fec764edf1200`; GitHub Ubuntu 24.04 isolated disposable lab |
+
+Final-run raw evidence: **1,375 / 1,375 unique IDs**; 1,000/1,000 normal APPLIED (p99 **24.6277ms**, max 40.6374ms), 90/100 induced table-lock contentions APPLIED (successful p99 **926.8647ms**), 10/100 induced 2200ms lock waits failed closed with SQLSTATE **55P03**, 30ms one-way per-direction TCP byte-delay **12/12 APPLIED** (p99 **2287.4318ms**, max 2287.494ms), 20 real cancel tests SQLSTATE **57014**, 10 backend terminations, 8 lost COMMIT acknowledgments classified INDETERMINATE. No production database, DNS/TLS, WAN, QPS/pool backpressure or realistic combined stressors were tested.
+
+Preceding expanded source-pinned ZIPs independently recalculated: [#14359801508](https://github.com/AbdullahZaher/vibress/actions/runs/44151684946/artifacts/14359801508), [#14359611993](https://github.com/AbdullahZaher/vibress/actions/runs/44151913933/artifacts/14359611993), [#14361185666](https://github.com/AbdullahZaher/vibress/actions/runs/44154251306/artifacts/14361185666), each 1,335/1,335 unique attempts. Maximum 30ms one-way TCP successful profile **p99=2298.0869ms**, observed maximum **2298.1778ms**, from second expanded run. Across three runs highest cancellation-to-final-classification p99 **7.7803ms** and separately highest ROLLBACK-ACK p99 **0.3701ms**, both from third expanded run. These are small lab cohorts, not hard recovery guarantees. The final held-out CI generates its OWN exploratory `A=2393ms`, `B=2498ms` using its local reserve `105ms`; those figures must not replace the **pre-frozen cross-run** 2408/2517ms candidates.
+
+### 8.2 Independently checked sizing formula and limited fixed-candidate validation
+
+Definitions: `P = max(per-profile successful p99 across the three prior expanded runs) = 2298.0869ms`; `M = max(successful elapsed duration across these runs) = 2298.1778ms`. `R = ceil(7.7803 + 0.3701 + 100 unverified event-loop allowance) = 109ms`. The 100ms term is explicitly assumed, **not** a measured 95th/99th-percentile bound, and R is NOT a proven rollback time, universal cancellation reserve, or COMMIT ACK safety budget.
+
+| Pre-frozen laboratory candidate | Formula | Margin above M | Measured exceedances | Fixed held-out candidate trial | Governance |
+| --- | --- | --- | --- | --- | --- |
+| **A 2408ms** | `ceil(P + R) = ceil(2298.0869 + 109) = 2408` | **109.8222ms** | 0/3492 in-sample eligible success durations; 0/1164 preselected held-out eligible success durations | **8/8 normal APPLIED, 8/8 independent 500ms table-lock APPLIED, 4/4 exhausted-budget pre-COMMIT denied** | Unapproved; smaller headroom |
+| **B 2517ms — preferred** | `ceil(M + 2*R) = ceil(2298.1778 + 218) = 2517` | **218.8222ms** | Same 0/3492 in-sample; 0/1164 held-out | **8/8 normal APPLIED, 8/8 real 500ms lock APPLIED, 4/4 exhausted-budget pre-COMMIT denied** | **RECOMMENDED FOR RESTRICTED LAB ONLY; NOT APPROVED** |
+
+Each run's deadline fixture remains **test-only**. These pass counts demonstrate safe *particular cases*, not a correct deployable supervisor, true <=1% false-timeout rate, or a service-level latency guarantee. Fixed candidate positive cohorts are only 16 per value; 30ms network profile only 12; independent repeated installation/customer and combined-stressor evidence are absent. In the final raw artifact, **all four deliberate exhaustion cases for A** reached result classification up to **2697.1533ms** and cleanup up to **2699.3299ms**; **all four for B** reached result classification up to **2818.4536ms** and cleanup up to **2820.5951ms**. They did not reach T14/T15 within either proposed number. No false committed journal was observed, but return status is currently generic UNAUTHORIZED rather than a dedicated DEADLINE_EXCEEDED.
+
+**Technical decision:** Recommend B=2517ms over A=2408ms ONLY after the accountable owner explicitly chooses contract D1 and accepts this synthetic lab class. **Neither A nor B can currently be approved as a D2 T0-to-T15 deadline.** Neither can be inferred suitable for production, regional databases, remote TLS, overloaded service, or simultaneous maximum network+lock+ACK stressors.
+
+### 8.3 Formal deadline contract choice — D1 technically recommended, owner selection PENDING
+
+| Timeline stage | Definition | Contract D1 recommendation |
+| --- | --- | --- |
+| **T0** | Supervised restricted operator accepts/validates execution request before PostgreSQL client connection creation and DNS/TLS/network acquisition | Start one immutable monotonic budget using `process.hrtime.bigint()`; record a sanitized request ID |
+| **T1–T11** | Connection, BEGIN, all advisory/registry/table locks, approval/catalog/privilege checks, final Policy A authorization, allowed DDL, postconditions, manifest CAS and completed journal | All awaited stages consume the SAME total budget. No timer reset and no new DDL if exhausted |
+| **T12** | COMMIT first transmitted | Do NOT transmit if time is exhausted or if the separately **DBA-approved, measured COMMIT-ACK admission margin** is unavailable; R=109ms above is cancellation sensitivity only, NOT a proven COMMIT margin |
+| **T13** | Definitive server COMMIT ACK observed by client | Required **before** deadline to report synchronous APPLIED; dispatch alone is insufficient |
+| **T14** | Outcome classification produced | For immediate synchronous APPLIED, classification must also complete within deadline. When budget expires on an in-flight query, record timeout promptly and begin fail-closed recovery; **D1 DOES NOT guarantee that definite failure/recovery classification T14 completes within the same budget** |
+| **T15** | Safe connection disposal / resource cleanup or independently verified quarantine completion | **NOT covered by proposed 2517ms D1 success-admission threshold**; must have separate bounded recovery objectives and escalation, not yet authorized |
+
+**D1 is a synchronous-success admission + definite-success classification budget, not an unconditional guarantee for all operation outcomes or all T14 classifications.** Some fail-closed classification may legitimately occur after the D1 deadline while PostgreSQL cancellation/rollback/fencing is verified; preserve an immutable breach timestamp and provisional not-success status. Do not count a late definite failure or late COMMIT ACK as timely APPLIED. Physical PostgreSQL COMMIT, backend cleanup or TCP ACK delivery cannot be guaranteed by a JS timer under crash/partition.
+
+**D2** requires **every** operation to reach T14, plus completed rollback/termination/quarantine and cleanup T15 within the bound. The actual 2699–2821ms failure traces **contradict D2 for both 2408/2517ms**, even on this lab. If the Project Owner requires D2, reject both values for implementation approval, size recovery separately and rerun tests with the true T0-to-T15 contract.
+
+### 8.4 Mandatory fail-closed semantics and recovery objectives
+
+- **Approval correctness:** preserve independent authenticated author/approver and unchanged migration 0060 trust/revocation lock order; Policy A's fresh `clock_timestamp()` AFTER all required locks/catalog checks and immediately before one approved ADD_FIELD remains authoritative. Expiry/revocation ordered before final decision DENIES; strictly later expiry is nonretroactive; a valid approval NEVER overrides deadline exhaustion.
+- **Pre-COMMIT:** enforce remaining monotonic budget before every awaited blocking action and before DDL or COMMIT. Never start DDL or dispatch COMMIT once expired, or when independently approved measured safety requirements cannot fit. On expiry initiate bounded authorized cancellation by separate restricted control channel for verified database/backend/role/start time, await actual query settlement, verify ROLLBACK or known backend termination/fence before claiming ROLLED_BACK. Failed cancel, lost observer, unproven rollback => INDETERMINATE / quarantine.
+- **Post-COMMIT send:** if ACK is late, missing or transport drops, never assert APPLIED or ROLLED_BACK solely from client timer; mark INDETERMINATE and deadline breach. Discard/quarantine connection, use a **new independently trusted PostgreSQL session** to fence the original possible executor before comparing exact registry, completed journal, manifest digest, physical catalog and seeded row checksum. Resolve **COMMITTED/ALREADY_APPLIED**, **conclusively ROLLED_BACK with fresh approval before retry**, or **HALT_UNRECONCILABLE; no blind retry**. A later authoritative ACK or reconciliation may show success but does not erase the missed D1 deadline.
+- **Separate T15 recovery targets are REQUIRED but NOT APPROVED:** cancellation initiation, confirmed backend termination/rollback, quarantine, connection disposal, final diagnostic result and uncertain-COMMIT reconciliation each need named responsible owner, measured p95/p99/max, an explicit time-bound SLO and alert/escalation thresholds. The observed 7.7803ms cancel-to-classification p99, 0.3701ms rollback ACK p99 and ~12ms fresh observer p99 were small, source-specific lab samples, **not guarantees**; actual deadline exhaustion tests took 2699–2821ms including cleanup.
+- **SQLSTATE and incident telemetry (AG06-S03-10 remains open):** 55P03 => LOCK_TIMEOUT or LOCK_NOT_AVAILABLE; 40P01 => DEADLOCK_DETECTED; 57014 => QUERY_CANCELED; truly invalid approval => UNAUTHORIZED. Detect transport/ack uncertainty separately. No raw SQL, secrets, credentials, actor identifiers or sensitive schema data in client errors/logs. Record SHA, sanitized operation ID, T0/T12/T13/T14/T15 timings when available, deadline_breached, cancel/rollback proof, and recovery classification.
+
+### 8.5 Explicit operating SLO and risk decisions REQUESTED (not yet approved)
+
+**Supported model for owner consideration:** disposable-only PostgreSQL 16.16 and Node 24.22.3 on a GitHub Ubuntu 24.04 class runner; one existing application-owned relation and single approved scalar ADD_FIELD without default; repeated hot-table fixture; separate individual author/approver/operator; **one stressor at a time**: emulated TCP byte-delay <=30ms ONE-WAY in each direction OR <=900ms independent target relation lock OR three sequential 250ms real waits OR <=200ms extra COMMIT ACK delay. Not combinations. No production roles, API/Worker entrypoint, DNS/TLS, cloud database, WAN, sustained QPS, multi-tenant datasets, heavy indexes/constraints, or >2s lock waits. A manifest with unapproved new index/CHECK must fail CATALOG_DRIFT.
+
+**Illustrative SLO OFFER, NOT OWNER DECISION:** >=99% of otherwise eligible single-stressor lab operations reach T13+T14 with synchronous APPLIED inside a **proposed 2517ms**; <=1% additional, solely deadline-induced aborts among otherwise valid, supported-profile requests. Explicitly exclude invalid authorization, catalog drift, deliberate >2s lock waits and fault-injected lost COMMIT ACK from the *normal false-timeout* denominator, but count them in separate reliability/security metrics. **The current evidence does not verify this SLO:** n=12 network-tail, non-independent repeated warm-table trials and 0 observed fixed-candidate exceedances are insufficient for a stable 1% bound. Require independently repeated representative profiles (a provisional validation target: >=300 near-independent eligible trials *per stressor and across different runners*, with explicit statistical assumptions) and combined-stressor tests before operational SLO acceptance. No statistical claim is made absent those samples.
+
+**Project Owner to explicitly decide**: accept/reject D1's limited success-only classification guarantee vs require D2; accept/reject the one-stressor synthetic topology; accept/reject 2517ms numerical threshold and illustrative 99%/1% lab SLO; set a separate maximum tolerated unexpected INDETERMINATE rate and time-to-fenced-reconciliation recovery objective based on a separately measured fault budget; accept or reject false-timeout/availability impact. **None is approved by the existing Policy A decision.**
+
+### 8.6 Separate accountable specialist sign-offs (requests only)
+
+**Independent IAM Authority — PENDING / identity MISSING:** named human reviewer must independently accept/reject Policy A final `clock_timestamp()` check, registration/provenance of author versus approver versus operator, migration 0060 advisory fence/revocation order, expiry during table waits, no DDL without valid approval, an independent operation deadline, no runtime privilege expansion and clear sanitized error classification. Require a dated GitHub decision, identity, scope and conditions; Agent 05 automated tests alone are not human IAM sign-off.
+
+**Independent PostgreSQL DBA Authority — PENDING / identity MISSING:** named human reviewer must independently accept/reject 2517ms for the narrow one-stressor lab class, timeout control and SQLSTATE mapping, lock/deadlock and cancellation behavior, *measured separate pre-COMMIT ACK margin* (must not silently substitute R=109ms), backend identity before cancel/terminate, rollback-proof criteria, quarantine, fresh-session fenced journal/catalog reconciliation, and separate T15 recovery SLO. Require a dated GitHub decision, evidence refs and conditions; Agent 02 automated tests alone are not a human DBA signature.
+
+**Agent 03 AppSec review:** required for error taxonomy, no SQL/secrets in artifacts, test-only benchmark proxy isolation and no public operator entrypoint. **Agent 06 independent review:** only after approved contract, new canonical integrated SHA, exact-tree full CI and PG fault suites.
+
+### 8.7 Exact proposed implementation contract for Agents 05 + 02 — BLOCKED until sign-offs
+
+**Do not implement or integrate the approved runtime supervisor yet.** On authorization, freeze one exact policy+deadline contract: restricted disposable-only PostgreSQL operator invocation; T0 before connection; one monotonic budget in integer milliseconds propagated through entire SQL sequence and connection acquisition; per-phase PostgreSQL SET LOCAL lock/statement/idle timeouts constrained by remaining budget, handling PostgreSQL 55P03/40P01/57014; check at beginning, after each await, immediately before DDL and COMMIT; require separate DBA-approved pre-COMMIT margin; Policy A final authorization with exact approval provenance and atomic DDL/manifest CAS/journal; independently scoped cancellation/fencing and bounded rollback proof; on-wire lost/late COMMIT ACK yields INDETERMINATE and fresh observer reconciliation without DDL replay; separate T15 cleanup/recovery targets and truthful sanitized structured telemetry. Preserve all AG06-S03-01..07 mitigations, no modification to migrations 0059/0060, SQL grammar or runtime grants; remediate AG06-S03-10 error classification under AppSec/DBA review.
+
+**Required negative tests** after approval: near-deadline connection/approval/installation/target locks, simultaneous modeled stressors, expiry/revocation at final Policy A boundary, no DDL/COMMIT when insufficient budget, 55P03 vs 40P01 vs 57014, canceled query with failed ROLLBACK, lost watcher/backend, SIGKILL, backend terminate, lost and late COMMIT ACK, stale journal, deadlock, catalog drift, 0059/0060 fresh-install/upgrade, privilege inheritance and role-switch negatives, no runtime DDL or tenant escape, real post-deadline T14/T15 failure classification and bounded separate recovery. Re-run **four primary full CI jobs plus real PostgreSQL fault/deadline CI** on the NEW integrated canonical #198 SHA/tree, document Node/PG versions and skips, then request independently authored Agent 06 verdict.
+
+**Authorization register as of this decision proposal:**
+
+| Gate | Verdict |
+| --- | --- |
+| Project Owner Policy A selection | **CONFIRMED** for restricted development/disposable testing; no numeric approval |
+| Proposed numeric candidate | **2517ms (B), NOT APPROVED**; alternative 2408ms (A) unapproved |
+| Deadline contract | **D1 RECOMMENDED; OWNER CHOICE PENDING**; D2 unsupported at 2517ms |
+| Owner SLO / false-timeout rate / unknown COMMIT frequency / recovery RTO | **PENDING / NOT AUTHORIZED** |
+| Project Owner numeric 2517ms decision | **MISSING** |
+| Independent human IAM approval | **MISSING** |
+| Independent human DBA approval | **MISSING** |
+| Implementation-readiness / canonical integration | **BLOCKED / NOT AUTHORIZED** |
+| Agent06 review on final integrated SHA | **PENDING** |
+| AG06-S03-08 / AG06-S03-10 | **OPEN P2 / OPEN P3** |
+| Merge / production | **NOT AUTHORIZED / NO-GO** |
+
+**Final scope and risk statement:** The owner-selected Policy A expiry nonretroactivity is separate from D1; no high/critical security risk is accepted. Lab result-classification margin, artificial event-loop allowance, missing real TLS/DNS and combined stressors, unproven cancellation and T15 targets, native table-owner DDL reach and possible ambiguous COMMIT remain explicit residual risks. This proposal changes documentation only, does not touch operator code/production/IAM roles or alter any database, and cannot be used as release or merge authorization.
+
+**Official reference set reviewed 2026-11-17:** [PostgreSQL16 timeouts](https://www.postgresql.org/docs/16/runtime-config-client.html), [PostgreSQL16 wire/cancel](https://www.postgresql.org/docs/16/protocol-flow.html), [PostgreSQL16 libpq cancel caveat](https://www.postgresql.org/docs/16/libpq-cancel.html), [PostgreSQL16 SQLSTATE codes](https://www.postgresql.org/docs/16/errcodes-appendix.html), [PostgreSQL16 COMMIT](https://www.postgresql.org/docs/16/sql-commit.html), [Node24 process.hrtime.bigint](https://nodejs.org/docs/latest-v24.x/api/process.html#processhrtimebigint).
