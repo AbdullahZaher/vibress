@@ -917,8 +917,11 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
       for(let i=0;i<PROFILE_SAMPLES.largeIndexed;i++){
         const s=await supervisor(lab,{profile:"indexed_constrained_25002_rows",
           caseId:"IDX-"+i});
-        expect(s.outcome).toBe("APPLIED");
-        await resetForNext(lab);
+        // Unauthorized additional indexes/constraints are NOT part of the
+        // approved canonical manifest. A secure operator MUST reject live
+        // catalog drift instead of silently accepting an unmodeled index.
+        expect(s.outcome).toBe("CATALOG_DRIFT");
+        await noCompletedJournal(lab);
       }
     }finally{
       await lab.dbAdmin.query("DELETE FROM "+qualified+" WHERE name LIKE 'indexed-%'");
