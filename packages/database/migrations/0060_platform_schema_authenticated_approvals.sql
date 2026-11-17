@@ -217,7 +217,37 @@ BEGIN
   END IF;
 END $$;
 
+-- The operator has READ ONLY table ACLs. A vetted definer holds the approval
+-- row lock; PostgreSQL SELECT ... FOR SHARE otherwise requires UPDATE privilege.
+CREATE FUNCTION public.platform_schema_lock_approval(
+  p_installation_id text, p_plan_digest text, p_operation_id text)
+RETURNS TABLE (
+  operation_id text, approver text, approver_login text,
+  approver_principal_id text, approved_application_id text,
+  operator_role text, environment text, approved_at timestamptz,
+  expires_at timestamptz, revoked_at timestamptz, server_now timestamptz
+)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.platform_schema_registry r
+     WHERE r.installation_id = p_installation_id
+       AND r.operator_role = session_user
+       AND r.environment IN ('test','development')
+  ) THEN
+    RAISE EXCEPTION 'unauthorized schema approval locking actor' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY SELECT a.operation_id, a.approver, a.approver_login,
+       a.approver_principal_id, a.approved_application_id,
+       a.operator_role, a.environment, a.approved_at,
+       a.expires_at, a.revoked_at, clock_timestamp()
+    FROM public.platform_schema_approvals a
+   WHERE a.installation_id = p_installation_id AND a.plan_digest = p_plan_digest
+     AND a.operation_id = p_operation_id FOR SHARE OF a;
+END $;
+
 -- SECURITY DEFINER functions have default PUBLIC EXECUTE unless explicitly revoked.
+REVOKE ALL ON FUNCTION public.platform_schema_lock_approval(text,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_submit_plan(text,text,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_revoke_operation(text,text,text) FROM PUBLIC;
