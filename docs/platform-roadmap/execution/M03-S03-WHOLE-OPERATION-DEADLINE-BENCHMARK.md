@@ -1,5 +1,46 @@
 # M03-S03 — Whole-Operation Deadline Benchmark
 
+## Current Agent04 benchmark certification — supersedes historical pending labels below
+
+**Updated: 2026-11-17. OWNER POLICY A SELECTED by user for restricted development/disposable scope. Numeric deadline NOT approved; IAM/DBA human signatures MISSING.** The earlier historical text below describes PR #203 and earlier reports **as they stood before this explicit owner policy selection**. It must not be used to revoke the owner's current selection or to claim a numeric deadline is approved.
+
+**Technical test-only verdict: PASS** on two complete independent GitHub Actions jobs, each 1335/1335 unique machine-readable attempts. No production-code change, privileged grant or canonical PR #198 modification. PostgreSQL16.16 (160016), Node24.22.3, isolated GitHub Actions ubuntu-24.04. **Representative environment: LIMITED (no real DNS/TLS, region RTT, production loads or pool contention).**
+
+**Complete sizing and reliability report:** [M03-S03-DEADLINE-SIZING-RECOMMENDATION.md](M03-S03-DEADLINE-SIZING-RECOMMENDATION.md) — 22 sections, full metric table, statistical caveats, profile definitions and exact numeric conditional proposals.
+
+### Source and raw evidence pinned to actually executed code
+
+| Subject | Expanded run 1 | Expanded run 2 |
+| --- | --- | --- |
+| Branch HEAD at run | 9e00ad92e428cb64a7f6d4a86ddb2e38e1943867 | 185afb9ccad8b8ec28a8c6b923a1e69f93d98914 |
+| Exact synthetic checkout SHA | 660eb29be9b703ac45eb05d268167b8c4a0f853a | a748ff6a4c52e3488125960f0fc83616cde9d93a |
+| CI status | [#44151684946](https://github.com/AbdullahZaher/vibress/actions/runs/44151684946) **SUCCESS** | [#44151913933](https://github.com/AbdullahZaher/vibress/actions/runs/44151913933) **SUCCESS** |
+| All six sanitized JSONL/JSON files | [Artifact #14359801508](https://github.com/AbdullahZaher/vibress/actions/runs/44151684946/artifacts/14359801508) | [Artifact #14359611993](https://github.com/AbdullahZaher/vibress/actions/runs/44151913933/artifacts/14359611993) |
+| Attempt records | 1335 | 1335 |
+| Normal APPLIED (p99 end-to-end) | 1000/1000 (42.1438ms) | 1000/1000 (45.7440ms) |
+| Successful contention (p99 end-to-end) | 90/100 (936.883ms) | 90/100 (947.981ms) |
+| Injected lock_timeout failures | 10/100 55P03 | 10/100 55P03 |
+| Actual TCP transport 30ms one-way (p99) | 2286.4865ms (n=12) | 2298.0869ms (n=12) |
+| ACK extra +200ms (ACK p99) | 201.3809ms | 200.981ms |
+| Cancellation SQLSTATE 57014 + rollback verified | 20/20 | 20/20 |
+| Terminated backend and fresh observer | 10/10 | 10/10 |
+| Lost COMMIT ACK -> INDETERMINATE -> COMMITTED | 8/8 | 8/8 |
+| Pre-COMMIT deliberately exhausted budget, no journal | 8/8 | 8/8 |
+| External unexpected index/CHECK | 12/12 fail-closed CATALOG_DRIFT | 12/12 fail-closed CATALOG_DRIFT |
+| Candidate A derived in each run | 2392ms | 2405ms |
+| Candidate B derived in each run | 2497ms | 2511ms |
+
+The two **latest-run** measured candidate values combine to a conservative **FINAL CONDITIONAL LAB PROPOSAL**: Candidate A **2405ms**, Candidate B **2511ms**, preferred **2511ms** for the restricted test topology ONLY. Formula: max observed eligible profile-specific end-to-end p99 plus cancellation/rollback reserve = A; maximum eligible observed success plus twice reserve = B. Maximum reserve across the two runs was 106ms: ceil(5.045ms cancel-to-classification p99 + 0.252ms rollback ACK p99 + explicitly assumed unvalidated 100ms scheduler margin). A=ceil(2298.0869+106)=2405ms. B=ceil(2298.1778+2×106)=2511ms. Both have zero exceeded eligible successes among the 2328 selected in-sample attempts (1164 per run), **not an independent statistical 1%-SLO validation**. No owner SLO is approved.
+
+**Critical limitation:** The candidate budget is a **client result/admission policy proposal**; the test-only per-query guard does not cancel an in-flight query by itself. 4 deliberately exhausted attempts per candidate per run denied new DDL/COMMIT and verified zero completed journal, but their **total cleanup lifecycle exceeded the numeric deadline** (~2.7–2.8 seconds). Do not claim the candidate bounds physical rollback or even callback return time. COMMIT dispatched and ACK lost must remain INDETERMINATE pending trusted fresh connection. The native per-statement lock_timeout=2000ms, statement_timeout=10000ms, idle_in_transaction_session_timeout=15000ms do not form a universal total timeout. More stringent production supervisor requires separately approved implementation and tests.
+
+**Reproduction:** Existing dedicated benchmark workflow now executes 1000 normal +100 lock contention + expanded TCP, connection faults, cumulative waits, cancellation, crash/COMMIT and test-only candidate retests. It fails closed if any required expanded profile count differs or if the fixture teardown fails, and exports the six required artifacts. The Docker Compose PostgreSQL image uses a floating 16-alpine patch tag; actual server patch 16.16 is recorded, but immutable image digest and production topology remain unavailable.
+
+**Outstanding governance:** AG06-S03-08 OPEN P2; AG06-S03-10 OPEN P3 (55P03 / 40P01 / 57014 sanitized operational classification). Numeric deadline approval PENDING; independent IAM human PENDING; DBA human PENDING; production supervisor NOT INTEGRATED. **MERGE NOT AUTHORIZED / PRODUCTION NO-GO.** Historical successful suites for findings S03-01 through S03-07 are preserved in their exact earlier scope.
+
+---
+
+
 **Date:** 2026-11-17 (Asia/Riyadh)  
 **Authority:** Agent 04 technical evidence only; Policy A/B, global deadline and operational SLO **NOT APPROVED**  
 **Release:** NO-GO · AG06-S03-08 OPEN · Merge NOT AUTHORIZED
