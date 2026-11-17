@@ -1,0 +1,71 @@
+name: Agent 02 M03-S02 PostgreSQL 16 identifier regression
+
+on:
+  push:
+    branches:
+      - fix/agent02-m03-s02-pg16-identifiers-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pg16-identifier-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Checkout exact revision
+        uses: actions/checkout@v7
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Confirm exact tested SHA
+        run: git rev-parse HEAD
+      - name: Schema engine typecheck, lint, tests and build
+        run: |
+          pnpm --filter @vibress/schema-engine typecheck
+          pnpm --filter @vibress/schema-engine lint
+          pnpm --filter @vibress/schema-engine test
+          pnpm --filter @vibress/schema-engine build
+      - name: Verify explicit-any guard
+        run: pnpm verify:explicit-any
+      - name: Start isolated development infrastructure
+        run: docker compose -f compose.dev.yml up -d --wait
+      - name: Verify PostgreSQL 16.16+ and keyword classifications (READ ONLY)
+        run: |
+          version=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SHOW server_version_num")
+          echo "PostgreSQL server_version_num=$version"
+          test "$version" -ge 160016 && test "$version" -lt 170000
+          actual=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT word || ':' || catcode FROM pg_get_keywords() WHERE word IN ('group','index','name','order','schema','select','update','user') ORDER BY word")
+          expected=$(printf '%s\n' 'group:R' 'index:U' 'name:U' 'order:R' 'schema:U' 'select:R' 'update:U' 'user:R')
+          echo "$actual"
+          test "$actual" = "$expected"
+      - name: Full workspace typecheck and lint
+        run: |
+          pnpm typecheck
+          pnpm lint
+      - name: Unit and architecture boundary tests
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          REDIS_URL: redis://127.0.0.1:6380
+        run: pnpm test:unit
+      - name: PostgreSQL and other integration tests
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          REDIS_URL: redis://127.0.0.1:6380
+        run: pnpm test:integration
+      - name: Monorepo build
+        run: pnpm build
+      - name: Clean tree check
+        run: pnpm verify:clean-tree
+      - name: Teardown disposable infrastructure
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes

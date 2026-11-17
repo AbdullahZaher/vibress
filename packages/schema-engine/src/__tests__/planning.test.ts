@@ -350,3 +350,57 @@ describe("M03-S02 deterministic non-executing change planning", () => {
     expect(() => planSchemaChanges(null, ir, protoOptions)).toThrow(SchemaPlanningError);
   });
 });
+
+
+describe("AG06-S02-02 physical name and canonical manifest compatibility", () => {
+  it("retains deterministic 61-byte table hints for different 63-byte names with a shared prefix", () => {
+    const first = "a" + "n".repeat(61) + "x";
+    const second = "a" + "n".repeat(61) + "y";
+    const resources = [
+      { ...crmCustomers(), id: first },
+      { ...crmDeals(), id: second },
+    ];
+    const ir = compileResourceSchema(resources, crmScope);
+    const reversedIr = compileResourceSchema([...resources].reverse(), crmScope);
+    const before = createSchemaManifest(ir);
+    const again = createSchemaManifest(reversedIr);
+    expect(JSON.stringify(before)).toBe(JSON.stringify(again));
+    expect(before.digest).toBe(again.digest);
+    expect(before.canonicalIrDigest).toBe(canonicalSchemaDigest(ir));
+    expect(before.manifestVersion).toBe(1);
+    expect(before.schemaVersion).toBe(1);
+    expect(before.applicationId).toBe(crmScope.applicationId);
+    expect(before.installationId).toBe(crmScope.installationId);
+    const names = before.resources.map((resource) => resource.tableName);
+    expect(new Set(names).size).toBe(2);
+    for (const name of names) {
+      expect(name).toMatch(/^vr_[a-z0-9_]+_[a-f0-9]{12}$/);
+      expect(Buffer.byteLength(name, "utf8")).toBeLessThanOrEqual(63);
+      expect(name.length).toBe(61);
+    }
+    expect(JSON.stringify(parseSchemaManifest(JSON.parse(JSON.stringify(before)))))
+      .toBe(JSON.stringify(before));
+    const planA = planSchemaChanges(null, ir, {
+      scope: crmScope, expectedCurrentDigest: null,
+    });
+    const planB = planSchemaChanges(null, reversedIr, {
+      scope: crmScope, expectedCurrentDigest: null,
+    });
+    expect(planA.digest).toBe(planB.digest);
+    expect(JSON.stringify(planA)).toBe(JSON.stringify(planB));
+  });
+
+  it("keeps ordinary CRM manifests deterministic without any SQL/DDL output", () => {
+    const left = createSchemaManifest(compile([crmCustomers(), crmDeals()]));
+    const right = createSchemaManifest(compile([crmDeals(), crmCustomers()]));
+    expect(left).toEqual(right);
+    expect(left.digest).toBe(right.digest);
+    expect(left.resources.every((resource) => !/[; "'\u0000]/.test(resource.tableName)))
+      .toBe(true);
+    const plan = planSchemaChanges(null, compile(), {
+      scope: crmScope, expectedCurrentDigest: null,
+    });
+    expect(plan.proposedManifest.digest).toBe(left.digest);
+    expect(JSON.stringify(plan)).not.toMatch(/CREATE TABLE|ALTER TABLE|DROP TABLE|GRANT /);
+  });
+});

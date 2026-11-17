@@ -113,29 +113,56 @@ function onlyKeys(
   }
 }
 
-const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
-const RESERVED = new Set([
-  "id", "application_id", "installation_id", "tenant_id", "created_at",
-  "updated_at", "select", "from", "where", "join", "table", "create",
-  "drop", "alter", "delete", "insert", "update", "grant", "revoke",
-  "user", "index", "constraint", "primary", "foreign", "references",
-  "null", "true", "false", "default", "schema", "public", "current_user",
-  "session_user", "information_schema",
+// PostgreSQL 16 parser RESERVED_KEYWORD entries (catcode 'R'), derived from
+// PostgreSQL's upstream src/include/parser/kwlist.h (REL_16_STABLE).
+// Do not classify all PostgreSQL keywords as reserved: e.g. UPDATE and INDEX
+// are non-reserved in PG16, although the schema-engine policy separately bans them.
+// https://www.postgresql.org/docs/16/sql-keywords-appendix.html
+const POSTGRESQL16_RESERVED = new Set([
+  "all", "analyse", "analyze", "and", "any",
+  "array", "as", "asc", "asymmetric", "both",
+  "case", "cast", "check", "collate", "column",
+  "constraint", "create", "current_catalog", "current_date", "current_role",
+  "current_time", "current_timestamp", "current_user", "default", "deferrable",
+  "desc", "distinct", "do", "else", "end",
+  "except", "false", "fetch", "for", "foreign",
+  "from", "grant", "group", "having", "in",
+  "initially", "intersect", "into", "lateral", "leading",
+  "limit", "localtime", "localtimestamp", "not", "null",
+  "offset", "on", "only", "or", "order",
+  "placing", "primary", "references", "returning", "select",
+  "session_user", "some", "symmetric", "system_user", "table",
+  "then", "to", "trailing", "true", "union",
+  "unique", "user", "using", "variadic", "when",
+  "where", "window", "with",
 ]);
+
+// Existing Canonical IR v1 restrictions: protected columns, namespaces and
+// intentionally stricter engine policy. Keep these separate from parser classes.
+const ENGINE_RESERVED = new Set([
+  "id", "application_id", "installation_id", "tenant_id", "created_at",
+  "updated_at", "join", "drop", "alter", "delete",
+  "insert", "update", "revoke", "index", "schema",
+  "public", "information_schema",
+]);
+
+const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
 function identifier(value: unknown, path: string): string {
   if (
     typeof value !== "string" ||
     !NAME_PATTERN.test(value) ||
+    Buffer.byteLength(value, "utf8") > 63 ||
     value.includes("__") ||
     value.startsWith("pg_") ||
     value.startsWith("vibress_") ||
-    RESERVED.has(value)
+    POSTGRESQL16_RESERVED.has(value) ||
+    ENGINE_RESERVED.has(value)
   ) {
     return fail(
       "INVALID_IDENTIFIER",
       path,
-      "expected an unreserved lowercase SQL-safe identifier (1-63 characters)",
+      "expected a lowercase ASCII unquoted PostgreSQL 16 identifier (1-63 bytes), not a reserved keyword or protected name",
     );
   }
   return value;
