@@ -1,0 +1,94 @@
+name: M03-S03 Whole-Operation PG16 Benchmark
+on:
+  pull_request:
+    branches:
+      - main
+      - fix/m03-s03-ag01-ag05-approval-expiry-linearization-20261117
+    paths:
+      - "tests/integration/m03-s03-whole-operation-benchmark.test.ts"
+      - ".github/workflows/m03-s03-whole-operation-benchmark.yml"
+      - "packages/database/src/platform-schema-migration-operator.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      M03_S03_NORMAL_ATTEMPTS: "1000"
+      M03_S03_CONTENTION_ATTEMPTS: "100"
+      M03_S03_CHECKOUT_SHA: ${{ github.sha }}
+      M03_S03_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact synthetic PR merge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - name: Setup security-patched Node 24
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Verify checkout version and record provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.22.3"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -p artifacts/m03-s03-deadline
+          printf '{"checkout_sha":"%s","pr_head_sha":"%s","node":"%s","source":"GitHub PR synthetic merge","security":"disposable only"}\n' \
+            "$(git rev-parse HEAD)" "$M03_S03_PR_HEAD_SHA" "$(node --version)" \
+            > artifacts/m03-s03-deadline/provenance.json
+      - name: Install pinned dependency graph
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Boot disposable PostgreSQL 16 (not shared or production)
+        run: docker compose -f compose.dev.yml up -d --wait postgres
+      - name: Typecheck, lint and benchmark real operator
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @vibress/database typecheck
+          pnpm exec eslint tests/integration/m03-s03-whole-operation-benchmark.test.ts
+          pnpm exec vitest run --no-file-parallelism tests/integration/m03-s03-whole-operation-benchmark.test.ts \
+            --testTimeout=900000 --hookTimeout=120000
+      - name: Check complete benchmark result matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          const report=JSON.parse(fs.readFileSync('artifacts/m03-s03-deadline/summary.json','utf8'));
+          if(report.checkout_sha!==process.env.GITHUB_SHA ||
+             report.groups?.normal?.attempted!==1000 ||
+             report.groups?.table_contention?.attempted!==100 ||
+             report.groups?.normal?.outcomes?.APPLIED!==1000)
+            throw Error("INCOMPLETE_BENCHMARK_MATRIX");
+          console.log("M03_S03_BENCH_MATRIX_VERIFIED", report.samples,
+            "normal", report.groups.normal.elapsed_success,
+            "contention", report.groups.table_contention.elapsed_all);
+          NODE
+      - name: Teardown disposable PostgreSQL
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml down --volumes --remove-orphans
+          test -z "$(docker ps -aq --filter label=com.docker.compose.project=vibress)"
+      - name: Upload sanitized raw samples, summary and provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-whole-operation-benchmark
+          path: artifacts/m03-s03-deadline/
+          retention-days: 30
+          if-no-files-found: error
