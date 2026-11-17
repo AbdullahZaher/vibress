@@ -135,6 +135,29 @@ describe("AG06-S02-01: untrusted arrays never dispatch caller collection methods
     expect(getterCalls).toBe(0);
   });
 
+  it("rejects array and object Proxies before any ownKeys/getPrototypeOf/get trap", () => {
+    const resource = crmCustomers();
+    let traps = 0;
+    const trapHandler: ProxyHandler<object> = {
+      get() { traps++; throw new Error("get trap executed"); },
+      getPrototypeOf() { traps++; throw new Error("getPrototypeOf trap executed"); },
+      ownKeys() { traps++; throw new Error("ownKeys trap executed"); },
+      getOwnPropertyDescriptor() { traps++; throw new Error("descriptor trap executed"); },
+    };
+    const list = new Proxy([resource], trapHandler);
+    const field = new Proxy({ id: "name", type: "text", required: true }, trapHandler);
+    expect(() => compileResourceSchema(list, crmScope)).toThrow(ResourceSchemaError);
+    expect(() => parseResourceDefinition({ ...resource, fields: [field] }))
+      .toThrow(ResourceSchemaError);
+    const ir = compileResourceSchema([resource], crmScope);
+    const irWithProxy = { ...ir, resources: list };
+    expect(() => createSchemaManifest(irWithProxy)).toThrow(SchemaPlanningError);
+    expect(() => planSchemaChanges(null, irWithProxy, {
+      scope: crmScope, expectedCurrentDigest: null,
+    })).toThrow(SchemaPlanningError);
+    expect(traps).toBe(0);
+  });
+
   it("denies nested holes and changed canonical array prototypes", () => {
     const resource = crmCustomers();
     expect(() => parseResourceDefinition({

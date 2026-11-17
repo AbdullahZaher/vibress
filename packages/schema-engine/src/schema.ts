@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
 import {
   asApplicationId,
   asInstallationId,
@@ -85,6 +86,10 @@ function fail(code: SchemaErrorCode, path: string, reason: string): never {
 }
 
 function record(value: unknown, path: string): Record<string, unknown> {
+  // Reject Proxy before getPrototypeOf/ownKeys; otherwise its traps are executable.
+  if (value !== null && typeof value === "object" && nodeTypes.isProxy(value)) {
+    return fail("UNSAFE_DEFINITION", path, "Proxy objects are not accepted");
+  }
   if (
     typeof value !== "object" ||
     value === null ||
@@ -120,11 +125,14 @@ function onlyKeys(
  * iterators or index getters. Array subclasses, altered prototypes, holes,
  * decorated arrays, symbols and accessor entries all fail closed.
  *
- * JavaScript Proxy traps and mutations of global intrinsics cannot be made
- * side-effect-free in the same process: callers must not pass untrusted
- * executable objects/proxies from third-party plugins. JSON input is preferred.
+ * Node util.types.isProxy rejects proxies without running their traps.
+ * Global intrinsic monkey-patching and other arbitrary in-process executable
+ * code remain outside this data-parser trust boundary. Prefer parsed JSON.
  */
 function plainArray(value: unknown, path: string, min: number, max: number): readonly unknown[] {
+  if (nodeTypes.isProxy(value)) {
+    return fail("UNSAFE_DEFINITION", path, "Proxy arrays are not accepted");
+  }
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     return fail("UNSAFE_DEFINITION", path, "expected an ordinary Array prototype");
   }

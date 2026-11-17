@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as nodeTypes } from "node:util";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
   CANONICAL_SCHEMA_VERSION,
@@ -172,6 +173,10 @@ function assertSerializable(value: unknown, path: string): void {
     }
     if (typeof node !== "object") {
       fail("INVALID_INPUT", item.path, "only JSON data values are supported");
+    }
+    // Do not execute Proxy getPrototypeOf/ownKeys/descriptor traps in preflight.
+    if (nodeTypes.isProxy(node)) {
+      fail("INVALID_INPUT", item.path, "Proxy objects are not accepted");
     }
     if (visited.has(node)) fail("INVALID_INPUT", item.path, "shared/cyclic objects are not accepted");
     visited.add(node);
