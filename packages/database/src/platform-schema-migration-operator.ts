@@ -79,6 +79,8 @@ interface RoleRow {
   runtime_member: boolean;
   runtime_schema_create: boolean;
   runtime_database_create: boolean;
+  operator_schema_create: boolean;
+  operator_database_create: boolean;
 }
 interface RelationRow {
   oid: number;
@@ -127,7 +129,9 @@ async function assertAuthority(
     "pg_has_role($1, $2, 'MEMBER') AS operator_member, " +
     "pg_has_role($2, $1, 'MEMBER') AS runtime_member, " +
     "has_schema_privilege($1, 'public', 'CREATE') AS runtime_schema_create, " +
-    "has_database_privilege($1, current_database(), 'CREATE') AS runtime_database_create " +
+    "has_database_privilege($1, current_database(), 'CREATE') AS runtime_database_create, " +
+    "has_schema_privilege($2, 'public', 'CREATE') AS operator_schema_create, " +
+    "has_database_privilege($2, current_database(), 'CREATE') AS operator_database_create " +
     "FROM pg_roles op WHERE op.rolname = $2",
     [registry.runtime_role, identity.current_user],
   );
@@ -135,7 +139,8 @@ async function assertAuthority(
   if (!role || role.rolsuper || role.rolbypassrls || role.rolcreatedb ||
     role.rolcreaterole || role.rolreplication || !role.rolcanlogin ||
     role.operator_member || role.runtime_member ||
-    role.runtime_schema_create || role.runtime_database_create) {
+    role.runtime_schema_create || role.runtime_database_create ||
+    role.operator_schema_create || role.operator_database_create) {
     deny("UNAUTHORIZED", "effective operator/runtime role authority is unsafe");
   }
   const runtime = await db.query<{ rolsuper: boolean; rolbypassrls: boolean }>(
