@@ -363,7 +363,7 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
   });
   it("registry UPDATE privilege error: rollback and controlled retry", async () => {
     const lab = await isolated("j"), checksum = await contentChecksum(lab);
-    await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_registry FROM " +
+    await lab.dbAdmin.query("REVOKE UPDATE(manifest,manifest_digest,updated_at) ON platform_schema_registry FROM " +
       lab.dbAdmin.escapeIdentifier(lab.operatorRole));
     await expect(run(lab)).rejects.toThrow();
     await assertUncommitted(lab, checksum);
@@ -375,6 +375,7 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
   it("ROLLBACK transport failure: explicit INDETERMINATE, fresh-session old state", async () => {
     const lab = await isolated("k"), checksum = await contentChecksum(lab);
     const session = await connect(lab.name, lab.operatorRole);
+    session.on("error", () => undefined);
     const proxy = new Proxy(session, {
       get(target, property) {
         if (property === "query") return async (sql: string, args?: unknown[]) => {
@@ -397,6 +398,7 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
   it("live backend termination after DDL: fresh connection confirms rollback", async () => {
     const lab = await isolated("l"), checksum = await contentChecksum(lab);
     const session = await connect(lab.name, lab.operatorRole);
+    session.on("error", () => undefined);
     const pid = (await session.query<{ pid: number }>(
       "SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
     const proxy = intercepted(session, /^ALTER TABLE/i, "after", async () => {
@@ -413,6 +415,7 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
   it("connection TCP break before COMMIT: INDETERMINATE then verified rollback", async () => {
     const lab = await isolated("m"), checksum = await contentChecksum(lab);
     const session = await connect(lab.name, lab.operatorRole);
+    session.on("error", () => undefined);
     const proxy = intercepted(session, /^COMMIT$/, "before", async () => {
       dropClientSocket(session); throw Error("TEST_TCP_BREAK_BEFORE_COMMIT");
     });
