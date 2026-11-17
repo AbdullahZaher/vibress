@@ -1470,10 +1470,20 @@ describe("AG02-AG04 D1 combined-fault independent disposable PG16",()=>{
     const checksum=await contentChecksum(lab);
     for(let i=0;i<4;i++){
       let reachedPrecommit=false;
+      let originalPid=0,originalBackendStart="";
       const sample=await supervisor(lab,{
         profile:"combined_test_only_d1_precommit_denial",
         caseId:"C-ADMIT-DENY-"+i,
         testDeadlineMs:COMBINED_D1_MS,preCommitReserveMs:300, // HYPOTHETICAL M
+        onConnected:async client=>{
+          originalPid=client.processID ?? 0;
+          const original=await lab.dbAdmin.query<{started:string}>(
+            "SELECT backend_start::text AS started FROM pg_stat_activity "+
+            "WHERE pid=$1 AND usename=$2 AND datname=current_database()",
+            [originalPid,lab.operatorRole]);
+          expect(original.rows).toHaveLength(1);
+          originalBackendStart=original.rows[0]!.started;
+        },
         onStage:stage=>{
           if(stage==="commit_acknowledged_query"){
             reachedPrecommit=true;
@@ -1482,14 +1492,29 @@ describe("AG02-AG04 D1 combined-fault independent disposable PG16",()=>{
         },
       });
       expect(reachedPrecommit).toBe(true);
-      expect(sample.outcome).not.toBe("APPLIED");
+      expect(sample.outcome).toBe("INDETERMINATE");
+      // The core sets commitAttempted BEFORE invoking its query adapter.
+      // The test-only adapter refuses BEFORE sending SQL COMMIT, and the core
+      // conservatively emits INDETERMINATE without explicit ROLLBACK. Only
+      // proven original backend termination PLUS fresh physical verification
+      // supports this TEST FIXTURE's final rolled-back classification.
+      let originalGone=false;
+      for(let n=0;n<60;n++){
+        const current=await lab.dbAdmin.query<{n:number}>(
+          "SELECT count(*)::int AS n FROM pg_stat_activity WHERE pid=$1 "+
+          "AND backend_start::text=$2",
+          [originalPid,originalBackendStart]);
+        if(current.rows[0]?.n===0){originalGone=true;break;}
+        await pause(12);
+      }
+      expect(originalGone).toBe(true);
       await noCompletedJournal(lab);
       expect(await contentChecksum(lab)).toBe(checksum);
       const recon=await independentlyReconcile(lab);
       expect(recon.state).toBe("ROLLED_BACK");
       recordCombined(sample,{test_only_admission_guard:true,
         hypothetical_margin_ms:300,commit_dispatched:false,
-        physical_rollback_verified:true,
+        physical_rollback_verified:true,backend_gone_verified:true,
         cleaned_after_d1:sample.timeline_ms?.client_disposed_ms !== undefined &&
           sample.timeline_ms.client_disposed_ms>COMBINED_D1_MS,
         fresh_reconcile_ms:recon.latency_ms});
