@@ -871,6 +871,83 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
     }
   },30000);
 
+  it("AUTH-19: accidental actor-roster UPDATE grant cannot reclassify a principal", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_trusted_actors TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_trusted_actors SET actor_kind='APPROVER'," +
+        "principal_id=$1 WHERE login_name=$2",
+        ["forged:new-identity",lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+      const result = await lab.dbAdmin.query(
+        "SELECT actor_kind,principal_id FROM platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.author],
+      );
+      expect(result.rows).toEqual([{
+        actor_kind:"AUTHOR",principal_id:"individual:"+lab.author,
+      }]);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_trusted_actors FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-20: accidental DELETE grant cannot erase committed revocation audit", async () => {
+    const lab = labs[5]!; // AUTH-16 committed one authentic revocation here.
+    await lab.dbAdmin.query("GRANT DELETE ON platform_schema_revocation_audit TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "DELETE FROM platform_schema_revocation_audit WHERE installation_id=$1",
+        [lab.installationId],
+      )).rejects.toMatchObject({code:"42501"});
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_revocation_audit")).rowCount).toBe(1);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE DELETE ON platform_schema_revocation_audit FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-21: an unregistered runtime login cannot author through a misgranted entrypoint", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_submit_plan(text,text,text,text)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(lab.runtime.query(
+        "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+        [lab.installationId,"d".repeat(64),
+          JSON.stringify(lab.current),JSON.stringify(lab.plan)],
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    }
+  });
+
+  it("AUTH-22: a real approver cannot extend an approval using direct UPDATE", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_approvals SET expires_at=expires_at+interval '1 day'",
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
   it("AUTH-18: failed journal authorization rolls back DDL; later approval remains bounded", async () => {
     const lab = labs[7]!;
     await approve(lab);
