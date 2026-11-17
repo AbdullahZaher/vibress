@@ -101,13 +101,16 @@ jobs:
             candidate_A_normal:8,candidate_B_normal:8,
             candidate_A_table_lock_500ms:8,candidate_B_table_lock_500ms:8,
             candidate_A_deadline_exhaustion:4,candidate_B_deadline_exhaustion:4,
+            frozen_candidate_A_normal:8,frozen_candidate_B_normal:8,
+            frozen_candidate_A_table_lock_500ms:8,frozen_candidate_B_table_lock_500ms:8,
+            frozen_candidate_A_deadline_exhaustion:4,frozen_candidate_B_deadline_exhaustion:4,
           };
           for (const [profile,count] of Object.entries(required)) {
             if(candidate.profiles?.[profile]?.attempts!==count) throw Error("INCOMPLETE_PROFILE_"+profile);
           }
           if(candidate.candidate_a_ms<=0 || candidate.candidate_b_ms<=candidate.candidate_a_ms ||
             fault.checkout_sha!==report.checkout_sha || topology.checkout_sha!==report.checkout_sha ||
-            fsCount!==1335)throw Error("CANDIDATE_OR_COUNT_INVALID");
+            fsCount!==1375)throw Error("CANDIDATE_OR_COUNT_INVALID");
           console.log('M03_S03_QUANTITATIVE_CANDIDATES_UNAPPROVED',JSON.stringify({
             a:candidate.candidate_a_ms,b:candidate.candidate_b_ms,attempts:fsCount,
             false_timeout_a:candidate.candidate_a_empirical,
