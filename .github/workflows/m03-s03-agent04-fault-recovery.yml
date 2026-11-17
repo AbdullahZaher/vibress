@@ -51,6 +51,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter @vibress/database typecheck
+          pnpm exec eslint tests/integration/platform-schema-migration-fault-injection.test.ts scripts/platform/m03-s03-fault/*.ts
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts
       - name: Teardown disposable PostgreSQL
         if: always()
