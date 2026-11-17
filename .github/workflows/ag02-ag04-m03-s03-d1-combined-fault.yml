@@ -100,7 +100,7 @@ jobs:
           }
           for(const x of raw.filter(x=>x.profile==='combined_test_only_d1_precommit_denial')){
             if(x.commit_dispatched!==false || !x.physical_rollback_verified ||
-              x.outcome==='APPLIED' || !x.cleaned_after_d1)
+              !x.backend_gone_verified || x.outcome!=='INDETERMINATE' || !x.cleaned_after_d1)
               throw Error('D1_COMMIT_ADMISSION_DEFECT');
           }
           for(const x of raw.filter(x=>x.profile==='combined_tcp_30_lost_ack')){
