@@ -463,11 +463,13 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
       await external.query("LOCK TABLE public." +
         external.escapeIdentifier(lab.table) + " IN ACCESS EXCLUSIVE MODE");
       await expect(run(lab)).rejects.toThrow();
-      await assertUncommitted(lab, checksum);
     } finally {
+      // Release the external ACCESS EXCLUSIVE lock before checksum inspection.
+      // An observer SELECT would otherwise block, masking the operator result.
       await external.query("ROLLBACK").catch(() => undefined);
       await external.end().catch(() => undefined);
     }
+    await assertUncommitted(lab, checksum);
     expect((await run(lab)).status).toBe("APPLIED");
     await assertCommitted(lab, checksum);
   }, 30000);
