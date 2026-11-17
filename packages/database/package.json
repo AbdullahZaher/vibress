@@ -19,7 +19,8 @@
     "@vibress/tenancy": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0",
-    "@vibress/observability": "workspace:*"
+    "@vibress/observability": "workspace:*",
+    "@vibress/schema-engine": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

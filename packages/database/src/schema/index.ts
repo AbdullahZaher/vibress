@@ -36,3 +36,4 @@ export * from "./plugin-member-records";
 export * from "./plugin-upgrades";
 export * from "./plugin-marketplace-admissions";
 export * from "./platform-kernel";
+export * from "./platform-schema-execution";
