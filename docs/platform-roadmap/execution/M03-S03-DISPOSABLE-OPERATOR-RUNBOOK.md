@@ -1,10 +1,10 @@
 # M03-S03 Disposable PG16 Operator and Recovery Runbook
 
-**Restricted scope:** four ephemeral local PostgreSQL 16 databases (fixtures A–D) with names prefixed vibress_s03_. No production credentials, DB migration, deployment or role change is permitted.
+**Restricted scope:** eight ephemeral local PostgreSQL 16 databases (operator fixtures A–H), plus the separate Agent04 per-case fault fixtures E–Y, all randomly suffixed `vibress_s03_` databases. These independent test-file labels may overlap but names are unique to each run. No production credentials, DB migration, deployment or role change is permitted.
 
 ## Actual disposable fixture inventory
 
-The integration test provisions **four** randomly suffixed databases, not two:
+The primary operator integration test provisions **eight** randomly suffixed databases (A–H), not the original four:
 
 | Fixture | Database name pattern | Purpose |
 | --- | --- | --- |
@@ -12,18 +12,22 @@ The integration test provisions **four** randomly suffixed databases, not two:
 | B | `vibress_s03_b_<hex-id>` | advisory lock contention |
 | C | `vibress_s03_c_<hex-id>` | concurrent same-plan execution and journal |
 | D | `vibress_s03_d_<hex-id>` | failed journal INSERT and retry |
+| E | `vibress_s03_e_<hex-id>` | authenticated actor, forged identity, dual grants, SET ROLE, misgranted INSERT lock inversion |
+| F | `vibress_s03_f_<hex-id>` | revocation committed before authorization |
+| G | `vibress_s03_g_<hex-id>` | operator lock before concurrent revocation |
+| H | `vibress_s03_h_<hex-id>` | journal rollback, replay and post-revocation denial |
 
 Each fixture has separate `s03_author_<letter>_<hex-id>`, `s03_approver_<letter>_<hex-id>`, `s03_operator_<letter>_<hex-id>` and `s03_runtime_<letter>_<hex-id>` principals. Setup requires a **disposable PostgreSQL 16 superuser** only at `127.0.0.1:5433/vibress` with known test-only login. On teardown, close all connections, terminate only fixture backends and drop only the matching disposable databases and roles; query catalogs to verify removal. A failed cleanup remains a failure, never silently PASS.
 
 ## Preparations
 1. Provision the distinct app installation database and non-superuser migration owner, unrelated app runtime login, independent plan author and approver. Prove effective grants, no runtime schema/database CREATE, table ownership, BYPASSRLS or inherited privileged role membership. Runtime must not read registry or approval tables.
-2. An authorized provisioner records the authoritative installation/application/environment/database/owner/runtime binding and exact Schema Manifest v1 in the dedicated schema registry. The author stores the exact original manifest and canonical plan as TEXT. An independent actor approves exactly one operation with planned operator role, environment, expiry and revocation state.
+2. An authorized provisioner registers distinct individually authenticated PostgreSQL LOGIN principals in the 0060 actor roster and records the authoritative installation/application/environment/database/owner/runtime binding and exact Schema Manifest v1 in the dedicated schema registry. The author stores the exact original manifest and canonical plan as TEXT. An independent actor approves exactly one operation with planned operator role, environment, expiry and revocation state.
 3. Confirm the existing application-owned physical table's complete column set and row counts; no tenant-owned execution, unsafe defaults, unreviewed constraints or relation rewrites are supported. Do not use the old broad legacy CMS runtime role.
 4. Execute only from the isolated database operator process; never load privileged credentials in API, worker, Fastify handlers or plugins.
 
 ## Agent 04 expanded fault laboratories (not part of original four)
 
-The separate `platform-schema-migration-fault-injection.test.ts` file creates **one fresh fixture per case**, keys **E–Y**, with the same `vibress_s03_<letter>_<random-id>` naming convention and four distinct roles each. The original file still creates four labs A–D. Tests require separate disposable databases; they are not authorized to reuse an application production/staging database. Each test's before/after SQL stage or termination mechanism is named in its `it(...)` title, and the [Agent 04 evidence report](M03-S03-AG04-FAULT-RECOVERY-REPORT.md) retains failed and passing attempts.
+The separate `platform-schema-migration-fault-injection.test.ts` file creates **one fresh fixture per case**, keys **E–Y**, with the same `vibress_s03_<letter>_<random-id>` naming convention and four distinct roles each. The primary operator integration file now creates eight labs A–H. Separate random test-run IDs prevent collisions with the Agent04 fault file. Tests require separate disposable databases; they are not authorized to reuse an application production/staging database. Each test's before/after SQL stage or termination mechanism is named in its `it(...)` title, and the [Agent 04 evidence report](M03-S03-AG04-FAULT-RECOVERY-REPORT.md) retains failed and passing attempts.
 
 **Reproducible setup (disposable development lab ONLY):**
 
