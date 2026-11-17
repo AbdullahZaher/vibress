@@ -124,6 +124,9 @@ async function createLab(key: Key): Promise<Lab> {
   }
   await dbAdmin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON " + qualified +
     " TO " + dbAdmin.escapeIdentifier(runtimeRole));
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_lock_approval(text,text,text) TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT SELECT ON platform_installations," +
     "platform_schema_registry,platform_schema_plans,platform_schema_approvals," +
     "platform_schema_trusted_actors,platform_schema_migration_journal TO " +
