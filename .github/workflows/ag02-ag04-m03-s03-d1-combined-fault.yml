@@ -1,0 +1,131 @@
+name: AG02+AG04 PG16 D1 Combined-Fault Audit (TEST ONLY)
+
+on:
+  push:
+    branches:
+      - experiment/m03-s03-ag02-ag04-d1-combined-fault-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-pg16-run:
+    strategy:
+      fail-fast: false
+      matrix:
+        independent_run: [1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      M03_S03_CHECKOUT_SHA: ${{ github.sha }}
+      M03_S03_PR_HEAD_SHA: ${{ github.sha }}
+      M03_S03_NORMAL_ATTEMPTS: "1000"
+      M03_S03_CONTENTION_ATTEMPTS: "100"
+      M03_S03_AUDIT_REPETITION: ${{ matrix.independent_run }}
+    steps:
+      - name: Checkout exact unmerged test-only branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Validate immutable production operator, CLI and 0060 migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "31b1e862f594434944fec516f768265baf794525"
+          test "$(git hash-object packages/database/src/schema-operator-cli.ts)" = "a0e337680d2a73c1016f60b0506ecfdcf73388c2"
+          test "$(git hash-object packages/database/migrations/0060_platform_schema_authenticated_approvals.sql)" = "d8b1e50a0a4dd347fde235ae7cb1a12468249719"
+          mkdir -p artifacts/m03-s03-combined-fault
+          echo "AG02_AG04_TEST_SOURCE_SHA=$(git rev-parse HEAD)"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Install pinned dependencies, lint and typecheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+          pnpm exec eslint tests/integration/m03-s03-whole-operation-benchmark.test.ts scripts/platform/m03-s03-benchmark/*.ts
+          pnpm typecheck
+      - name: Start disposable PostgreSQL 16.16 and assert exact version
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml up -d --wait postgres
+          v="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          test "$v" = "160016"
+          echo "AG02_AG04_PG_VERSION=$v"
+      - name: Execute combined faults with real PG16 operator and test-only proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run --no-file-parallelism tests/integration/m03-s03-whole-operation-benchmark.test.ts -t "AG02-AG04 D1" --testTimeout=420000 --hookTimeout=120000
+      - name: Validate artifacts and all required fault profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module - <<'JS'
+          import fs from 'node:fs';
+          const base='artifacts/m03-s03-combined-fault/';
+          const a=JSON.parse(fs.readFileSync(base+'combined-fault-summary.json','utf8'));
+          const c=JSON.parse(fs.readFileSync(base+'commit-admission-candidates.json','utf8'));
+          const pg=JSON.parse(fs.readFileSync(base+'d1-pg06-regression.json','utf8'));
+          const raw=fs.readFileSync(base+'combined-fault-raw-attempts.jsonl','utf8').trim().split('\n').map(JSON.parse);
+          const required={combined_tcp_5_ack_60:6,combined_tcp_5_ack_200:6,
+            combined_tcp_15_ack_60:6,combined_tcp_15_ack_200:6,
+            combined_tcp_30_ack_60:12,combined_tcp_30_ack_200:12,
+            combined_tcp_30_lock_500:5,combined_tcp_30_lock_900:5,
+            combined_tcp_30_three_locks:4,combined_tcp_30_cancel_lock:5,
+            combined_tcp_30_lost_ack:4,combined_tcp30_ack200_eventloop25:5};
+          const total=Object.values(required).reduce((a,b)=>a+b,0);
+          if(raw.length!==total||a.combined_cases!==total||a.owner_d1_ms!==2517||
+            c.owner_d1_ms!==2517 ||pg.cases.length!==2)throw Error('INCOMPLETE_D1_MATRIX');
+          for(const [profile,n] of Object.entries(required)){
+            if(a.groups[profile]?.n!==n)throw Error('MISSING_'+profile);
+          }
+          if(!pg.cases.every(x=>x.original_outcome==='APPLIED' &&
+              x.test_only_classification==='COMMITTED_LATE' && x.t14_ms>2517))
+            throw Error('D1_PG06_NOT_REPRODUCED');
+          for(const x of raw.filter(x=>x.profile==='combined_tcp_30_cancel_lock')){
+            if(!x.physical_rollback_verified||x.sql_state!=='57014'||
+              x.outcome!=='UNAUTHORIZED')throw Error('CANCEL_ROLLBACK_UNPROVEN');
+          }
+          for(const x of raw.filter(x=>x.profile==='combined_tcp_30_lost_ack')){
+            if(x.outcome!=='INDETERMINATE'||x.reconciled!=='COMMITTED'||
+              x.ack_received_by_client!==false)throw Error('LOST_ACK_UNSAFE');
+          }
+          const cases=new Set(raw.map(x=>x.case_id));
+          if(cases.size!==raw.length)throw Error('DUPLICATE_CASE');
+          console.log('AG02_AG04_COMBINED_MATRIX_PASS',JSON.stringify({
+            cases:raw.length,pg06:pg.cases.length,protocol:'real_pg16',human_approved:false,
+            late_successes:Object.values(a.groups).reduce((n,g)=>n+g.d1_late_applied,0)}));
+          JS
+          NODE_VERSION="$(node --version)" SOURCE_SHA="$(git rev-parse HEAD)" REPETITION="$M03_S03_AUDIT_REPETITION" python - <<'PY'
+          import os,json
+          from pathlib import Path
+          d={'schema':'m03-s03-ag02-ag04-provenance/v1','source_sha':os.environ['SOURCE_SHA'],
+          'independent_run':int(os.environ['REPETITION']),'node':os.environ['NODE_VERSION'],
+          'postgres_server_version_num':160016,'owner_d1_ms':2517,'policy':'FINAL_PRE_DDL',
+          'production_source_unchanged':True,'human_dba_approval':'PENDING'}
+          Path('artifacts/m03-s03-combined-fault/source-provenance.json').write_text(json.dumps(d,indent=2)+'\n')
+          PY
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "AG02_AG04_DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+      - name: Destroy test-only PostgreSQL and persistent volumes
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans
+      - name: Upload sanitized independent raw PG16 combined-fault evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-ag02-ag04-combined-fault-${{ matrix.independent_run }}
+          path: artifacts/m03-s03-combined-fault/
+          retention-days: 30
+          if-no-files-found: error
