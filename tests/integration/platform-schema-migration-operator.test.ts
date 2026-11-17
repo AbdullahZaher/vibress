@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -229,7 +229,9 @@ beforeAll(async () => {
   labs.push(await createLab("c")); // Dedicated concurrent execution and replay fixture.
   labs.push(await createLab("d")); // Dedicated journal failure/recovery fixture.
   labs.push(await createLab("e")); // Agent05 identity negative fixture.
-  labs.push(await createLab("f")); // Agent05 two-session revocation fixture.
+  labs.push(await createLab("f")); // Revocation-before-lock fixture.
+  labs.push(await createLab("g")); // Execution-before-revocation fixture.
+  labs.push(await createLab("h")); // Forced rollback and replay fixture.
 }, 120000);
 
 afterAll(async () => {
