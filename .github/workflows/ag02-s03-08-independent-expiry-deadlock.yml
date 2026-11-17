@@ -21,7 +21,7 @@ jobs:
       SOURCE_TREE: d54a7e43a3ce09727cc15ba0fdab4a77ed9e1b26
       OPERATOR_BLOB: 31b1e862f594434944fec516f768265baf794525
       APPROVAL_MIGRATION_BLOB: d8b1e50a0a4dd347fde235ae7cb1a12468249719
-      FRAGMENT_BLOB: 714dd40eb63b72bd81f496d5848f273c6cd57009
+      FRAGMENT_BLOB: 60245c178f186dcc5d9a86c0508e48ab0c28b375
       OLD_REGRESSION_SHA: c79aa458b14a88dc543a6e954ec13e3531605480
     steps:
       - name: Checkout exact isolated Policy A candidate (never auditor branch code)

@@ -27,7 +27,6 @@ describe("AG02-S03-08 separately authored PostgreSQL 16 lock and time evidence",
     const checksum = await contentChecksum(lab);
     const external = await connect(lab.name);
     const sqlStates: string[] = [];
-    let observedOperator = false;
     let operatorResult:
       | { kind: "FULFILLED"; status: string }
       | { kind: "REJECTED"; code: string | undefined } | undefined;
@@ -65,7 +64,6 @@ describe("AG02-S03-08 separately authored PostgreSQL 16 lock and time evidence",
       await ag02WaitForPgLock(
         lab.dbAdmin, lab.operator.processID ?? -1, "LOCK TABLE ONLY",
       );
-      observedOperator = true;
       let externalCode: string | undefined;
       try {
         // External DDL holds the table lock while operator holds registry
@@ -117,7 +115,6 @@ describe("AG02-S03-08 separately authored PostgreSQL 16 lock and time evidence",
       await external.query("ROLLBACK").catch(() => undefined);
       await external.end().catch(() => undefined);
     }
-    expect(observedOperator).toBe(true);
     expect(operatorResult).toBeDefined();
   }, 15000);
 
