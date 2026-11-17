@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v";
+type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -677,5 +677,59 @@ describe("M03-S03 fresh-session recovery state machine", () => {
     expect(await independentReconcile(lab, checksum)).toEqual({
       state: "ROLLED_BACK", retry: "REQUIRES_NEW_AUTHORIZATION_CHECK",
     });
+  });
+});
+
+describe("M03-S03 Agent04 live DDL interruption and registry boundary", () => {
+  it("kills PostgreSQL backend while actual ALTER TABLE is waiting for table lock", async () => {
+    const lab = await isolated("w"), checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const operator = await connect(lab.name, lab.operatorRole);
+    operator.on("error", () => undefined);
+    const pid = (await operator.query<{ pid: number }>(
+      "SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+    let outcome: unknown;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("LOCK TABLE public." +
+        blocker.escapeIdentifier(lab.table) + " IN ACCESS SHARE MODE");
+      const operation = executeApprovedAdditiveColumn(operator, request(lab))
+        .then(value => { outcome = value; })
+        .catch(error => { outcome = error; });
+      // The synchronization trigger is pg_stat_activity.wait_event_type='Lock';
+      // the small poll interval is NOT used to infer when DDL began.
+      let observedLockWait = false;
+      const until = Date.now() + 1600;
+      while (Date.now() < until) {
+        const row = (await lab.dbAdmin.query<{ type: string | null }>(
+          "SELECT wait_event_type AS type FROM pg_stat_activity WHERE pid=$1",
+          [pid])).rows[0];
+        if (row?.type === "Lock") { observedLockWait = true; break; }
+        await new Promise<void>(resolve => setTimeout(resolve, 10));
+      }
+      expect(observedLockWait, "actual DDL lock wait was never observed").toBe(true);
+      const terminated = await lab.dbAdmin.query<{ done: boolean }>(
+        "SELECT pg_terminate_backend($1) AS done", [pid]);
+      expect(terminated.rows[0]?.done).toBe(true);
+      await blocker.query("ROLLBACK");
+      await operation;
+      expect(outcome).toBeInstanceOf(Error);
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+      await operator.end().catch(() => undefined);
+    }
+    await assertUncommitted(lab, checksum);
+  }, 25000);
+
+  it("after registry compare-and-swap, before journal: rollback all effects", async () => {
+    const lab = await isolated("x"), checksum = await contentChecksum(lab);
+    await expect(withOperator(lab,
+      /^UPDATE public\.platform_schema_registry SET manifest/, "after",
+      async () => { throw Error("TEST_POST_REGISTRY_FAULT"); }))
+      .rejects.toThrow();
+    await assertUncommitted(lab, checksum);
+    expect((await run(lab)).status).toBe("APPLIED");
+    await assertCommitted(lab, checksum);
   });
 });
