@@ -109,7 +109,7 @@ jobs:
                   platform-schema-migration-operator) expected=46 ;;
                   platform-schema-migration-fault-injection) expected=21 ;;
                 esac
-                if ! grep -Eaq "\b$expected passed\b" "$RUNNER_TEMP/$suite-$n.log"; then
+                if ! grep -Fq "$expected passed" "$RUNNER_TEMP/$suite-$n.log"; then
                   echo "Unexpected test count"; tail -n 70 "$RUNNER_TEMP/$suite-$n.log"; exit 1
                 fi
                 printf '%s\t%s\t%s\tPASS\n' "$suite" "$n" "$expected" >> artifacts/attempts.tsv
@@ -148,7 +148,7 @@ jobs:
           for n in 1 2 3 4 5; do
             echo "DEADLOCK_CLOCK_ITERATION=$n"
             if pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "AG02_S03_08_" > "$RUNNER_TEMP/deadlock-$n.log" 2>&1; then
-              if ! grep -Eaq '2 passed' "$RUNNER_TEMP/deadlock-$n.log"; then
+              if ! grep -Fq '2 passed' "$RUNNER_TEMP/deadlock-$n.log"; then
                 echo "Unexpected deadlock/time evidence"; tail -n 100 "$RUNNER_TEMP/deadlock-$n.log"; exit 1
               fi
               printf 'deadlock_and_clock\t%s\t2\tPASS\n' "$n" >> artifacts/attempts.tsv
