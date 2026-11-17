@@ -30,6 +30,48 @@ The last run's ALL-outcome contention p99=2015.6543ms includes failures and is n
 
 With 1000 within-run iid resamples (seed 414), descriptive bootstrap 95% p99 ranges were 41.3304–47.2981ms, 22.1476–24.7178ms and 36.7230–43.4555ms. Each is **conditional on that particular warm-cache runner**, not across-run variance or production uncertainty. Zero failures in 1000 independent trials would have a one-sided 95% exact binomial upper bound ~0.299%; independence/stationarity do not hold strictly for recycled DDL on one relation.
 
+
+### Verified expanded runs (disposable, not production)
+
+| Source | Run 1 | Run 2 |
+| --- | --- | --- |
+| Exact tested branch HEAD | 9e00ad92e428cb64a7f6d4a86ddb2e38e1943867 | 185afb9ccad8b8ec28a8c6b923a1e69f93d98914 |
+| GitHub synthetic merge checkout | 660eb29be9b703ac45eb05d268167b8c4a0f853a | a748ff6a4c52e3488125960f0fc83616cde9d93a |
+| Actions | [#44151684946](https://github.com/AbdullahZaher/vibress/actions/runs/44151684946) SUCCESS | [#44151913933](https://github.com/AbdullahZaher/vibress/actions/runs/44151913933) SUCCESS |
+| Raw ZIP | [Artifact #14359801508](https://github.com/AbdullahZaher/vibress/actions/runs/44151684946/artifacts/14359801508) | [Artifact #14359611993](https://github.com/AbdullahZaher/vibress/actions/runs/44151913933/artifacts/14359611993) |
+| Downloaded ZIP SHA-256 | 1b05095eee693ce1ab943700fdf564d3e6dcdf1b14773731f1cca4da4d107538 | 0249f107edef20e23e9483861a5ddee296681591cc9073aefbf0d0f9474f6941 |
+| Runtime | Node v24.22.3 / PG 16.16 (160016) | Node v24.22.3 / PG 16.16 (160016) |
+| Real recorded attempts | 1335, unique case IDs 1335 | 1335, unique case IDs 1335 |
+| Local normal 1000 APPLIED p99 | 42.1438ms | 45.7440ms |
+| Normal COMMIT-ACK p99 | 9.9019ms | 0.886ms |
+| Physical TCP proxy 5ms one-way p99 (n=20) | 420.2374ms | 432.163ms |
+| TCP proxy 15ms one-way p99 (n=20) | 1172.9078ms | 1184.294ms |
+| TCP proxy 30ms one-way p99 (n=12) | 2286.4865ms | 2298.0869ms |
+| Network 30ms observed max | 2286.5562ms | 2298.1778ms |
+| Approved native ALTER on 900ms/120ms table locks | 90/100 applied | 90/100 applied |
+| Controlled >2s locks | 10/100 55P03, no committed journal | 10/100 55P03, no committed journal |
+| Three real consecutive 250ms waits p99 (n=12) | 789.1206ms | 795.946ms |
+| Delayed COMMIT +60ms query ACK p99 (n=20) | 61.1166ms | 60.791ms |
+| Delayed COMMIT +200ms query ACK p99 (n=10) | 201.3809ms | 200.981ms |
+| cancel lock wait, SQLSTATE 57014 (n=20) | 20/20 safe verified rollback | 20/20 safe verified rollback |
+| cancel-to-final-classification p99 | 4.3479ms | 5.045ms |
+| rollback-ACK p99 (canceled, n=20) | 0.2626ms | 0.252ms |
+| fresh read-only classification p99 after cancellation | 9.3999ms | 12.036ms |
+| backend terminated, SQLSTATE 57P01 (n=10) | 10/10 backend gone, rollback verified | 10/10 backend gone, rollback verified |
+| lost COMMIT ACK (n=8) | 8/8 INDETERMINATE then committed independently verified | 8/8 same |
+| fresh observer p99 after lost COMMIT ACK | 9.7994ms | 12.307ms |
+| Socket refused/authentication failed/blackhole | 8/8 each correctly classified | 8/8 each correctly classified |
+| Extra index/CHECK not represented in canonical manifest | 12/12 CATALOG_DRIFT, no DDL journal | 12/12 same |
+| Test-only A/B rerun (real 500ms table hold) | A 8/8, B 8/8 successful | A 8/8, B 8/8 successful |
+| Test-only forced over-deadline pre-COMMIT rollback | A 4/4 and B 4/4 deny, no journal | A 4/4 and B 4/4 deny, no journal |
+| CI | typecheck/lint/Vitest/1335 count/teardown/artifact PASS | typecheck/lint/Vitest/1335 count/teardown/artifact PASS |
+
+**Raw audit:** Both ZIP archives were downloaded and recomputed independently using NumPy linear percentile interpolation; all records had unique case IDs and none contained credential strings, connection URLs, raw SQL, personal actor names or seeded sample content. Both complete runs produced all six required machine-readable artifacts. Initial failures are recorded below and must not be counted as passes.
+
+**Historical failed engineering attempts:** #44150697043, #44150800409, #44150895433, #44150932671, #44151561870, #44151604347 failed because test-only proxy cleanup timing, a source variable typo, and an incorrect expectation that unmodeled indexes/constraints would be accepted. The production operator was NOT changed; CATALOG_DRIFT is the correct fail-closed result. Reruns above proved these issues fixed. The original historical #44139179569 failed ESLint before benchmark. No failed attempt is silently erased or re-labeled passing.
+
+**Authorization limitation:** The owner-selected Policy A is valid for the specified restricted nonproduction policy only, independently from an unapproved numeric deadline. Exact canonical PR #198 still contains the pre-policy code blob 5b323911157fbffca3f48d0bcd604da0312609f8, whereas isolated PR #203 and benchmark #204 use the same proposed Policy-A operator blob 31b1e862f594434944fec516f768265baf794525. None of these benchmark tests deploys a deadline supervisor to the runtime.
+
 ## 4. New lab topology
 
 Disposable GitHub ubuntu-24.04 with Node 24.22.3, Docker PostgreSQL 16 (verify full patch in logs), pnpm 11.22.0, real migration 0059/0060, one self-contained PostgreSQL database created at 127.0.0.1:5433 with owner-installed application, distinct authenticated individual AUTHOR and APPROVER, separately restricted OPERATOR and RUNTIME. Genuine canonical plan/manifest, optional mapped scalar ADD_FIELD website without default, physical table and seed checksum. One hot table and repeated admin reset outside measured intervals make it a synthetic microbenchmark, not equivalent to 1000 independently installed customers.
@@ -79,15 +121,15 @@ Replay the measured successful durations against A and B, count exceedances, and
 
 ## 14. Candidate A: Performance-oriented development/test
 
-**Exact numeric integer: PENDING complete exact-SHA expanded CI and recomputation.** Report empirical exceedance count/denominator, cancellation reserve, tested topology and negative admission outcome. Candidate A is not an approved setting.
+**Exact numerical recommendation: 2405 milliseconds (UNAPPROVED LAB ONLY)**. From the maximum across both runs of separately observed profile-specific successful end-to-end p99, 2298.0869ms (30ms each-direction TCP proxy; 12 trials), plus conservative observed cancellation/rollback reserve R=ceil(5.045ms+0.252ms+100ms)=106ms, so A=ceil(2298.0869+106)=2405ms. Observed exceedances among 2328 already-measured qualifying successful requests (1164 each run) = **0/2328 (0%)**, an in-sample descriptive count, NOT an independently validated true false-timeout rate. Each run tested an additional 8 normal and 8 separate real 500ms relation-lock operations for its own selected A (Run1 A=2392ms; Run2 A=2405ms); all passed. Each run also denied four deliberately exhausted budgets before COMMIT, with intact schema/registry/journal. Candidate A has little margin over the observed 2298ms network profile, only about 107ms.
 
 ## 15. Candidate B: Conservative development/test
 
-**Exact numeric integer: PENDING complete exact-SHA expanded CI and recomputation.** May be preferred for lab if it leaves demonstrated tail headroom and does not hide existing 55P03 lock behavior.
+**Exact numerical recommendation: 2511 milliseconds (UNAPPROVED LAB ONLY)**. From M=max two-run observed qualifying successful end-to-end duration=2298.1778ms plus twice the maximum measured reserve (2×106ms): B=ceil(2298.1778+212)=2511ms. Observed exceedances on the same 2328 qualifying successes = **0/2328** (in-sample only). The first run separately tested B=2497ms, the second B=2511ms, each with 8 normal and 8 real 500ms table-lock successes, plus four negative deadline exhaustion cases; no completed journal after negative trials. B gives ~213ms above the largest measured success but is not a guarantee that cancellation or physical transaction completion will finish by T15.
 
 ## 16. Preferred Agent04 technical recommendation
 
-**PENDING measured candidates, not an owner authorization.** Must explicitly name the exact lab profile and may not be projected to staging/production without independent topology/SLO and agent signatures.
+**Preferred technical recommendation: 2511 ms (Candidate B), CONDITIONAL and UNAPPROVED** for this specific disposable PostgreSQL16.16 / Node24.22.3 / GitHub ubuntu-24.04 lab, with at most ONE of the tested stressors (<=30ms one-way actual TCP byte-delay proxy, <=900ms independent table lock, three serial 250ms locks, or <=200ms extra ACK delay), no production TLS/DNS or persistent high-QPS workload. This maximizes observed margin while keeping a finite budget; Candidate A=2405ms is an option where performance matters more than variance. The distinction is **106ms**, only a small measured laboratory buffer, not proof of cross-environment robustness. Both values have 0/2328 *in-sample* exceedances; 8 normal + 8 actual 500ms lock runs per candidate per CI confirm the test-only admission path in its own run, but 8 delayed workloads do not establish a p99. A common fixed 2511ms was not yet independently trialed on a production-like joint network+lock profile, so this recommendation is **not** ready for production implementation.
 
 ## 17. SLO and false-timeout assumptions
 
