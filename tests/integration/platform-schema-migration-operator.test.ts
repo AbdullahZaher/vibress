@@ -1541,8 +1541,8 @@ describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)
  */
 describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experiment", () => {
   async function cancelExactBackend(lab: Lab): Promise<() => Promise<boolean>> {
-    const initial = await lab.dbAdmin.query<{ backend_start: Date }>(
-      "SELECT backend_start FROM pg_stat_activity " +
+    const initial = await lab.dbAdmin.query<{ backend_start: string }>(
+      "SELECT backend_start::text AS backend_start FROM pg_stat_activity " +
       "WHERE pid=$1 AND usename=$2 AND datname=current_database()",
       [lab.operator.processID ?? -1, lab.operatorRole],
     );
@@ -1601,6 +1601,7 @@ describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experimen
         lab.operator, { installationId: lab.installationId, planDigest: lab.plan.digest },
         budget, { cancelVerifiedActiveQuery: control },
       );
+      void execution.catch(() => undefined); // Handle rejection before barrier polling.
       let waiting = false;
       for (let n = 0; n < 60; n += 1) {
         const row = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
@@ -1641,6 +1642,7 @@ describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experimen
         lab.operator, { installationId: lab.installationId, planDigest: lab.plan.digest },
         budget, { cancelVerifiedActiveQuery: control },
       );
+      void execution.catch(() => undefined); // Handle rejection before barrier polling.
       let waiting = false;
       for (let n = 0; n < 65; n += 1) {
         const state = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
@@ -1693,6 +1695,7 @@ describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experimen
       proxy, { installationId: lab.installationId, planDigest: lab.plan.digest },
       budget, { cancelVerifiedActiveQuery: async () => false },
     );
+    void pending.catch(() => undefined); // Handle expected timeout before ACK gate opens.
     try {
       await Promise.race([
         committed,
@@ -1744,6 +1747,7 @@ describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experimen
       proxy, { installationId: lab.installationId, planDigest: lab.plan.digest },
       budget, { cancelVerifiedActiveQuery: control },
     );
+    void pending.catch(() => undefined); // Handle expected timeout before journal gate opens.
     try {
       await Promise.race([
         journalWritten,
