@@ -178,7 +178,7 @@ async function approve(lab: Lab): Promise<void> {
   }
 }
 
-async function run(lab: Lab) {
+async function _run(lab: Lab) {
   return executeApprovedAdditiveColumn(lab.operator, {
     installationId: lab.installationId, planDigest: lab.plan.digest,
   });
@@ -209,8 +209,8 @@ const OUT_DIR = "artifacts/m03-s03-deadline";
 const NORMAL_ATTEMPTS = Number(process.env.M03_S03_NORMAL_ATTEMPTS ?? "1000");
 const CONTENTION_ATTEMPTS = Number(process.env.M03_S03_CONTENTION_ATTEMPTS ?? "100");
 const SAMPLES: Attempt[] = [];
-let checkout = process.env.M03_S03_CHECKOUT_SHA ?? "UNVERIFIED";
-let sourceHead = process.env.M03_S03_PR_HEAD_SHA ?? "UNVERIFIED";
+const checkout = process.env.M03_S03_CHECKOUT_SHA ?? "UNVERIFIED";
+const sourceHead = process.env.M03_S03_PR_HEAD_SHA ?? "UNVERIFIED";
 let pgVersion = "UNVERIFIED";
 
 interface Attempt {
@@ -267,7 +267,7 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   const start = clock(); // BEFORE connection acquisition, including libpq protocol
   const stages: Record<string, number> = {};
   const calls: Record<string, number> = {};
-  let outcome = "UNKNOWN";
+  let outcome: string;
   let state: string | null = null;
   const client = new Client({
     connectionString: urlFor(lab.name,lab.operatorRole),
