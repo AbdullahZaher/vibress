@@ -47,6 +47,7 @@ export const platformSchemaApprovals = pgTable("platform_schema_approvals", {
     columns: [table.installationId, table.planDigest],
     foreignColumns: [platformSchemaPlans.installationId, platformSchemaPlans.planDigest],
   }).onDelete("restrict"),
+  approverCheck: check("platform_schema_approvals_approver_check", sql.raw("length(btrim(approver)) > 0")),
   expiryCheck: check("platform_schema_approvals_expiry_check", sql.raw("expires_at > approved_at")),
   expiresIndex: index("platform_schema_approvals_expiry_idx").on(table.expiresAt, table.installationId),
 }));

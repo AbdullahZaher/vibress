@@ -7,12 +7,12 @@ CREATE TABLE "platform_schema_registry" (
   operator_role text NOT NULL,
   runtime_role text NOT NULL,
   manifest text NOT NULL,
-  manifest_digest text NOT NULL CHECK (manifest_digest ~ '^[0-9a-f]{64}$'),
+  manifest_digest text NOT NULL CONSTRAINT platform_schema_registry_digest_check CHECK (manifest_digest ~ '^[0-9a-f]{64}$'),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE "platform_schema_plans" (
   installation_id text NOT NULL REFERENCES platform_schema_registry(installation_id) ON DELETE RESTRICT,
-  plan_digest text NOT NULL CHECK (plan_digest ~ '^[0-9a-f]{64}$'),
+  plan_digest text NOT NULL CONSTRAINT platform_schema_plans_digest_check CHECK (plan_digest ~ '^[0-9a-f]{64}$'),
   expected_manifest text NOT NULL,
   plan text NOT NULL,
   author text NOT NULL CHECK (length(btrim(author)) > 0),
@@ -30,7 +30,7 @@ CREATE TABLE "platform_schema_approvals" (
   expires_at timestamptz NOT NULL,
   revoked_at timestamptz,
   PRIMARY KEY (installation_id, plan_digest, operation_id),
-  FOREIGN KEY (installation_id, plan_digest)
+  CONSTRAINT platform_schema_approvals_plan_fk FOREIGN KEY (installation_id, plan_digest)
     REFERENCES platform_schema_plans(installation_id, plan_digest) ON DELETE RESTRICT,
   CONSTRAINT platform_schema_approvals_expiry_check CHECK (expires_at > approved_at)
 );
@@ -38,18 +38,19 @@ CREATE TABLE "platform_schema_migration_journal" (
   installation_id text NOT NULL,
   operation_id text NOT NULL,
   plan_digest text NOT NULL,
-  previous_digest text NOT NULL CHECK (previous_digest ~ '^[0-9a-f]{64}$'),
-  new_digest text NOT NULL CHECK (new_digest ~ '^[0-9a-f]{64}$'),
+  previous_digest text NOT NULL,
+  new_digest text NOT NULL,
   authorization_ref text NOT NULL,
   operator_role text NOT NULL,
-  status text NOT NULL CHECK (status = 'COMPLETED'),
+  status text NOT NULL CONSTRAINT platform_schema_journal_status_check CHECK (status = 'COMPLETED'),
   started_at timestamptz NOT NULL,
   completed_at timestamptz NOT NULL,
   catalog_evidence jsonb NOT NULL,
   PRIMARY KEY (installation_id, operation_id),
-  FOREIGN KEY (installation_id, plan_digest, operation_id)
+  CONSTRAINT platform_schema_journal_approval_fk FOREIGN KEY (installation_id, plan_digest, operation_id)
     REFERENCES platform_schema_approvals(installation_id, plan_digest, operation_id)
     ON DELETE RESTRICT,
+  CONSTRAINT platform_schema_journal_digests_check CHECK (previous_digest ~ '^[0-9a-f]{64}$' AND new_digest ~ '^[0-9a-f]{64}$'),
   CONSTRAINT platform_schema_journal_times_check CHECK (completed_at >= started_at)
 );
 CREATE INDEX platform_schema_approvals_expiry_idx
