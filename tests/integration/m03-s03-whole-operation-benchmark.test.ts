@@ -1102,7 +1102,10 @@ function addedTimeline(sample:Attempt){
 function recordCombined(sample:Attempt, other:Record<string,unknown>={}){
   const stage=addedTimeline(sample);
   const row={case_id:sample.case_id,profile:sample.profile,outcome:sample.outcome,
-    elapsed_ms:sample.elapsed_ms,sql_state:sample.sql_state,...stage,...other};
+    elapsed_ms:sample.elapsed_ms,sql_state:sample.sql_state,
+    connection_ms:sample.connection_ms,stage_elapsed_ms:sample.stage_ms,
+    stage_monotonic_timeline_ms:sample.timeline_ms?.stages ?? {},
+    ...stage,...other};
   combinedEvents.push(row);
   return row;
 }
@@ -1300,7 +1303,18 @@ describe("AG02-AG04 D1 combined-fault independent disposable PG16",()=>{
             onStage:stage=>{
               if(stage==="target_access_exclusive_wait"&&!cancelJob){
                 cancelJob=(async()=>{
-                  await pause(180);
+                  let observedLock=false;
+                  for(let attempt=0;attempt<90;attempt++){
+                    const current=await lab.dbAdmin.query<{wait_event_type:string|null;query:string|null}>(
+                      "SELECT wait_event_type,query FROM pg_stat_activity WHERE pid=$1",
+                      [pid]);
+                    if(current.rows[0]?.wait_event_type==="Lock" &&
+                      current.rows[0]?.query?.includes("LOCK TABLE")){
+                      observedLock=true;break;
+                    }
+                    await pause(12);
+                  }
+                  expect(observedLock).toBe(true);
                   cancelInitiated=clock();
                   const signal=await lab.dbAdmin.query<{ok:boolean}>(
                     "SELECT pg_cancel_backend(pid) AS ok FROM pg_stat_activity "+
@@ -1389,6 +1403,98 @@ describe("AG02-AG04 D1 combined-fault independent disposable PG16",()=>{
       await p.close();
     }
   },120000);
+
+
+  it("measures genuine THREE-way stress: 30ms TCP+500/900ms table lock+200ms COMMIT ACK",async()=>{
+    const lab=labs[0]!;
+    const p=await startDisposableTransportProxy({
+      upstreamMs:30,downstreamMs:30,commitAckExtraMs:200});
+    try{
+      for(const waitMs of [500,900] as const){
+        for(let i=0;i<4;i++){
+          const blocker=await connect(lab.name);
+          let release:Promise<void>|undefined;
+          try{
+            await blocker.query("BEGIN");
+            await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+            const sample=await supervisor(lab,{profile:"combined_tcp30_ack200_lock_"+waitMs,
+              caseId:"C-TRIPLE-"+waitMs+"-"+i,connectionPort:p.port,
+              onStage:stage=>{
+                if(stage==="target_access_exclusive_wait"&&!release){
+                  release=pause(waitMs).then(()=>blocker.query("ROLLBACK")).then(()=>undefined);
+                }
+              }});
+            await release;
+            expect(sample.outcome).toBe("APPLIED"); // unguarded old source; D1 may fail
+            recordCombined(sample,{three_way_stressor:true,
+              transport_one_way_ms:30,commit_extra_ms:200,table_wait_ms:waitMs});
+            await assertPhysical(lab,lab.plan.proposedManifest.digest);
+            await resetForNext(lab);
+          }finally{
+            await blocker.query("ROLLBACK").catch(()=>undefined);
+            await blocker.end().catch(()=>undefined);
+          }
+        }
+      }
+    }finally{await p.close();}
+  },160000);
+
+  it("measures real parallel PostgreSQL CPU workload under 30ms TCP+200ms ACK",async()=>{
+    const lab=labs[0]!;
+    const p=await startDisposableTransportProxy({
+      upstreamMs:30,downstreamMs:30,commitAckExtraMs:200});
+    const pressure=await connect(lab.name);
+    try{
+      for(let i=0;i<3;i++){
+        const t=clock();
+        // Real read-only PostgreSQL backend CPU pressure; no production writes.
+        const competing=pressure.query("SELECT SUM(n::bigint) FROM generate_series(1,8000000) n");
+        const sample=await supervisor(lab,{profile:"combined_tcp30_ack200_db_cpu",
+          caseId:"C-DBCPU-"+i,connectionPort:p.port});
+        await competing;
+        expect(sample.outcome).toBe("APPLIED");
+        recordCombined(sample,{real_parallel_pg_cpu:true,
+          competing_query_elapsed_observation_ms:Number(elapsed(t,clock()).toFixed(4)),
+          generated_rows:8000000});
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        await resetForNext(lab);
+      }
+    }finally{
+      await pressure.end().catch(()=>undefined);
+      await p.close();
+    }
+  },140000);
+
+  it("withholds real COMMIT after D1 expiry in TEST-ONLY admission decorator; verifies physical rollback",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    for(let i=0;i<4;i++){
+      let reachedPrecommit=false;
+      const sample=await supervisor(lab,{
+        profile:"combined_test_only_d1_precommit_denial",
+        caseId:"C-ADMIT-DENY-"+i,
+        testDeadlineMs:COMBINED_D1_MS,preCommitReserveMs:300, // HYPOTHETICAL M
+        onStage:stage=>{
+          if(stage==="commit_acknowledged_query"){
+            reachedPrecommit=true;
+            busyStall(2600); // test-only passage of D1 AFTER DDL/journal BEFORE COMMIT
+          }
+        },
+      });
+      expect(reachedPrecommit).toBe(true);
+      expect(sample.outcome).not.toBe("APPLIED");
+      await noCompletedJournal(lab);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const recon=await independentlyReconcile(lab);
+      expect(recon.state).toBe("ROLLED_BACK");
+      recordCombined(sample,{test_only_admission_guard:true,
+        hypothetical_margin_ms:300,commit_dispatched:false,
+        physical_rollback_verified:true,
+        cleaned_after_d1:sample.timeline_ms?.client_disposed_ms !== undefined &&
+          sample.timeline_ms.client_disposed_ms>COMBINED_D1_MS,
+        fresh_reconcile_ms:recon.latency_ms});
+    }
+  },30000);
 
   it("reproduces D1-PG06 physical COMMIT then delayed wrapper result; test-only classifier contains the breach",async()=>{
     const lab=labs[0]!;
