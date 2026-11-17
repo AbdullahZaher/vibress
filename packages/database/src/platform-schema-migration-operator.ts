@@ -56,6 +56,12 @@ interface PlanRow {
   author_application_id: string | null;
   author_environment: string | null;
 }
+interface FinalApprovalDecision {
+  approved_at: Date;
+  expires_at: Date;
+  revoked_at: Date | null;
+  checked_at: Date;
+}
 interface ApprovalRow {
   operation_id: string;
   approver: string;
@@ -437,6 +443,26 @@ export async function executeApprovedAdditiveColumn(
     }
     await verifyCatalog(db, oid, resource);
     const beforeRows = await rowCount(db, ddl.tableName);
+    // Proposed Policy A (owner approval pending): expiry linearizes at the
+    // last database-observed authorization read, AFTER all potentially blocking
+    // target-lock waits and catalog/row checks, IMMEDIATELY BEFORE DDL.
+    // clock_timestamp() is fresh wall time, not BEGIN/statement time.
+    // The existing approval xact advisory lock is held until COMMIT, so any
+    // competing revocation must finish before this decision or wait until
+    // the migration commits/rolls back. No intervening external await.
+    const finalApproval = (await db.query<FinalApprovalDecision>(
+      "SELECT approved_at, expires_at, revoked_at, clock_timestamp() AS checked_at " +
+      "FROM public.platform_schema_approvals " +
+      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
+      [request.installationId, request.planDigest, ddl.operationId],
+    )).rows[0];
+    if (!finalApproval || finalApproval.revoked_at !== null ||
+      finalApproval.approved_at > finalApproval.checked_at ||
+      finalApproval.expires_at <= finalApproval.checked_at ||
+      finalApproval.approved_at.getTime() !== approval.approved_at.getTime() ||
+      finalApproval.expires_at.getTime() !== approval.expires_at.getTime()) {
+      deny("UNAUTHORIZED", "approval expired or changed before final DDL authorization");
+    }
     await db.query(ddl.sql);
     await verifyCatalog(db, oid, next);
     const afterRows = await rowCount(db, ddl.tableName);
@@ -462,7 +488,9 @@ export async function executeApprovedAdditiveColumn(
           approval.approved_at.toISOString(),
         identity.current_user,
         JSON.stringify({ operation: "ADD_FIELD", table: ddl.tableName,
-          column: ddl.columnName, beforeRows, afterRows, postgres: 16 }),
+          column: ddl.columnName, beforeRows, afterRows, postgres: 16,
+          finalAuthorizedAt: finalApproval.checked_at.toISOString(),
+          authorizationPolicy: "FINAL_PRE_DDL" }),
       ],
     );
     commitAttempted = true;
