@@ -2,7 +2,7 @@
 -- Deploy only with independently approved owner provisioning. Old NULL provenance is DENIED.
 -- This feature is test/development only. NEVER register pooled/shared logins as humans.
 CREATE TABLE public.platform_schema_trusted_actors (
-  login_name name PRIMARY KEY,
+  login_name text PRIMARY KEY,
   principal_id text NOT NULL UNIQUE CHECK (length(btrim(principal_id)) > 0),
   actor_kind text NOT NULL CHECK (actor_kind IN ('AUTHOR', 'APPROVER')),
   identity_mode text NOT NULL DEFAULT 'INDIVIDUAL_DATABASE_LOGIN'
@@ -12,23 +12,23 @@ CREATE TABLE public.platform_schema_trusted_actors (
 );
 
 ALTER TABLE public.platform_schema_plans
-  ADD COLUMN author_login name,
+  ADD COLUMN author_login text,
   ADD COLUMN author_principal_id text,
   ADD COLUMN author_application_id text,
   ADD COLUMN author_environment text;
 
 ALTER TABLE public.platform_schema_approvals
-  ADD COLUMN approver_login name,
+  ADD COLUMN approver_login text,
   ADD COLUMN approver_principal_id text,
   ADD COLUMN approved_application_id text,
-  ADD COLUMN revoked_by_login name,
+  ADD COLUMN revoked_by_login text,
   ADD COLUMN revoked_by_principal_id text;
 
 CREATE TABLE public.platform_schema_revocation_audit (
   installation_id text NOT NULL,
   plan_digest text NOT NULL,
   operation_id text NOT NULL,
-  revoked_by_login name NOT NULL,
+  revoked_by_login text NOT NULL,
   revoked_by_principal_id text NOT NULL,
   revoked_at timestamptz NOT NULL,
   PRIMARY KEY (installation_id, plan_digest, operation_id)
