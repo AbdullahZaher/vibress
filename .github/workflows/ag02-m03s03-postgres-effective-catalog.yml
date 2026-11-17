@@ -1,0 +1,63 @@
+name: AG02 M03-S03 PostgreSQL effective privileges and catalog lock proof
+
+on:
+  push:
+    branches:
+      - fix/agent02-m03-s03-effective-privilege-lock-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.22.3"
+          cache: pnpm
+      - name: Frozen install
+        run: pnpm install --frozen-lockfile
+      - name: Pin evidence SHA and full TypeScript check
+        run: |
+          git rev-parse HEAD
+          pnpm typecheck
+      - name: Lint changed files and explicit-any
+        run: |
+          pnpm exec eslint packages/database/src/platform-schema-migration-operator.ts packages/database/src/platform-schema-effective-privileges.ts tests/integration/platform-schema-migration-operator.test.ts
+          pnpm verify:explicit-any
+      - name: Start disposable PostgreSQL/Redis/MInIO fixture
+        run: docker compose -f compose.dev.yml up -d --wait
+      - name: Require PostgreSQL 16.16+ patch level
+        run: |
+          version=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SHOW server_version_num")
+          echo "PostgreSQL server_version_num=$version"
+          test "$version" -ge 160016 && test "$version" -lt 170000
+      - name: M03-S03 real PostgreSQL targeted integration negatives
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          REDIS_URL: redis://127.0.0.1:6380
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts
+      - name: Schema-engine contract regression
+        run: pnpm --filter @vibress/schema-engine test
+      - name: Full unit and integration regression
+        env:
+          DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+          REDIS_URL: redis://127.0.0.1:6380
+        run: |
+          pnpm test:unit
+          pnpm test:integration
+      - name: Monorepo build and clean tree
+        run: |
+          pnpm build
+          pnpm verify:clean-tree
+      - name: Destroy disposable database, volumes and containers
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes
