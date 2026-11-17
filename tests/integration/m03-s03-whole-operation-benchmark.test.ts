@@ -334,6 +334,7 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   } finally {
     await client.end().catch(()=>undefined);
   }
+  if(connectedAt===start) connectedAt=clock();
   const sample:Attempt={case_id:options.caseId, profile:options.profile,
     outcome,elapsed_ms:Number(elapsed(start,clock()).toFixed(4)),
     connection_ms:Number(elapsed(start,connectedAt).toFixed(4)),
@@ -737,7 +738,7 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
               mode==="bad_auth"?"AUTH_FAILED":"CONNECT_TIMEOUT";
           }finally{await client.end().catch(()=>undefined);}
           const sample=sampleFault("connection_"+mode,"CON-"+mode+"-"+i,
-            result,started,{},code);
+            result,started,{connection_ms:Number(elapsed(start,clock()).toFixed(4))},code);
           expect(sample.outcome).not.toBe("UNEXPECTED_SUCCESS");
         }
       }finally{await proxy?.close();}
