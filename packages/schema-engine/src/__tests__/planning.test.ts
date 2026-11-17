@@ -395,7 +395,7 @@ describe("AG06-S02-02 physical name and canonical manifest compatibility", () =>
     expect(left).toEqual(right);
     expect(left.digest).toBe(right.digest);
     expect(left.resources.every((resource) =>
-      !/[; "']/.test(resource.tableName) && !resource.tableName.includes("\\u0000")))
+      !/[; "']/.test(resource.tableName) && !resource.tableName.includes(String.fromCharCode(0))))
       .toBe(true);
     const plan = planSchemaChanges(null, compile(), {
       scope: crmScope, expectedCurrentDigest: null,
