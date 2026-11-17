@@ -191,6 +191,7 @@ async function assertAuthority(
   const unexpected = await db.query<{ count: number }>(
     "SELECT (SELECT count(*) FROM pg_constraint WHERE conrelid = $1::oid) + " +
     "(SELECT count(*) FROM pg_trigger WHERE tgrelid = $1::oid AND NOT tgisinternal) + " +
+    "(SELECT count(*) FROM pg_index WHERE indrelid = $1::oid) + " +
     "(SELECT count(*) FROM pg_inherits WHERE inhrelid = $1::oid) AS count",
     [found.oid],
   );

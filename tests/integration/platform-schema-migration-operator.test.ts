@@ -371,7 +371,7 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     const fname = lab.dbAdmin.escapeIdentifier("s03_pub_" + id);
     await lab.dbAdmin.query(
       "CREATE FUNCTION public." + fname + "() RETURNS integer LANGUAGE sql " +
-      "SECURITY DEFINER SET search_path = pg_catalog AS $ SELECT 7 $",
+      "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
     );
     try {
       const callable = await lab.runtime.query<{ result: number }>(
@@ -394,7 +394,7 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
         lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
       await lab.dbAdmin.query(
         "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
-        "SECURITY DEFINER SET search_path = pg_catalog AS $ SELECT 7 $",
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
       );
       const reachable = await lab.runtime.query<{ result: number }>(
         "SELECT " + schema + ".probe() AS result",
@@ -418,7 +418,7 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
       await lab.dbAdmin.query("GRANT USAGE ON SCHEMA " + schema + " TO " + runtime);
       await lab.dbAdmin.query(
         "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
-        "SECURITY DEFINER SET search_path = pg_catalog AS $ SELECT 7 $",
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
       );
       await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + schema +
         ".probe() FROM PUBLIC");
@@ -511,7 +511,7 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     }
     await lab.dbAdmin.query("CREATE FUNCTION public." + fn +
       "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog " +
-      "AS $ BEGIN RETURN NEW; END $");
+      "AS 'BEGIN RETURN NEW; END'");
     try {
       await lab.dbAdmin.query("CREATE TRIGGER s03_unexpected BEFORE INSERT ON " +
         qualified + " FOR EACH ROW EXECUTE FUNCTION public." + fn + "()");
@@ -521,6 +521,54 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
       await lab.dbAdmin.query("DROP TRIGGER IF EXISTS s03_unexpected ON " + qualified);
       await lab.dbAdmin.query("DROP FUNCTION IF EXISTS public." + fn + "()");
     }
+  });
+
+
+  it("rejects unexpected target owner, extra schema owner and unmodeled index", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+    const schema = lab.dbAdmin.escapeIdentifier("s03_owned_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("ALTER SCHEMA " + schema + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+    }
+    const index = lab.dbAdmin.escapeIdentifier("s03_idx_" + id);
+    await lab.dbAdmin.query("CREATE INDEX " + index + " ON " + table + ' ("name")');
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP INDEX public." + index);
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+  });
+
+  it("rejects missing or changed physical columns after non-destructive rename", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN name TO renamed_name");
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN renamed_name TO name");
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
   });
 
   it("AG06-S03-03 rejects a noncooperating DDL commit before table lock acquisition", async () => {
