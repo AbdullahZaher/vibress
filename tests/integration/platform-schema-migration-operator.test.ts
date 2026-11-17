@@ -1973,6 +1973,9 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
       // The same held real table lock triggers operator's 2000ms cap.
       // Current catch wrongly turns this operational PG error into IAM denial.
       await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // The external ACCESS EXCLUSIVE lock also blocks checksum SELECT.
+      // Release it before postconditions; its waiter already timed out safely.
+      await blocker.query("ROLLBACK");
       expect(await hasWebsite(lab)).toBe(false);
       expect(await contentChecksum(lab)).toBe(checksum);
       expect((await lab.dbAdmin.query(
