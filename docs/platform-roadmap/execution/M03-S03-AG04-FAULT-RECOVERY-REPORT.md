@@ -29,6 +29,8 @@ Disruption types:
 
 The first focused run [#44041122761](https://github.com/AbdullahZaher/vibress/actions/runs/44041122761) observed **10/12 PASS**. The second [#44041473497](https://github.com/AbdullahZaher/vibress/actions/runs/44041473497) observed **15/16 PASS** after correcting a *test-only* table-lock inspection deadlock. [#44041817864](https://github.com/AbdullahZaher/vibress/actions/runs/44041817864) observed **17/18 PASS**. All three jobs are **FAIL** because the confirmed noncooperating external DDL race remains unremediated. The number of tests has since increased; prior outcomes must **not** be attributed to the latest HEAD.
 
+[CI #44042302748](https://github.com/AbdullahZaher/vibress/actions/runs/44042302748) then recorded **20/21 PASS, 1 FAIL**, including the **actual on-wire COMMIT acknowledgement-drop** test, backend termination during real relation lock wait, two independent-approved-plan contention and fresh state reconciliation. The sole failing case remains **AG06-S03-03 noncooperating external catalog DDL**; it still returned `APPLIED` where rejection was required. Full CI **FAIL** is intentional for this real blocker. All successful cases were executed on the precise PR head `c79aa458b14a88dc543a6e954ec13e3531605480` (the workflow's checkout itself is the separate PR merge SHA recorded in its provenance artifact).
+
 | Phase / operation | Mechanism | Proven before latest changes |
 | --- | --- | --- |
 | Before authorization | Adapter exception before approval SELECT | PASS |
@@ -43,14 +45,14 @@ The first focused run [#44041122761](https://github.com/AbdullahZaher/vibress/ac
 | Backend killed | `pg_terminate_backend` after physical DDL | PASS |
 | TCP interrupted before COMMIT | Socket destroy, fresh independent observer | PASS |
 | COMMIT caller acknowledgment suppressed | COMMIT returns from PG, test destroys real TCP connection before operator return | PASS |
-| Real COMMIT wire packet dropped | Loopback proxy discards server CommandComplete; true TCP disconnect | **PENDING latest CI evidence** |
+| Real COMMIT wire packet dropped | Loopback proxy discards server CommandComplete; true TCP disconnect | **PASS in #44042302748** |
 | SIGKILL process after DDL | Parent sends SIGKILL to separate operator Node process | PASS |
 | Retry after uncertain COMMIT | Independent observer verifies journal, registry, catalog and checksum; then ALREADY_APPLIED | PASS |
 | Conflicting journal | Deliberately forge digest in disposable database, require JOURNAL_CONFLICT | PASS |
 | Different approved plans | Two operator sessions/approvals, exactly one physical ADD COLUMN and one journal | PASS |
 | Noncooperating external DDL after fence | Independent admin runs ALTER while operator is fenced | **FAIL — confirmed race** |
 | External ACCESS EXCLUSIVE table lock | Independent session blocks operator; bounded timeout then safe retry | PASS |
-| Termination during actual DDL lock wait | Wait for `pg_stat_activity.wait_event_type='Lock'`, then backend terminate | **PENDING latest CI evidence** |
+| Termination during actual DDL lock wait | Wait for `pg_stat_activity.wait_event_type='Lock'`, then backend terminate | **PASS in #44042302748** |
 | Full catalog reconciliation | Fresh repeatable-read read-only snapshot, manifest text/digests/catalog/checksum | PASS for old/new/conflicting states at previous run |
 
 **Consequence:** do not claim AG06-S03-03 fixed, do not consider the full suite passed, and do not automatically retry DDL after connection loss. Existing authorization and database security controls remain in force.
