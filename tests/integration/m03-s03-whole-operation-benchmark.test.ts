@@ -383,7 +383,7 @@ function groups() {
 }
 function writeArtifacts() {
   mkdirSync(OUT_DIR,{recursive:true});
-  const raw=SAMPLES.map(s=>JSON.stringify(s)).join("\n")+"\n";
+  const raw=SAMPLES.map(s=>JSON.stringify({...s,checkout_sha:checkout,\n    node_version:process.version,postgres_version:pgVersion,attempts_total:SAMPLES.length})).join("\n")+"\n";
   writeFileSync(path.join(OUT_DIR,"raw-attempts.jsonl"),raw,{mode:0o600});
   const summary={
     schema:"m03-s03-whole-operation-benchmark/v1",checkout_sha:checkout,
@@ -628,6 +628,7 @@ function writeExpandedArtifacts() {
   const faultProfiles=profiles.filter(p=>/(cancel|terminate|ack|connection|budget)/i.test(p));
   const fault={
     schema:"m03-s03-fault-timing/v1",checkout_sha:checkout,node_version:process.version,
+    all_attempts:SAMPLES.length,
     postgres_version:pgVersion,
     profiles:Object.fromEntries(faultProfiles.map(p=>[p,attempts[p]])),
     important:"cancel signal delivery != backend completion; COMMIT ACK loss != rollback",
@@ -643,6 +644,7 @@ function writeExpandedArtifacts() {
   }
   const decision={
     schema:"m03-s03-conditional-lab-deadline/v1",checkout_sha:checkout,
+    node_version:process.version,postgres_version:pgVersion,attempts_total:SAMPLES.length,
     owner_slo:"MISSING - illustrative assumption only: <=1% extra false deadlines in stated lab class",
     production_authorization:false,policy_a_owner_selected:true,
     recommendations_unapproved:true,
