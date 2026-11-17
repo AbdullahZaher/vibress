@@ -738,7 +738,7 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
               mode==="bad_auth"?"AUTH_FAILED":"CONNECT_TIMEOUT";
           }finally{await client.end().catch(()=>undefined);}
           const sample=sampleFault("connection_"+mode,"CON-"+mode+"-"+i,
-            result,started,{connection_ms:Number(elapsed(start,clock()).toFixed(4))},code);
+            result,started,{connection_ms:Number(elapsed(started,clock()).toFixed(4))},code);
           expect(sample.outcome).not.toBe("UNEXPECTED_SUCCESS");
         }
       }finally{await proxy?.close();}
