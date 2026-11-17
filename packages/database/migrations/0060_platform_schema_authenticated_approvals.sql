@@ -116,14 +116,16 @@ BEGIN
      OR NEW.revoked_by_login IS NOT NULL OR NEW.revoked_by_principal_id IS NOT NULL THEN
     RAISE EXCEPTION 'forged approval provenance' USING ERRCODE = '42501';
   END IF;
-  SELECT author_login, author_principal_id, author_application_id, author_environment
+  SELECT author_login, author_principal_id, author_application_id, author_environment, plan
     INTO plan_actor FROM public.platform_schema_plans
     WHERE installation_id = NEW.installation_id AND plan_digest = NEW.plan_digest
     FOR SHARE;
   IF NOT FOUND OR plan_actor.author_login IS NULL
      OR plan_actor.author_principal_id IS NULL
      OR plan_actor.author_principal_id = actor.principal_id
-     OR plan_actor.author_login = session_user THEN
+     OR plan_actor.author_login = session_user
+     OR (plan_actor.plan::jsonb #>> '{operations,0,id}') IS DISTINCT FROM NEW.operation_id
+     OR jsonb_array_length(plan_actor.plan::jsonb -> 'operations') <> 1 THEN
     RAISE EXCEPTION 'self-approval or legacy unauthenticated plan'
       USING ERRCODE = '42501';
   END IF;
