@@ -35,8 +35,9 @@ export async function reconcileReadOnly(
   db: Client, expected: RecoveryExpected,
 ): Promise<Reconciled> {
   const halt: Reconciled = { state: "HALT_UNRECONCILABLE", retry: "DENIED" };
-  if (![expected.database, expected.installationId, expected.tableName,
+  if (![expected.database, expected.tableName,
         expected.columnName, expected.operatorRole].every(x => IDENTIFIER.test(x)) ||
+      !/^[a-z][a-z0-9_-]{1,62}$/.test(expected.installationId) ||
       ![expected.planDigest, expected.beforeDigest, expected.afterDigest]
         .every(x => SHA.test(x)) ||
       !expected.operationId || !expected.expectedSeedChecksum) {
