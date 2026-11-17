@@ -1,0 +1,183 @@
+name: AG02 M03-S03-08 Independent PG16 Expiry Lock Deadlock Proof
+
+on:
+  push:
+    branches:
+      - audit/ag02-s03-08-lock-expiry-deadlock-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-unchanged-candidate:
+    name: Pinned PG16 candidate adversarial revalidation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 42
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+      SOURCE_SHA: 2c31ed9119b88a7aff0ae8bd4c16638294a74cda
+      SOURCE_TREE: d54a7e43a3ce09727cc15ba0fdab4a77ed9e1b26
+      OPERATOR_BLOB: 31b1e862f594434944fec516f768265baf794525
+      APPROVAL_MIGRATION_BLOB: d8b1e50a0a4dd347fde235ae7cb1a12468249719
+      FRAGMENT_BLOB: 714dd40eb63b72bd81f496d5848f273c6cd57009
+      OLD_REGRESSION_SHA: c79aa458b14a88dc543a6e954ec13e3531605480
+    steps:
+      - name: Checkout exact isolated Policy A candidate (never auditor branch code)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: 2c31ed9119b88a7aff0ae8bd4c16638294a74cda
+          persist-credentials: false
+      - name: Verify canonical source SHA tree operator migration and no source editing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse HEAD^{tree})" = "$SOURCE_TREE"
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+          test "$(git hash-object packages/database/migrations/0060_platform_schema_authenticated_approvals.sql)" = "$APPROVAL_MIGRATION_BLOB"
+          mkdir -p artifacts
+          printf 'case\titeration\ttests_passed\toutcome\n' > artifacts/attempts.tsv
+          printf 'SOURCE_SHA=%s\nSOURCE_TREE=%s\nOPERATOR_BLOB=%s\nPG_MIGRATION_BLOB=%s\n' \
+            "$SOURCE_SHA" "$SOURCE_TREE" "$OPERATOR_BLOB" "$APPROVAL_MIGRATION_BLOB" > artifacts/source-provenance.txt
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Install pinned dependencies and verify Node24 security level
+        run: |
+          test "$(node -v)" = "v24.22.3"
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Boot disposable ONLY PostgreSQL16
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f compose.dev.yml up -d --wait postgres
+          v="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          echo "PG_SERVER_VERSION_NUM=$v"
+          test "$v" -ge 160016 && test "$v" -lt 170000
+      - name: Independently repeat original unweakened noncooperating DDL regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$OLD_REGRESSION_SHA"
+          git show "$OLD_REGRESSION_SHA:tests/integration/platform-schema-migration-fault-injection.test.ts" > "$RUNNER_TEMP/historical.ts"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          const file='tests/integration/platform-schema-migration-fault-injection.test.ts';
+          const old=readFileSync(process.env.RUNNER_TEMP+'/historical.ts','utf8');
+          const cur=readFileSync(file,'utf8');
+          const start='  it("noncooperating ALTER TABLE after advisory fence: no fabricated journal success"';
+          const after='  it("transaction lock held by noncooperating DDL session: bounded failure, retry"';
+          const cut=(s)=>{const a=s.indexOf(start),b=s.indexOf(after,a);if(a<0||b<=a)throw Error('MISSING_ORIGINAL_REGRESSION');return {a,b,part:s.slice(a,b)}};
+          const a=cut(old),b=cut(cur);
+          if(!a.part.includes(')).rejects.toThrow();')) throw Error('ASSERTION_WAS_WEAKENED');
+          const hash=createHash('sha256').update(a.part).digest('hex');
+          if(hash!=='560ec6aaceccc8f24d9936869934e9ea9e4ac726602aa764c4a074ddb1bd799c')throw Error('ORIGINAL_REGRESSION_HASH_CHANGED');
+          writeFileSync(process.env.GITHUB_WORKSPACE+'/artifacts/unchanged-historical-assertion.sha256',hash+'\n');
+          writeFileSync(file,cur.slice(0,b.a)+a.part+cur.slice(b.b));
+          if(cut(readFileSync(file,'utf8')).part!==a.part)throw Error('ORIGINAL_REGRESSION_OVERLAY_MISMATCH');
+          NODE
+          for n in 1 2 3 4 5; do
+            echo "HISTORICAL_UNCHANGED_DDL_ITERATION=$n"
+            if pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts -t "noncooperating ALTER TABLE after advisory fence: no fabricated journal success" \
+              > "$RUNNER_TEMP/original-$n.log" 2>&1; then
+              printf 'historical_unchanged_ddl\t%s\t1\tPASS\n' "$n" >> artifacts/attempts.tsv
+              tail -n 8 "$RUNNER_TEMP/original-$n.log"
+            else
+              printf 'historical_unchanged_ddl\t%s\t0\tFAIL\n' "$n" >> artifacts/attempts.tsv
+              tail -n 120 "$RUNNER_TEMP/original-$n.log"
+              exit 1
+            fi
+          done
+          git checkout -- tests/integration/platform-schema-migration-fault-injection.test.ts
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+      - name: Five repeat runs of COMPLETE operator and fault suites (real PG)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in 1 2 3 4 5; do
+            for suite in platform-schema-migration-operator platform-schema-migration-fault-injection; do
+              echo "SUITE=$suite ITERATION=$n SHA=$SOURCE_SHA"
+              if pnpm exec vitest run --no-file-parallelism "tests/integration/$suite.test.ts" > "$RUNNER_TEMP/$suite-$n.log" 2>&1; then
+                case "$suite" in
+                  platform-schema-migration-operator) expected=46 ;;
+                  platform-schema-migration-fault-injection) expected=21 ;;
+                esac
+                if ! grep -Eaq "\b$expected passed\b" "$RUNNER_TEMP/$suite-$n.log"; then
+                  echo "Unexpected test count"; tail -n 70 "$RUNNER_TEMP/$suite-$n.log"; exit 1
+                fi
+                printf '%s\t%s\t%s\tPASS\n' "$suite" "$n" "$expected" >> artifacts/attempts.tsv
+                tail -n 8 "$RUNNER_TEMP/$suite-$n.log"
+              else
+                printf '%s\t%s\t0\tFAIL\n' "$suite" "$n" >> artifacts/attempts.tsv
+                tail -n 120 "$RUNNER_TEMP/$suite-$n.log"
+                exit 1
+              fi
+            done
+          done
+      - name: Test-only overlay for genuine PostgreSQL 40P01 and clock semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin audit/ag02-s03-08-lock-expiry-deadlock-20261117
+          git show FETCH_HEAD:audit/ag02-s03-08-deadlock.fragment.ts > "$RUNNER_TEMP/deadlock.fragment.ts"
+          test "$(git hash-object "$RUNNER_TEMP/deadlock.fragment.ts")" = "$FRAGMENT_BLOB"
+          node --input-type=module <<'NODE'
+          import { readFileSync,writeFileSync } from 'node:fs';
+          const f='tests/integration/platform-schema-migration-operator.test.ts';
+          const s=readFileSync(f,'utf8');
+          const old='type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n";';
+          if(!s.includes(old))throw Error('BASELINE_KEY_ENUM_CHANGED');
+          const next=old.replace(' | "n";',' | "n" | "o" | "p";');
+          const fragment=readFileSync(process.env.RUNNER_TEMP+'/deadlock.fragment.ts','utf8');
+          if((fragment.match(/it\("AG02_S03_08_/g)||[]).length!==2)throw Error('EXPECTED_TWO_NEW_NEGATIVES');
+          writeFileSync(f,s.replace(old,next)+fragment);
+          NODE
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts
+      - name: Five repeated PostgreSQL deadlock and real clock checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in 1 2 3 4 5; do
+            echo "DEADLOCK_CLOCK_ITERATION=$n"
+            if pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "AG02_S03_08_" > "$RUNNER_TEMP/deadlock-$n.log" 2>&1; then
+              if ! grep -Eaq '2 passed' "$RUNNER_TEMP/deadlock-$n.log"; then
+                echo "Unexpected deadlock/time evidence"; tail -n 100 "$RUNNER_TEMP/deadlock-$n.log"; exit 1
+              fi
+              printf 'deadlock_and_clock\t%s\t2\tPASS\n' "$n" >> artifacts/attempts.tsv
+              tail -n 12 "$RUNNER_TEMP/deadlock-$n.log"
+            else
+              printf 'deadlock_and_clock\t%s\t0\tFAIL\n' "$n" >> artifacts/attempts.tsv
+              tail -n 150 "$RUNNER_TEMP/deadlock-$n.log"
+              exit 1
+            fi
+          done
+      - name: Verify no leaked test DB, complete evidence counts and unmodified operator
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c $'\tPASS$' artifacts/attempts.tsv)" -eq 20
+          awk -F '\t' 'NR>1{sum+=$3} END{print "TOTAL_EXECUTED_ASSERTIONS="sum;exit(sum!=350)}' artifacts/attempts.tsv
+          test "$(git hash-object packages/database/src/platform-schema-migration-operator.ts)" = "$OPERATOR_BLOB"
+          test "$(git hash-object packages/database/migrations/0060_platform_schema_authenticated_approvals.sql)" = "$APPROVAL_MIGRATION_BLOB"
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+      - name: Dispose of local PostgreSQL lab and volumes
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans
+      - name: Publish bounded reproducibility artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ag02-s03-08-independent-pg16-lock-expiry
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
