@@ -3,7 +3,7 @@
 [![CI](https://github.com/AbdullahZaher/vibress/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdullahZaher/vibress/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/AbdullahZaher/vibress?color=blue)](https://github.com/AbdullahZaher/vibress/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Node: >=24.0.0](https://img.shields.io/badge/Node-%3E%3D24.0.0-brightgreen.svg)](package.json)
+[![Node: >=24.22.3](https://img.shields.io/badge/Node-%3E%3D24.22.3-brightgreen.svg)](package.json)
 [![pnpm: >=11.17.0](https://img.shields.io/badge/pnpm-%3E%3D11.17.0-orange.svg)](package.json)
 
 **Vibress** is a modern, high-performance, open-source Content Management System (CMS) and publication platform designed as a self-hostable, full-stack alternative to existing CMS engines.
@@ -104,7 +104,7 @@ The production container topology isolates internal databases and caches on a de
 
 ### Option 2: Local Node.js Development
 
-**Prerequisites:** Node.js `>= 24.0.0 < 25`, `pnpm >= 11.17.0`, PostgreSQL 16+, Redis 7+.
+**Prerequisites:** Node.js `>= 24.22.3 < 25`, `pnpm >= 11.17.0`, PostgreSQL 16+, Redis 7+.
 
 1. **Install dependencies:**
    ```bash
