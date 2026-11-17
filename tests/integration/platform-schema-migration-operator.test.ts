@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d";
+type Key = "a" | "b" | "c" | "d" | "e" | "f";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -85,6 +85,8 @@ async function createLab(key: Key): Promise<Lab> {
     "REFERENCES platform_applications(id), environment text NOT NULL);",
   );
   await dbAdmin.query(schema);
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -124,14 +126,22 @@ async function createLab(key: Key): Promise<Lab> {
     " TO " + dbAdmin.escapeIdentifier(runtimeRole));
   await dbAdmin.query("GRANT SELECT ON platform_installations," +
     "platform_schema_registry,platform_schema_plans,platform_schema_approvals," +
-    "platform_schema_migration_journal TO " + dbAdmin.escapeIdentifier(operatorRole));
+    "platform_schema_trusted_actors,platform_schema_migration_journal TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT UPDATE(manifest,manifest_digest,updated_at) " +
     "ON platform_schema_registry TO " + dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
     dbAdmin.escapeIdentifier(operatorRole));
-  await dbAdmin.query("GRANT INSERT ON platform_schema_plans TO " +
+  // Owner-controlled isolated database logins; no direct table DML grants.
+  await dbAdmin.query("INSERT INTO platform_schema_trusted_actors " +
+    "(login_name,principal_id,actor_kind) VALUES ($1,$2,'AUTHOR'),($3,$4,'APPROVER')",
+    [author, "individual:" + author, approver, "individual:" + approver]);
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_submit_plan(text,text,text,text) TO " +
     dbAdmin.escapeIdentifier(author));
-  await dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " +
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_approve_operation(text,text,text,timestamptz), " +
+    "public.platform_schema_revoke_operation(text,text,text) TO " +
     dbAdmin.escapeIdentifier(approver));
   await dbAdmin.query(
     "INSERT INTO platform_schema_registry " +
@@ -143,9 +153,8 @@ async function createLab(key: Key): Promise<Lab> {
   const writer = await connect(name, author);
   try {
     await writer.query(
-      "INSERT INTO platform_schema_plans " +
-      "(installation_id,plan_digest,expected_manifest,plan,author) VALUES ($1,$2,$3,$4,$5)",
-      [installationId, plan.digest, JSON.stringify(current), JSON.stringify(plan), author],
+      "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+      [installationId, plan.digest, JSON.stringify(current), JSON.stringify(plan)],
     );
   } finally {
     await writer.end();
@@ -160,11 +169,9 @@ async function approve(lab: Lab): Promise<void> {
   const actor = await connect(lab.name, lab.approver);
   try {
     await actor.query(
-      "INSERT INTO platform_schema_approvals " +
-      "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
-      "VALUES($1,$2,$3,$4,$5,'test',clock_timestamp()+interval '20 minutes')",
-      [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id,
-        lab.approver, lab.operatorRole],
+      "SELECT public.platform_schema_approve_operation(" +
+      "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+      [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
     );
   } finally {
     await actor.end();
@@ -218,6 +225,8 @@ beforeAll(async () => {
   labs.push(await createLab("b"));
   labs.push(await createLab("c")); // Dedicated concurrent execution and replay fixture.
   labs.push(await createLab("d")); // Dedicated journal failure/recovery fixture.
+  labs.push(await createLab("e")); // Agent05 identity negative fixture.
+  labs.push(await createLab("f")); // Agent05 two-session revocation fixture.
 }, 120000);
 
 afterAll(async () => {
