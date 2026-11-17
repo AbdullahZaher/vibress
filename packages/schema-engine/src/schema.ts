@@ -113,6 +113,43 @@ function onlyKeys(
   }
 }
 
+
+/**
+ * Parser-boundary snapshot of an ordinary, dense Array. The copy is populated
+ * from own *data descriptors* and never invokes caller-supplied .map(),
+ * iterators or index getters. Array subclasses, altered prototypes, holes,
+ * decorated arrays, symbols and accessor entries all fail closed.
+ *
+ * JavaScript Proxy traps and mutations of global intrinsics cannot be made
+ * side-effect-free in the same process: callers must not pass untrusted
+ * executable objects/proxies from third-party plugins. JSON input is preferred.
+ */
+function plainArray(value: unknown, path: string, min: number, max: number): readonly unknown[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    return fail("UNSAFE_DEFINITION", path, "expected an ordinary Array prototype");
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(value, "length");
+  const length: unknown = descriptor?.value;
+  if (typeof length !== "number" || !Number.isInteger(length) ||
+      length < min || length > max) {
+    return fail("INVALID_DEFINITION", path, "array length is outside permitted bounds");
+  }
+  // A dense ordinary Array must own exactly length numeric entries and 'length'.
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1) {
+    return fail("UNSAFE_DEFINITION", path, "sparse or decorated array");
+  }
+  const copy: unknown[] = new Array<unknown>(length);
+  for (let i = 0; i < length; i++) {
+    const entry = Object.getOwnPropertyDescriptor(value, String(i));
+    if (!entry || !entry.enumerable || !("value" in entry)) {
+      return fail("UNSAFE_DEFINITION", path + "[" + i + "]", "missing, hidden or accessor array entry");
+    }
+    copy[i] = entry.value;
+  }
+  return copy;
+}
+
 const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 const RESERVED = new Set([
   "id", "application_id", "installation_id", "tenant_id", "created_at",
@@ -237,12 +274,11 @@ function normalizeField(value: unknown, path: string): FieldDefinition {
       });
     case "enum": {
       onlyKeys(input, ["id", "type", "required", "values", "default"], path);
-      if (!Array.isArray(input.values) || input.values.length < 1 || input.values.length > 64) {
-        fail("INVALID_DEFINITION", path + ".values", "expected 1-64 enum values");
+      const rawValues = plainArray(input.values, path + ".values", 1, 64);
+      const values: string[] = [];
+      for (let i = 0; i < rawValues.length; i++) {
+        values[i] = identifier(rawValues[i], path + ".values[" + i + "]");
       }
-      const values = input.values.map((entry: unknown, i: number) =>
-        identifier(entry, path + ".values[" + i + "]"),
-      );
       if (new Set(values).size !== values.length) {
         fail("DUPLICATE_IDENTIFIER", path + ".values", "duplicate enum value");
       }
@@ -279,12 +315,11 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
   if (source.ownership !== "tenant" && source.ownership !== "application") {
     fail("INVALID_DEFINITION", "resource.ownership", "expected tenant or application");
   }
-  if (!Array.isArray(source.fields) || source.fields.length < 1 || source.fields.length > 128) {
-    fail("INVALID_DEFINITION", "resource.fields", "expected 1-128 fields");
+  const rawFields = plainArray(source.fields, "resource.fields", 1, 128);
+  const fields: FieldDefinition[] = [];
+  for (let i = 0; i < rawFields.length; i++) {
+    fields[i] = normalizeField(rawFields[i], "resource.fields[" + i + "]");
   }
-  const fields = source.fields.map((field: unknown, i: number) =>
-    normalizeField(field, "resource.fields[" + i + "]"),
-  );
   const ids = new Set<string>();
   for (const field of fields) {
     if (ids.has(field.id)) {
@@ -317,11 +352,11 @@ export function compileResourceSchema(
   onlyKeys(context, ["applicationId", "installationId"], "scope");
   const appId = applicationId(context.applicationId, "scope.applicationId");
   const installId = installationId(context.installationId, "scope.installationId");
-  if (!Array.isArray(resources) || resources.length < 1 || resources.length > 128) {
-    fail("INVALID_DEFINITION", "resources", "expected 1-128 resources");
+  const rawResources = plainArray(resources, "resources", 1, 128);
+  const normalized: ResourceDefinition[] = [];
+  for (let i = 0; i < rawResources.length; i++) {
+    normalized[i] = parseResourceDefinition(rawResources[i]);
   }
-
-  const normalized = resources.map((resource) => parseResourceDefinition(resource));
   const byId = new Map<string, ResourceDefinition>();
   for (const resource of normalized) {
     if (resource.applicationId !== appId || resource.installationId !== installId) {
@@ -372,18 +407,17 @@ export function parseCanonicalSchemaIR(value: unknown): CanonicalSchemaIR {
   }
   const appId = applicationId(source.applicationId, "ir.applicationId");
   const installId = installationId(source.installationId, "ir.installationId");
-  if (!Array.isArray(source.resources)) {
-    fail("INVALID_DEFINITION", "ir.resources", "expected an array");
-  }
-  const resources = source.resources.map((value: unknown, i: number) => {
-    const entry = record(value, "ir.resources[" + i + "]");
+  const rawResources = plainArray(source.resources, "ir.resources", 0, 128);
+  const resources: ResourceDefinition[] = [];
+  for (let i = 0; i < rawResources.length; i++) {
+    const entry = record(rawResources[i], "ir.resources[" + i + "]");
     onlyKeys(entry, ["id", "ownership", "fields"], "ir.resources[" + i + "]");
-    return parseResourceDefinition({
+    resources[i] = parseResourceDefinition({
       ...entry,
       applicationId: appId,
       installationId: installId,
     });
-  });
+  }
   const compiled = compileResourceSchema(resources, {
     applicationId: appId, installationId: installId,
   });

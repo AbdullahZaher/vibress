@@ -176,22 +176,31 @@ function assertSerializable(value: unknown, path: string): void {
     if (visited.has(node)) fail("INVALID_INPUT", item.path, "shared/cyclic objects are not accepted");
     visited.add(node);
     const isArray = Array.isArray(node);
+    // Never accept custom Array prototypes that can override map/iteration
+    // between the preflight and Canonical IR parser.
+    if (isArray && Object.getPrototypeOf(node) !== Array.prototype) {
+      fail("INVALID_INPUT", item.path, "non-standard Array prototype is not accepted");
+    }
     if (!isArray && Object.getPrototypeOf(node) !== Object.prototype &&
       Object.getPrototypeOf(node) !== null) {
       fail("INVALID_INPUT", item.path, "expected plain objects");
     }
-    if (isArray && node.length > 128) {
-      fail("INVALID_INPUT", item.path, "array exceeds budget");
+    const arrayLength: unknown = isArray
+      ? Object.getOwnPropertyDescriptor(node, "length")?.value
+      : null;
+    if (isArray && (typeof arrayLength !== "number" ||
+      !Number.isInteger(arrayLength) || arrayLength > 128)) {
+      fail("INVALID_INPUT", item.path, "invalid or oversized array");
     }
     const keys = Reflect.ownKeys(node);
-    if (isArray && keys.length !== node.length + 1) {
+    if (isArray && keys.length !== (arrayLength as number) + 1) {
       fail("INVALID_INPUT", item.path, "sparse or decorated arrays are not accepted");
     }
     for (const key of keys) {
       if (isArray && key === "length") continue;
       if (typeof key !== "string" || key === "__proto__" ||
         key === "constructor" || key === "prototype" ||
-        (isArray && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= node.length))) {
+        (isArray && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= (arrayLength as number)))) {
         fail("INVALID_INPUT", item.path, "unexpected own property");
       }
       const descriptor = Object.getOwnPropertyDescriptor(node, key);
