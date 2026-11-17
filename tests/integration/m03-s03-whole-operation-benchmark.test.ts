@@ -347,16 +347,17 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   } finally {
     await client.end().catch(()=>undefined);
   }
-  if(connectedAt===start) connectedAt=clock();
+  const disposedAt=clock();
+  if(connectedAt===start) connectedAt=disposedAt;
   const sample:Attempt={case_id:options.caseId, profile:options.profile,
-    outcome,elapsed_ms:Number(elapsed(start,clock()).toFixed(4)),
+    outcome,elapsed_ms:Number(elapsed(start,disposedAt).toFixed(4)),
     connection_ms:Number(elapsed(start,connectedAt).toFixed(4)),
     stage_ms:Object.fromEntries(Object.entries(stages).map(([k,v])=>[k,Number(v.toFixed(4))])),
     stage_calls:calls,sql_state:state,
     timeline_ms:{ connection_start_ms:Number(elapsed(start,connectStart).toFixed(4)),
       connection_acquired_ms:Number(elapsed(start,connectedAt).toFixed(4)),
       result_classified_ms:Number(elapsed(start,classifiedAt).toFixed(4)),
-      client_disposed_ms:Number(elapsed(start,clock()).toFixed(4)),
+      client_disposed_ms:Number(elapsed(start,disposedAt).toFixed(4)),
       stages:timelineStages},
   };
   SAMPLES.push(sample);
@@ -998,4 +999,57 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
     }
     writeExpandedArtifacts();
   },120000);
+  it("validates frozen independent 2408/2517ms candidates against new real PG workloads",async()=>{
+    // Constants are from THREE completed prior independent raw CI artifacts;
+    // they are not dynamically chosen from this validation cohort.
+    // 2408=ceil(max successful profile p99 2298.0869 + max cleanup reserve 109)
+    // 2517=ceil(max full-success 2298.1778 + 2*109)
+    const lab=labs[0]!;
+    for(const [label,budget] of [["A",2408],["B",2517]] as const){
+      for(let i=0;i<8;i++){
+        const s=await supervisor(lab,{profile:"frozen_candidate_"+label+"_normal",
+          caseId:"F"+label+"-N-"+i,testDeadlineMs:budget,
+          preCommitReserveMs:109});
+        expect(s.outcome).toBe("APPLIED");
+        expect(s.elapsed_ms).toBeLessThanOrEqual(budget);
+        await resetForNext(lab);
+      }
+      for(let i=0;i<8;i++){
+        const blocker=await connect(lab.name);
+        let release:Promise<void>|undefined;
+        try{
+          await blocker.query("BEGIN");
+          await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+          const s=await supervisor(lab,{
+            profile:"frozen_candidate_"+label+"_table_lock_500ms",
+            caseId:"F"+label+"-L-"+i,testDeadlineMs:budget,preCommitReserveMs:109,
+            onStage:stage=>{
+              if(stage==="target_access_exclusive_wait"&&!release){
+                release=pause(500).then(async()=>{await blocker.query("ROLLBACK");});
+              }
+            },
+          });
+          await release;
+          expect(s.outcome).toBe("APPLIED");
+          expect(s.elapsed_ms).toBeLessThanOrEqual(budget);
+          await assertPhysical(lab,lab.plan.proposedManifest.digest);
+          await resetForNext(lab);
+        }finally{
+          await blocker.query("ROLLBACK").catch(()=>undefined);
+          await blocker.end().catch(()=>undefined);
+        }
+      }
+      for(let i=0;i<4;i++){
+        const s=await supervisor(lab,{
+          profile:"frozen_candidate_"+label+"_deadline_exhaustion",
+          caseId:"F"+label+"-D-"+i,testDeadlineMs:budget,
+          preCommitReserveMs:109,clientDelayMs:Math.ceil(budget/9),
+        });
+        expect(s.outcome).not.toBe("APPLIED");
+        await noCompletedJournal(lab);
+      }
+    }
+    writeExpandedArtifacts();
+  },120000);
+
 });
