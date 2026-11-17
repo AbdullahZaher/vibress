@@ -111,3 +111,13 @@ into every resource table in the one-app-per-installation topology.
 Focused checks: run the existing package typecheck, lint and test commands above.
 CRM reference and adversarial planning tests live in src/__tests__/planning.test.ts.
 Existing CMS, plugin, theme, worker, tenancy and migration contracts are unchanged.
+
+
+## PostgreSQL 16 identifier policy — AG06-S02-02
+
+- **Unquoted-only identifier contract.** Resource IDs, field IDs, relation targets and enum tokens must be lower-case ASCII `^[a-z][a-z0-9_]{0,62}$`, 1–63 **UTF-8 bytes**, and must not contain double underscores or reserved `pg_` / `vibress_` prefixes. Unicode and mixed-case are intentionally rejected; no case folding, Unicode normalization, silent truncation or automatic quoting occurs.
+- **Two distinct denial policies.** All **78** PostgreSQL 16 `RESERVED_KEYWORD` tokens from the official PostgreSQL parser are rejected (including `order`, `select`, `user`, `group`); previous M03-S01 engine-protected tokens remain rejected even if PostgreSQL itself categorizes them as **non-reserved** (`update`, `index`, `schema`). Other PG16 non-reserved tokens (such as `name` and `role`) stay valid unless explicitly protected.
+- The compiler-owned table hint `vr_<first 45 ASCII ID bytes>_<12 hex SHA-256 prefix>` is 17–61 bytes. Identical compilation produces identical names. Names that share a long prefix receive different hashes; all generated names are checked for collisions **within** the manifest, not against a live catalog.
+- **Compatibility:** M03-S01 Canonical IR v1, M03-S02 Manifest v1, installation/application binding, ordering and SHA-256 digest algorithms are unchanged for existing admissible IDs. Previously accidentally accepted PostgreSQL reserved IDs now fail validation deliberately; a historical document using one of these names needs an explicit owner-reviewed upgrade path, never silent renaming.
+- No SQL rendering or quoting API was introduced. Future M03-S03 executor must authorize and validate fresh input and independently check **live PostgreSQL catalog/namespace** (tables, indexes, constraints, other installations, privileges), consistent 63-byte identifier limits and RLS/ACL; these are **not certified** by the current pure compiler.
+- References: [PostgreSQL 16 keyword classification](https://www.postgresql.org/docs/16/sql-keywords-appendix.html), [PostgreSQL 16 lexical structure](https://www.postgresql.org/docs/16/sql-syntax-lexical.html), and PostgreSQL upstream `src/include/parser/kwlist.h` (`REL_16_STABLE`, `RESERVED_KEYWORD`).
