@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1351,4 +1351,179 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
     }
   },20000);
 
+});
+
+
+describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)", () => {
+  async function shortApproval(lab: Lab, milliseconds: number): Promise<void> {
+    const actor = await connect(lab.name, lab.approver);
+    try {
+      await actor.query(
+        "SELECT public.platform_schema_approve_operation($1,$2,$3," +
+        "clock_timestamp() + $4::int * interval '1 millisecond')",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id, milliseconds],
+      );
+    } finally {
+      await actor.end();
+    }
+  }
+
+  async function isExpired(lab: Lab): Promise<boolean> {
+    const check = await lab.dbAdmin.query<{ expired: boolean }>(
+      "SELECT expires_at <= clock_timestamp() AS expired " +
+      "FROM public.platform_schema_approvals WHERE installation_id = $1",
+      [lab.installationId],
+    );
+    return check.rows[0]?.expired === true;
+  }
+
+  it("EXP-01: five real table-lock waits crossing expiry must DENY without DDL or journal", async () => {
+    for (const key of ["i", "j", "k", "l", "m"] as const) {
+      const lab = await createLab(key);
+      labs.push(lab);
+      const beforeChecksum = await contentChecksum(lab);
+      const blocker = await connect(lab.name);
+      let pending: Promise<unknown> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query(
+          'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+          " IN ACCESS EXCLUSIVE MODE",
+        );
+        // The approval must be valid at the initial authorization read;
+        // the external relation lock forces expiry before the final decision.
+        await shortApproval(lab, 1100);
+        let signal!: () => void;
+        const aboutToLock = new Promise<void>(resolve => { signal = resolve; });
+        const proxy = new Proxy(lab.operator, {
+          get(target, property) {
+            if (property === "query") {
+              return async (sql: string, params?: readonly unknown[]) => {
+                if (sql.startsWith("LOCK TABLE ONLY")) signal();
+                return target.query(sql, params);
+              };
+            }
+            const value: unknown = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+        pending = executeApprovedAdditiveColumn(proxy, {
+          installationId: lab.installationId, planDigest: lab.plan.digest,
+        });
+        await Promise.race([
+          aboutToLock,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(Error("authorization never reached table lock")), 2500)),
+        ]);
+        const initiallyValid = await lab.dbAdmin.query<{ valid: boolean }>(
+          "SELECT approved_at <= clock_timestamp() AND expires_at > clock_timestamp() " +
+          "AND revoked_at IS NULL AS valid FROM public.platform_schema_approvals " +
+          "WHERE installation_id = $1",
+          [lab.installationId],
+        );
+        expect(initiallyValid.rows[0]?.valid, "pre-lock approval must be valid").toBe(true);
+        let waiting = false;
+        for (let n = 0; n < 32; n += 1) {
+          const state = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
+            "SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1",
+            [lab.operator.processID ?? -1],
+          );
+          if (state.rows[0]?.wait_event_type === "Lock") { waiting = true; break; }
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        expect(waiting, "operator must encounter a real PostgreSQL relation lock wait")
+          .toBe(true);
+        let expired = false;
+        for (let n = 0; n < 75; n += 1) {
+          if (await isExpired(lab)) { expired = true; break; }
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
+        expect(expired, "approval must expire during the bounded relation lock wait")
+          .toBe(true);
+      } finally {
+        await blocker.query("ROLLBACK").catch(() => undefined);
+        await blocker.end().catch(() => undefined);
+      }
+      expect(pending).toBeDefined();
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(beforeChecksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id = $1",
+        [lab.installationId],
+      )).rowCount).toBe(0);
+      const state = await lab.dbAdmin.query<{ manifest_digest: string }>(
+        "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(state.rows[0]?.manifest_digest).toBe(lab.current.digest);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    }
+  }, 65000);
+
+  it("EXP-02: expiry after final authorization is nonretroactive under proposed Policy A", async () => {
+    const lab = await createLab("n");
+    labs.push(lab);
+    await shortApproval(lab, 1200);
+    const originalChecksum = await contentChecksum(lab);
+    let signal!: () => void;
+    let release!: () => void;
+    const finalized = new Promise<void>(resolve => { signal = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: readonly unknown[]) => {
+            const result = await target.query(sql, params);
+            if (sql.includes("clock_timestamp() AS checked_at")) {
+              signal();
+              await gate; // Deliberate test-only post-decision pause, not production code.
+            }
+            return result;
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const pending = executeApprovedAdditiveColumn(proxy, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        finalized,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("final authorization point not reached")), 2500)),
+      ]);
+      let expired = false;
+      for (let n = 0; n < 90; n += 1) {
+        if (await isExpired(lab)) { expired = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 16));
+      }
+      expect(expired).toBe(true);
+    } finally {
+      release();
+    }
+    const result = await pending;
+    expect(result.status).toBe("APPLIED");
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+    const journal = await lab.dbAdmin.query<{
+      authorization_policy: string;
+      final_authorized_at: string;
+      completion_after_expiry: boolean;
+    }>(
+      "SELECT catalog_evidence->>'authorizationPolicy' AS authorization_policy, " +
+      "catalog_evidence->>'finalAuthorizedAt' AS final_authorized_at, " +
+      "completed_at > (SELECT expires_at FROM public.platform_schema_approvals " +
+      "WHERE installation_id = $1) AS completion_after_expiry " +
+      "FROM public.platform_schema_migration_journal WHERE installation_id = $1",
+      [lab.installationId],
+    );
+    expect(journal.rows).toHaveLength(1);
+    expect(journal.rows[0]?.authorization_policy).toBe("FINAL_PRE_DDL");
+    expect(journal.rows[0]?.final_authorized_at).toBeTruthy();
+    expect(journal.rows[0]?.completion_after_expiry).toBe(true);
+    await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  }, 15000);
 });
