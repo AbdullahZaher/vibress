@@ -301,7 +301,8 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
           try {
             // Explicit TEST-ONLY admission guard. It does not cancel in-flight
             // backend work and MUST NOT be certified as a production supervisor.
-            if (options.testDeadlineMs !== undefined) {
+            if (options.testDeadlineMs !== undefined &&
+                stage !== "rollback_acknowledged_query") {
               const remaining = options.testDeadlineMs - elapsed(start,clock());
               const minReserve = stage === "commit_acknowledged_query" ||
                 stage === "physical_add_field" ? (options.preCommitReserveMs ?? 0) : 0;
@@ -938,16 +939,36 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
         await resetForNext(lab);
       }
       for(let i=0;i<8;i++){
-        const s=await supervisor(lab,{profile:"candidate_"+candidate+"_table_lock_500ms",
-          caseId:candidate+"-L-"+i,testDeadlineMs:ms,
+        const blocker=await connect(lab.name);
+        let release:Promise<void>|undefined;
+        try{
+          await blocker.query("BEGIN");
+          await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+          const s=await supervisor(lab,{profile:"candidate_"+candidate+"_table_lock_500ms",
+            caseId:candidate+"-L-"+i,testDeadlineMs:ms,
+            preCommitReserveMs:deadlines.reserve,
+            onStage:stage=>{
+              if(stage==="target_access_exclusive_wait"&&!release){
+                release=pause(500).then(async()=>{await blocker.query("ROLLBACK");});
+              }
+            }});
+          await release;
+          expect(s.outcome).toBe("APPLIED");
+          await resetForNext(lab);
+        }finally{
+          await blocker.query("ROLLBACK").catch(()=>undefined);
+          await blocker.end().catch(()=>undefined);
+        }
+      }
+      for(let i=0;i<4;i++){
+        const s=await supervisor(lab,{profile:"candidate_"+candidate+"_deadline_exhaustion",
+          caseId:candidate+"-EXP-"+i,testDeadlineMs:ms,
           preCommitReserveMs:deadlines.reserve,
-          onStage:stage=>{
-            // The admission timer is only a prototype; the 500ms actual
-            // PG relation contention is controlled by a separate experiment.
-            if(stage==="commit_acknowledged_query")return;
-          }});
-        expect(s.outcome).toBe("APPLIED");
-        await resetForNext(lab);
+          clientDelayMs:Math.max(120,Math.ceil(ms/9))});
+        // No DDL/journal even when multiple individually short waits
+        // exhaust a client budget. Runtime error class is NOT certified.
+        expect(s.outcome).not.toBe("APPLIED");
+        await noCompletedJournal(lab);
       }
     }
     writeExpandedArtifacts();
