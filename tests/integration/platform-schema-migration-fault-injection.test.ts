@@ -457,15 +457,33 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
   });
   it("noncooperating ALTER TABLE after advisory fence: no fabricated journal success", async () => {
     const lab = await isolated("o"), checksum = await contentChecksum(lab);
-    await expect(withOperator(lab, /pg_advisory_xact_lock/, "after", async () => {
-      // A second independent session intentionally ignores the advisory lock.
-      await lab.dbAdmin.query("ALTER TABLE public." +
-        lab.dbAdmin.escapeIdentifier(lab.table) + " ADD COLUMN outsider text");
-    })).rejects.toThrow();
+    let appliedWithoutFence = false;
+    try {
+      const result = await withOperator(lab, /pg_advisory_xact_lock/, "after", async () => {
+        // A second independent session intentionally ignores the advisory lock.
+        await lab.dbAdmin.query("ALTER TABLE public." +
+          lab.dbAdmin.escapeIdentifier(lab.table) + " ADD COLUMN outsider text");
+      });
+      appliedWithoutFence = result.status === "APPLIED";
+    } catch {
+      // Rejection is acceptable ONLY if no false journal/registry success.
+    }
     const s = await state(lab);
+    expect(s.checksum).toBe(checksum);
+    const extraColumn = await lab.dbAdmin.query<{ present: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid " +
+      "WHERE c.relname=$1 AND a.attname='outsider' AND a.attnum>0 " +
+      "AND NOT a.attisdropped) AS present", [lab.table]);
+    expect(extraColumn.rows[0]?.present).toBe(true);
+    if (appliedWithoutFence) {
+      // A successful journal is a violation when the physical catalog
+      // contains a column outside the approved manifest.
+      expect(s.journal).toHaveLength(1);
+      expect(s.registry).toBe(lab.plan.proposedManifest.digest);
+      throw Error("AG06_S03_03_FALSE_APPLIED_WITH_CONCURRENT_CATALOG_DRIFT");
+    }
     expect(s.journal).toEqual([]);
     expect(s.registry).toBe(lab.current.digest);
-    expect(s.checksum).toBe(checksum);
     expect(s.column).toBe(false);
   });
   it("transaction lock held by noncooperating DDL session: bounded failure, retry", async () => {
