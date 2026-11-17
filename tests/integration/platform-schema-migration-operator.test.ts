@@ -376,6 +376,243 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     expect(await hasWebsite(lab)).toBe(false);
   });
 
+  it("AG06-S03-02 rejects a PUBLIC-executable SECURITY DEFINER in public", async () => {
+    const lab = labs[0]!;
+    const fname = lab.dbAdmin.escapeIdentifier("s03_pub_" + id);
+    await lab.dbAdmin.query(
+      "CREATE FUNCTION public." + fname + "() RETURNS integer LANGUAGE sql " +
+      "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+    );
+    try {
+      const callable = await lab.runtime.query<{ result: number }>(
+        "SELECT public." + fname + "() AS result",
+      );
+      expect(callable.rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP FUNCTION IF EXISTS public." + fname + "()");
+    }
+  });
+
+  it("AG06-S03-02 detects non-public SECURITY DEFINER via schema USAGE + PUBLIC EXECUTE", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_priv_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("GRANT USAGE ON SCHEMA " + schema + " TO " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+      await lab.dbAdmin.query(
+        "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+      );
+      const reachable = await lab.runtime.query<{ result: number }>(
+        "SELECT " + schema + ".probe() AS result",
+      );
+      expect(reachable.rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+    }
+  });
+
+  it("AG06-S03-02 blocks inherited EXECUTE even when PUBLIC access was revoked", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_inh_" + id);
+    const group = lab.dbAdmin.escapeIdentifier("s03_group_" + id);
+    const runtime = lab.dbAdmin.escapeIdentifier(lab.runtimeRole);
+    await lab.dbAdmin.query("CREATE ROLE " + group + " NOLOGIN");
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("GRANT USAGE ON SCHEMA " + schema + " TO " + runtime);
+      await lab.dbAdmin.query(
+        "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+      );
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + schema +
+        ".probe() FROM PUBLIC");
+      await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + schema +
+        ".probe() TO " + group);
+      await lab.dbAdmin.query("GRANT " + group + " TO " + runtime +
+        " WITH INHERIT TRUE, SET FALSE");
+      expect((await lab.runtime.query<{ result: number }>(
+        "SELECT " + schema + ".probe() AS result",
+      )).rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE " + group + " FROM " + runtime).catch(() => undefined);
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+      await lab.dbAdmin.query("DROP ROLE " + group);
+    }
+  });
+
+  it("AG06-S03-02 rejects SET ROLE reachability even without inherited EXECUTE", async () => {
+    const lab = labs[0]!;
+    const group = lab.dbAdmin.escapeIdentifier("s03_set_" + id);
+    const runtime = lab.dbAdmin.escapeIdentifier(lab.runtimeRole);
+    await lab.dbAdmin.query("CREATE ROLE " + group + " NOLOGIN");
+    try {
+      await lab.dbAdmin.query("GRANT " + group + " TO " + runtime +
+        " WITH INHERIT FALSE, SET TRUE");
+      await lab.runtime.query("SET ROLE " + group);
+      expect((await lab.runtime.query<{ principal: string }>(
+        "SELECT current_user AS principal",
+      )).rows[0]?.principal).toBe("s03_set_" + id);
+      await lab.runtime.query("RESET ROLE");
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.runtime.query("RESET ROLE").catch(() => undefined);
+      await lab.dbAdmin.query("REVOKE " + group + " FROM " + runtime);
+      await lab.dbAdmin.query("DROP ROLE " + group);
+    }
+  });
+
+  it("rejects runtime or operator schema CREATE outside public", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_create_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      for (const role of [lab.runtimeRole, lab.operatorRole]) {
+        await lab.dbAdmin.query("GRANT CREATE ON SCHEMA " + schema + " TO " +
+          lab.dbAdmin.escapeIdentifier(role));
+        await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await lab.dbAdmin.query("REVOKE CREATE ON SCHEMA " + schema + " FROM " +
+          lab.dbAdmin.escapeIdentifier(role));
+      }
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema);
+    }
+  });
+
+  it("operator owner SQL grammar is narrower than the credential's actual ALTER/DROP ability", async () => {
+    const lab = labs[0]!;
+    const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const original = await contentChecksum(lab);
+    await lab.operator.query("ALTER TABLE " + qualified + " ADD COLUMN owner_probe text");
+    expect((await lab.dbAdmin.query<{ present: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_attribute a " +
+      "JOIN pg_class c ON c.oid=a.attrelid WHERE c.relname=$1 " +
+      "AND a.attname='owner_probe' AND NOT a.attisdropped) AS present",
+      [lab.table],
+    )).rows[0]?.present).toBe(true);
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+    } finally {
+      await lab.operator.query("ALTER TABLE " + qualified + " DROP COLUMN owner_probe");
+    }
+    expect(await contentChecksum(lab)).toBe(original);
+  });
+
+  it("AG06-S03-03 rejects unexpected CHECK constraints and noninternal triggers", async () => {
+    const lab = labs[0]!;
+    const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const fn = lab.dbAdmin.escapeIdentifier("s03_trigger_" + id);
+    await lab.dbAdmin.query("ALTER TABLE " + qualified +
+      " ADD CONSTRAINT s03_extra_check CHECK (char_length(name) >= 0)");
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + qualified +
+        " DROP CONSTRAINT s03_extra_check");
+    }
+    await lab.dbAdmin.query("CREATE FUNCTION public." + fn +
+      "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog " +
+      "AS 'BEGIN RETURN NEW; END'");
+    try {
+      await lab.dbAdmin.query("CREATE TRIGGER s03_unexpected BEFORE INSERT ON " +
+        qualified + " FOR EACH ROW EXECUTE FUNCTION public." + fn + "()");
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP TRIGGER IF EXISTS s03_unexpected ON " + qualified);
+      await lab.dbAdmin.query("DROP FUNCTION IF EXISTS public." + fn + "()");
+    }
+  });
+
+
+  it("rejects unexpected target owner, extra schema owner and unmodeled index", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+    const schema = lab.dbAdmin.escapeIdentifier("s03_owned_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("ALTER SCHEMA " + schema + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+    }
+    const index = lab.dbAdmin.escapeIdentifier("s03_idx_" + id);
+    await lab.dbAdmin.query("CREATE INDEX " + index + " ON " + table + ' ("name")');
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP INDEX public." + index);
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+  });
+
+  it("rejects missing or changed physical columns after non-destructive rename", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN name TO renamed_name");
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN renamed_name TO name");
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+  });
+
+  it("AG06-S03-03 rejects a noncooperating DDL commit before table lock acquisition", async () => {
+    const lab = labs[0]!;
+    const sqlTable = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query("ALTER TABLE " + sqlTable + " ADD COLUMN rogue text");
+      const pending = run(lab);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await lab.dbAdmin.query("COMMIT");
+      await expect(pending).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK").catch(() => undefined);
+      await lab.dbAdmin.query("ALTER TABLE " + sqlTable + " DROP COLUMN IF EXISTS rogue");
+    }
+  }, 15000);
+
+  it("AG06-S03-03 enforces the 2-second ACCESS EXCLUSIVE lock timeout without altering schema", async () => {
+    const lab = labs[0]!;
+    const sqlTable = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query("LOCK TABLE ONLY " + sqlTable + " IN ACCESS EXCLUSIVE MODE");
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK");
+    }
+    expect(await contentChecksum(lab)).toBe(checksum);
+  }, 12000);
+
   it("rejects overprivileged migration identities despite valid plan approval", async () => {
     const lab = labs[0]!;
     const role = lab.dbAdmin.escapeIdentifier(lab.operatorRole);
@@ -523,6 +760,74 @@ describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
     const replay = await run(lab);
     expect(replay.status).toBe("ALREADY_APPLIED");
   }, 30000);
+  it("runtime cannot write approvals or registry, and cannot use another installation", async () => {
+    const lab = labs[0]!;
+    for (const command of [
+      "UPDATE public.platform_schema_registry SET updated_at=clock_timestamp()",
+      "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp()",
+      "INSERT INTO public.platform_schema_approvals " +
+        "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+        "VALUES ('x','x','x','x','x','test',clock_timestamp())",
+    ]) {
+      await expect(lab.runtime.query(command)).rejects.toMatchObject({ code: "42501" });
+    }
+    await expect(connect(labs[1]!.name, lab.operatorRole)).rejects.toThrow();
+  });
+
+  it("AG06-S03-03 denies a noncooperating ALTER while the operator already owns the target lock", async () => {
+    // Fixture D has a completed journal from the prior recovery test, so the
+    // operator is performing verified ALREADY_APPLIED replay, not second DDL.
+    const lab = labs[3]!;
+    let signalLock!: () => void;
+    let releaseLock!: () => void;
+    const locked = new Promise<void>(resolve => { signalLock = resolve; });
+    const released = new Promise<void>(resolve => { releaseLock = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, prop) {
+        if (prop === "query") {
+          return async (sql: string, params?: readonly unknown[]) => {
+            const response = await target.query(sql, params);
+            if (sql.startsWith("LOCK TABLE ONLY")) {
+              signalLock();
+              await released;
+            }
+            return response;
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as Client;
+    const pending = executeApprovedAdditiveColumn(proxy, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        locked,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("operator never acquired target lock")), 5000)),
+      ]);
+      await lab.dbAdmin.query("SET lock_timeout = '250ms'");
+      await expect(lab.dbAdmin.query(
+        'ALTER TABLE "public".' + lab.dbAdmin.escapeIdentifier(lab.table) +
+        " ADD COLUMN noncooperating text",
+      )).rejects.toMatchObject({ code: "55P03" });
+    } finally {
+      releaseLock();
+      await lab.dbAdmin.query("RESET lock_timeout").catch(() => undefined);
+    }
+    const result = await pending;
+    expect(result.status).toBe("ALREADY_APPLIED");
+    expect(await hasWebsite(lab)).toBe(true);
+    const unexpected = await lab.dbAdmin.query<{ present: boolean }>(
+      "SELECT EXISTS (SELECT 1 FROM pg_attribute a " +
+      "JOIN pg_class c ON c.oid=a.attrelid " +
+      "WHERE c.relname=$1 AND a.attname='noncooperating' AND NOT a.attisdropped) AS present",
+      [lab.table],
+    );
+    expect(unexpected.rows[0]?.present).toBe(false);
+  }, 15000);
+
 });
 
 describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG16)", () => {

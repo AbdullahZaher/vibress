@@ -1,4 +1,5 @@
 import type { ClientBase } from "pg";
+import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
   renderTrustedAdditiveColumn,
@@ -157,15 +158,15 @@ async function assertAuthority(
   if (!runtime.rows[0] || runtime.rows[0].rolsuper || runtime.rows[0].rolbypassrls) {
     deny("UNAUTHORIZED", "runtime role can bypass database policy");
   }
-  const unsafeFunctions = await db.query<{ count: number }>(
-    "SELECT count(*)::int AS count FROM pg_proc p " +
-    "JOIN pg_namespace n ON n.oid = p.pronamespace " +
-    "WHERE n.nspname = 'public' AND p.prosecdef " +
-    "AND has_function_privilege($1, p.oid, 'EXECUTE')",
-    [registry.runtime_role],
+  const effective = await inspectSchemaOperatorEffectivePrivileges(
+    db, registry.runtime_role, identity.current_user,
   );
-  if ((unsafeFunctions.rows[0]?.count ?? 0) !== 0) {
-    deny("UNAUTHORIZED", "runtime can execute a SECURITY DEFINER function");
+  if (effective.reachableSecurityDefinerCount !== 0 ||
+    effective.roleMembershipCount !== 0 ||
+    effective.unsafeSchemaAuthorityCount !== 0 ||
+    effective.runtimeRelationOwnershipCount !== 0 ||
+    effective.unsafeDatabaseOwnershipCount !== 0) {
+    deny("UNAUTHORIZED", "runtime/operator effective PostgreSQL authority is unsafe");
   }
   const relation = await db.query<RelationRow>(
     "SELECT c.oid, pg_get_userbyid(c.relowner) AS owner_name, " +
@@ -197,6 +198,7 @@ async function assertAuthority(
   const unexpected = await db.query<{ count: number }>(
     "SELECT (SELECT count(*) FROM pg_constraint WHERE conrelid = $1::oid) + " +
     "(SELECT count(*) FROM pg_trigger WHERE tgrelid = $1::oid AND NOT tgisinternal) + " +
+    "(SELECT count(*) FROM pg_index WHERE indrelid = $1::oid) + " +
     "(SELECT count(*) FROM pg_inherits WHERE inhrelid = $1::oid) AS count",
     [found.oid],
   );
@@ -388,6 +390,20 @@ export async function executeApprovedAdditiveColumn(
     const resource = current.resources.find(item => item.tableName === ddl.tableName);
     const next = plan.proposedManifest.resources.find(item => item.tableName === ddl.tableName);
     if (!resource || !next) deny("UNSUPPORTED", "resource mapping is unavailable");
+    // AG06-S03-03: advisory locks only synchronize cooperating operators.
+    // ACCESS EXCLUSIVE is the same table-level mode taken by ADD COLUMN and
+    // excludes noncooperating ALTER/CREATE TRIGGER/DROP until COMMIT/ROLLBACK.
+    // Bound waiting via SET LOCAL lock_timeout above. This happens BEFORE the
+    // first authoritative table/catalog inspection; READ COMMITTED rechecks
+    // after any DDL that committed while this lock was being acquired.
+    if (resource.tableName !== ddl.tableName ||
+      !/^vr_[a-z0-9_]+_[a-f0-9]{12}$/.test(ddl.tableName)) {
+      deny("CATALOG_DRIFT", "compiled target table identity is invalid");
+    }
+    await db.query(
+      'LOCK TABLE ONLY "public".' + db.escapeIdentifier(ddl.tableName) +
+      " IN ACCESS EXCLUSIVE MODE",
+    );
     const oid = await assertAuthority(db, identity, registry, resource);
     const journal = (await db.query<JournalRow>(
       "SELECT plan_digest, previous_digest, new_digest, operator_role, status " +
