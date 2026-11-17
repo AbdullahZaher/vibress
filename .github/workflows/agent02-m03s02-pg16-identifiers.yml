@@ -44,7 +44,7 @@ jobs:
           version=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SHOW server_version_num")
           echo "PostgreSQL server_version_num=$version"
           test "$version" -ge 160016 && test "$version" -lt 170000
-          actual=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT word || ':' || catcode FROM pg_get_keywords() WHERE word IN ('group','index','name','order','schema','select','update','user') ORDER BY word")
+          actual=$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT word || ':' || catcode::text FROM pg_get_keywords() WHERE word IN ('group','index','name','order','schema','select','update','user') ORDER BY word")
           expected=$(printf '%s\n' 'group:R' 'index:U' 'name:U' 'order:R' 'schema:U' 'select:R' 'update:U' 'user:R')
           echo "$actual"
           test "$actual" = "$expected"
