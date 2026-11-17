@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import { startDisposableTransportProxy } from "../../scripts/platform/m03-s03-benchmark/transport-latency-proxy";
 import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -1052,4 +1053,401 @@ describe("M03-S03 Agent04 additional real-PG16 latency and fault profiles",()=>{
     writeExpandedArtifacts();
   },120000);
 
+});
+
+
+/**
+ * AG02 + AG04 combined-fault D1 engineering laboratory.
+ * This is intentionally NOT the deployed CLI supervisor or an approved M.
+ * All real PostgreSQL sessions are disposed of by the inherited strict hooks.
+ */
+const COMBINED_D1_MS = 2517;
+type D1Class = "ON_TIME_APPLIED" | "COMMITTED_LATE" | "INDETERMINATE" | "NOT_APPLIED";
+const combinedMeta: Record<string, unknown> = {};
+const d1Pg06Proof: Array<Record<string, unknown>> = [];
+const combinedEvents: Array<Record<string, unknown>> = [];
+const combinedClock = () => process.hrtime.bigint();
+
+function classifyD1TestOnly(status: string, t13: number | null, t14: number,
+  definitiveAck: boolean): {classification: D1Class; deadline_breached: boolean} {
+  const onTime = definitiveAck && t13 !== null &&
+    t13 <= COMBINED_D1_MS && t14 <= COMBINED_D1_MS;
+  if (status === "APPLIED" && onTime) {
+    return {classification:"ON_TIME_APPLIED",deadline_breached:false};
+  }
+  if (status === "APPLIED" && definitiveAck) {
+    return {classification:"COMMITTED_LATE",deadline_breached:true};
+  }
+  if (status === "INDETERMINATE" || !definitiveAck) {
+    return {classification:"INDETERMINATE",deadline_breached:true};
+  }
+  return {classification:"NOT_APPLIED",deadline_breached:t14>COMBINED_D1_MS};
+}
+function combinedCandidateMarginGate(remainingMs:number, hypotheticalMarginMs:number){
+  if (!Number.isFinite(remainingMs) || remainingMs<=0) return false;
+  if (!Number.isSafeInteger(hypotheticalMarginMs) || hypotheticalMarginMs<1) return false;
+  return remainingMs > hypotheticalMarginMs;
+}
+function addedTimeline(sample:Attempt){
+  const commit=sample.timeline_ms?.stages["commit_acknowledged_query"]?.[0];
+  const t14=sample.timeline_ms?.result_classified_ms ?? null;
+  return {t0_ms:0, t12_ms:commit?.start_ms ?? null,t13_ms:
+    commit && sample.outcome==="APPLIED" ? commit.end_ms : null,
+    t14_ms:t14,t15_ms:sample.timeline_ms?.client_disposed_ms ?? null,
+    remaining_precommit_ms:commit ? Number((COMBINED_D1_MS-commit.start_ms).toFixed(4)):null,
+    commit_ack_ms:commit ? Number((commit.end_ms-commit.start_ms).toFixed(4)):null,
+    d1_compliant:sample.outcome==="APPLIED" && commit!==undefined &&
+      commit.end_ms<=COMBINED_D1_MS && t14!==null && t14<=COMBINED_D1_MS};
+}
+function recordCombined(sample:Attempt, other:Record<string,unknown>={}){
+  const stage=addedTimeline(sample);
+  const row={case_id:sample.case_id,profile:sample.profile,outcome:sample.outcome,
+    elapsed_ms:sample.elapsed_ms,sql_state:sample.sql_state,...stage,...other};
+  combinedEvents.push(row);
+  return row;
+}
+function busyStall(ms:number){
+  const end=combinedClock()+BigInt(ms)*1_000_000n;
+  while(combinedClock()<end) { /* deliberate test-only event-loop pressure */ }
+}
+function writeCombinedEvidence(){
+  const basedir="artifacts/m03-s03-combined-fault";
+  mkdirSync(basedir,{recursive:true});
+  const rows=combinedEvents.map(row=>JSON.stringify(row)).join("\n")+"\n";
+  writeFileSync(path.join(basedir,"combined-fault-raw-attempts.jsonl"),rows,{mode:0o600});
+  const profiles=[...new Set(combinedEvents.map(x=>String(x.profile)))];
+  const groups=Object.fromEntries(profiles.map(profile=>{
+    const xs=combinedEvents.filter(x=>x.profile===profile);
+    const toN=(key:string)=>xs.map(x=>x[key]).filter((v):v is number=>
+      typeof v==="number" && Number.isFinite(v));
+    return [profile,{n:xs.length,outcomes:Object.fromEntries(
+      [...new Set(xs.map(x=>String(x.outcome)))].map(outcome=>
+        [outcome,xs.filter(x=>x.outcome===outcome).length])),
+      elapsed:statistics(toN("elapsed_ms")),
+      t12_precommit:statistics(toN("t12_ms")),
+      ack:statistics(toN("commit_ack_ms")),
+      t14:statistics(toN("t14_ms")),
+      remaining_at_commit:statistics(toN("remaining_precommit_ms")),
+      d1_late_applied:xs.filter(x=>x.outcome==="APPLIED"&&x.d1_compliant!==true).length,
+      d1_compliant_applied:xs.filter(x=>x.d1_compliant===true).length}];
+  }));
+  const summary={schema:"m03-s03-d1-combined-fault/v1",source_sha:sourceHead,
+    checkout_sha:checkout,operator_blob_expected:"31b1e862f594434944fec516f768265baf794525",
+    node_version:process.version,postgres_version:pgVersion,
+    owner_policy:"FINAL_PRE_DDL",owner_d1_ms:COMBINED_D1_MS,
+    execution:"restricted disposable PG16 only; no integrated global supervisor",
+    measurement:"actual loopback byte-delay proxy plus real lock/commit and test-only adapters",
+    combined_cases:combinedEvents.length,
+    groups,uncertainty:"descriptive; no supported D1 hard bound, production SLA or human approval",
+    d1pg06:d1Pg06Proof,events:combinedMeta,
+    generated_at:new Date().toISOString()};
+  writeFileSync(path.join(basedir,"combined-fault-summary.json"),
+    JSON.stringify(summary,null,2)+"\n",{mode:0o600});
+  const candidates={schema:"m03-s03-commit-admission-candidates/v1",
+    owner_d1_ms:COMBINED_D1_MS,
+    measured_max_commit_ack:Math.max(0,...combinedEvents.map(x=>Number(x.commit_ack_ms ?? 0))),
+    candidate_margin_ms:null,
+    decision:"NOT DETERMINABLE until complete combined fault/SLO/recovery statistical evidence",
+    historic_109ms_is_not_ack_margin:true,
+    approval_status:"NOT APPROVED",owner_d1_unchanged:true};
+  writeFileSync(path.join(basedir,"commit-admission-candidates.json"),
+    JSON.stringify(candidates,null,2)+"\n",{mode:0o600});
+  writeFileSync(path.join(basedir,"cancellation-recovery-timings.json"),
+    JSON.stringify({schema:"m03-s03-combined-cancel/v1",source_sha:sourceHead,
+      cases:combinedEvents.filter(x=>String(x.profile).includes("cancel")||
+        String(x.profile).includes("lost_ack")||
+        String(x.profile).includes("kill")),
+      note:"Signals alone do not prove ROLLBACK; fresh admin reconciliation required",
+    },null,2)+"\n",{mode:0o600});
+  writeFileSync(path.join(basedir,"d1-pg06-regression.json"),
+    JSON.stringify({schema:"m03-s03-d1-pg06/v1",source_sha:sourceHead,
+      owner_d1_ms:COMBINED_D1_MS,
+      cases:d1Pg06Proof, production_supervisor_integrated:false},null,2)+"\n",{mode:0o600});
+  console.log("AG02_AG04_COMBINED_FAULT_RESULTS",JSON.stringify({
+    count:combinedEvents.length,profiles:Object.fromEntries(profiles.map(p=>
+      [p,groups[p]?.n])),late_applied:Object.values(groups).reduce((a,g)=>a+(g?.d1_late_applied??0),0),
+    pg06:d1Pg06Proof.length,policy:"NOT CERTIFIED"}));
+}
+afterAll(()=>{writeCombinedEvidence();},120000);
+
+describe("AG02-AG04 D1 combined-fault independent disposable PG16",()=>{
+  it("samples physical TCP delays 5/15/30ms combined with +60/+200ms COMMIT ACK delay",async()=>{
+    const lab=labs[0]!;
+    for(const upstream of [5,15,30] as const){
+      for(const additionalAck of [60,200] as const){
+        const count=upstream===30?12:6;
+        const p=await startDisposableTransportProxy({
+          upstreamMs:upstream,downstreamMs:upstream,commitAckExtraMs:additionalAck});
+        try{
+          for(let i=0;i<count;i++){
+            const sample=await supervisor(lab,{profile:
+              "combined_tcp_"+upstream+"_ack_"+additionalAck,
+              caseId:"C-TCP-"+upstream+"-"+additionalAck+"-"+i,connectionPort:p.port});
+            expect(sample.outcome).toBe("APPLIED"); // original source has no D1 timing guard
+            recordCombined(sample,{transport_one_way_ms:upstream,
+              commit_extra_ms:additionalAck});
+            await assertPhysical(lab,lab.plan.proposedManifest.digest);
+            await resetForNext(lab);
+          }
+        }finally{await p.close();}
+      }
+    }
+  },300000);
+
+  it("samples actual PG ACCESS EXCLUSIVE waits of 500/900ms under 30ms TCP byte delay",async()=>{
+    const lab=labs[0]!;
+    const p=await startDisposableTransportProxy({upstreamMs:30,downstreamMs:30});
+    try{
+      for(const waitMs of [500,900] as const){
+        for(let i=0;i<5;i++){
+          const blocker=await connect(lab.name);
+          let release:Promise<void>|undefined;
+          try{
+            await blocker.query("BEGIN");
+            await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+            const sample=await supervisor(lab,{profile:"combined_tcp_30_lock_"+waitMs,
+              caseId:"C-LOCK-"+waitMs+"-"+i,connectionPort:p.port,onStage:stage=>{
+                if(stage==="target_access_exclusive_wait"&&!release){
+                  release=pause(waitMs).then(()=>blocker.query("ROLLBACK")).then(()=>undefined);
+                }
+              }});
+            await release;
+            expect(sample.outcome).toBe("APPLIED");
+            recordCombined(sample,{transport_one_way_ms:30,table_wait_ms:waitMs});
+            await assertPhysical(lab,lab.plan.proposedManifest.digest);
+            await resetForNext(lab);
+          }finally{
+            await blocker.query("ROLLBACK").catch(()=>undefined);
+            await blocker.end().catch(()=>undefined);
+          }
+        }
+      }
+    }finally{await p.close();}
+  },180000);
+
+  it("samples 30ms TCP proxy plus three actual sequential 250ms PostgreSQL locks",async()=>{
+    const lab=labs[0]!;
+    const p=await startDisposableTransportProxy({upstreamMs:30,downstreamMs:30});
+    try{
+      for(let i=0;i<4;i++){
+        const install=await connect(lab.name),registry=await connect(lab.name),
+          relation=await connect(lab.name);
+        const releases:Promise<unknown>[]=[];
+        try{
+          await install.query("BEGIN");
+          await install.query(
+            "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'),hashtext($1::text))",
+            [lab.installationId]);
+          await registry.query("BEGIN");
+          await registry.query(
+            "SELECT 1 FROM platform_schema_registry WHERE installation_id=$1 FOR UPDATE",
+            [lab.installationId]);
+          await relation.query("BEGIN");
+          await relation.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+          const gates:Record<string,Client>={installation_advisory_wait:install,
+            registry_row_lock:registry,target_access_exclusive_wait:relation};
+          const released=new Set<string>();
+          const sample=await supervisor(lab,{profile:"combined_tcp_30_three_locks",
+            caseId:"C-MULTI-"+i,connectionPort:p.port,onStage:stage=>{
+              const gate=gates[stage];
+              if(gate&&!released.has(stage)){
+                released.add(stage);
+                releases.push(pause(250).then(()=>gate.query("ROLLBACK")));
+              }
+            }});
+          await Promise.all(releases);
+          expect(released.size).toBe(3);
+          expect(sample.outcome).toBe("APPLIED");
+          recordCombined(sample,{transport_one_way_ms:30,observed_real_lock_stages:3});
+          await assertPhysical(lab,lab.plan.proposedManifest.digest);
+          await resetForNext(lab);
+        }finally{
+          for(const db of [install,registry,relation]){
+            await db.query("ROLLBACK").catch(()=>undefined);
+            await db.end().catch(()=>undefined);
+          }
+        }
+      }
+    }finally{await p.close();}
+  },150000);
+
+  it("proves actual backend 57014 cancellation and physical ROLLBACK under 30ms transport + table contention",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    const p=await startDisposableTransportProxy({upstreamMs:30,downstreamMs:30});
+    try{
+      for(let i=0;i<5;i++){
+        const blocker=await connect(lab.name);
+        let cancelJob:Promise<void>|undefined;
+        let cancelInitiated=0n,cancelAcknowledged=0n;
+        let acknowledged=false;
+        try{
+          await blocker.query("BEGIN");
+          await blocker.query("LOCK TABLE ONLY "+targetTable(lab)+" IN ACCESS SHARE MODE");
+          let pid=0,backendStart="";
+          const sample=await supervisor(lab,{profile:"combined_tcp_30_cancel_lock",
+            caseId:"C-CAN-"+i,connectionPort:p.port,
+            onConnected:async client=>{
+              pid=(await client.query<{pid:number}>("SELECT pg_backend_pid() AS pid"))
+                .rows[0]!.pid;
+              const ident=await lab.dbAdmin.query<{start:string}>(
+                "SELECT backend_start::text AS start FROM pg_stat_activity "+
+                "WHERE pid=$1 AND usename=$2 AND datname=current_database()",
+                [pid,lab.operatorRole]);
+              expect(ident.rows).toHaveLength(1);
+              backendStart=ident.rows[0]!.start;
+            },
+            onStage:stage=>{
+              if(stage==="target_access_exclusive_wait"&&!cancelJob){
+                cancelJob=(async()=>{
+                  await pause(180);
+                  cancelInitiated=clock();
+                  const signal=await lab.dbAdmin.query<{ok:boolean}>(
+                    "SELECT pg_cancel_backend(pid) AS ok FROM pg_stat_activity "+
+                    "WHERE pid=$1 AND usename=$2 AND datname=current_database() "+
+                    "AND backend_start::text=$3",
+                    [pid,lab.operatorRole,backendStart]);
+                  cancelAcknowledged=clock();
+                  acknowledged=signal.rows[0]?.ok===true;
+                })();
+              }
+            }});
+          await cancelJob;
+          expect(acknowledged).toBe(true);
+          await blocker.query("ROLLBACK");
+          expect(sample.sql_state).toBe("57014");
+          expect(sample.outcome).toBe("UNAUTHORIZED"); // old generic classification
+          await noCompletedJournal(lab);
+          expect(await contentChecksum(lab)).toBe(checksum);
+          const fence=await lab.dbAdmin.query<{count:number}>(
+            "SELECT count(*)::int AS count FROM pg_stat_activity WHERE pid=$1",
+            [pid]);
+          expect(fence.rows[0]?.count).toBe(0);
+          const recon=await independentlyReconcile(lab);
+          expect(recon.state).toBe("ROLLED_BACK");
+          recordCombined(sample,{control_signal_accepted:true,
+            cancel_signal_elapsed_ms:Number(elapsed(cancelInitiated,cancelAcknowledged).toFixed(4)),
+            original_backend_gone:true,physical_rollback_verified:true,
+            fresh_reconcile_ms:recon.latency_ms});
+        }finally{
+          await blocker.query("ROLLBACK").catch(()=>undefined);
+          await blocker.end().catch(()=>undefined);
+        }
+      }
+    }finally{await p.close();}
+  },120000);
+
+  it("combines 30ms TCP byte-delay and real protocol-level lost COMMIT ACK",async()=>{
+    const lab=labs[0]!;
+    const checksum=await contentChecksum(lab);
+    for(let i=0;i<4;i++){
+      const dropped=await startCommitAckDropProxy();
+      const delayed=await startDisposableTransportProxy({
+        upstreamMs:30,downstreamMs:30,upstreamPort:dropped.port});
+      try{
+        const sample=await supervisor(lab,{profile:"combined_tcp_30_lost_ack",
+          caseId:"C-LOSS-"+i,connectionPort:delayed.port});
+        await Promise.race([dropped.serverCommitObserved,
+          pause(6000).then(()=>{throw Error("COMMIT_WIRE_CONFIRM_NOT_SEEN")})]);
+        expect(sample.outcome).toBe("INDETERMINATE");
+        const recon=await independentlyReconcile(lab);
+        expect(recon.state).toBe("COMMITTED");
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        expect(await contentChecksum(lab)).toBe(checksum);
+        recordCombined(sample,{physical_server_commit_seen:true,
+          ack_received_by_client:false,reconciled:"COMMITTED",
+          fresh_reconcile_ms:recon.latency_ms});
+        await resetForNext(lab);
+      }finally{await delayed.close();await dropped.close();}
+    }
+  },120000);
+
+  it("measures deliberate event-loop stall + physical 30ms TCP proxy + 200ms ACK delay",async()=>{
+    const lab=labs[0]!;
+    const p=await startDisposableTransportProxy({upstreamMs:30,downstreamMs:30,
+      commitAckExtraMs:200});
+    const lag=monitorEventLoopDelay({resolution:5});lag.enable();
+    try{
+      for(let i=0;i<5;i++){
+        let stalled=false;
+        const sample=await supervisor(lab,{profile:"combined_tcp30_ack200_eventloop25",
+          caseId:"C-LAG-"+i,connectionPort:p.port,onStage:stage=>{
+            if(stage==="commit_acknowledged_query"&&!stalled){
+              stalled=true;busyStall(25);
+            }
+          }});
+        expect(stalled).toBe(true);
+        expect(sample.outcome).toBe("APPLIED");
+        recordCombined(sample,{deliberate_scheduler_stall_ms:25});
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        await resetForNext(lab);
+      }
+    }finally{
+      lag.disable();
+      combinedMeta.event_loop_lag_p99_ms=Number((lag.percentile(99)/1e6).toFixed(4));
+      combinedMeta.event_loop_lag_max_ms=Number((lag.max/1e6).toFixed(4));
+      await p.close();
+    }
+  },120000);
+
+  it("reproduces D1-PG06 physical COMMIT then delayed wrapper result; test-only classifier contains the breach",async()=>{
+    const lab=labs[0]!;
+    for(let i=0;i<2;i++){
+      const started=clock();
+      const client=await connect(lab.name,lab.operatorRole);
+      client.on("error",()=>undefined);
+      let sawRealAck=false,t13:number|null=null;
+      try{
+        const held=new Proxy(client,{
+          get(target,key){
+            if(key!=="query"){
+              const value:unknown=Reflect.get(target,key,target);
+              return typeof value==="function" ? value.bind(target):value;
+            }
+            return async (sql:string,args?:unknown[])=>{
+              const result=args===undefined?await target.query(sql):await target.query(sql,args);
+              if(sql==="COMMIT"){
+                sawRealAck=true;
+                t13=Number(elapsed(started,clock()).toFixed(4));
+                await pause(2600); // TEST-ONLY delay AFTER physical PG COMMIT ACK
+              }
+              return result;
+            };
+          },
+        }) as ClientBase;
+        const original=await executeApprovedAdditiveColumn(held,{
+          installationId:lab.installationId,planDigest:lab.plan.digest});
+        const t14=Number(elapsed(started,clock()).toFixed(4));
+        expect(original.status).toBe("APPLIED"); // reproducible UNGUARDED source defect
+        expect(sawRealAck).toBe(true);
+        expect(t13).not.toBeNull();
+        expect(t14).toBeGreaterThan(COMBINED_D1_MS);
+        const contained=classifyD1TestOnly(original.status,t13,t14,true);
+        expect(contained).toEqual({classification:"COMMITTED_LATE",
+          deadline_breached:true});
+        const unknown=classifyD1TestOnly("INDETERMINATE",null,t14,false);
+        expect(unknown.classification).toBe("INDETERMINATE");
+        await assertPhysical(lab,lab.plan.proposedManifest.digest);
+        const recon=await independentlyReconcile(lab);
+        expect(recon.state).toBe("COMMITTED");
+        d1Pg06Proof.push({case_id:"C-PG06-"+i,original_outcome:original.status,
+          test_only_classification:contained.classification,
+          definite_t13_ms:t13,t14_ms:t14,owner_d1_ms:COMBINED_D1_MS,
+          physical_commit:true,reconciled:recon.state,
+          source_defect_reproduced:true});
+        await resetForNext(lab);
+      }finally{await client.end().catch(()=>undefined);}
+    }
+  },15000);
+
+  it("validates synthetic exact-margin admission equality semantics without claiming approved M",()=>{
+    const TEST_ONLY_M=300; // HYPOTHETICAL; NOT derived/approved COMMIT margin
+    for(const [remaining,allow] of [[TEST_ONLY_M-1,false],
+      [TEST_ONLY_M,false],[TEST_ONLY_M+1,true],
+      [-1,false],[0,false],[1,false]] as const){
+      expect(combinedCandidateMarginGate(remaining,TEST_ONLY_M)).toBe(allow);
+    }
+    combinedMeta.synthetic_margin_boundary_only_ms=TEST_ONLY_M;
+    combinedMeta.synthetic_margin_approved=false;
+  });
 });
