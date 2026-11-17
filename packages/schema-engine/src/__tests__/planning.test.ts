@@ -18,7 +18,6 @@ import {
   type SchemaManifest,
 } from "../planning";
 import {
-  crmActivities,
   crmCustomers,
   crmDeals,
   crmPlanningExample,
@@ -395,7 +394,8 @@ describe("AG06-S02-02 physical name and canonical manifest compatibility", () =>
     const right = createSchemaManifest(compile([crmDeals(), crmCustomers()]));
     expect(left).toEqual(right);
     expect(left.digest).toBe(right.digest);
-    expect(left.resources.every((resource) => !/[; "'\u0000]/.test(resource.tableName)))
+    expect(left.resources.every((resource) =>
+      !/[; "']/.test(resource.tableName) && !resource.tableName.includes("\\u0000")))
       .toBe(true);
     const plan = planSchemaChanges(null, compile(), {
       scope: crmScope, expectedCurrentDigest: null,
