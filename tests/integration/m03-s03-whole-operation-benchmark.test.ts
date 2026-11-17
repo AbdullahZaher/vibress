@@ -289,7 +289,7 @@ async function supervisor(lab: Lab, options: SupervisorOptions): Promise<Attempt
   client.on("error", () => undefined);
   let connectedAt = start;
   const connectStart = clock();
-  let classifiedAt = start;
+  let classifiedAt: bigint;
   try {
     await client.connect();
     connectedAt = clock();
