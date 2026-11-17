@@ -49,7 +49,66 @@ GitHub Actions artifact **m03-s03-whole-operation-benchmark** (30-day retention)
 
 CI must reject incomplete normal/contended sample matrices; it must never mark a run PASS if the test, checksum, row integrity or fixture cleanup fails. No percentile is accepted from a run whose required case count has not been completed.
 
-**Executed results:** PENDING exact CI evidence. Do not copy values from earlier correctness fixtures. This report is to be amended with raw artifact ID, measured numbers, sample counts and any anomalies after evidence retrieval.
+**Executed results: AVAILABLE for these two disposable local benchmark runs only.** Source and checkout SHAs, raw sample counts and aggregate percentiles are verified in Section 4A below. This is not proof of production topology or of an approved execution budget.
+
+## 4A. Measured evidence — two complete executable runs
+
+**The original pre-fix CI #44139179569 FAILED at ESLint before measurement. It is NOT benchmark evidence.** The corrected workflow then executed two complete independent GitHub Actions jobs using the same test-only operator instrumentation and isolated PostgreSQL 16:
+
+| Provenance | Run A | Run B (current report's measured baseline) |
+| --- | --- | --- |
+| GitHub Actions | [#44139586272](https://github.com/AbdullahZaher/vibress/actions/runs/44139586272) | [#44139725010](https://github.com/AbdullahZaher/vibress/actions/runs/44139725010) |
+| PR head at that run | c991368a33d4294068587fc2451c4b9d8487d959 | 712a2a842e97b76d7d6c486919ed5a3c0c2aaa67 |
+| **Actual checked-out synthetic merge** | **0cb905230638e889b964aeb2a0487a2cac3e9c87** | **c0f6e070b0bf5e1b609523f18ab009438c7e8db3** |
+| PG16 server_version_num | 160016 (PG 16.16) | 160016 (PG 16.16) |
+| Node version | v24.22.3 | v24.22.3 |
+| Workflow verdict | SUCCESS, fixture/volume cleanup PASS | SUCCESS, fixture/volume cleanup PASS |
+| Raw artifact (30-day retention) | [Artifact #14352569979](https://github.com/AbdullahZaher/vibress/actions/runs/44139586272/artifacts/14352569979) | [Artifact #14354815507](https://github.com/AbdullahZaher/vibress/actions/runs/44139725010/artifacts/14354815507) |
+| **Unique raw attempt records** | **1,127** | **1,127** |
+
+Each run contains 1,000 normal + 100 independently blocked target-table operations + 12 simulated client-delay + 12 larger seeded-table + 3 warmup samples. **1,000 normal real migrations succeeded in each run; 90/100 blocked ones succeeded, 10/100 were denied after actual PG lock_timeout (SQLSTATE 55P03) with no completed journal.** All 12 synthetic 4ms-per-SQL delay and 12 seeded-table operations succeeded, plus warmups.
+
+### End-to-end operation distributions — milliseconds
+
+Results include connection acquisition, the real S03 Operator preflight, approval/lock/DDL/registry/journal/COMMIT acknowledgment and connection disposal. Percentiles calculated separately for completed successful operations versus ALL attempts, with nearest-linear rank interpolation.
+
+| Workload / cohort | n | p50 | p95 | p99 | Maximum |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| A normal, successful | 1,000 | 34.7442 | 38.5988 | 43.9495 | 53.4477 |
+| B normal, successful | 1,000 | 18.1891 | 21.1542 | 24.0058 | 42.0199 |
+| A contention, ALL outcomes | 100 | 159.0336 | 2017.6953 | 2018.0935 | 2018.2339 |
+| B contention, ALL outcomes | 100 | 144.7109 | 2011.3843 | 2012.1077 | 2012.3336 |
+| A contention, successful only | 90 | — | — | 941.2738 | — |
+| B contention, successful only | 90 | 143.9907 | 924.2816 | 925.1673 | 925.5559 |
+| A 4ms simulated per-SQL client delay | 12 | — | — | 179.2080 | — |
+| B 4ms simulated per-SQL client delay | 12 | 167.4167 | 171.4980 | 171.4994 | 171.4998 |
+| A 10,002-row fixture | 12 | — | — | 40.3197 | — |
+| B 10,002-row fixture | 12 | 21.4595 | 22.9364 | 23.0236 | 23.0454 |
+
+**Critical variance:** run A normal p99 is **43.9495 ms** and run B p99 is **24.0058 ms**, despite nominally identical disposable topology, with no actual region-crossing RTT or TLS. This between-run performance variation alone disqualifies treating a single localhost p99 as a stable production upper bound. The repeated operation is on one hot relation with repeated test-only DDL resets; neither 1,000-count result proves production p99.
+
+### Stage distributions — B run, milliseconds
+
+| Monitored phase | p50 | p95 | p99 | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Connection acquisition (normal) | 2.8663 | 3.2097 | 3.7891 | 9.9600 |
+| Target ACCESS EXCLUSIVE (uncontended normal) | 0.1172 | 0.1932 | 0.2364 | 3.3131 |
+| Effective privilege check (normal) | 4.4581 | 5.3429 | 5.8715 | 10.1080 |
+| Catalog inspection (normal) | 2.6270 | 2.9935 | 3.2290 | 9.0029 |
+| ADD_FIELD statement (normal) | 0.3961 | 0.5788 | 0.6158 | 0.7650 |
+| COMMIT query through ACK (normal) | 0.2135 | 0.2876 | 0.3372 | 0.5465 |
+| Target ACCESS EXCLUSIVE (100 forced contention cases) | 120.9509 | 2000.7565 | 2000.7921 | 2000.9303 |
+| Connection acquisition (100 forced contention cases) | 3.7054 | 4.0310 | 5.0932 | 7.6790 |
+
+The raw JSON also includes initial approval, approval advisory lock, registry FOR UPDATE, post-DDL CAS, journal insertion, rollback and full elapsed. In **10 forced lock-timeout cases**, rollback query durations were **0.231–0.498 ms** in B; this is only a measured round-trip for ROLLBACK, **not** the guarantee that an interrupted transaction physically completed rollback. No deadlock SQLSTATE 40P01 or COMMIT uncertainty occurred in these measurement runs; those negative behaviors have separate correctness tests.
+
+### Error classification and operational follow-up
+
+- **10 / 100 contention attempts** intentionally held an external relation lock for 2200 ms after a deterministic entry barrier. PostgreSQL issued SQLSTATE **55P03** at the existing 2000ms lock cap. These attempts ended in **UNAUTHORIZED**, the current operator's generic external error class, with verified absent completed journal. **Do not mislabel these as invalid actor authorizations in production metrics**; Agent 02/03 must independently decide whether a distinct LOCK_TIMEOUT classification is required, without widening approvals.
+- **0 / 1000** normal attempts timed out in either run; **0 / 100** forced contention trials produced a deadlock; no INDETERMINATE was observed. These zeros apply only to the exact controlled workloads, not real outage/COMMIT paths.
+- No end-to-end cancellation watchdog, recovery classification latency or late/lost COMMIT ACK is measured. Previous on-wire failure tests prove safe recovery behavior only for their separate test scope. DNS/TLS, production connection pool, unapproved/expired approvals during benchmark, external noncooperating ALTER, concurrent different plans and slow catalog under realistic data still lack latency distributions.
+
+**Raw proof location:** GitHub CI artifact raw-attempts.jsonl (1,127 sanitized records per run), summary.json and provenance.json. Each was fetched and independently re-counted; 55P03 counts and stage distributions were cross-checked against raw records, not copied from a single summary line.
 
 ## 5. Deadline sizing and enforceability
 
@@ -63,7 +122,7 @@ A client-side monotonic budget can classify a response and prevent **new** opera
 
 Agent 02: confirm PostgreSQL instrumentation, actual dataset/topology, query/lock behavior, safe server timeout caps and cancellation semantics. Agent 05: expiry/revocation linearization under any future watchdog. Agent 03: ensure test-only instrumentation cannot be invoked by runtime, no SQL/secrets in CI artifacts. Agent 06: rerun on frozen exact SHA, review percentiles and unsigned release claims. Agent 01: owner SLO and final policy/number/signature only after sufficient evidence.
 
-**Decision (2026-11-17): Benchmark PENDING; Representative Environment LIMITED; Normal/Contention/COMMIT latency INCOMPLETE; Deadline NOT DETERMINABLE; Policy/deadline approval PENDING; Merge NOT AUTHORIZED; Production NO-GO.**
+**Decision (2026-11-17): Benchmark PASS in the disposable lab (2 complete runs); Representative Environment LIMITED; Normal latency AVAILABLE; Lock contention AVAILABLE in controlled artificial profiles; COMMIT ACK latency AVAILABLE only on loopback; cancellation and unknown-COMMIT evidence INCOMPLETE; Deadline NOT DETERMINABLE; Policy/deadline approval PENDING; AG06-S03-08 OPEN; Merge NOT AUTHORIZED; Production NO-GO.**
 
 ## Primary source review, 2026-11-17
 
