@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r";
+type Key = "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -471,4 +471,136 @@ describe("M03-S03 Agent 04 deterministic disposable PostgreSQL failures", () => 
     expect((await run(lab)).status).toBe("APPLIED");
     await assertCommitted(lab, checksum);
   }, 30000);
+});
+
+describe("M03-S03 Agent 04 process crash and competing plans", () => {
+  it("actual OS SIGKILL during an open DDL transaction rolls back on disconnect", async () => {
+    const lab = await isolated("q"), checksum = await contentChecksum(lab);
+    const nodeArgs = ["--import", "tsx", "scripts/platform/m03-s03-fault/crash-operator.ts"];
+    const child = spawn(process.execPath, nodeArgs, {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        M03_S03_DISPOSABLE_CONFIRM: "I_CONFIRM_DISPOSABLE",
+        M03_S03_FAULT_DATABASE_URL: urlFor(lab.name, lab.operatorRole),
+        M03_S03_FAULT_INSTALLATION: lab.installationId,
+        M03_S03_FAULT_PLAN_DIGEST: lab.plan.digest,
+      },
+      stdio: ["ignore", "ignore", "ignore", "ipc"],
+    });
+    let killed = false;
+    try {
+      const signal = await Promise.race([
+        once(child, "message").then(args => args[0] as { phase?: string }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("FAULT_CHILD_BARRIER_TIMEOUT")), 10000)),
+      ]);
+      expect(signal.phase).toBe("AFTER_PHYSICAL_DDL");
+      const exit = once(child, "exit");
+      expect(child.kill("SIGKILL")).toBe(true);
+      killed = true;
+      const [code, name] = await exit;
+      expect(code).toBeNull();
+      expect(name).toBe("SIGKILL");
+    } finally {
+      if (!killed && !child.killed) child.kill("SIGKILL");
+    }
+    // New superuser connection examines the catalog, not the dead process's
+    // uncommitted in-memory view.
+    await assertUncommitted(lab, checksum);
+    expect((await run(lab)).status).toBe("APPLIED");
+    await assertCommitted(lab, checksum);
+  }, 30000);
+
+  it("two independently approved different plans cannot both commit", async () => {
+    const lab = await isolated("r"), checksum = await contentChecksum(lab);
+    const scope = { applicationId, installationId: lab.installationId };
+    const alternative = compileResourceSchema([{
+      ...scope, id: "catalog", ownership: "application" as const,
+      fields: [
+        { id: "name", type: "text" as const, required: true },
+        { id: "telephone", type: "text" as const, required: false },
+      ],
+    }], scope);
+    const otherPlan = planSchemaChanges(lab.current, alternative,
+      { scope, expectedCurrentDigest: lab.current.digest });
+    expect(otherPlan.digest).not.toBe(lab.plan.digest);
+    const author = await connect(lab.name, lab.author);
+    const approver = await connect(lab.name, lab.approver);
+    try {
+      await author.query("INSERT INTO platform_schema_plans " +
+        "(installation_id,plan_digest,expected_manifest,plan,author) " +
+        "VALUES ($1,$2,$3,$4,$5)", [
+        lab.installationId, otherPlan.digest,
+        JSON.stringify(lab.current), JSON.stringify(otherPlan), lab.author,
+      ]);
+      await approver.query("INSERT INTO platform_schema_approvals " +
+        "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+        "VALUES($1,$2,$3,$4,$5,'test',clock_timestamp()+interval '20 minutes')", [
+        lab.installationId, otherPlan.digest, otherPlan.operations[0]?.id,
+        lab.approver, lab.operatorRole,
+      ]);
+    } finally {
+      await author.end(); await approver.end();
+    }
+    const second = await connect(lab.name, lab.operatorRole);
+    try {
+      const outcomes = await Promise.allSettled([
+        executeApprovedAdditiveColumn(lab.operator, request(lab)),
+        executeApprovedAdditiveColumn(second, {
+          installationId: lab.installationId, planDigest: otherPlan.digest,
+        }),
+      ]);
+      const successes = outcomes.filter(x =>
+        x.status === "fulfilled" && x.value.status === "APPLIED");
+      expect(successes, "exactly one migration may commit").toHaveLength(1);
+      const rows = (await lab.dbAdmin.query<{
+        operation_id: string; plan_digest: string; status: string; new_digest: string;
+      }>("SELECT operation_id,plan_digest,status,new_digest FROM platform_schema_migration_journal")).rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.status).toBe("COMPLETED");
+      const resulting = (await lab.dbAdmin.query<{ manifest_digest: string }>(
+        "SELECT manifest_digest FROM platform_schema_registry")).rows[0]!.manifest_digest;
+      expect(resulting).toBe(rows[0]!.new_digest);
+      expect([lab.plan.proposedManifest.digest, otherPlan.proposedManifest.digest])
+        .toContain(resulting);
+      const fields = await lab.dbAdmin.query<{ attname: string }>(
+        "SELECT a.attname FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid " +
+        "WHERE c.relname=$1 AND a.attnum>0 AND NOT a.attisdropped " +
+        "AND a.attname IN ('website','telephone') ORDER BY a.attname",
+        [lab.table]);
+      expect(fields.rows).toHaveLength(1);
+      expect(fields.rows[0]?.attname).toBe(
+        resulting === lab.plan.proposedManifest.digest ? "website" : "telephone");
+      expect(await contentChecksum(lab)).toBe(checksum);
+    } finally { await second.end().catch(() => undefined); }
+  }, 30000);
+
+  it("journal INSERT succeeds but injected pre-COMMIT failure rolls back registry and DDL", async () => {
+    const lab = await isolated("s"), checksum = await contentChecksum(lab);
+    await expect(withOperator(lab,
+      /^INSERT INTO public\.platform_schema_migration_journal/, "after",
+      async () => { throw Error("TEST_POST_JOURNAL_FAULT"); })).rejects.toThrow();
+    await assertUncommitted(lab, checksum);
+    expect((await run(lab)).status).toBe("APPLIED");
+    await assertCommitted(lab, checksum);
+  });
+
+  it("conflicting committed journal cannot masquerade as successful retry", async () => {
+    const lab = await isolated("t"), checksum = await contentChecksum(lab);
+    expect((await run(lab)).status).toBe("APPLIED");
+    await lab.dbAdmin.query("UPDATE platform_schema_migration_journal " +
+      "SET new_digest=$1 WHERE installation_id=$2",
+      ["a".repeat(64), lab.installationId]);
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "JOURNAL_CONFLICT" });
+      expect(await contentChecksum(lab)).toBe(checksum);
+    } finally {
+      await lab.dbAdmin.query("UPDATE platform_schema_migration_journal " +
+        "SET new_digest=$1 WHERE installation_id=$2",
+        [lab.plan.proposedManifest.digest, lab.installationId]);
+    }
+    expect((await run(lab)).status).toBe("ALREADY_APPLIED");
+    await assertCommitted(lab, checksum);
+  });
 });
