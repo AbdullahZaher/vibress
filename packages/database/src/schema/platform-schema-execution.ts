@@ -9,7 +9,7 @@ export const platformSchemaRegistry = pgTable("platform_schema_registry", {
   databaseName: text("database_name").notNull(),
   operatorRole: text("operator_role").notNull(),
   runtimeRole: text("runtime_role").notNull(),
-  manifest: jsonb("manifest").notNull(),
+  manifest: text("manifest").notNull(),
   manifestDigest: text("manifest_digest").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => ({
@@ -20,8 +20,8 @@ export const platformSchemaRegistry = pgTable("platform_schema_registry", {
 export const platformSchemaPlans = pgTable("platform_schema_plans", {
   installationId: text("installation_id").notNull().references(() => platformSchemaRegistry.installationId, { onDelete: "restrict" }),
   planDigest: text("plan_digest").notNull(),
-  expectedManifest: jsonb("expected_manifest").notNull(),
-  plan: jsonb("plan").notNull(),
+  expectedManifest: text("expected_manifest").notNull(),
+  plan: text("plan").notNull(),
   author: text("author").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => ({

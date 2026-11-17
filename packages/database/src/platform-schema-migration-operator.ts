@@ -3,7 +3,6 @@ import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
   renderTrustedAdditiveColumn,
   type ManifestResource,
-  type SchemaManifest,
 } from "@vibress/schema-engine";
 
 /**
@@ -43,13 +42,13 @@ interface RegistryRow {
   database_name: string;
   operator_role: string;
   runtime_role: string;
-  manifest: unknown;
+  manifest: string;
   manifest_digest: string;
 }
 interface PlanRow {
   plan_digest: string;
-  expected_manifest: unknown;
-  plan: unknown;
+  expected_manifest: string;
+  plan: string;
   author: string;
 }
 interface ApprovalRow {
@@ -308,7 +307,7 @@ export async function executeApprovedAdditiveColumn(
       installationId: asInstallationId(registry.installation_id),
     };
     const validated = renderTrustedAdditiveColumn(
-      planRecord.plan, planRecord.expected_manifest, scope);
+      JSON.parse(planRecord.plan), JSON.parse(planRecord.expected_manifest), scope);
     const { plan, current, ddl } = validated;
     if (plan.digest !== request.planDigest || plan.operations.length !== 1 ||
       current.applicationId !== scope.applicationId ||
@@ -362,7 +361,7 @@ export async function executeApprovedAdditiveColumn(
       };
     }
     if (registry.manifest_digest !== current.digest ||
-      JSON.stringify(registry.manifest) !== JSON.stringify(current)) {
+      registry.manifest !== JSON.stringify(current)) {
       deny("STALE_PLAN", "accepted manifest differs from trusted plan precondition");
     }
     await verifyCatalog(db, oid, resource);
@@ -372,7 +371,7 @@ export async function executeApprovedAdditiveColumn(
     const afterRows = await rowCount(db, ddl.tableName);
     if (beforeRows !== afterRows) deny("CATALOG_DRIFT", "additive operation changed row count");
     const update = await db.query(
-      "UPDATE public.platform_schema_registry SET manifest = $1::jsonb, " +
+      "UPDATE public.platform_schema_registry SET manifest = $1, " +
       "manifest_digest = $2, updated_at = clock_timestamp() " +
       "WHERE installation_id = $3 AND manifest_digest = $4",
       [JSON.stringify(plan.proposedManifest), plan.proposedManifest.digest,

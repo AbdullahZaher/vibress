@@ -6,15 +6,15 @@ CREATE TABLE "platform_schema_registry" (
   database_name text NOT NULL,
   operator_role text NOT NULL,
   runtime_role text NOT NULL,
-  manifest jsonb NOT NULL,
+  manifest text NOT NULL,
   manifest_digest text NOT NULL CHECK (manifest_digest ~ '^[0-9a-f]{64}$'),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE "platform_schema_plans" (
   installation_id text NOT NULL REFERENCES platform_schema_registry(installation_id) ON DELETE RESTRICT,
   plan_digest text NOT NULL CHECK (plan_digest ~ '^[0-9a-f]{64}$'),
-  expected_manifest jsonb NOT NULL,
-  plan jsonb NOT NULL,
+  expected_manifest text NOT NULL,
+  plan text NOT NULL,
   author text NOT NULL CHECK (length(btrim(author)) > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (installation_id, plan_digest)
