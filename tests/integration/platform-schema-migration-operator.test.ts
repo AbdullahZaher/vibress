@@ -11,6 +11,10 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../../packages/database/src/platform-schema-migration-operator";
+import {
+  startExperimentalBudget,
+  executeExperimentalBudgetedAdditiveColumn,
+} from "../../packages/database/src/platform-schema-operation-budget-experiment";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
 const BASE_URL = process.env.DATABASE_URL ??
@@ -19,7 +23,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1526,4 +1530,235 @@ describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)
     expect(journal.rows[0]?.completion_after_expiry).toBe(true);
     await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   }, 15000);
+});
+
+
+/**
+ * EXPERIMENTAL only, never an approved whole-operation deadline contract.
+ * Durations below are fault-fixture thresholds, NOT owner-approved budgets.
+ * All cancellation uses a separately authenticated lab admin, restricted by
+ * actual backend pid + initial backend_start + database + exact operator role.
+ */
+describe("EXP-BUDGET M03-S03 unapproved PostgreSQL cumulative deadline experiment", () => {
+  async function cancelExactBackend(lab: Lab): Promise<() => Promise<boolean>> {
+    const initial = await lab.dbAdmin.query<{ backend_start: Date }>(
+      "SELECT backend_start FROM pg_stat_activity " +
+      "WHERE pid=$1 AND usename=$2 AND datname=current_database()",
+      [lab.operator.processID ?? -1, lab.operatorRole],
+    );
+    expect(initial.rows).toHaveLength(1);
+    const backendStart = initial.rows[0]!.backend_start;
+    return async () => {
+      const result = await lab.dbAdmin.query<{ canceled: boolean }>(
+        "SELECT pg_cancel_backend(pid) AS canceled FROM pg_stat_activity " +
+        "WHERE pid=$1 AND usename=$2 AND datname=current_database() " +
+        "AND backend_start=$3::timestamptz",
+        [lab.operator.processID ?? -1, lab.operatorRole, backendStart],
+      );
+      return result.rows[0]?.canceled === true;
+    };
+  }
+
+  it("EXP-BUDGET-01: start before new DB connect; already exhausted budget issues no DDL", async () => {
+    const lab = await createLab("o");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const budget = startExperimentalBudget(1); // TEST FIXTURE only
+    const client = await connect(lab.name, lab.operatorRole);
+    try {
+      // Explicit monotonic expiry even if loopback connect happened unusually fast.
+      await lab.dbAdmin.query("SELECT pg_sleep(0.02)");
+      await expect(executeExperimentalBudgetedAdditiveColumn(
+        client, { installationId: lab.installationId, planDigest: lab.plan.digest },
+        budget, { cancelVerifiedActiveQuery: async () => false },
+      )).rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal",
+      )).rowCount).toBe(0);
+    } finally {
+      await client.end().catch(() => undefined);
+    }
+  }, 10000);
+
+  it("EXP-BUDGET-02: cumulative budget expires in REAL installation advisory lock wait and cancels backend", async () => {
+    const lab = await createLab("p");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'), hashtext($1::text))",
+        [lab.installationId],
+      );
+      const control = await cancelExactBackend(lab);
+      const budget = startExperimentalBudget(600); // TEST FIXTURE only
+      const execution = executeExperimentalBudgetedAdditiveColumn(
+        lab.operator, { installationId: lab.installationId, planDigest: lab.plan.digest },
+        budget, { cancelVerifiedActiveQuery: control },
+      );
+      let waiting = false;
+      for (let n = 0; n < 60; n += 1) {
+        const row = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (row.rows[0]?.wait_event_type === "Lock") { waiting = true; break; }
+        await lab.dbAdmin.query("SELECT pg_sleep(0.015)");
+      }
+      expect(waiting, "actual advisory lock wait must be observed").toBe(true);
+      await expect(execution).rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal",
+    )).rowCount).toBe(0);
+  }, 12000);
+
+  it("EXP-BUDGET-03: expiry while waiting ACCESS EXCLUSIVE cancels and rolls back", async () => {
+    const lab = await createLab("q");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const control = await cancelExactBackend(lab);
+      const budget = startExperimentalBudget(700); // TEST FIXTURE only
+      const execution = executeExperimentalBudgetedAdditiveColumn(
+        lab.operator, { installationId: lab.installationId, planDigest: lab.plan.digest },
+        budget, { cancelVerifiedActiveQuery: control },
+      );
+      let waiting = false;
+      for (let n = 0; n < 65; n += 1) {
+        const state = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (state.rows[0]?.wait_event_type === "Lock") { waiting = true; break; }
+        await lab.dbAdmin.query("SELECT pg_sleep(0.015)");
+      }
+      expect(waiting, "ACCESS EXCLUSIVE wait must be real").toBe(true);
+      await expect(execution).rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal",
+    )).rowCount).toBe(0);
+  }, 12000);
+
+  it("EXP-BUDGET-04: COMMIT acknowledgement after budget is never falsely APPLIED", async () => {
+    const lab = await createLab("r");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let reached!: () => void;
+    let release!: () => void;
+    const committed = new Promise<void>(resolve => { reached = resolve; });
+    const heldAck = new Promise<void>(resolve => { release = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property !== "query") {
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (sql: string, params?: unknown[]) => {
+          const response = params ? await target.query(sql, params) : await target.query(sql);
+          if (sql === "COMMIT") {
+            reached();
+            await heldAck; // Test-only delayed ACK AFTER actual server COMMIT.
+          }
+          return response;
+        };
+      },
+    });
+    const budget = startExperimentalBudget(1200); // TEST FIXTURE only
+    const pending = executeExperimentalBudgetedAdditiveColumn(
+      proxy, { installationId: lab.installationId, planDigest: lab.plan.digest },
+      budget, { cancelVerifiedActiveQuery: async () => false },
+    );
+    try {
+      await Promise.race([
+        committed,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("COMMIT was not reached before fixture budget")), 850)),
+      ]);
+      await lab.dbAdmin.query("SELECT pg_sleep(1.3)");
+    } finally {
+      release();
+    }
+    await expect(pending).rejects.toMatchObject({ code: "INDETERMINATE" });
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal",
+    )).rowCount).toBe(1);
+    // Fresh approved attempt performs a verification, not duplicate ALTER.
+    expect((await run(lab)).status).toBe("ALREADY_APPLIED");
+  }, 18000);
+
+  it("EXP-BUDGET-05: post-DDL/pre-COMMIT expiration must roll back journal and physical column", async () => {
+    const lab = await createLab("s");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let reached!: () => void;
+    let release!: () => void;
+    const journalWritten = new Promise<void>(resolve => { reached = resolve; });
+    const heldJournalResponse = new Promise<void>(resolve => { release = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property !== "query") {
+          const value: unknown = Reflect.get(target, property, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (sql: string, params?: unknown[]) => {
+          const response = params ? await target.query(sql, params) : await target.query(sql);
+          if (sql.startsWith("INSERT INTO public.platform_schema_migration_journal")) {
+            reached();
+            await heldJournalResponse; // Server INSERT executed, not COMMIT.
+          }
+          return response;
+        };
+      },
+    });
+    const control = await cancelExactBackend(lab);
+    const budget = startExperimentalBudget(1200); // TEST FIXTURE only
+    const pending = executeExperimentalBudgetedAdditiveColumn(
+      proxy, { installationId: lab.installationId, planDigest: lab.plan.digest },
+      budget, { cancelVerifiedActiveQuery: control },
+    );
+    try {
+      await Promise.race([
+        journalWritten,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("journal not reached before fixture budget")), 850)),
+      ]);
+      await lab.dbAdmin.query("SELECT pg_sleep(1.3)");
+    } finally {
+      release();
+    }
+    await expect(pending).rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal",
+    )).rowCount).toBe(0);
+  }, 18000);
 });
