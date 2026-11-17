@@ -383,7 +383,8 @@ function groups() {
 }
 function writeArtifacts() {
   mkdirSync(OUT_DIR,{recursive:true});
-  const raw=SAMPLES.map(s=>JSON.stringify({...s,checkout_sha:checkout,\n    node_version:process.version,postgres_version:pgVersion,attempts_total:SAMPLES.length})).join("\n")+"\n";
+  const raw=SAMPLES.map(s=>JSON.stringify({...s,checkout_sha:checkout,
+    node_version:process.version,postgres_version:pgVersion,attempts_total:SAMPLES.length})).join("\n")+"\n";
   writeFileSync(path.join(OUT_DIR,"raw-attempts.jsonl"),raw,{mode:0o600});
   const summary={
     schema:"m03-s03-whole-operation-benchmark/v1",checkout_sha:checkout,
