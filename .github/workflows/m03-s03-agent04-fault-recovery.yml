@@ -1,0 +1,70 @@
+name: M03-S03 Agent04 Disposable PG16 Fault Recovery
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "tests/integration/platform-schema-migration-fault-injection.test.ts"
+      - "scripts/platform/m03-s03-fault/**"
+      - ".github/workflows/m03-s03-agent04-fault-recovery.yml"
+      - "packages/database/src/platform-schema-migration-operator.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fault-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+    steps:
+      - name: Checkout exact PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - name: Setup patched Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+      - name: Refuse stale Node and record exact SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -v)" = "v24.22.3"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -p artifacts
+          printf '{"checkout_sha":"%s","pr_head_sha":"%s","node_version":"%s","postgres_required":"16","scope":"disposable"}\n' "$(git rev-parse HEAD)" "$PR_HEAD" "$(node -v)" > artifacts/m03-s03-agent04-provenance.json
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      - name: Install workspace
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+      - name: Start disposable PostgreSQL 16 (loopback only)
+        run: docker compose -f compose.dev.yml up -d --wait postgres
+      - name: Typecheck and focused migration fault/recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @vibress/database typecheck
+          pnpm exec eslint tests/integration/platform-schema-migration-fault-injection.test.ts scripts/platform/m03-s03-fault/*.ts
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts
+      - name: Teardown disposable PostgreSQL
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          docker compose -f compose.dev.yml down --volumes --remove-orphans
+          test -z "$(docker ps -q --filter name=vibress_s03_)"
+      - name: Upload sanitized provenance
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: m03-s03-agent04-provenance
+          path: artifacts/m03-s03-agent04-provenance.json
+          if-no-files-found: error
+          retention-days: 14
