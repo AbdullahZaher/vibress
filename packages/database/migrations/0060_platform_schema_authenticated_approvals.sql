@@ -34,6 +34,52 @@ CREATE TABLE public.platform_schema_revocation_audit (
   PRIMARY KEY (installation_id, plan_digest, operation_id)
 );
 
+-- The actor roster itself must not be replaceable via an accidental GRANT.
+-- Only the *authenticated owner login* (or a separately governed superuser)
+-- may provision, suspend, or change credentials/identity mappings.
+CREATE FUNCTION public.platform_schema_trusted_actor_registry_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp AS $
+DECLARE
+  table_owner text;
+  is_super boolean;
+  acceptable_login boolean;
+BEGIN
+  SELECT pg_catalog.pg_get_userbyid(c.relowner) INTO table_owner
+    FROM pg_catalog.pg_class c
+    WHERE c.oid = 'public.platform_schema_trusted_actors'::pg_catalog.regclass;
+  SELECT rolsuper INTO is_super
+    FROM pg_catalog.pg_roles WHERE rolname = session_user;
+  IF session_user IS DISTINCT FROM table_owner AND NOT COALESCE(is_super,false) THEN
+    RAISE EXCEPTION 'only trusted DB provisioning may change actor identities'
+      USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  SELECT (rolcanlogin AND NOT (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication))
+    INTO acceptable_login
+    FROM pg_catalog.pg_roles WHERE rolname = NEW.login_name;
+  IF NOT COALESCE(acceptable_login,false) THEN
+    RAISE EXCEPTION 'actor must be individually authenticated unprivileged LOGIN'
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $;
+
+CREATE TRIGGER platform_schema_trusted_actor_provisioning
+  BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors
+  FOR EACH ROW EXECUTE FUNCTION public.platform_schema_trusted_actor_registry_guard();
+
+CREATE FUNCTION public.platform_schema_revocation_audit_immutability_guard()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp AS $
+BEGIN
+  RAISE EXCEPTION 'revocation audit is append-only' USING ERRCODE = '42501';
+END $;
+
+CREATE TRIGGER platform_schema_revocation_audit_immutable
+  BEFORE UPDATE OR DELETE ON public.platform_schema_revocation_audit
+  FOR EACH ROW EXECUTE FUNCTION public.platform_schema_revocation_audit_immutability_guard();
+
 -- PostgreSQL session_user is the authenticated LOGIN (not a human for shared DSNs).
 -- Trigger checks are deliberately present even if a bad grant permits direct INSERT.
 CREATE FUNCTION public.platform_schema_plan_provenance_guard()
@@ -235,6 +281,8 @@ END $$;
 REVOKE ALL ON FUNCTION public.platform_schema_submit_plan(text,text,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_revoke_operation(text,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_schema_trusted_actor_registry_guard() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_schema_revocation_audit_immutability_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_plan_provenance_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_approval_provenance_guard() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_schema_revocation_audit_guard() FROM PUBLIC;
