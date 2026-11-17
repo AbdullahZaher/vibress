@@ -137,6 +137,17 @@ DECLARE
   scope record;
   is_super boolean;
 BEGIN
+  -- Always acquire the registry row lock BEFORE the approval advisory lock
+  -- on insertion, including when a bad GRANT enables direct table INSERT.
+  -- The operator already holds registry FOR UPDATE before its advisory lock.
+  -- Without this order, direct INSERT could invert those locks and deadlock.
+  IF TG_OP = 'INSERT' THEN
+    PERFORM 1 FROM public.platform_schema_registry
+      WHERE installation_id = NEW.installation_id FOR SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'missing approval registry' USING ERRCODE = '42501';
+    END IF;
+  END IF;
   -- The operator acquires this same xact-scoped key BEFORE it reads approval.
   -- Every UPDATE/DELETE, including ordinary direct DML, must pass this guard.
   -- Runtime/operator never need UPDATE privileges on approval rows.
