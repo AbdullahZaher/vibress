@@ -54,6 +54,25 @@ jobs:
           pnpm --filter @vibress/plugin-sdk build
       - name: Boot disposable PostgreSQL 16 (not shared or production)
         run: docker compose -f compose.dev.yml up -d --wait postgres
+      - name: Verify PostgreSQL patch version and immutable Docker image ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          pg_ver="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          test "$pg_ver" = "160016"
+          container_id="$(docker compose -f compose.dev.yml ps -q postgres)"
+          image_id="$(docker inspect -f '{{.Image}}' "$container_id")"
+          PG_NUMBER="$pg_ver" PG_IMAGE="$image_id" python - <<'PY'
+          import os,json
+          from pathlib import Path
+          path=Path("artifacts/m03-s03-deadline/provenance.json")
+          d=json.loads(path.read_text())
+          d["postgres_server_version_num"]=os.environ["PG_NUMBER"]
+          d["postgres_docker_image_id"]=os.environ["PG_IMAGE"]
+          path.write_text(json.dumps(d,sort_keys=True,indent=2)+"\n")
+          print("M03_S03_PG16_VERSION",d["postgres_server_version_num"])
+          print("M03_S03_DISPOSABLE_IMAGE_SHA",d["postgres_docker_image_id"])
+          PY
       - name: Typecheck, lint and benchmark real operator
         shell: bash
         run: |
