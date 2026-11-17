@@ -124,9 +124,6 @@ async function createLab(key: Key): Promise<Lab> {
   }
   await dbAdmin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON " + qualified +
     " TO " + dbAdmin.escapeIdentifier(runtimeRole));
-  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
-    "public.platform_schema_lock_approval(text,text,text) TO " +
-    dbAdmin.escapeIdentifier(operatorRole));
   await dbAdmin.query("GRANT SELECT ON platform_installations," +
     "platform_schema_registry,platform_schema_plans,platform_schema_approvals," +
     "platform_schema_trusted_actors,platform_schema_migration_journal TO " +
@@ -820,7 +817,7 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
       .toBe(0);
   });
 
-  it("AUTH-17: real execution approval lock wins race; revocation waits for COMMIT", async () => {
+  it("AUTH-17: operator transaction advisory lock wins race; revocation waits for COMMIT", async () => {
     const lab = labs[6]!;
     await approve(lab);
     let signalLock!: () => void;
@@ -831,7 +828,7 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
       escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
       query: async (sql: string, params?: unknown[]) => {
         const result = await lab.operator.query(sql,params);
-        if (sql.includes("platform_schema_lock_approval(")) {
+        if (sql.includes("vibress_m03s03_approval")) {
           signalLock();
           await gate;
         }
