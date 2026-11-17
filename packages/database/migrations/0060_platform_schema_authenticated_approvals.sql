@@ -39,7 +39,7 @@ CREATE TABLE public.platform_schema_revocation_audit (
 -- may provision, suspend, or change credentials/identity mappings.
 CREATE FUNCTION public.platform_schema_trusted_actor_registry_guard()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp AS $
+SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   table_owner text;
   is_super boolean;
@@ -63,7 +63,7 @@ BEGIN
       USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
-END $;
+END $$;
 
 CREATE TRIGGER platform_schema_trusted_actor_provisioning
   BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors
@@ -71,10 +71,10 @@ CREATE TRIGGER platform_schema_trusted_actor_provisioning
 
 CREATE FUNCTION public.platform_schema_revocation_audit_immutability_guard()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, pg_temp AS $
+SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
   RAISE EXCEPTION 'revocation audit is append-only' USING ERRCODE = '42501';
-END $;
+END $$;
 
 CREATE TRIGGER platform_schema_revocation_audit_immutable
   BEFORE UPDATE OR DELETE ON public.platform_schema_revocation_audit
