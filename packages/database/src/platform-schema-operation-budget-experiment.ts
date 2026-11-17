@@ -118,7 +118,7 @@ export async function executeExperimentalBudgetedAdditiveColumn(
             uncertain = true;
             throw new ExperimentalBudgetError("INDETERMINATE");
           }
-          let canceled = false;
+          let canceled: boolean;
           try {
             canceled = await control.cancelVerifiedActiveQuery();
           } catch {
