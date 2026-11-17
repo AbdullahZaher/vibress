@@ -1,5 +1,16 @@
 # M03-S03 — Whole-Operation Deadline Benchmark
 
+
+### Final frozen numerical-candidate CI evidence — PASS
+
+[**CI #44155976796**](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796) completed **SUCCESS** on exact tested PR #204 HEAD `66af2e217b565ae552832a0399b6a96cd3259728` and synthetic checkout `08dd3097ce015c2583b16aba8b18209e9588670f`; raw [**Artifact #14361431684**](https://github.com/AbdullahZaher/vibress/actions/runs/44155976796/artifacts/14361431684), ZIP SHA-256 `dc0038d09ef839cf521b94f9133b4123871c01d4149dd60310641d62095b43db`. Actual Node `v24.22.3`, PostgreSQL `16.16` / `160016`, disposable Docker image ID `sha256:3cbd775daa28461ef484ed88ca1e5a5a72ff126e196deeebce6fec764edf1200`.
+
+Recomputed directly from **1,375/1,375 unique raw attempt IDs**, with **0 provenance mismatches, 0 T15-vs-elapsed timing mismatches**, sanitized six artifact files and CI cleanup/teardown PASS. 1,000/1,000 normal migrations succeeded (p99 **24.6277ms**), 90/100 contended succeeded (success-only p99 **926.8647ms**), 10 forced 55P03 locks failed closed, and socket 30ms each way p99 **2287.4318ms** (12 samples). Lost COMMIT ACK 8/8 INDETERMINATE and fresh reconciliation, cancellations 20/20 and backend terminations 10/10 independently verified.
+
+**Held-out fixed values — not derived from this CI:** Candidate A **2408ms**: **8/8** normal APPLIED, **8/8** actual 500ms blocked table-lock APPLIED, **4/4** over-budget refusals with zero journal/DDL. Candidate B **2517ms**: same **8/8 + 8/8 + 4/4 PASS**. On the same new CI's 1,164 eligible preselected successes, **0/1164** exceeded either fixed candidate. This adds one new separate validation run to the earlier *in-sample* 3,492 records, but **n=12 network-tail and n=16 successful fixed-value samples per candidate remain statistically insufficient** to establish a true <=1% false-timeout risk. Deliberate expiry cases returned from cleanup **later than** the numeric duration; watchdog physical completion timing is NOT certified.
+
+The final recommended **2517ms (Candidate B)** is still **conditional laboratory-only**, NOT approved; the owner SLO, independent IAM/DBA human signatures, production deadline supervisor, exact canonical integration and Agent06 independent review are all **PENDING / NO-GO**. This successful source test belongs to the benchmark branch, not PR #198.
+
 ## Current Agent04 benchmark certification — supersedes historical pending labels below
 
 ### Three-run independent quantitative sizing update (supersedes earlier two-run values)
@@ -8,7 +19,7 @@ Latest completed exact-source [CI #44154251306](https://github.com/AbdullahZaher
 
 **Three-run conditional lab sizing:** Max eligible successful profile-specific p99 **2298.0869ms** (Run2), maximum observed successful lifecycle **2298.1778ms** (Run2), maximum observed cancellation/rollback reserve ceil(7.7803 + 0.3701 + 100 unverified margin) = **109ms** (Run3). Candidate A **2408ms**, Candidate B **2517ms**, **preferred technical proposal B=2517ms in the precisely stated disposable test lab ONLY**. The historical two-run **2405/2511ms** below is superseded. Both revised candidates have **0/3492 in-sample** exceeds among 1164 eligible successful requests per run, not independent validation of a true production false-timeout SLO. No approved owner numeric deadline, no IAM/DBA human sign-offs.
 
-**Frozen 2408/2517ms held-out validation:** additional test-only benchmark executes eight normal successes, eight actual 500ms table-lock successes, and four deliberately expired pre-COMMIT budget denials per candidate, with physical catalog/journal checks. Status **PENDING exact-HEAD CI** until the separate frozen cohort completes. There is NO production supervisor.
+**Frozen 2408/2517ms held-out validation:** additional test-only benchmark executes eight normal successes, eight actual 500ms table-lock successes, and four deliberately expired pre-COMMIT budget denials per candidate, with physical catalog/journal checks. Status **PASS for the frozen source in CI #44155976796** until the separate frozen cohort completes. There is NO production supervisor.
 
 
 
