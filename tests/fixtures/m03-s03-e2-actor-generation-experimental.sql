@@ -120,3 +120,44 @@ REVOKE ALL ON FUNCTION public.s03_e2_bind_approval() FROM PUBLIC;
 
 COMMENT ON COLUMN public.platform_schema_trusted_actors.actor_generation IS
   'EXPERIMENT ONLY: transactionally monotonic under E2 lifecycle trigger';
+
+-- L1 test-only governed combined lifecycle transaction. SECURITY INVOKER;
+-- callable only by the fixture DB table owner, never the runtime/operator.
+-- Acquires all advisory and registry locks before any actor/approval row DML.
+-- Existing migration 0060 remains unchanged and its guards still execute.
+CREATE FUNCTION public.s03_test_governed_deactivate_and_revoke(
+  p_installation text, p_digest text, p_operation text, p_actor text)
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER
+SET search_path=pg_catalog,pg_temp AS $l1$
+DECLARE owner_name text; affected bigint;
+BEGIN
+  SELECT pg_catalog.pg_get_userbyid(c.relowner) INTO owner_name
+    FROM pg_catalog.pg_class c
+    WHERE c.oid='public.platform_schema_trusted_actors'::pg_catalog.regclass;
+  IF session_user IS DISTINCT FROM owner_name OR current_user IS DISTINCT FROM session_user THEN
+    RAISE EXCEPTION 'governed lifecycle test owner required' USING ERRCODE='42501';
+  END IF;
+  -- Lock hierarchy: installation I -> registry R -> approval A -> actor X
+  -- -> implicit actor row UPDATE -> implicit approval row UPDATE.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('vibress_m03s03'),pg_catalog.hashtext(p_installation));
+  PERFORM 1 FROM public.platform_schema_registry
+    WHERE installation_id=p_installation FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'missing installation' USING ERRCODE='42501'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('vibress_m03s03_approval'),
+    pg_catalog.hashtext(p_installation || ':' || p_digest || ':' || p_operation));
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(p_actor));
+  UPDATE public.platform_schema_trusted_actors SET active=false
+    WHERE login_name=p_actor AND active=true;
+  GET DIAGNOSTICS affected=ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'actor missing or disabled' USING ERRCODE='42501'; END IF;
+  UPDATE public.platform_schema_approvals SET revoked_at=pg_catalog.clock_timestamp()
+    WHERE installation_id=p_installation AND plan_digest=p_digest
+      AND operation_id=p_operation AND revoked_at IS NULL;
+  GET DIAGNOSTICS affected=ROW_COUNT;
+  IF affected <> 1 THEN RAISE EXCEPTION 'approval missing/revoked' USING ERRCODE='42501'; END IF;
+END $l1$;
+
+REVOKE ALL ON FUNCTION public.s03_test_governed_deactivate_and_revoke(text,text,text,text) FROM PUBLIC;
