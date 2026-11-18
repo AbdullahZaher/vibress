@@ -242,17 +242,37 @@ async function rowCount(db: ClientBase, tableName: string): Promise<string> {
  *
  * Only disposable test/development databases are enabled in M03-S03.
  */
+// Process-local fence for the caller-owned dedicated client. A different wrapper
+// or a caller performing raw SQL is outside this boundary; CLI owns a fresh
+// physical connection and always closes it. No pool reuse is permitted.
+const activeSessions = new WeakSet<ClientBase>();
+const quarantinedSessions = new WeakSet<ClientBase>();
+
+async function withSession(
+  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
+  mode: "EXECUTE" | "RECONCILE",
+): Promise<SchemaOperatorResult> {
+  if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
+  if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");
+  activeSessions.add(db);
+  try {
+    return await runP06(db, request, budget, mode);
+  } finally {
+    activeSessions.delete(db);
+  }
+}
+
 export function executeApprovedAdditiveColumn(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
 ): Promise<SchemaOperatorResult> {
-  return runP06(db,request,budget,"EXECUTE");
+  return withSession(db,request,budget,"EXECUTE");
 }
 
 /** Reconcile only, on a fresh dedicated session. Absence of evidence never dispatches DDL. */
 export function reconcileApprovedAdditiveColumn(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
 ): Promise<SchemaOperatorResult> {
-  return runP06(db,request,budget,"RECONCILE");
+  return withSession(db,request,budget,"RECONCILE");
 }
 
 async function runP06(
@@ -491,10 +511,12 @@ async function runP06(
         const rolled=await rawDb.query("ROLLBACK");
         if (rolled.command!=="ROLLBACK") deny("INDETERMINATE","rollback response unexpected");
       } catch {
+        quarantinedSessions.add(rawDb);
         deny("INDETERMINATE", "rollback failed; discard the operator connection and reconcile journal");
       }
     }
     if (commitAttempted) {
+      quarantinedSessions.add(rawDb);
       deny("INDETERMINATE", "commit outcome unknown; reconcile registry and journal on a fresh connection");
     }
     if (began && !beginAcknowledged) {

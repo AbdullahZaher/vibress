@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3087,5 +3088,106 @@ describe("P06 seeded E2 migration identity preservation", () => {
     expect(fresh.operationId).not.toBe(stale.operationId);
     expect(fresh.approvalId).not.toBe(stale.approvalId);
     expect((await executeP06(lab.operator, fresh, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+});
+
+describe("P06 integrated residual concurrency and transport safety", () => {
+  it("P06-E2E-13: real COMMIT packet loss quarantines the session; fresh reconciliation sees atomic state", async () => {
+    const lab = await createLab("ba");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const proxy = await startCommitAckDropProxy();
+    const connection = new URL(urlFor(lab.name, lab.operatorRole));
+    connection.port = String(proxy.port);
+    const budget = new ExperimentalD1Budget();
+    const client = new Client({ connectionString: connection.toString(),
+      connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
+      statement_timeout: Math.max(1, Math.floor(budget.remainingMs())) });
+    client.on("error", () => undefined);
+    void proxy.serverCommitObserved.catch(() => undefined);
+    try {
+      await client.connect();
+      await expect(executeP06(client, request, budget)).rejects.toMatchObject({ code: "INDETERMINATE" });
+      await proxy.serverCommitObserved;
+      await expect(executeP06(client, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "INDETERMINATE", message: "session quarantined; use a fresh dedicated connection",
+      });
+      await expect(reconcileP06(client, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "INDETERMINATE", message: "session quarantined; use a fresh dedicated connection",
+      });
+    } finally {
+      await client.end().catch(() => undefined);
+      await proxy.close();
+    }
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest)
+      .toBe(lab.plan.proposedManifest.digest);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows)
+      .toEqual([{ operation_id: request.operationId }]);
+    const other = await connect(lab.name, lab.operatorRole);
+    try {
+      expect((await reconcileP06(other, request, new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");
+    } finally { await other.end(); }
+  }, 30000);
+
+  it("P06-E2E-14: actual overlapping same-client invocation denied and PG lock timeout classified without writes", async () => {
+    const lab = await createLab("bb");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    let pending: ReturnType<typeof executeP06> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      pending = executeP06(lab.operator, request, new ExperimentalD1Budget());
+      void pending.catch(() => undefined);
+      await expect(executeP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session already in use",
+      });
+      await expect(pending).rejects.toMatchObject({ code: "LOCK_NOT_AVAILABLE" });
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await pending?.catch(() => undefined);
+      await blocker.end();
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest)
+      .toBe(lab.current.digest);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+
+  it("P06-E2E-15: accidental INSERT grant cannot bypass entrypoints; guard maintenance preserves active transaction", async () => {
+    const lab = await createLab("bc");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_submissions,public.s03_p06_approvals,public.s03_p06_revocations,public.platform_schema_plans TO "
+      +lab.dbAdmin.escapeIdentifier(lab.author));
+    const author = await connect(lab.name, lab.author);
+    try {
+      for (const table of ["s03_p06_submissions", "s03_p06_approvals", "s03_p06_revocations", "platform_schema_plans"]) {
+        await expect(author.query("INSERT INTO public."+author.escapeIdentifier(table)+" DEFAULT VALUES"))
+          .rejects.toMatchObject({ code: "42501", message: "protected insert requires governed entrypoint" });
+      }
+      await expect(author.query("SELECT public.s03_p06_prune_call_guard()")).rejects.toMatchObject({ code: "42501" });
+      await author.query("BEGIN");
+      await author.query("SELECT public.s03_p06_submit($1,$2)", [lab.installationId, lab.plan.digest]);
+      await lab.dbAdmin.query("SELECT public.s03_p06_prune_call_guard()");
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)", [lab.installationId, lab.plan.digest]))
+        .rejects.toMatchObject({ code: "42501" });
+      await author.query("ROLLBACK");
+      await lab.dbAdmin.query("SELECT public.s03_p06_prune_call_guard()");
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_call_guard")).rowCount).toBe(0);
+    } finally { await author.query("ROLLBACK").catch(() => undefined); await author.end(); }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
   }, 30000);
 });

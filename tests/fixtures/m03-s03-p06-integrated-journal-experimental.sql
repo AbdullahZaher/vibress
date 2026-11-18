@@ -112,6 +112,14 @@ CREATE OR REPLACE FUNCTION public.platform_schema_submit_plan(
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
 BEGIN
   PERFORM public.s03_p06_enter();
+  -- 0060's provenance trigger takes a registry SHARE lock. Acquire it
+  -- before the actor fence, not after it; operator holds registry before X.
+  PERFORM 1 FROM public.platform_schema_registry
+    WHERE installation_id=p_installation_id AND database_name=current_database()
+      AND environment IN ('test','development') FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'content registration scope denied' USING ERRCODE='42501'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(session_user::text));
   INSERT INTO public.platform_schema_plans(installation_id,plan_digest,expected_manifest,plan,author)
   VALUES(p_installation_id,p_plan_digest,p_expected_manifest,p_plan,session_user);
 END $body$;
@@ -139,3 +147,48 @@ BEGIN
   IF affected<>1 THEN RAISE EXCEPTION 'actor transition unavailable' USING ERRCODE='42501'; END IF;
 END $body$;
 
+
+-- Defense in depth for ordinary direct INSERT even if an accidental grant is
+-- introduced. Current fixture table/function owner is an explicit trust root.
+-- Each protected INSERT must arrive via its SECURITY DEFINER entrypoint.
+CREATE FUNCTION public.s03_p06_protected_insert() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE owner_name text;
+BEGIN
+ SELECT pg_catalog.pg_get_userbyid(relowner) INTO owner_name
+   FROM pg_catalog.pg_class WHERE oid=TG_RELID;
+ IF current_user IS DISTINCT FROM owner_name THEN
+   RAISE EXCEPTION 'protected insert requires governed entrypoint' USING ERRCODE='42501';
+ END IF;
+ RETURN NEW;
+END $body$;
+CREATE TRIGGER aa_s03_p06_plan_insert BEFORE INSERT ON public.platform_schema_plans
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_protected_insert();
+CREATE TRIGGER aa_s03_p06_submission_insert BEFORE INSERT ON public.s03_p06_submissions
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_protected_insert();
+CREATE TRIGGER aa_s03_p06_approval_insert BEFORE INSERT ON public.s03_p06_approvals
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_protected_insert();
+CREATE TRIGGER aa_s03_p06_revocation_insert BEFORE INSERT ON public.s03_p06_revocations
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_protected_insert();
+REVOKE ALL ON FUNCTION public.s03_p06_protected_insert() FROM PUBLIC;
+
+-- Root-only maintenance, bounded per call. Never delete the current or any
+-- potentially active xid. This is not a recovery-epoch guarantee across restore.
+CREATE FUNCTION public.s03_p06_prune_call_guard() RETURNS bigint
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE removed bigint;
+BEGIN
+ IF current_user IS DISTINCT FROM session_user OR current_user IS DISTINCT FROM
+   (SELECT pg_catalog.pg_get_userbyid(relowner) FROM pg_catalog.pg_class
+    WHERE oid='public.s03_p06_call_guard'::pg_catalog.regclass)
+ THEN RAISE EXCEPTION 'guard maintenance requires trust root' USING ERRCODE='42501'; END IF;
+ DELETE FROM public.s03_p06_call_guard WHERE transaction_id IN (
+   SELECT transaction_id FROM public.s03_p06_call_guard
+   WHERE transaction_id < pg_catalog.pg_snapshot_xmin(pg_catalog.pg_current_snapshot())
+     AND transaction_id <> pg_catalog.pg_current_xact_id()
+   ORDER BY transaction_id LIMIT 1000
+ );
+ GET DIAGNOSTICS removed=ROW_COUNT;
+ RETURN removed;
+END $body$;
+REVOKE ALL ON FUNCTION public.s03_p06_prune_call_guard() FROM PUBLIC;
