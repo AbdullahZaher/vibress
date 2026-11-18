@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2418,6 +2418,150 @@ describe("E2 actor generation/provenance adversarial tests (TEST-ONLY POLICY)", 
       "WHERE installation_id=$1", [lab.installationId],
     );
     await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+});
+
+
+describe("R1-10 governed ADMIN vs legacy revoker (TEST-ONLY)", () => {
+  it("R1-10-FIX2: legacy approval UPDATE row-before-A and governed gateway remain acyclic", async () => {
+    const lab=await createLab("ag"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const op=lab.operator, admin=lab.dbAdmin;
+    const revoker=await connect(lab.name,lab.approver);
+    type Result={ok:boolean;code:string|null};
+    const settle=(p:Promise<unknown>):Promise<Result>=>p.then(
+      ()=>({ok:true,code:null}),
+      (e:unknown)=>({ok:false,code:typeof e==="object"&&e!==null&&
+        "code" in e&&typeof e.code==="string"?e.code:null}),
+    );
+    const waitBlocked=async (pid:number):Promise<boolean>=>{
+      for(let i=0;i<120;i+=1){
+        const row=await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",[pid]);
+        if(row.rows[0]?.wait_event_type==="Lock")return true;
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      return false;
+    };
+    let revoking:Promise<Result>|undefined;
+    let adminCall:Promise<Result>|undefined;
+    try {
+      await op.query("BEGIN");
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'),"+
+        "hashtext($1::text||':'||$2::text||':'||$3::text))",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id]);
+      await revoker.query("BEGIN");
+      revoking=settle(revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      ));
+      expect(await waitBlocked(revoker.processID??-1),
+        "real direct revoker must wait on operator approval A while holding approval row").toBe(true);
+      await admin.query("BEGIN");
+      adminCall=settle(admin.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      ));
+      expect(await waitBlocked(admin.processID??-1),
+        "governed gateway must wait before obtaining actor X").toBe(true);
+      // Operator can acquire X; admin has only the earlier independent lock
+      // chain and cannot hold the actor fence before its approval row/A locks.
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),"+
+        "hashtext($1::text))",[lab.author]);
+      await op.query("COMMIT");
+      expect((await revoking).ok).toBe(true);
+      await revoker.query("COMMIT");
+      const adminOutcome=await adminCall;
+      expect(adminOutcome).toEqual({ok:false,code:"42501"});
+      await admin.query("ROLLBACK");
+    } finally {
+      await op.query("ROLLBACK").catch(()=>undefined);
+      await revoker.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([revoking??Promise.resolve(),adminCall??Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(true);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals "+
+      "WHERE installation_id=$1",[lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query("SELECT 1 FROM public.platform_schema_migration_journal "+
+      "WHERE installation_id=$1",[lab.installationId])).rowCount).toBe(0);
+  },30000);
+});
+
+describe("E2 negative privilege, UUID tombstone and rollback tests (EXPERIMENT ONLY)",()=>{
+  it("E2-05: operator/runtime cannot mutate roster or execute governed admin gateway",async()=>{
+    const lab=await createLab("ah");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    for(const actor of [lab.operator,lab.runtime]){
+      await expect(actor.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.approver],
+      )).rejects.toMatchObject({code:"42501"});
+      await expect(actor.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+    }
+    const grants=await lab.dbAdmin.query<{operator_update:boolean;runtime_update:boolean;
+      operator_admin_exec:boolean;runtime_admin_exec:boolean}>(
+      "SELECT has_table_privilege($1,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS operator_update, "+
+      "has_table_privilege($2,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS runtime_update, "+
+      "has_function_privilege($1,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS operator_admin_exec, "+
+      "has_function_privilege($2,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS runtime_admin_exec",
+      [lab.operatorRole,lab.runtimeRole],
+    );
+    expect(grants.rows[0]).toEqual({operator_update:false,runtime_update:false,
+      operator_admin_exec:false,runtime_admin_exec:false});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-06: append-only actor-instance history blocks UUID resurrection after DELETE",async()=>{
+    const lab=await createLab("ai");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const actor=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query("BEGIN");
+    try{
+      await lab.dbAdmin.query(
+        "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      );
+      await expect(lab.dbAdmin.query(
+        "INSERT INTO public.platform_schema_trusted_actors "+
+        "(login_name,principal_id,actor_kind,actor_instance_id) "+
+        "VALUES($1,$2,'APPROVER',$3::uuid)",
+        [lab.approver,actor.principal_id,actor.actor_instance_id],
+      )).rejects.toMatchObject({code:"23505"});
+    }finally{
+      await lab.dbAdmin.query("ROLLBACK").catch(()=>undefined);
+    }
+    const restored=(await lab.dbAdmin.query<{actor_instance_id:string}>(
+      "SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).toBe(actor.actor_instance_id);
+    await expect(lab.dbAdmin.query(
+      "DELETE FROM public.s03_e2_actor_instance_history WHERE actor_instance_id=$1::uuid",
+      [actor.actor_instance_id],
+    )).rejects.toMatchObject({code:"42501"});
     expect(await hasWebsite(lab)).toBe(false);
     expect(await contentChecksum(lab)).toBe(before);
   },30000);
