@@ -87,6 +87,36 @@ async function createLab(key: Key): Promise<Lab> {
   await dbAdmin.query(schema);
   await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
     "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
+  // EXPERIMENT ONLY, installed in each owned disposable PG16 fixture AFTER
+  // the unchanged 0060 migration. SECURITY INVOKER with no extra operator
+  // grants: the actor roster writer and reader share per-login xact advisory
+  // keys. This is NOT a deployable 0061 or approved production mechanism.
+  await dbAdmin.query(
+    "CREATE FUNCTION public.s03_test_actor_xact_fence() " +
+    "RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER " +
+    "SET search_path=pg_catalog,pg_temp AS $ " +
+    "DECLARE k text; BEGIN " +
+    "IF TG_OP = 'INSERT' THEN " +
+    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
+    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
+    "    pg_catalog.hashtext(NEW.login_name)); RETURN NEW; " +
+    "ELSIF TG_OP = 'DELETE' THEN " +
+    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
+    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
+    "    pg_catalog.hashtext(OLD.login_name)); RETURN OLD; " +
+    "ELSE " +
+    "  FOR k IN SELECT DISTINCT a.login FROM " +
+    "    pg_catalog.unnest(ARRAY[OLD.login_name,NEW.login_name]) AS a(login) " +
+    "    ORDER BY a.login LOOP " +
+    "    PERFORM pg_catalog.pg_advisory_xact_lock(" +
+    "      pg_catalog.hashtext('vibress_m03s03_actor'), pg_catalog.hashtext(k)); " +
+    "  END LOOP; RETURN NEW; " +
+    "END IF; END $; " +
+    "CREATE TRIGGER s03_test_actor_xact_fence " +
+    "BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors " +
+    "FOR EACH ROW EXECUTE FUNCTION public.s03_test_actor_xact_fence(); " +
+    "REVOKE ALL ON FUNCTION public.s03_test_actor_xact_fence() FROM PUBLIC"
+  );
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -1975,11 +2005,11 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
 
 
 /**
- * Isolated P05/R1 post-catalog actor-row locking. These deterministic tests
+ * Isolated P05/R1 post-catalog actor advisory fencing. These deterministic tests
  * observe actual PG16 blocked backends; poll sleeps only observe wait state,
  * never determine correctness of transaction ordering.
  */
-describe("P05/R1 final row-lock serialization (EXPERIMENT ONLY)", () => {
+describe("P05/R1 advisory-lock serialization (EXPERIMENT ONLY)", () => {
   it("R1-06: deactivation queued after final authorization commits after DDL", async () => {
     const lab = await createLab("y");
     labs.push(lab);
@@ -2028,7 +2058,7 @@ describe("P05/R1 final row-lock serialization (EXPERIMENT ONLY)", () => {
         }
         await new Promise(resolve => setTimeout(resolve, 10));
       }
-      expect(blocked, "actor UPDATE must wait for FOR SHARE held by operator").toBe(true);
+      expect(blocked, "actor UPDATE must wait for operator's advisory fence").toBe(true);
       release();
       expect((await migrating).status).toBe("APPLIED");
       await deactivating;
@@ -2070,8 +2100,7 @@ describe("P05/R1 final row-lock serialization (EXPERIMENT ONLY)", () => {
       const hooked = {
         escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
         query: async (sql: string, params?: unknown[]) => {
-          if (sql.includes("FROM public.platform_schema_trusted_actors " +
-            "WHERE login_name = $1 FOR SHARE")) reached();
+          if (sql.includes("pg_advisory_xact_lock(hashtext('vibress_m03s03_actor')")) reached();
           return params ? lab.operator.query(sql, params) : lab.operator.query(sql);
         },
       } as unknown as ClientBase;
@@ -2094,7 +2123,7 @@ describe("P05/R1 final row-lock serialization (EXPERIMENT ONLY)", () => {
         }
         await new Promise(resolve => setTimeout(resolve, 10));
       }
-      expect(blocked, "operator must wait for an uncommitted actor UPDATE").toBe(true);
+      expect(blocked, "operator must wait for actor writer's advisory fence").toBe(true);
       await admin.query("COMMIT");
       await expect(migrating).rejects.toMatchObject({code:"UNAUTHORIZED"});
       expect(await hasWebsite(lab)).toBe(false);
