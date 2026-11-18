@@ -31,7 +31,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs" | "ct" | "cu" | "cv" | "cw";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs" | "ct" | "cu" | "cv" | "cw" | "cx" | "cy";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4338,3 +4338,150 @@ it("P06-E2E-49: rollback before historical journal observation is not operation 
     expect(await hasWebsite(lab)).toBe(false);
   }finally{a.close();rmSync(dir,{recursive:true,force:true});}
 },30000);
+
+
+it.each([["P06-E2E-51","cv","DROP"],["P06-E2E-52","cw","STALL"]] as const)("%s: combined target contention, synchronous storage delay and COMMIT %s (%s)",async(_name,key,fault)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-combined-fault-")),anchor=testAnchor(dir);
+  const adapter:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+    anchor.compareAndSet(p,n);
+  }};
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,adapter,recoveryAdminKeys.publicKey);
+  const blocker=await connect(lab.name),proxy=await startStatementAckFaultProxy("COMMIT",fault,()=>{Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);});
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  let operation:Promise<unknown>|undefined;
+  try{
+    const sentinel=(await lab.operator.query<{pid:number}>("SELECT pg_backend_pid() AS pid")).rows[0]!;
+    await blocker.query("BEGIN");
+    await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+    const budget=new ExperimentalD1Budget(undefined,true);
+    operation=a.execute(url.toString(),request,epochKeys.publicKey,budget);
+    void operation.catch(()=>undefined);
+    let observed=false;
+    for(let index=0;index<120;index++){
+      const row=(await lab.dbAdmin.query<{waiting:boolean}>("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND $3::int=ANY(pg_blocking_pids(pid))) AS waiting",[lab.name,lab.operatorRole,blocker.processID])).rows[0];
+      if(row?.waiting){observed=true;break;}
+      await new Promise(resolve=>setTimeout(resolve,10));
+    }
+    expect(observed).toBe(true);
+    await blocker.query("COMMIT");
+    await proxy.serverCommitObserved;
+    await expect(operation).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    expect((await lab.operator.query("SELECT pg_backend_pid() AS pid")).rows).toEqual([sentinel]);
+    expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    console.info("D1_COMBINED_FAULT "+JSON.stringify({fault,n:1,elapsedMs:2517-budget.remainingMs(),stages:budget.measurements(),margin:"NOT_DETERMINABLE"}));
+  }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await operation?.catch(()=>undefined);await blocker.end();await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+// Catalog-derived finite supported surface. This is evidence, not a universal
+// deadlock-freedom statement or an authorization policy for native cluster DDL.
+async function disposableWriterInventory(lab:Lab){
+  const principals=[lab.author,lab.approver,lab.runtimeRole,lab.operatorRole];
+  const relations=(await lab.dbAdmin.query<{role:string;relation:string;insert:boolean;update:boolean;delete:boolean;truncate:boolean;columnupdate:boolean;references:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,has_table_privilege(r.oid,c.oid,'INSERT') AS insert,has_table_privilege(r.oid,c.oid,'UPDATE') AS update,"+
+    "has_table_privilege(r.oid,c.oid,'DELETE') AS delete,has_table_privilege(r.oid,c.oid,'TRUNCATE') AS truncate,has_any_column_privilege(r.oid,c.oid,'UPDATE') AS columnupdate,"+
+    "has_any_column_privilege(r.oid,c.oid,'REFERENCES') AS references FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN pg_roles r "+
+    "WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation",[principals])).rows;
+  const functions=(await lab.dbAdmin.query<{role:string;routine:string;definer:boolean;executable:boolean}>(
+    "SELECT r.rolname AS role,p.proname AS routine,p.prosecdef AS definer,(has_schema_privilege(r.oid,n.oid,'USAGE') AND has_function_privilege(r.oid,p.oid,'EXECUTE')) AS executable "+
+    "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN pg_roles r WHERE n.nspname='public' AND (p.proname LIKE 'platform_schema_%' OR p.proname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,routine,p.oid",[principals])).rows;
+  const memberships=(await lab.dbAdmin.query("SELECT roleid::text,member::text,admin_option,inherit_option,set_option FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1::name[])) OR roleid IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1::name[])) ORDER BY roleid,member,grantor",[principals])).rows;
+  const foreignKeys=(await lab.dbAdmin.query("SELECT c.conname,c.conrelid::regclass::text AS source,c.confrelid::regclass::text AS target FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace WHERE c.contype='f' AND n.nspname='public' AND (r.relname LIKE 'platform_schema_%' OR r.relname LIKE 's03_%') ORDER BY source,c.conname")).rows;
+  return {relations,functions,memberships,foreignKeys};
+}
+
+it("P06-E2E-53: catalog writer inventory and explicit mixed relation/advisory transaction denial",async()=>{
+  const lab=await createLab("cx");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const inventory=await disposableWriterInventory(lab);
+  expect(inventory.relations.length).toBeGreaterThan(0);expect(inventory.foreignKeys.length).toBeGreaterThan(0);
+  expect(inventory.memberships).toEqual([]);
+  const ordinary=inventory.relations.filter(row=>row.role!==lab.operatorRole);
+  expect(ordinary.filter(row=>row.insert||row.update||row.delete||row.truncate||row.columnupdate||row.references)).toEqual([]);
+  expect(inventory.functions.filter(row=>[lab.runtimeRole,lab.operatorRole].includes(row.role)&&row.definer&&row.executable)).toEqual([]);
+  expect(inventory.functions.filter(row=>row.role===lab.author&&row.definer&&row.executable).map(row=>row.routine).sort()).toEqual(["platform_schema_submit_plan","s03_p06_submit"]);
+  const author=await connect(lab.name,lab.author);
+  try{
+    await author.query("BEGIN");
+    await author.query("SELECT pg_advisory_xact_lock(92731,1)");
+    await author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]);
+    const locks=(await lab.dbAdmin.query<{locktype:string;mode:string}>("SELECT locktype,mode FROM pg_locks WHERE pid=$1 AND granted",[author.processID])).rows;
+    expect(locks.some(row=>row.locktype==="advisory")).toBe(true);
+    expect(locks.some(row=>row.locktype==="relation"&&row.mode==="RowShareLock")).toBe(true);
+    await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await author.query("ROLLBACK");
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+    console.info("L1_WRITER_INVENTORY "+JSON.stringify({relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length,scope:"supported-disposable-writers"}));
+  }finally{await author.query("ROLLBACK").catch(()=>undefined);await author.end();}
+},30000);
+
+// Only the dedicated owned-service workflow selects this definition. It is not
+// discovered on shared infrastructure or the ordinary monorepo full CI.
+if(process.env.M03_S03_OWNED_RESTART==="I_CONFIRM_OWNED_SERVICE"&&process.env.GITHUB_ACTIONS==="true"){
+  it("P06-RESTART-01: real post-COMMIT process death, authenticated takeover and PostgreSQL restart preserve pending and committed history",async()=>{
+    let lab=await createLab("cy");labs.push(lab);await p06Install(lab);
+    const first=await freshP06(lab),stale=await freshP06(lab);
+    const root=mkdtempSync(path.join(tmpdir(),"s03-process-restart-")),directory=path.join(root,"ledger"),anchorDirectory=path.join(root,"anchor");
+    mkdirSync(directory);mkdirSync(anchorDirectory);
+    const anchorKeys=generateKeyPairSync("ed25519"),anchor=new FileExperimentalRecoveryAnchor(anchorDirectory,anchorKeys.privateKey);
+    for(const [name,key] of [["ledger-key.pem",epochKeys.privateKey],["anchor-key.pem",anchorKeys.privateKey]] as const)
+      writeFileSync(path.join(root,name),key.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+    writeFileSync(path.join(root,"admin-key.pem"),recoveryAdminKeys.publicKey.export({type:"spki",format:"pem"}),{mode:0o600});
+    let a=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    try{
+      expect((await a.execute(urlFor(lab.name,lab.operatorRole),first,epochKeys.publicKey)).status).toBe("APPLIED");
+      const scope={applicationId,installationId:lab.installationId},current=lab.plan.proposedManifest;
+      const ir=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+        {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+      const plan=planSchemaChanges(current,ir,{scope,expectedCurrentDigest:current.digest});
+      const author=await connect(lab.name,lab.author);
+      try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(current),JSON.stringify(plan)]);}finally{await author.end();}
+      const second=await freshP06({...lab,current,plan});
+      writeFileSync(path.join(root,"request.json"),JSON.stringify(second),{mode:0o600});
+      a.close();
+      const child=spawnSync(process.execPath,["--import","tsx","scripts/platform/m03-s03-fault/crash-authority.ts",root,"BEFORE_OUTCOME_WRITE"],{env:{...process.env,NODE_ENV:"test",M03_S03_DISPOSABLE_CONFIRM:"I_CONFIRM_DISPOSABLE",M03_S03_FAULT_DATABASE_URL:urlFor(lab.name,lab.operatorRole)},timeout:20000});
+      expect(child.signal).toBe("SIGKILL");
+      expect(DisposableDurableRecoveryAuthority.inspectOffline(directory,anchor)).toMatchObject({disposition:"MATCHED",pending:false,unresolved:1});
+      expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations ORDER BY completed_at")).rows).toEqual([{operation_id:first.operationId},{operation_id:second.operationId}]);
+      const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
+      const signature=sign(null,recoveryAdministrationMessage(view,"OFFLINE_TAKEOVER",payload),recoveryAdminKeys.privateKey).toString("base64url");
+      a=DisposableDurableRecoveryAuthority.takeoverMatchedPending(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey,{...payload,signature});
+      expect(a.snapshot().pending).toBe(true);expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","UNCERTAIN"]);
+      const history=a.snapshot().operations,acl=await disposableWriterInventory(lab);
+      const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+cluster.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+      const dataDigests={[lab.table]:createHash("sha256").update(JSON.stringify(data.map(row=>row.value))).digest("hex")};
+      const before=(await cluster.query<{started:string}>("SELECT pg_postmaster_start_time()::text AS started")).rows[0]!.started;
+      a.close();
+      for(const existing of labs)await Promise.allSettled([existing.operator.end(),existing.runtime.end(),existing.dbAdmin.end()]);
+      await cluster.end();
+      const restart=spawnSync("docker",["compose","-f","compose.dev.yml","restart","postgres"],{timeout:30000});expect(restart.status).toBe(0);
+      const up=spawnSync("docker",["compose","-f","compose.dev.yml","up","-d","--wait","postgres"],{timeout:30000});expect(up.status).toBe(0);
+      cluster=await connect("vibress");
+      expect((await cluster.query<{started:string}>("SELECT pg_postmaster_start_time()::text AS started")).rows[0]!.started).not.toBe(before);
+      lab={...lab,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.findIndex(x=>x.name===lab.name)]=lab;
+      a=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().operations).toEqual(history);expect(a.snapshot().pending).toBe(true);
+      expect(await disposableWriterInventory(lab)).toEqual(acl);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+      await Promise.all([lab.operator.end(),lab.runtime.end()]);
+      await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+      try{
+        const evidence=await collectDisposableRecoveryReadiness(lab.dbAdmin,{installationId:lab.installationId,databaseName:lab.name,epoch:a.snapshot().epoch,manifestDigest:plan.proposedManifest.digest,dataDigests});
+        expect(evidence.journal).toHaveLength(2);
+        const signed=attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",{operationId:second.operationId,evidence});
+        a.resolveObservedCommit(second.operationId,evidence,signed);
+        expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+        expect(a.snapshot().pending).toBe(true); // activation is a separate verified epoch transition
+      }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+      console.info("P06_POSTCOMMIT_CRASH_RESTART=PASS");
+    }finally{a.close();rmSync(root,{recursive:true,force:true});}
+  },120000);
+}

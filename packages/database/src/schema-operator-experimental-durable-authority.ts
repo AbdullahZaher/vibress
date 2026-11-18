@@ -70,7 +70,9 @@ function reduce(s: State|undefined,e: Event): State {
       next.operations.set(o.operationId,e.outcome==="COMMITTED"?{...identity,outcome:"COMMITTED",newDigest:e.newDigest}:{...identity,outcome:e.outcome});break;
     }
     case "TAKEOVER":
-      if(!s.pending||!UUID.test(e.nonce)||!SHA.test(e.writerDigest)||!/^[A-Za-z0-9_-]{86}$/.test(e.signature))return refuse();
+      if((!s.pending&&![...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))||
+        !UUID.test(e.nonce)||!SHA.test(e.writerDigest)||!/^[A-Za-z0-9_-]{86}$/.test(e.signature))return refuse();
+      if(!s.pending){next.pending=true;next.advanced=false;next.intent=e.nonce;}
       break;
     case "INTENT":
       if(s.pending || !UUID.test(e.intent)) return refuse();
@@ -119,7 +121,7 @@ export class DisposableDurableRecoveryAuthority {
     private readonly administrationKey:KeyObject, maintenanceHeld=false,private readonly testProbe?:PersistenceProbe) {
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519"||administrationKey.type!=="public"||administrationKey.asymmetricKeyType!=="ed25519"||
       keyIdentity(createPublicKey(key))===keyIdentity(administrationKey)) refuse();
-    if(testProbe&&process.env.NODE_ENV!=="test")return refuse();
+    if(testProbe&&process.env.NODE_ENV!=="test")throw Error("test probe unavailable");
     this.path=join(directory,"authority.jsonl");this.lockPath=join(directory,"writer.lock");
     const maintenancePath=join(directory,"maintenance.lock");
     // Serialize every supported writer acquisition against offline maintenance.
@@ -167,7 +169,7 @@ export class DisposableDurableRecoveryAuthority {
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519"||
       administrationKey.type!=="public"||administrationKey.asymmetricKeyType!=="ed25519")return refuse();
     const {state,head,sequence}=readLedger(directory),publicKey=createPublicKey(key);
-    if(!state.pending||state.signingIdentity!==keyIdentity(publicKey)||state.administrationIdentity!==keyIdentity(administrationKey)||
+    if((!state.pending&&![...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))||state.signingIdentity!==keyIdentity(publicKey)||state.administrationIdentity!==keyIdentity(administrationKey)||
       !sameRecoveryHead(anchor.read(),{ledgerId:state.ledgerId,installationId:state.installationId,signingIdentity:state.signingIdentity,head,sequence}))return refuse();
     const writerDigest=inspectDeadWriter(directory,publicKey);
     return Object.freeze({ledgerId:state.ledgerId,installationId:state.installationId,head,epoch:state.epoch,sequence,writerDigest});

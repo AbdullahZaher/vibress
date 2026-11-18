@@ -82,6 +82,12 @@ jobs:
             # separately named disposable PG16 fixture databases.
             pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "R1-10|E2-0|E2-REPLAY" --testTimeout=90000 --hookTimeout=120000
           done
+      - name: Verify post-COMMIT authority crash and actual owned PostgreSQL restart
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        env:
+          M03_S03_OWNED_RESTART: I_CONFIRM_OWNED_SERVICE
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-RESTART-01" --testTimeout=120000 --hookTimeout=120000
       - name: Confirm disposable fixture databases fully cleaned
         if: always() && steps.pg16.outcome == 'success'
         run: |
