@@ -2,7 +2,7 @@
 // CancelRequest or broad signal privilege. Timeout closes the client and
 // conservatively reports uncertainty; disconnect alone is NOT rollback proof.
 import { Client } from "pg";
-import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
+import { ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
 import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
@@ -28,14 +28,15 @@ export async function superviseDisposableSchemaOperation(
   db.on("error", () => undefined);
   let closing: Promise<void> | undefined;
   const close = () => closing ??= db.end().then(() => undefined, () => undefined);
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancelDeadline: (() => void) | undefined;
   const deadline = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
+    cancelDeadline = scheduleExperimentalD1Deadline(budget, () => {
       void close();
       reject(new SchemaMigrationOperatorError("INDETERMINATE", "D1 supervisor closed session; reconcile on fresh connection"));
-    }, Math.max(1, Math.ceil(budget.remainingMs())));
+    });
   });
   const operation = (async () => {
+    budget.checkpoint();
     await db.connect();
     budget.checkpoint();
     const run = mode === "EXECUTE" ? executeApprovedAdditiveColumn : reconcileApprovedAdditiveColumn;
@@ -49,7 +50,7 @@ export async function superviseDisposableSchemaOperation(
     }
     return result;
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    cancelDeadline?.();
     // No waiting past the outcome deadline for a socket close that might stall.
     // The physical client is never handed out or reused.
     void close();

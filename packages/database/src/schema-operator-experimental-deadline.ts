@@ -24,3 +24,31 @@ export class ExperimentalD1Budget {
     if (this.expired()) throw new D1DeadlineExceeded();
   }
 }
+
+// Node timer delivery is not an authoritative monotonic deadline observation.
+// A scheduler returns a cancellation closure for its pending callback.
+export function scheduleExperimentalD1Deadline(
+  budget: ExperimentalD1Budget,
+  onExpired: () => void,
+  schedule: (callback: () => void, delayMs: number) => () => void = (callback, delayMs) => {
+    const handle = setTimeout(callback, delayMs);
+    return () => clearTimeout(handle);
+  },
+): () => void {
+  let finished = false;
+  let cancelPending: (() => void) | undefined;
+  const check = () => {
+    if (finished) return;
+    if (budget.expired()) {
+      finished = true;
+      onExpired();
+      return;
+    }
+    cancelPending = schedule(check, Math.max(1, Math.ceil(budget.remainingMs())));
+  };
+  check();
+  return () => {
+    finished = true;
+    cancelPending?.();
+  };
+}
