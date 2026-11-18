@@ -21,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -59,7 +59,7 @@ async function connect(database: string, role?: string): Promise<Client> {
   return client;
 }
 
-async function createLab(key: Key): Promise<Lab> {
+async function createLab(key: Key, installE2 = true): Promise<Lab> {
   const name = "vibress_s03_" + key + "_" + id;
   const installationId = asInstallationId("s03-" + key);
   const author = "s03_author_" + key + "_" + id;
@@ -94,8 +94,10 @@ async function createLab(key: Key): Promise<Lab> {
     "tests/fixtures/m03-s03-r1-actor-fence-experimental.sql"), "utf8"));
   // E2-A is ONLY a disposable test fixture, not a numbered migration and not
   // an approved real actor reactivation policy. 0059/0060 remain unchanged.
-  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
-    "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
+  if (installE2) {
+    await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
+  }
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -3033,5 +3035,57 @@ describe("Integrated P06 transaction-start acknowledgment safety", () => {
     }
     expect(await hasWebsite(lab)).toBe(false);
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  }, 30000);
+});
+
+describe("P06 seeded E2 migration identity preservation", () => {
+  it("P06-E2E-12: migrated actors reserve UUIDs, legacy provenance stays null, and same LOGIN cannot revive authorization", async () => {
+    const lab = await createLab("az", false);
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    // Apply the additive candidate to a genuinely pre-E2 roster and approval.
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
+    const history = await lab.dbAdmin.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM public.platform_schema_trusted_actors a "+
+      "JOIN public.s03_e2_actor_instance_history h USING(actor_instance_id) "+
+      "WHERE a.login_name=h.login_name AND a.principal_id=h.principal_id",
+    );
+    expect(history.rows[0]?.n).toBe("2");
+    expect((await lab.dbAdmin.query(
+      "SELECT author_actor_instance_id,author_actor_generation FROM public.platform_schema_plans",
+    )).rows).toEqual([{ author_actor_instance_id: null, author_actor_generation: null }]);
+    expect((await lab.dbAdmin.query(
+      "SELECT author_actor_instance_id,author_actor_generation,approver_actor_instance_id,approver_actor_generation "+
+      "FROM public.platform_schema_approvals",
+    )).rows).toEqual([{ author_actor_instance_id: null, author_actor_generation: null,
+      approver_actor_instance_id: null, approver_actor_generation: null }]);
+    await p06Install(lab);
+    const stale = await freshP06(lab);
+    const prior = (await lab.dbAdmin.query<{ actor_instance_id: string; principal_id: string }>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]!;
+    await lab.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1", [lab.author]);
+    await expect(lab.dbAdmin.query(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind,actor_instance_id) "+
+      "VALUES($1,$2,'AUTHOR',$3::uuid)", [lab.author, prior.principal_id, prior.actor_instance_id],
+    )).rejects.toMatchObject({ code: "23505" });
+    const replacement = (await lab.dbAdmin.query<{ actor_instance_id: string }>(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) "+
+      "VALUES($1,$2,'AUTHOR') RETURNING actor_instance_id", [lab.author, prior.principal_id],
+    )).rows[0]!;
+    expect(replacement.actor_instance_id).not.toBe(prior.actor_instance_id);
+    await expect(executeP06(lab.operator, stale, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    const fresh = await freshP06(lab);
+    expect(fresh.planDigest).toBe(stale.planDigest);
+    expect(fresh.operationId).not.toBe(stale.operationId);
+    expect(fresh.approvalId).not.toBe(stale.approvalId);
+    expect((await executeP06(lab.operator, fresh, new ExperimentalD1Budget())).status).toBe("APPLIED");
   }, 30000);
 });
