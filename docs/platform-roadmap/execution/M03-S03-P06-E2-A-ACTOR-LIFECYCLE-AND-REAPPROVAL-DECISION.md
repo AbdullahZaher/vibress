@@ -1,3 +1,41 @@
+# P06 — E2-A Project Owner decision (APPROVED — RESTRICTED POLICY)
+
+> **Current binding decision:** `M03-S03-P06-E2-A-OWNER-2026-11-18` · 2026-11-18 Asia/Riyadh · [Owner decision relay — Issue #197](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6971205056). This section supersedes the pending proposal below, which is retained unaltered as historical evidence. **Policy approval and isolated L1/E2 migration prototyping only; NOT normative implementation, migration deployment, integration, merge, production or independent human IAM/DBA approval.**
+
+## Current owner instruction (verbatim)
+
+> بصفتي مالك المشروع أعتمد P06/E2-A كسياسة ضمن نطاق التطوير والاختبارات المعزولة. أعتمد مبدأ Actor UUID وGeneration، وأشترط خطة جديدة وهوية عملية جديدة وموافقة مستقلة جديدة بعد إبطال التفويض، مع الحفاظ على حتمية Canonical Digest. أسمح بتطوير واختبار نماذج L1 وE2 Migration المعزولة فقط. لا أصرح بتوسيع صلاحيات الإنتاج أو الدمج أو النشر أو تجاوز موافقات IAM وDBA.
+
+Recorded by the assistant at the Project Owner's request. This is not a separately authenticated human reviewer signature.
+
+## Effective contract
+
+- E2-A: after committed lifecycle invalidation of either AUTHOR or APPROVER, invalidated pending authorizations require a newly submitted plan, fresh unique operation identity and new independently authenticated approval by a distinct eligible active APPROVER. Bind authenticated provenance to nonreusable actor UUID and authoritative generation. Reactivation or LOGIN reuse cannot revive invalidated authorization. Rolled-back lifecycle transactions are not authoritative. Preserve the approved P05/R1 nonretroactive rule after final valid authorization.
+- **Correction to historical proposal item 4:** identical canonical content in an unchanged digest domain MUST retain its deterministic digest. Fresh operation/plan identity and approval provenance are distinct from the canonical content digest; bind them and the exact digest in the verified authorization record/envelope. Do not require an artificially different content hash. Exact encoding and lifecycle transitions remain subject to review.
+- Do not silently reapprove an invalidated plan or fabricate historical generations. Legacy unverifiable provenance fails closed; no recovery exception approved.
+- Authorized: isolated L1 and E2 migration prototypes and new disposable PostgreSQL 16 validation. No modification to historical 0059/0060; no application to shared or production databases. No new production privileges.
+- Policy A, P05/R1 and D1=2517ms remain unchanged in their original restricted scope. No numerical M, expanded success envelope or watchdog privilege approved.
+
+## Current gates and next action
+
+| Gate | Disposition |
+| --- | --- |
+| P06/E2-A owner policy | APPROVED — restricted |
+| L1 / E2 additive migration prototyping | AUTHORIZED — disposable environments only |
+| Enforceable global administrative writer protocol | INCOMPLETE |
+| Normative migration / ACL / lifecycle implementation | BLOCKED pending applicable IAM/DBA review |
+| Human IAM / DBA | PENDING / PENDING |
+| Integrated D1 supervisor / pre-COMMIT M / watchdog / SQLSTATE | OPEN |
+| Agent06 independent integrated-source certification | PENDING |
+| Canonical PR #198 integration | BLOCKED |
+| Merge / Production | NOT AUTHORIZED / NO-GO |
+
+Preserve historical evidence: tested executable `3a8dce2fa296fd6a3b51c14bdd193d757cc4aa5c`, [CI #44242532694](https://github.com/AbdullahZaher/vibress/actions/runs/44242532694). This documentation change does not constitute new tests. Next: build and validate enforceable L1, E2 additive migration and anti-replay behavior in isolation; prepare independent IAM/DBA review on exact candidate; no canonical integration until required authorization. **REQUEST CHANGES / NO-GO.**
+
+---
+
+## Historical proposal snapshot (superseded status; not current governing text)
+
 # P06 — E2-A Project Owner decision package (PROPOSAL / DECISION PENDING)
 
 > 2026-11-18 Asia/Riyadh. REVIEW-ONLY / NOT NORMATIVE. Source: PR #209 documentation HEAD `999246ce8a0379908be6d749cb3c1acd2330fa38`; verified tested executable `3a8dce2fa296fd6a3b51c14bdd193d757cc4aa5c`; tree `30fd302094db904ed537f1809c6b69e607312d00`. Canonical PR #198 `b5cfc0687076c86a7450a8a785a072f6e63ad289` unchanged. No new PG16 test or independent human signature is claimed by this document.
