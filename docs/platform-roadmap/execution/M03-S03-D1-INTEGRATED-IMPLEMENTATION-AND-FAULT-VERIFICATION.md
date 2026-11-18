@@ -2,7 +2,7 @@
 
 **Date:** 2026-11-18 Asia/Riyadh · Agent01 coordination with Agent02/03/04/05 technical evidence  
 **Canonical exact SHA:** `b5cfc0687076c86a7450a8a785a072f6e63ad289` · tree `4808788688120b147fcab3fdd8a730021ec51516` (UNCHANGED).  
-**Verdict:** BLOCKED / NO INTEGRATED CANDIDATE · **No new tests executed for a D1 integrated SHA**. Human IAM PENDING, DBA PENDING, Owner P05 R1/R2 PENDING, M NOT DETERMINABLE. Production NO-GO.
+**Verdict:** BLOCKED / NO INTEGRATED CANDIDATE · **No new tests executed for a D1 integrated SHA**. Human IAM PENDING, DBA PENDING, Owner P05 **R1 POLICY APPROVED**, but actor epoch/reactivation and human IAM/DBA design approvals PENDING; M NOT DETERMINABLE. Production NO-GO.
 
 ## Evidence inventory (separate sources; DO NOT transfer PASS across SHAs)
 
@@ -20,7 +20,7 @@
 
 1. Dedicated nonpooled disposable PG16 operator connection; immutable `T0=performance.now()/hrtime` before connection acquisition. No reset on retries, reconnects, cancellations, SQL stages or journal recovery. New connection authorization stays source-bound and within D1.
 2. Positive, finite, **dynamically bounded** connect/query/statement/lock timeouts based on remaining deadline; explicitly distinguish driver timeout, query cancel and PostgreSQL lock failure. Retain no-default scalar ADD_FIELD-only renderer and existing deny-by-default role boundaries.
-3. Fixed ordering for registry/advisory/actor/approval/table locks after owner selects R1/R2; fresh server `clock_timestamp()` final check after catalog locks, immediately before allowed DDL. Expiry strictly later than final check remains nonretroactive.
+3. **Owner has selected R1 (policy only)** for both AUTHOR and APPROVER: committed deactivation before final serialized authorization denies DDL; later committed deactivation is nonretroactive. Design a provable total order between actor deactivation COMMIT and final authorization, with epoch/reactivation/reapproval choices and registry/advisory/actor/approval/table lock ordering **PENDING human IAM/DBA review**. Fresh server `clock_timestamp()` final Policy A check after catalog locks, immediately before allowed DDL; expiry strictly later remains nonretroactive. No code change without gates.
 4. No new DDL if remaining time exhausted; physical DDL + manifest CAS + completed journal in one PG transaction. Review ALREADY_APPLIED path separately for classification.
 5. Before COMMIT, `remainingMs > APPROVED_M` mandatory; **M presently unknown**, so do not dispatch from any asserted final D1 supervisor in a release candidate. Never substitute 109, 292, 293 or 300ms hypothetical values as policy.
 6. After COMMIT dispatch, distinguish **definitive acknowledged COMMITTED**, **definitive late committed/breach**, and **unknown INDETERMINATE**. A stale/late `APPLIED` return is forbidden. Keep monotonic T13/T14 evidence, not just wall-clock logs.
@@ -32,7 +32,7 @@
 ## Mandatory exact-SHA acceptance tests (all NOT RUN against a new integrated candidate)
 
 - Build, typecheck, lint, explicit-any, unit/integration, SCA, E2E, platform reference E2E, container scan.
-- Policy A expiry and approval revocation across lock waits and post-authorization nonretroactivity; R1/R2 actor-race matrix including deactivation/rollback/reactivation/epoch.
+- Policy A expiry and approval revocation across lock waits and post-authorization nonretroactivity; **approved R1** actor-race matrix (AUTHOR and APPROVER committed deactivation before final authorization must deny), also post-final deactivation, uncommitted/rolled-back deactivation, deadlocks, and **unapproved** epoch/reactivation/reapproval variants for specialist decision.
 - Privilege inheritance, SET ROLE, forged provenance, catalog drift, 0059/0060 exact migration hash and no grants.
 - D1-PG06 delayed COMMIT ACK regression; T0 before connect; DDL/COMMIT exhaustion; positive approved admission margin and false-timeout cohort.
 - Real PostgreSQL 55P03/40P01/57014 and rollback proof; lost ACK, backend fencing, fresh journal/registry/catalog consistency, original session quarantine.

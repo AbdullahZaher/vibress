@@ -17,9 +17,9 @@ Owner P04 expressly approved Policy A FINAL_PRE_DDL, Contract D1 **2517ms** for 
 
 ## P05 and specialist results
 
-**P05:** R1 recommended but NOT APPROVED; R2 alternative. A future explicit owner decision must fix actor-deactivation linearization, both AUTHOR/APPROVER semantics, epoch/reactivation and signed workload/SLO. Retain original bounded single-stressor test scope pending any explicit amendment. T15 recovery metrics and the originally suggested 99%/1% values remain UNAPPROVED.
+**P05:** R1 **OWNER APPROVED — POLICY ONLY (2026-11-18)** for both AUTHOR and APPROVER; [P05 decision relay](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6968063436). Deactivation committed before the final serialized authorization must deny DDL; later commit is nonretroactive. R2 NOT SELECTED. Exact actor-epoch/reactivation/reapproval semantics, lock order and migration approach remain PENDING human IAM/DBA review; no implementation is authorized. Workload/SLO amendments are separate. Retain original bounded single-stressor test scope pending any explicit amendment. T15 recovery metrics and the originally suggested 99%/1% values remain UNAPPROVED.
 
-**Agent05/03 IAM-RACE-01:** True PostgreSQL actor-deactivation race reproduced with source-pinned negative tests. Existing operator can proceed after privileged deactivation during relation wait; contractual violation depends on R1. PR #206 is test-only, **not remediation**. R1 may need epoch, lock-order and migration review.
+**Agent05/03 IAM-RACE-01:** True PostgreSQL actor-deactivation race reproduced with source-pinned negative tests. Existing operator can proceed after privileged deactivation during relation wait; under newly adopted R1 this is now an **OPEN contractual violation** on prior tested source. PR #206 is test-only, **not remediation**. R1 may need epoch, lock-order and migration review.
 
 **Agent05/03 IAM-WD-01:** real read-only backend identity tests exist, but no atomic PID+backend_start identity-gated cancellation. PostgreSQL native pg_signal_backend is too broad for runtime. No watchdog grant or privileged SECURITY DEFINER function created. OPEN.
 
@@ -41,7 +41,7 @@ Owner P04 expressly approved Policy A FINAL_PRE_DDL, Contract D1 **2517ms** for 
 |---|---|---|
 | AG06-S03-08 P2 | OPEN | Agent01+02+04+05: P05, M, D1 supervisor, independent approvals |
 | AG06-S03-10 P3 | OPEN | Agent03+02: sanitized mapping & real PG retests |
-| IAM-RACE-01 | CONTRACT-DEPENDENT | Agent05+03: owner R1/R2 then prove locking |
+| IAM-RACE-01 | OPEN — VIOLATES APPROVED R1 | Agent05+03+02: human IAM/DBA review of epoch/reapproval, serialize actor-state decision, real PG retest |
 | IAM-WD-01 | OPEN | Agent05+03+02: bounded identity-safe signaling design |
 | D1-PG06 | OPEN | Agent04+02: exact-SHA T13/T14 guard |
 | Human IAM/DBA | PENDING / PENDING | Named independent accountable humans |
@@ -49,7 +49,7 @@ Owner P04 expressly approved Policy A FINAL_PRE_DDL, Contract D1 **2517ms** for 
 
 **Risk:** potential invalid in-flight authorization, false deadline success, wrong-session cancel, uncertain COMMIT, misleading security metrics. No risk acceptance issued. **Containment:** #198 stays Draft; no merge, privileged grant, schema rewrite or production deployment.  
 **Rollback:** docs-only branch revert safe; future committed DDL must be reconciled, not inferred undone by client timeout.  
-**Next authorized action:** obtain P05 owner R1/R2 and operational decisions, human IAM/DBA independent concurrence, defend positive M or explicitly narrow acceptance contract; then implement isolated supervised operator and independently certify its exact SHA. **Merge BLOCKED. Production NO-GO.**
+**Next authorized action:** P05/R1 owner policy is now APPROVED. Obtain human IAM/DBA independent concurrence on actor epoch/reactivation, lock order and exact design; resolve separately pending SLO/M/recovery requirements, then authorize isolated implementation only when all prerequisite gates hold and independently certify exact SHA. **Merge BLOCKED. Production NO-GO.**
 
 ## Primary reproducible evidence and researched guidance
 

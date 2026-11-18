@@ -9,11 +9,11 @@
 | Owner Policy A | APPROVED — restricted dev/disposable test | P04 #6959358323; preserve fresh final pre-DDL PG check |
 | Owner D1 | APPROVED — 2517ms only, restricted | P04; COMMIT ACK T13 + classification T14 |
 | D2 | NOT APPROVED | No T15 deadline promise |
-| Trusted actor R1/R2 | PENDING OWNER DECISION | P05-01; R1 recommended only |
+| Trusted actor R1/R2 | **R1 OWNER APPROVED — POLICY ONLY** | P05 decision [#6968063436](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-6968063436); exact IAM/DBA lock/epoch design PENDING |
 | D1 supported workload | P04 single-stressor documented; amendment PENDING | Combined-fault safety negatives outside success SLO |
 | Owner operational SLO | PENDING | No approved 99%/1%, reconciliation or fence objectives |
 | Pre-COMMIT margin | NOT DETERMINABLE | Agent02/04 #6961059780; M not signed |
-| IAM-RACE-01 | CONTRACT-DEPENDENT / OPEN | PR #206 reproduces real race; no R1/R2 patch |
+| IAM-RACE-01 | **OPEN — R1 CONTRACT VIOLATION ON PRIOR TESTED SOURCE** | R1 now owner-approved; PR #206 reproduces race; implementation and retest absent |
 | IAM-WD-01 | OPEN | Read-only probe tests ≠ safe atomic cancellation |
 | AG06-S03-10 P3 | OPEN | PR #206 real 55P03 bug reproduction, no fix |
 | D1-PG06 | OPEN | Late APPLIED defect; no supervisor fix |
@@ -33,4 +33,4 @@
 **Risk rating:** blocking P2 authorization/deadline integration, P3 error taxonomy, unresolved privileged watcher and uncertain COMMIT; cannot classify as acceptable. No high/critical risk waiver issued. No independent human sign-offs verified.  
 **Rollback/containment:** no software/schema mutation in this governance-only package; revert/close this Draft docs PR if necessary. For any later authorized code: pre-verified backup and tested recovery, original backend isolation, reconcile catalog/registry/journal, automatic stop-new-DDL triggers on unknown COMMIT/privilege mismatch, no destructive rollback without separate written authority.  
 **Monitoring:** production none authorized; future staging owner-selected observation window and thresholds PENDING.  
-**Next permitted action:** attributable P05 decision, independently scoped IAM/DBA decisions, M evidence and least-privileged watcher design, then a frozen noncanonical implementation for exact-SHA tests.
+**Next permitted action:** human IAM/DBA actor-epoch, reactivation and lock-order review under approved R1; separate SLO/M/watchdog evidence. Only after required approvals may a frozen noncanonical implementation be considered for exact-SHA tests. No merge.
