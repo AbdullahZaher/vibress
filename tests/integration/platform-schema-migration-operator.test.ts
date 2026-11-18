@@ -87,36 +87,9 @@ async function createLab(key: Key): Promise<Lab> {
   await dbAdmin.query(schema);
   await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
     "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
-  // EXPERIMENT ONLY, installed in each owned disposable PG16 fixture AFTER
-  // the unchanged 0060 migration. SECURITY INVOKER with no extra operator
-  // grants: the actor roster writer and reader share per-login xact advisory
-  // keys. This is NOT a deployable 0061 or approved production mechanism.
-  await dbAdmin.query(
-    "CREATE FUNCTION public.s03_test_actor_xact_fence() " +
-    "RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER " +
-    "SET search_path=pg_catalog,pg_temp AS $actor$ " +
-    "DECLARE k text; BEGIN " +
-    "IF TG_OP = 'INSERT' THEN " +
-    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
-    "    pg_catalog.hashtext(NEW.login_name)); RETURN NEW; " +
-    "ELSIF TG_OP = 'DELETE' THEN " +
-    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
-    "    pg_catalog.hashtext(OLD.login_name)); RETURN OLD; " +
-    "ELSE " +
-    "  FOR k IN SELECT DISTINCT a.login FROM " +
-    "    pg_catalog.unnest(ARRAY[OLD.login_name,NEW.login_name]) AS a(login) " +
-    "    ORDER BY a.login LOOP " +
-    "    PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "      pg_catalog.hashtext('vibress_m03s03_actor'), pg_catalog.hashtext(k)); " +
-    "  END LOOP; RETURN NEW; " +
-    "END IF; END $actor$; " +
-    "CREATE TRIGGER s03_test_actor_xact_fence " +
-    "BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors " +
-    "FOR EACH ROW EXECUTE FUNCTION public.s03_test_actor_xact_fence(); " +
-    "REVOKE ALL ON FUNCTION public.s03_test_actor_xact_fence() FROM PUBLIC"
-  );
+  // Reuse the identical disposable-only PostgreSQL actor fence as fault harness.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-r1-actor-fence-experimental.sql"), "utf8"));
   // E2-A is ONLY a disposable test fixture, not a numbered migration and not
   // an approved real actor reactivation policy. 0059/0060 remain unchanged.
   await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
