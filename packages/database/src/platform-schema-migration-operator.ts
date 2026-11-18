@@ -443,6 +443,41 @@ export async function executeApprovedAdditiveColumn(
     }
     await verifyCatalog(db, oid, resource);
     const beforeRows = await rowCount(db, ddl.tableName);
+
+    // EXPERIMENTAL P05/R1 ONLY: cooperative transaction advisory fencing.
+    // PostgreSQL SELECT FOR SHARE would require UPDATE privilege on this
+    // owner-controlled roster and MUST NOT be granted to the operator.
+    // The disposable-only fixture installs a nonprivileged BEFORE actor-
+    // mutation trigger that acquires the SAME per-login advisory xact key.
+    // This permits a read-only operator to serialize final actor state
+    // without actor DML/ownership rights. The trigger is NOT in 0059/0060;
+    // normative adoption needs human IAM/DBA + migration/lock-order approval.
+    for (const actorLogin of [planRecord.author_login, approval.approver_login].sort()) {
+      await db.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), " +
+        "hashtext($1::text))",
+        [actorLogin],
+      );
+      const expectedAuthor = actorLogin === planRecord.author_login;
+      const row = await db.query<{
+        login_name: string; principal_id: string; actor_kind: string;
+        identity_mode: string; active: boolean;
+      }>(
+        "SELECT login_name, principal_id, actor_kind, identity_mode, active " +
+        "FROM public.platform_schema_trusted_actors WHERE login_name = $1",
+        [actorLogin],
+      );
+      const actor = row.rows[0];
+      if (row.rows.length !== 1 || !actor || !actor.active ||
+          actor.login_name !== actorLogin ||
+          actor.principal_id !== (expectedAuthor ?
+            planRecord.author_principal_id : approval.approver_principal_id) ||
+          actor.actor_kind !== (expectedAuthor ? "AUTHOR" : "APPROVER") ||
+          actor.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN") {
+        deny("UNAUTHORIZED", "trusted actor changed before final DDL authorization");
+      }
+    }
+
     // Proposed Policy A (owner approval pending): expiry linearizes at the
     // last database-observed authorization read, AFTER all potentially blocking
     // target-lock waits and catalog/row checks, IMMEDIATELY BEFORE DDL.
