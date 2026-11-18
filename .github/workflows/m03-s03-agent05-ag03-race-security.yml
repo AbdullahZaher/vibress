@@ -1,10 +1,11 @@
-name: M03-S03 Agent05+03 P05 R1 Experimental PG16 Lock Race Evidence
+name: M03-S03 Agent05+02+03 R1-10 E2 Experimental PostgreSQL16 Evidence
 
 on:
   push:
     branches:
       - test/m03-s03-ag05-ag03-trusted-actor-watchdog-20261117
       - experiment/m03-s03-r1-actor-linearization-20261118
+      - experiment/m03-s03-r1-lock-order-e2-20261118
   pull_request:
     branches:
       - fix/m03-s03-ag01-ag05-approval-expiry-linearization-20261117
@@ -50,7 +51,7 @@ jobs:
           echo "POSTGRES_VERSION_NUM=$pg_ver"
       - name: Run adversarial actor-state and watchdog observation tests
         run: |
-          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0" --testTimeout=90000 --hookTimeout=120000
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-" --testTimeout=90000 --hookTimeout=120000
       - name: Rerun full original authenticated operator and expiry regressions
         run: |
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts --testTimeout=90000 --hookTimeout=120000
