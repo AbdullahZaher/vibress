@@ -22,7 +22,7 @@ export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT",
   return startStatementAckFaultProxy(command, fault);
 }
 
-export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | "ALTER TABLE" | "UPDATE" | "INSERT" | "ROLLBACK", fault: "DROP" | "STALL"): Promise<CommitAckDrop> {
+export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | "ALTER TABLE" | "UPDATE" | "INSERT" | "ROLLBACK", fault: "DROP" | "STALL" | "OBSERVE", onObserved?:()=>void): Promise<CommitAckDrop> {
   const marker = command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" :
     command === "ALTER TABLE" ? "ALTER TABLE " :
     command === "UPDATE" ? "UPDATE public.platform_schema_registry SET manifest" :
@@ -81,6 +81,11 @@ export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | 
           // this acknowledgment to the application client.
           seenCommit = true;
           resolveCommit?.();
+          onObserved?.();
+          if (fault === "OBSERVE") {
+            if (!downstream.destroyed) downstream.write(frame);
+            continue;
+          }
           if (fault === "STALL") { stalled = true; return; }
           downstream.destroy();
           upstream.destroy();

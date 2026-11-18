@@ -70,7 +70,12 @@ BEGIN
  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(session_user::text));
  IF NOT EXISTS(SELECT 1 FROM public.s03_p06_approvals a JOIN public.s03_p06_submissions s USING(submission_id)
  JOIN public.platform_schema_registry r USING(installation_id) JOIN public.platform_schema_trusted_actors v ON v.login_name=a.approver_login
- WHERE a.approval_id=p_approval AND a.approver_login=session_user AND v.active AND v.actor_kind='APPROVER'
+ JOIN public.s03_p06_actor_enrollments e ON e.actor_instance_id=v.actor_instance_id
+ JOIN public.s03_p06_recovery_epochs re ON re.installation_id=s.installation_id AND re.epoch_id=e.epoch_id AND re.epoch_id=s.recovery_epoch
+ JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=v.login_name
+ WHERE pr.rolcanlogin AND NOT(pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+ AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid)
+ AND a.approval_id=p_approval AND a.approver_login=session_user AND v.active AND v.actor_kind='APPROVER'
  AND v.principal_id=a.approver_principal AND v.actor_instance_id=a.approver_instance AND v.actor_generation=a.approver_generation
  AND r.database_name=current_database() AND r.environment IN ('test','development'))
  THEN RAISE EXCEPTION 'revocation authority unavailable' USING ERRCODE='42501'; END IF;
