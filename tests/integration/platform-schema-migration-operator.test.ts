@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { verifyExperimentalRegistry,registryAcceptanceMessage } from "../../packages/database/src/schema-operator-experimental-registry";
+import { verifyExperimentalWriterTopology } from "../../packages/database/src/schema-operator-experimental-writer-contract";
+import { compileExperimentalPhysicalContract,prepareExperimentalPhysicalTransition } from "../../packages/schema-engine/src";
 import { runExperimentalRecoveryUnit } from "../../packages/database/src/schema-operator-experimental-admission";
 import { TenantUnitOfWork,verifyTenantScope } from "@vibress/tenancy";
 import { randomBytes, randomUUID, generateKeyPairSync, sign, createHash } from "node:crypto";
@@ -4565,7 +4568,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     if(container!=="vibress-m03-physical-ci" || process.env.GITHUB_ACTIONS!=="true") throw Error("dedicated CI container required");
     const physical=(...args:string[])=>{
       const x=spawnSync("bash",["tests/fixtures/m03-actual-physical-cluster.sh",...args],{encoding:"utf8",timeout:120000});
-      if(x.status!==0)throw Error("physical helper failed: "+x.stderr);
+      if(x.status!==0)throw Error("physical helper failed ["+args[0]+"]: "+x.stdout+" "+x.stderr);
       console.info(x.stdout.trim());
     };
     const start=performance.now();
@@ -4614,11 +4617,17 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     };
     try{
       const initial=await state(lab.dbAdmin),initialData=await data(lab.dbAdmin),initialMigrations=await migrationDigest();
+      const primaryIdentity=(await lab.dbAdmin.query<{systemIdentifier:string;databaseOid:string;timeline:number}>('SELECT (pg_control_system()).system_identifier::text AS "systemIdentifier",oid::text AS "databaseOid",(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database WHERE datname=current_database()')).rows[0]!;
+      const setTarget=async()=>(await lab.dbAdmin.query<{segment:string}>("SELECT pg_walfile_name(pg_create_restore_point('vibress_component_target')) AS segment")).rows[0]!.segment;
+      let segment:string|undefined;
       mark("baseline");
       physical("backup");
       mark("backup_and_verify");
+      // Generate a real record before forcing a segment switch. A no-op
+      // pg_switch_wal on an empty current segment is not sufficient.
+      await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_padding')");
       await lab.dbAdmin.query("SELECT pg_switch_wal()");
-      if(mode==="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
+      if(mode==="rewound")segment=await setTarget();
       if(mode==="lost-ack"){
         const proxy=await startStatementAckFaultProxy("COMMIT","DROP");
         void proxy.serverCommitObserved.catch(()=>undefined);
@@ -4634,9 +4643,10 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
       reopen();
       const committed=await state(lab.dbAdmin),committedData=await data(lab.dbAdmin);
       expect(committed).not.toBe(initial);
-      if(mode!=="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
-      // Archive target segment and verify it exists before stopping the original.
-      const segment=(await lab.dbAdmin.query<{segment:string}>("SELECT pg_walfile_name(pg_current_wal_insert_lsn()) AS segment")).rows[0]!.segment;
+      if(mode!=="rewound")segment=await setTarget();
+      if(!segment)throw Error("named target WAL identity missing");
+      // Archive the exact segment containing the named restore record.
+      // Do not infer it from a later insert LSN.
       await lab.dbAdmin.query("SELECT pg_switch_wal()");
       physical("archive",segment);
       if(!a.snapshot().pending)a.beginRecovery();
@@ -4708,9 +4718,12 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         mark("journal_and_authority_reconciliation");
         const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify(q)).digest("hex");
         expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
-        const identity=(await dbAdmin.query<{systemIdentifier:string;databaseOid:string;timeline:number}>('SELECT (pg_control_system()).system_identifier::text AS "systemIdentifier",oid::text AS "databaseOid",(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database WHERE datname=current_database()')).rows[0]!;
-        const target={version:2 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,...identity,manifestDigest,dataDigests};
+        // Same physical cluster/database, new timeline after promotion.
+        // Expected identity comes from the retained pre-restore observation.
+        const target={version:2 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,...primaryIdentity,timeline:primaryIdentity.timeline+1,manifestDigest,dataDigests};
         const advance={epoch:nextEpoch,quiescenceEvidenceDigest,target};
+        const wrongTarget={...target,installationId:"other-installation"};
+        expect(()=>a.advanceScoped(nextEpoch,quiescenceEvidenceDigest,wrongTarget,attestRecovery(a,"ADVANCE_V2",{...advance,target:wrongTarget}))).toThrow();
         a.advanceScoped(nextEpoch,quiescenceEvidenceDigest,target,attestRecovery(a,"ADVANCE_V2",advance));
         reopen();
         const nextObservation={...observation,epoch:nextEpoch};
@@ -4729,6 +4742,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         expect(()=>a.activate(wrongEpoch,attestRecovery(a,"READY",wrongEpoch))).toThrow();
         const scoped=await a.scopedReadiness(dbAdmin);
         const sig=attestRecovery(a,"READY_V2",scoped);
+        if(scoped.observed.journal.length){const missing={...scoped,observed:{...scoped.observed,journal:[]}};await expect(a.activateScoped(dbAdmin,missing,attestRecovery(a,"READY_V2",missing))).rejects.toThrow();}
         expect(()=>a.activate(ready,attestRecovery(a,"READY",ready))).toThrow();
         await expect(a.activateScoped(dbAdmin,scoped,"A".repeat(86))).rejects.toThrow();
         for(const bad of [
@@ -4740,6 +4754,8 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
           {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,installationId:"wrong-installation"}}},
           {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,databaseName:"vibress_s03_wrong"}}},
           {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,databaseOid:"99999"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,systemIdentifier:"99999"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,timeline:99}}},
           {...scoped,observed:{...scoped.observed,catalogManifestDigest:"f".repeat(64)}},
           {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,dataDigests:{[lab.table]:"f".repeat(64)}}}},
         ])await expect(a.activateScoped(dbAdmin,bad,attestRecovery(a,"READY_V2",bad))).rejects.toThrow();
@@ -4869,4 +4885,96 @@ it("M03-ADMISSION-01: authority-local transaction fence through actual TenantUni
     await expect(run(async()=>{throw Error("should not admit offline authority");})).rejects.toThrow();
     console.info("M03_LOCAL_UOW_ADMISSION=PASS");
   }finally{auth.close();await pool.end();rmSync(root,{recursive:true,force:true});}
+},30000);
+
+it("M03-REGISTRY-01: signed committed registry provenance, pure physical planning and live catalog drift refusal",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const req=await freshP06(lab),scope={applicationId,installationId:lab.installationId};
+  const target=lab.plan.proposedManifest;
+  const prepared=prepareExperimentalPhysicalTransition(lab.current,target,scope);
+  expect(prepared.disposition).toBe("EXISTING_OPERATOR_AUTHORIZATION_REQUIRED");
+  expect(prepared.ddl?.columnName).toBe("website");
+  expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
+  expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
+  expect((await executeP06(lab.operator,req,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+  const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
+    operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
+  const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
+  await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+  try{
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey);
+    expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    const wrong={...evidence,operationId:randomUUID()};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("GRANT SELECT ON "+q+" TO PUBLIC");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("REVOKE SELECT ON "+q+" FROM PUBLIC");}
+    await lab.dbAdmin.query("ALTER TABLE "+q+" ADD COLUMN surprise text");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("ALTER TABLE "+q+" DROP COLUMN surprise");}
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).toEqual(good);
+  }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+},30000);
+
+it("M03-WRITER-02: expected effective authority, grant and ownership drift refusal",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"};
+  const verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify();
+  expect(expected.relationChecks).toBeGreaterThan(0);
+  const checks=[
+    ["GRANT UPDATE(installation_id) ON public.platform_schema_registry TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole),"REVOKE UPDATE(installation_id) ON public.platform_schema_registry FROM "+lab.dbAdmin.escapeIdentifier(lab.operatorRole)],
+    ["GRANT SELECT ON public.platform_schema_registry TO PUBLIC","REVOKE SELECT ON public.platform_schema_registry FROM PUBLIC"],
+    ["GRANT "+lab.dbAdmin.escapeIdentifier(lab.author)+" TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"REVOKE "+lab.dbAdmin.escapeIdentifier(lab.author)+" FROM "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole)],
+    ["ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO public","ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO pg_catalog,pg_temp"],
+    ["ALTER TABLE public.s03_p06_revocations OWNER TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"ALTER TABLE public.s03_p06_revocations OWNER TO vibress"]
+  ];
+  for(const [change,undo] of checks){
+    await lab.dbAdmin.query(change!);
+    try{await expect(verify()).rejects.toThrow();}
+    finally{await lab.dbAdmin.query(undo!);}
+    expect(await verify()).toEqual(expected);
+  }
+  console.info("EXPECTED_WRITER_CONTRACT "+JSON.stringify(expected));
+},30000);
+
+
+it("M03-WATCHDOG-01: one-shot deadline owns only its target; unrelated same-role transaction survives",async()=>{
+  const lab=await createLab("ct");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),dir=mkdtempSync(path.join(tmpdir(),"s03-owned-watchdog-"));
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  const proxy=await startTransactionAckFaultProxy("BEGIN","STALL");
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  type Backend={pid:number;started:string;db:number;role:string;state:string};
+  const sessions=async()=> (await lab.dbAdmin.query<Backend>("SELECT pid,backend_start::text AS started,datid AS db,usename AS role,state FROM pg_stat_activity WHERE datname=$1 AND usename=$2 ORDER BY pid",[lab.name,lab.operatorRole])).rows;
+  let execution:Promise<unknown>|undefined;
+  try{
+    await lab.operator.query("BEGIN");
+    const sentinel=(await sessions()).find(x=>x.pid===lab.operator.processID)!;
+    expect(sentinel.state).toBe("idle in transaction");
+    const budget=new ExperimentalD1Budget();
+    execution=a.execute(url.toString(),request,epochKeys.publicKey,budget);
+    void execution.catch(()=>undefined);
+    await proxy.serverCommitObserved;
+    const owned=(await sessions()).filter(x=>x.pid!==sentinel.pid);
+    expect(owned).toHaveLength(1);
+    expect(owned[0]).toMatchObject({db:sentinel.db,role:sentinel.role,state:"idle in transaction"});
+    await expect(execution).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    let current:Backend[]=[];
+    for(let i=0;i<100;i++){current=await sessions();if(current.length===1)break;await new Promise(resolve=>setTimeout(resolve,10));}
+    expect(current).toEqual([sentinel]);
+    expect((await lab.operator.query("SELECT pg_backend_pid() AS pid")).rows).toEqual([{pid:sentinel.pid}]);
+    await lab.operator.query("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([]);
+    expect((await lab.dbAdmin.query("SELECT pg_has_role($1,'pg_signal_backend','USAGE') AS signal",[lab.operatorRole])).rows).toEqual([{signal:false}]);
+    console.info("M03_OWNED_WATCHDOG_SAME_ROLE=PASS");
+  }finally{await execution?.catch(()=>undefined);await lab.operator.query("ROLLBACK").catch(()=>undefined);await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
 },30000);

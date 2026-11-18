@@ -69,7 +69,7 @@ restore)
  ! pg_ctl -D "$r/primary" status
  if [[ -n "$1" ]]; then
    # The needed target segment must not be part of the streamed base backup.
-   [[ ! -f "$r/backup/pg_wal/$1" ]]
+   [[ ! -f "$r/backup/pg_wal/$1" ]] || { echo "target WAL was included in base backup; negative scenario cannot prove absence" >&2; exit 1; }
    cp -a "$r/backup" "$r/missing"
    mkdir "$r/incomplete-archive"
    for f in "$r/archive/"*; do [[ "$(basename "$f")" == "$1" ]] || cp "$f" "$r/incomplete-archive/"; done
