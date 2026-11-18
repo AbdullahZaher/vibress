@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -117,6 +117,10 @@ async function createLab(key: Key): Promise<Lab> {
     "FOR EACH ROW EXECUTE FUNCTION public.s03_test_actor_xact_fence(); " +
     "REVOKE ALL ON FUNCTION public.s03_test_actor_xact_fence() FROM PUBLIC"
   );
+  // E2-A is ONLY a disposable test fixture, not a numbered migration and not
+  // an approved real actor reactivation policy. 0059/0060 remain unchanged.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -1721,7 +1725,7 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
     await assertNoWrite(lab,checksum);
   }, 30000);
 
-  it("IAM-RACE-01E: deactivate-then-reactivate before first roster check is allowed by present schema", async () => {
+  it("E2-REPLAY-01: deactivate-reactivate must NOT revive old approval (test-only E2-A)", async () => {
     const lab = await createLab("s");
     labs.push(lab);
     await approve(lab);
@@ -1734,13 +1738,13 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
       "UPDATE public.platform_schema_trusted_actors SET active=true " +
       "WHERE login_name=$1", [lab.approver],
     );
-    expect((await run(lab)).status).toBe("APPLIED");
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
     expect(await contentChecksum(lab)).toBe(before);
+    expect(await hasWebsite(lab)).toBe(false);
     expect((await lab.dbAdmin.query(
       "SELECT 1 FROM public.platform_schema_migration_journal"
-    )).rowCount).toBe(1);
-    // No generation/epoch field exists today: a later active=true masks the
-    // earlier privileged deactivation. A policy decision is required.
+    )).rowCount).toBe(0);
+    // Experimental E2-A generation bound reapproval is NOT owner approved.
   }, 30000);
 });
 
