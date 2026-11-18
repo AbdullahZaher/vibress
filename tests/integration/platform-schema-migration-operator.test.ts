@@ -2249,3 +2249,188 @@ describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () 
     expect(actor.rows[0]?.active).toBe(true);
   }, 30000);
 });
+
+
+/**
+ * L1 global admin order (fixture-only). The supported protocol takes the
+ * approval-specific transaction advisory key first, then actor keys in stable
+ * order, BEFORE the first UPDATE acquires any implicit tuple locks. This is
+ * a test orchestration protocol, NOT an authorized production admin function.
+ */
+describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
+  it("R1-10-FIX: approval-first admin cannot hold actor X while waiting for operator approval A", async () => {
+    const lab = await createLab("ab");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const operator = lab.operator, admin = lab.dbAdmin;
+    let adminWait: Promise<unknown> | undefined;
+    try {
+      await operator.query("BEGIN");
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      await admin.query("BEGIN");
+      // L1: no actor UPDATE, no tuple locks before approval fence acquisition.
+      adminWait = admin.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      let blocked = false;
+      for (let attempt=0; attempt<100; attempt+=1) {
+        const probe = await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [admin.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked=true; break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(blocked, "admin must wait for approval key BEFORE any actor row lock").toBe(true);
+      // Operator already has approval A, and can now acquire actor X without
+      // waiting: admin holds NO actor-row/advisory lock in the corrected order.
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), hashtext($1::text))",
+        [lab.author],
+      );
+      await operator.query("COMMIT");
+      await adminWait; // Now admin has A and no competing X holder.
+      await admin.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), hashtext($1::text))",
+        [lab.author],
+      );
+      await admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.author],
+      );
+      await admin.query(
+        "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp() " +
+        "WHERE installation_id=$1 AND plan_digest=$2 AND operation_id=$3",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      await admin.query("COMMIT");
+    } finally {
+      await operator.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([adminWait ?? Promise.resolve()]);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(false);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals " +
+      "WHERE installation_id=$1", [lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+});
+
+/**
+ * Experimental E2-A: immutable instance + increasing generation bound into
+ * plan and approval via fixture-only triggers. Owner has NOT approved E2-A.
+ * Neither fixture-only DDL nor these test outcomes imply policy authorization.
+ */
+describe("E2 actor generation/provenance adversarial tests (TEST-ONLY POLICY)", () => {
+  it("E2-01: APPROVER deactivate/reactivate increments epoch and rejects old signed approval", async () => {
+    const lab=await createLab("ac"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const before=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.approver],
+    );
+    const after=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(after.actor_instance_id).toBe(before.actor_instance_id);
+    expect(BigInt(after.actor_generation)).toBe(BigInt(before.actor_generation)+2n);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+
+  it("E2-02: AUTHOR deactivate/reactivate rejects old plan and approval", async () => {
+    const lab=await createLab("ad"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.author],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.author],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET actor_generation=actor_generation+1 " +
+      "WHERE login_name=$1", [lab.author],
+    )).rejects.toMatchObject({code:"42501"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-03: DELETE and re-register same LOGIN gets new actor instance; old approval denied", async () => {
+    const lab=await createLab("ae"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const saved=(await lab.dbAdmin.query<{
+      actor_instance_id:string;principal_id:string
+    }>("SELECT actor_instance_id, principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) " +
+      "VALUES($1,$2,'APPROVER')",
+      [lab.approver,saved.principal_id],
+    );
+    const restored=(await lab.dbAdmin.query<{
+      actor_instance_id:string
+    }>("SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).not.toBe(saved.actor_instance_id);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-04: legacy NULL approval generation fails closed", async () => {
+    const lab=await createLab("af"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    // Fixture database owner simulates an old/unauthenticated imported row.
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_approvals SET approver_actor_generation=NULL " +
+      "WHERE installation_id=$1", [lab.installationId],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+});
