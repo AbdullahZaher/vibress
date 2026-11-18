@@ -30,7 +30,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3379,9 +3379,12 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
       await cluster.query("ALTER DATABASE "+escaped(lab.name)+" RENAME TO "+escaped(retained));
       retainedExists = true;
       const nextEpoch = randomUUID();
-      const sessions=(await cluster.query<{n:number}>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",[retained])).rows[0]?.n;
-      expect(sessions).toBe(0);
-      const quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,sessions})).digest("hex");
+      await cluster.query("ALTER DATABASE "+escaped(retained)+" ALLOW_CONNECTIONS false");
+      const observation=(await cluster.query<{oid:number;datallowconn:boolean;sessions:number;prepared:number}>(
+        "SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid=d.oid) AS sessions,"+
+        "(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[retained])).rows[0]!;
+      expect(observation).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+      const quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,observation})).digest("hex");
       durable.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(durable,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
       labEpochs.set(key,nextEpoch);
       labRecoveryPending.add(key);
@@ -4011,4 +4014,63 @@ it("P06-E2E-39: admission anchor failure before SQL and outcome anchor failure a
     expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
     authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(second,epochKeys.privateKey,secondAnchor,recoveryAdminKeys.publicKey)).toThrow();
   }finally{authority.close();rmSync(second,{recursive:true,force:true});}
+},30000);
+
+it("P06-E2E-40: PUBLIC and inherited/SET ROLE ACL drift cannot write registry or forge journal; retirement fences reversed LOGIN",async()=>{
+  const lab=await createLab("cf");labs.push(lab);await p06Install(lab);
+  const stale=await freshP06(lab),checksum=await contentChecksum(lab),esc=(v:string)=>lab.dbAdmin.escapeIdentifier(v);
+  const author=await connect(lab.name,lab.author);
+  try{
+    await lab.dbAdmin.query("GRANT SELECT,UPDATE(manifest_digest) ON public.platform_schema_registry TO PUBLIC");
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_completed_operations TO PUBLIC");
+    try{
+      expect((await lab.dbAdmin.query("SELECT has_column_privilege($1,'public.platform_schema_registry','manifest_digest','UPDATE') AS can_update,has_table_privilege($1,'public.s03_p06_completed_operations','INSERT') AS can_insert",[lab.author])).rows)
+        .toEqual([{can_update:true,can_insert:true}]);
+      await expect(author.query("UPDATE public.platform_schema_registry SET manifest_digest=$1",["f".repeat(64)])).rejects.toMatchObject({code:"42501"});
+      await expect(author.query("INSERT INTO public.s03_p06_completed_operations(installation_id,operator_role) VALUES($1,$2)",[lab.installationId,lab.operatorRole])).rejects.toMatchObject({code:"42501"});
+    }finally{
+      await lab.dbAdmin.query("REVOKE SELECT,UPDATE(manifest_digest) ON public.platform_schema_registry FROM PUBLIC");
+      await lab.dbAdmin.query("REVOKE INSERT ON public.s03_p06_completed_operations FROM PUBLIC");
+    }
+    await cluster.query("GRANT "+esc(lab.author)+" TO "+esc(lab.runtimeRole)+" WITH INHERIT TRUE, SET TRUE");
+    try{
+      expect((await cluster.query("SELECT inherit_option,set_option FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=$1) AND roleid=(SELECT oid FROM pg_roles WHERE rolname=$2)",[lab.runtimeRole,lab.author])).rows)
+        .toMatchObject([{inherit_option:true,set_option:true}]);
+      await lab.runtime.query("SET ROLE "+esc(lab.author));
+      await expect(lab.runtime.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await lab.runtime.query("RESET ROLE");
+    }finally{await lab.runtime.query("RESET ROLE");await cluster.query("REVOKE "+esc(lab.author)+" FROM "+esc(lab.runtimeRole));}
+    const previous=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>("SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    // Trusted cluster-admin protocol: retire and commit before any security-
+    // relevant cluster mutation, even if the native role change is later reversed.
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_retire($1,$2)",[lab.installationId,lab.author]);
+    await cluster.query("ALTER ROLE "+esc(lab.author)+" NOLOGIN");
+    await cluster.query("ALTER ROLE "+esc(lab.author)+" LOGIN");
+    const replacement=(await lab.dbAdmin.query<{instance:string}>("SELECT public.s03_p06_root_register($1,$2,$3,'AUTHOR') AS instance",[lab.installationId,lab.author,previous.principal_id])).rows[0]!;
+    expect(replacement.instance).not.toBe(previous.actor_instance_id);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows).toEqual([{manifest_digest:lab.current.digest}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }finally{await author.end();}
+},30000);
+
+it("P06-E2E-41: durable admitted whole-operation stage measurement includes ledger fsync and anchor",async()=>{
+  const lab=await createLab("cg");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-durable-measurement-"));
+  const authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+    const budget=new ExperimentalD1Budget(undefined,true);
+    const result=await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,budget);
+    const samples=budget.measurements();
+    expect(samples.map(s=>s.stage)).toEqual(expect.arrayContaining(["ADMISSION_START","ADMIT_LEDGER_FSYNC","ADMIT_ANCHOR_CONFIRMED","CONNECT_START","CONNECT_ACK","REGISTRY_LOCK","INITIAL_PROOF","TARGET_LOCK","ACTOR_LOCKS","FINAL_PROOF","FINAL_AUTHORIZATION","DDL_ACK","MANIFEST_CAS_ACK","JOURNAL_ACK","COMMIT_ACK","OUTCOME_LEDGER_FSYNC","OUTCOME_ANCHOR_CONFIRMED","FINAL_CLASSIFICATION"]));
+    for(let i=1;i<samples.length;i++)expect(samples[i]!.elapsedMs).toBeGreaterThanOrEqual(samples[i-1]!.elapsedMs);
+    expect(result.status).toBe("APPLIED");expect(budget.expired()).toBe(false);
+    console.info("D1_DURABLE_EXPLORATORY "+JSON.stringify({rows:2,n:1,margin:"NOT_DETERMINABLE",stages:samples}));
+    const recoveryBudget=new ExperimentalD1Budget(undefined,true);
+    expect((await authority.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,recoveryBudget)).status).toBe("ALREADY_APPLIED");
+    console.info("D1_DURABLE_RECONCILE_EXPLORATORY "+JSON.stringify({elapsedMs:2517-recoveryBudget.remainingMs(),n:1}));
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
 },30000);

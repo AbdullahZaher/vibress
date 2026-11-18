@@ -78,7 +78,9 @@ export async function superviseDisposableSchemaOperation(
     if (session.snapshot().terminalCause) throw new SchemaMigrationOperatorError("INDETERMINATE", "recovery admission fenced");
     budget.checkpoint();
     try {
+      budget.mark("CONNECT_START");
       await db.connect();
+      budget.mark("CONNECT_ACK");
     } catch {
       session.fence("CONNECTION_FAILED");
       throw new SchemaMigrationOperatorError("INDETERMINATE", "supervisor connection failed; use fresh connection");

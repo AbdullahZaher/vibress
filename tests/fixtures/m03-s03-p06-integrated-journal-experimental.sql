@@ -407,3 +407,33 @@ END $body$;
 CREATE TRIGGER aa_s03_p06_journal_writer BEFORE INSERT ON public.s03_p06_completed_operations
  FOR EACH ROW EXECUTE FUNCTION public.s03_p06_journal_writer_guard();
 REVOKE ALL ON FUNCTION public.s03_p06_journal_writer_guard() FROM PUBLIC;
+
+-- Experimental physical boundary for ordinary registry writers. The root and
+-- dedicated operator are explicit trust roots for their respective authority.
+CREATE FUNCTION public.s03_p06_registry_write_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE relation_owner text;
+BEGIN
+ SELECT pg_catalog.pg_get_userbyid(relowner) INTO relation_owner FROM pg_catalog.pg_class WHERE oid=TG_RELID;
+ IF current_user=session_user AND session_user=relation_owner THEN
+   IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+   RETURN NEW;
+ END IF;
+ IF TG_OP<>'UPDATE' OR current_user IS DISTINCT FROM session_user
+    OR session_user IS DISTINCT FROM OLD.operator_role
+    OR OLD.database_name IS DISTINCT FROM current_database()
+    OR OLD.environment NOT IN ('test','development')
+    OR (pg_catalog.to_jsonb(NEW)-'manifest'-'manifest_digest'-'updated_at') IS DISTINCT FROM
+       (pg_catalog.to_jsonb(OLD)-'manifest'-'manifest_digest'-'updated_at')
+ THEN RAISE EXCEPTION 'registry writer denied' USING ERRCODE='42501'; END IF;
+ RETURN NEW;
+END $body$;
+CREATE TRIGGER aa_s03_p06_registry_write BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_registry
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_registry_write_guard();
+CREATE TRIGGER aa_s03_p06_registry_truncate BEFORE TRUNCATE ON public.platform_schema_registry
+ FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_metadata_owner_guard();
+REVOKE ALL ON FUNCTION public.s03_p06_registry_write_guard() FROM PUBLIC;
+
+-- Scope the historical-trust-root administrative protocol: retirement BEFORE
+-- cluster-level identity/credential changes, then a newly enrolled instance.
+-- Root can bypass this protocol; that requires independent operational review.

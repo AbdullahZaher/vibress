@@ -29,7 +29,7 @@ type State = { installationId: string; databaseName: string; epoch: string; epoc
   pending: boolean; advanced: boolean; intent?: string; operations: Map<string,Operation> };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
-const refuse = (): never => { throw Error("durable recovery authority refused"); };
+function refuse(): never { throw Error("durable recovery authority refused"); }
 const keyIdentity=(key:KeyObject)=>createHash("sha256").update(key.export({type:"spki",format:"der"})).digest("hex");
 // An independent trusted administrator signs exact observations, not merely a
 // digest format. The signature is bound to this ledger head and transition.
@@ -141,21 +141,24 @@ export class DisposableDurableRecoveryAuthority {
   private assertAnchor():void{
     if(!sameRecoveryHead(this.anchor.read(),this.anchorValue(this.current()))) refuse();
   }
-  private append(event:Event):void{
+  private append(event:Event,budget?:ExperimentalD1Budget):void{
     if(this.lock===undefined||this.poisoned) refuse();
     const next=reduce(this.state,event);
     const record={previous:this.head,event,hash:hash(this.head,event)};
     try{
       const previous=this.state?this.anchorValue(this.state):null;
       if(!sameRecoveryHead(this.anchor.read(),previous)) refuse();
+      budget?.mark(event.kind+"_LEDGER_START");
       const fd=openSync(this.path,"a");try{
         writeFileSync(fd,JSON.stringify(record)+"\n","utf8");fsyncSync(fd);
       }finally{closeSync(fd);}
       // Never return success or publish state until both writes are confirmed.
       // A crash between them leaves a mismatch requiring offline investigation.
+      budget?.mark(event.kind+"_LEDGER_FSYNC");
       const nextAnchor=this.anchorValue(next,record.hash,this.sequence+1);
       this.anchor.compareAndSet(previous,nextAnchor);
       if(!sameRecoveryHead(this.anchor.read(),nextAnchor)) refuse();
+      budget?.mark(event.kind+"_ANCHOR_CONFIRMED");
     }catch(error){this.poisoned=true;for(const fence of this.fences.values()) fence();throw error;}
     this.state=next;this.head=record.hash;this.sequence++;
   }
@@ -196,7 +199,7 @@ export class DisposableDurableRecoveryAuthority {
     // validated outcome record; no automatic claim of distributed atomicity.
     this.requireAdministration("RESOLVE",{operationId,outcome,evidenceDigest,newDigest},signature);
     if(outcome==="COMMITTED"){
-      if(!newDigest||!SHA.test(newDigest)) refuse();
+      if(!newDigest||!SHA.test(newDigest)) return refuse();
       this.append({kind:"OUTCOME",operationId,outcome:"COMMITTED",newDigest,evidenceDigest});
     }else{
       if(newDigest!==undefined) refuse();
@@ -228,11 +231,12 @@ export class DisposableDurableRecoveryAuthority {
     budget=new ExperimentalD1Budget()):Promise<SchemaOperatorResult>{
     this.assertAnchor();
     const s=this.current(),url=new URL(connectionString);
-    if(keyIdentity(publicKey)!==s.signingIdentity||s.pending||request.installationId!==s.installationId||url.pathname!=="/"+s.databaseName) return refuse();
+    if(this.fences.size!==0||keyIdentity(publicKey)!==s.signingIdentity||s.pending||request.installationId!==s.installationId||url.pathname!=="/"+s.databaseName) return refuse();
     budget.checkpoint();
     if(request.envelopeVersion!==1) refuse();
+    budget.mark("ADMISSION_START");
     this.append({kind:"ADMIT",operation:{operationId:request.operationId,submissionId:request.submissionId,
-      approvalId:request.approvalId,planDigest:request.planDigest,epoch:s.epoch,outcome:"ADMITTED"}});
+      approvalId:request.approvalId,planDigest:request.planDigest,epoch:s.epoch,outcome:"ADMITTED"}},budget);
     const id=request.operationId;
     try{
       const admission={attach:(fence:()=>void)=>{
@@ -241,15 +245,18 @@ export class DisposableDurableRecoveryAuthority {
       }};
       registerExperimentalAdmission(admission,request,"EXECUTE");
       const result=await superviseDisposableSchemaOperation(connectionString,request,this.proofAuthority(publicKey),"EXECUTE",budget,admission);
-      this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:result.newDigest});
+      this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:result.newDigest},budget);
+      budget.mark("FINAL_CLASSIFICATION");
       return budget.expired()&&result.status==="APPLIED"?{...result,status:"COMMITTED_LATE"}:
         budget.expired()&&result.status==="ALREADY_APPLIED"?{...result,status:"ALREADY_APPLIED_LATE"}:result;
     }catch(error){
       // Includes external write failure following PostgreSQL COMMIT. A failed
       // durable append poisons this instance; restart must reconcile ADMITTED.
       if(!this.poisoned){
-        this.append({kind:"OUTCOME",operationId:id,outcome:"UNCERTAIN"});
-        if(!this.current().pending) this.beginRecovery();
+        try{
+          this.append({kind:"OUTCOME",operationId:id,outcome:"UNCERTAIN"});
+          if(!this.current().pending) this.beginRecovery();
+        }catch{throw new SchemaMigrationOperatorError("INDETERMINATE","external outcome unavailable; offline reconciliation required");}
       }
       if(this.poisoned) throw new SchemaMigrationOperatorError("INDETERMINATE","external outcome unavailable; offline reconciliation required");
       throw error;
@@ -268,7 +275,9 @@ export class DisposableDurableRecoveryAuthority {
     try{
       const admission={attach:(fence:()=>void)=>{this.fences.set(id,fence);if(this.current().pending) fence();}};
       registerExperimentalAdmission(admission,request,"RECONCILE");
-      return await superviseDisposableSchemaOperation(connectionString,request,this.proofAuthority(publicKey),"RECONCILE",budget,admission);
+      const result=await superviseDisposableSchemaOperation(connectionString,request,this.proofAuthority(publicKey),"RECONCILE",budget,admission);
+      if(result.newDigest!==o.newDigest) throw new SchemaMigrationOperatorError("INDETERMINATE","external journal conflicts with reconciled database");
+      return result;
     }finally{this.fences.delete(id);}
   }
   close():void{

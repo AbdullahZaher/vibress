@@ -350,6 +350,7 @@ async function runP06(
     session.beforeDispatch("BEGIN");
     began = true;
     const beginResult = await rawDb.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+    budget.mark("BEGIN_ACK");
     session.acknowledge("BEGIN", beginResult.command);
     if (beginResult.command !== "BEGIN") throw new Error("unexpected begin response");
     beginAcknowledged = true;
@@ -362,6 +363,7 @@ async function runP06(
     await db.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'), hashtext($1::text))",
       [request.installationId]);
 
+    budget.mark("INSTALLATION_LOCK");
     const identity = (await db.query<IdentityRow>(
       "SELECT current_user, session_user, current_database() AS database_name, " +
       "current_setting('server_version_num')::int AS postgres_version",
@@ -409,7 +411,9 @@ async function runP06(
       if (!local || local.epoch_id !== external) deny("UNAUTHORIZED", "recovery epoch mismatch; re-enrollment required");
       return external;
     }
+    budget.mark("REGISTRY_LOCK");
     const recoveryEpoch = await assertRecoveryEpoch(identity.database_name);
+    budget.mark("INITIAL_PROOF");
     const planRecord = (await db.query<PlanRow>(
       "SELECT plan_digest,expected_manifest,plan FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",
       [request.installationId,request.planDigest],
@@ -453,6 +457,7 @@ async function runP06(
       'LOCK TABLE ONLY "public".' + db.escapeIdentifier(ddl.tableName) +
       " IN ACCESS EXCLUSIVE MODE",
     );
+    budget.mark("TARGET_LOCK");
     const oid = await assertAuthority(db, identity, registry, resource);
     const journal=(await db.query<CompletedRow>(
       "SELECT submission_id,approval_id,canonical_plan_digest,previous_digest,new_digest,operator_role "+
@@ -495,8 +500,10 @@ async function runP06(
     for (const key of keys.rows) {
       await db.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),$1::int)",[key.k]);
     }
+    budget.mark("ACTOR_LOCKS");
     if (await assertRecoveryEpoch(identity.database_name) !== recoveryEpoch)
       deny("UNAUTHORIZED", "recovery epoch changed; fresh enrollment required");
+    budget.mark("FINAL_PROOF");
     // One fresh server timestamp, exact identity tuple, actor fences and approval fence held until COMMIT.
     const final=(await db.query<{checked_at:Date}>(
       "WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS checked_at) "+
@@ -524,8 +531,10 @@ async function runP06(
       [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId,recoveryEpoch],
     )).rows[0];
     if (!final) deny("UNAUTHORIZED","final P06 authorization stale, revoked, expired or invalid");
+    budget.mark("FINAL_AUTHORIZATION");
     finalCheckCompleted=true;
     await db.query(ddl.sql);
+    budget.mark("DDL_ACK");
     await verifyCatalog(db, oid, next);
     const afterRows = await rowCount(db, ddl.tableName);
     if (beforeRows !== afterRows) deny("CATALOG_DRIFT", "additive operation changed row count");
@@ -537,6 +546,7 @@ async function runP06(
         request.installationId, current.digest],
     );
     if (update.rowCount !== 1) deny("STALE_PLAN", "manifest compare-and-swap failed");
+    budget.mark("MANIFEST_CAS_ACK");
     await db.query(
       "INSERT INTO public.s03_p06_completed_operations "+
       "(installation_id,operation_id,submission_id,approval_id,canonical_plan_digest,previous_digest,new_digest,"+
@@ -546,12 +556,15 @@ async function runP06(
        JSON.stringify({operation:"ADD_FIELD",table:ddl.tableName,column:ddl.columnName,beforeRows,afterRows,
          postgres:16,authorizationPolicy:"FINAL_PRE_DDL",envelopeVersion:1,recoveryEpoch})],
     );
+    budget.mark("JOURNAL_ACK");
     // Refresh before COMMIT, without selecting an unapproved numeric margin.
     await refreshTimeout();
+    budget.mark("COMMIT_ADMISSION");
     session.beforeDispatch("COMMIT");
     commitAttempted = true;
     const commitResult = await rawDb.query("COMMIT");
     session.acknowledge("COMMIT", commitResult.command);
+    budget.mark("COMMIT_ACK");
     began = false;
     if (commitResult.command === "ROLLBACK") {
       commitAttempted = false;

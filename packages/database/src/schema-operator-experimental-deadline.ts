@@ -11,9 +11,14 @@ export class D1DeadlineExceeded extends Error {
 
 export class ExperimentalD1Budget {
   private readonly t0: number;
-  constructor(private readonly now: () => number = () => performance.now()) {
+  private readonly marks:{stage:string;elapsedMs:number}[]=[];
+  constructor(private readonly now: () => number = () => performance.now(), private readonly measure=false) {
     this.t0 = now();
   }
+  mark(stage:string):void {
+    if(this.measure&&this.marks.length<64)this.marks.push({stage,elapsedMs:this.now()-this.t0});
+  }
+  measurements(){return this.marks.map(mark=>({...mark}));}
   remainingMs(): number {
     return EXPERIMENTAL_D1_MS - (this.now() - this.t0);
   }
