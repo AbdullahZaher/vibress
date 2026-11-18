@@ -55,6 +55,8 @@ interface PlanRow {
   author_principal_id: string | null;
   author_application_id: string | null;
   author_environment: string | null;
+  author_actor_instance_id: string | null; // E2 experiment only
+  author_actor_generation: string | null;
 }
 interface FinalApprovalDecision {
   approved_at: Date;
@@ -68,6 +70,10 @@ interface ApprovalRow {
   approver_login: string | null;
   approver_principal_id: string | null;
   approved_application_id: string | null;
+  author_actor_instance_id: string | null; // E2 experiment only
+  author_actor_generation: string | null;
+  approver_actor_instance_id: string | null;
+  approver_actor_generation: string | null;
   operator_role: string;
   environment: string;
   approved_at: Date;
@@ -350,7 +356,8 @@ export async function executeApprovedAdditiveColumn(
     );
     const approval = (await db.query<ApprovalRow>(
       "SELECT operation_id, approver, approver_login, approver_principal_id, " +
-      "approved_application_id, operator_role, environment, " +
+      "approved_application_id, author_actor_instance_id, author_actor_generation, " +
+      "approver_actor_instance_id, approver_actor_generation, operator_role, environment, " +
       "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
       "FROM public.platform_schema_approvals " +
       "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
@@ -376,8 +383,10 @@ export async function executeApprovedAdditiveColumn(
     const actors = await db.query<{
       login_name: string; principal_id: string; actor_kind: string;
       identity_mode: string; active: boolean;
+      actor_instance_id: string; actor_generation: string;
     }>(
-      "SELECT login_name, principal_id, actor_kind, identity_mode, active " +
+      "SELECT login_name, principal_id, actor_kind, identity_mode, active, " +
+      "actor_instance_id, actor_generation " +
       "FROM public.platform_schema_trusted_actors " +
       "WHERE login_name = $1 OR login_name = $2",
       [planRecord.author_login, approval.approver_login],
@@ -390,8 +399,17 @@ export async function executeApprovedAdditiveColumn(
       authored.actor_kind !== "AUTHOR" || approved.actor_kind !== "APPROVER" ||
       authored.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
       approved.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
-      !authored.active || !approved.active) {
-      deny("UNAUTHORIZED", "trusted independent approval provenance unavailable");
+      !authored.active || !approved.active ||
+      !planRecord.author_actor_instance_id || !planRecord.author_actor_generation ||
+      !approval.author_actor_instance_id || !approval.author_actor_generation ||
+      !approval.approver_actor_instance_id || !approval.approver_actor_generation ||
+      planRecord.author_actor_instance_id !== approval.author_actor_instance_id ||
+      planRecord.author_actor_generation !== approval.author_actor_generation ||
+      authored.actor_instance_id !== planRecord.author_actor_instance_id ||
+      authored.actor_generation !== planRecord.author_actor_generation ||
+      approved.actor_instance_id !== approval.approver_actor_instance_id ||
+      approved.actor_generation !== approval.approver_actor_generation) {
+      deny("UNAUTHORIZED", "trusted independent E2 actor generation/provenance unavailable");
     }
     const resource = current.resources.find(item => item.tableName === ddl.tableName);
     const next = plan.proposedManifest.resources.find(item => item.tableName === ddl.tableName);
@@ -444,7 +462,7 @@ export async function executeApprovedAdditiveColumn(
     await verifyCatalog(db, oid, resource);
     const beforeRows = await rowCount(db, ddl.tableName);
 
-    // EXPERIMENTAL P05/R1 ONLY: cooperative transaction advisory fencing.
+    // EXPERIMENTAL P05/R1 + E2-A ONLY: cooperative transaction advisory fencing.
     // PostgreSQL SELECT FOR SHARE would require UPDATE privilege on this
     // owner-controlled roster and MUST NOT be granted to the operator.
     // The disposable-only fixture installs a nonprivileged BEFORE actor-
@@ -462,8 +480,10 @@ export async function executeApprovedAdditiveColumn(
       const row = await db.query<{
         login_name: string; principal_id: string; actor_kind: string;
         identity_mode: string; active: boolean;
+        actor_instance_id: string; actor_generation: string;
       }>(
-        "SELECT login_name, principal_id, actor_kind, identity_mode, active " +
+        "SELECT login_name, principal_id, actor_kind, identity_mode, active, " +
+        "actor_instance_id, actor_generation " +
         "FROM public.platform_schema_trusted_actors WHERE login_name = $1",
         [actorLogin],
       );
@@ -473,7 +493,14 @@ export async function executeApprovedAdditiveColumn(
           actor.principal_id !== (expectedAuthor ?
             planRecord.author_principal_id : approval.approver_principal_id) ||
           actor.actor_kind !== (expectedAuthor ? "AUTHOR" : "APPROVER") ||
-          actor.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN") {
+          actor.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
+          actor.actor_instance_id !== (expectedAuthor ?
+            planRecord.author_actor_instance_id : approval.approver_actor_instance_id) ||
+          actor.actor_generation !== (expectedAuthor ?
+            planRecord.author_actor_generation : approval.approver_actor_generation) ||
+          (expectedAuthor &&
+            (actor.actor_instance_id !== approval.author_actor_instance_id ||
+             actor.actor_generation !== approval.author_actor_generation))) {
         deny("UNAUTHORIZED", "trusted actor changed before final DDL authorization");
       }
     }
