@@ -4547,3 +4547,143 @@ it.each([["P06-E2E-54","cz","ROLLBACK"],["P06-E2E-55","da","COMMIT"]] as const)(
     await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});
   }
 },30000);
+
+
+
+// Dedicated opt-in physical cluster replacement. The ordinary logical recovery
+// suite is unchanged; only the isolated workflow may run this cluster-wide test.
+describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual component recovery", () => {
+  it.each([
+    ["PHY-M03-01", "cq", "committed"],
+    ["PHY-M03-02", "cu", "rewound"],
+    ["PHY-M03-03", "cz", "lost-ack"],
+  ] as const)("%s: actual component physical WAL recovery (%s, %s)", async (scenario, key, mode) => {
+    const container=process.env.M03_PHYSICAL_CONTAINER;
+    if(container!=="vibress-m03-physical-ci" || process.env.GITHUB_ACTIONS!=="true") throw Error("dedicated CI container required");
+    const physical=(...args:string[])=>{
+      const x=spawnSync("bash",["tests/fixtures/m03-actual-physical-cluster.sh",...args],{encoding:"utf8",timeout:120000});
+      if(x.status!==0)throw Error("physical helper failed: "+x.stderr);
+      console.info(x.stdout.trim());
+    };
+    const start=performance.now();
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),stale=await freshP06(lab);
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-actual-physical-")),anchor=testAnchor(dir);
+    const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+    const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+    const esc=(v:string)=>cluster.escapeIdentifier(v);
+    const state=async(db:Client)=>{
+      const entries:Record<string,unknown>={};
+      for(const table of ["platform_schema_registry","platform_schema_plans","platform_schema_trusted_actors","s03_p06_actor_enrollments","s03_p06_submissions","s03_p06_approvals","s03_p06_revocations","s03_p06_completed_operations","s03_p06_recovery_epochs",lab.table]){
+        entries[table]=(await db.query("SELECT to_jsonb(t)::text AS value FROM public."+db.escapeIdentifier(table)+" t ORDER BY value")).rows;
+      }
+      entries.roles=(await db.query("SELECT oid,rolname,rolsuper,rolbypassrls,rolcanlogin FROM pg_roles WHERE rolname=ANY($1) ORDER BY rolname",[[lab.author,lab.approver,lab.operatorRole,lab.runtimeRole]])).rows;
+      entries.members=(await db.query("SELECT roleid,member,grantor,admin_option,inherit_option,set_option FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1)) ORDER BY roleid,member,grantor",[[lab.author,lab.approver,lab.operatorRole,lab.runtimeRole]])).rows;
+      entries.catalog=(await db.query("SELECT c.oid,c.relacl::text,c.relowner,c.relrowsecurity,c.relforcerowsecurity,a.attname,a.atttypid,a.attnotnull,a.attacl::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid WHERE n.nspname='public' AND c.relname=$1 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum",[lab.table])).rows;
+      entries.identity=(await db.query("SELECT (pg_control_system()).system_identifier::text AS system_id,oid::text AS database_oid FROM pg_database WHERE datname=current_database()")).rows;
+      return createHash("sha256").update(JSON.stringify(entries)).digest("hex");
+    };
+    const data=async(db:Client)=>{
+      const rows=(await db.query<{value:string}>("SELECT to_jsonb(t)::text AS value FROM public."+db.escapeIdentifier(lab.table)+" t ORDER BY value")).rows;
+      return {[lab.table]:createHash("sha256").update(JSON.stringify(rows.map(row=>row.value))).digest("hex")};
+    };
+    try{
+      const initial=await state(lab.dbAdmin),initialData=await data(lab.dbAdmin);
+      physical("backup");
+      if(mode==="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
+      if(mode==="lost-ack"){
+        const proxy=await startStatementAckFaultProxy("COMMIT","DROP");
+        void proxy.serverCommitObserved.catch(()=>undefined);
+        const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+        try{
+          await expect(a.execute(url.toString(),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+          await proxy.serverCommitObserved;
+          expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"UNCERTAIN"}]});
+        }finally{await proxy.close();}
+      }else{
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("APPLIED");
+      }
+      const committed=await state(lab.dbAdmin),committedData=await data(lab.dbAdmin);
+      expect(committed).not.toBe(initial);
+      if(mode!=="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
+      // Archive target segment and verify it exists before stopping the original.
+      const segment=(await lab.dbAdmin.query<{segment:string}>("SELECT pg_walfile_name(pg_current_wal_insert_lsn()) AS segment")).rows[0]!.segment;
+      await lab.dbAdmin.query("SELECT pg_switch_wal()");
+      physical("archive",segment);
+      if(!a.snapshot().pending)a.beginRecovery();
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+      const authorityBefore=a.snapshot();
+      for(const l of labs) await Promise.allSettled([l.operator.end(),l.runtime.end(),l.dbAdmin.end()]);
+      await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+      const q=(await cluster.query("SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity s WHERE s.datid=d.oid) AS sessions,(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[lab.name])).rows[0];
+      expect(q).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+      expect((await cluster.query("SELECT count(*)::int AS n FROM pg_prepared_xacts")).rows).toEqual([{n:0}]);
+      await cluster.end();
+      physical("restore");
+      cluster=await connect("vibress");
+      const dbAdmin=await connect(lab.name);
+      const restored={...lab,dbAdmin,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.indexOf(lab)]=restored;
+      expect(a.snapshot()).toEqual(authorityBefore);
+      const restoredState=await state(dbAdmin);
+      expect(restoredState).toBe(mode==="rewound"?initial:committed);
+      expect(await hasWebsite(restored)).toBe(mode!=="rewound");
+      const dataDigests=mode==="rewound"?initialData:committedData;
+      const manifestDigest=mode==="rewound"?lab.current.digest:lab.plan.proposedManifest.digest;
+      await Promise.all([restored.operator.end(),restored.runtime.end()]);
+      await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+      try{
+        const observation={installationId:lab.installationId,databaseName:lab.name,epoch,manifestDigest,dataDigests};
+        const evidence=await collectDisposableRecoveryReadiness(dbAdmin,observation);
+        expect(evidence.journal).toHaveLength(mode==="rewound"?0:1);
+        if(mode==="lost-ack"){
+          expect(a.snapshot().operations[0]?.outcome).toBe("UNCERTAIN");
+          const payload={operationId:request.operationId,evidence};
+          expect(()=>a.resolveObservedCommit(request.operationId,evidence,"A".repeat(86))).toThrow();
+          a.resolveObservedCommit(request.operationId,evidence,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",payload));
+          expect(a.snapshot().operations[0]?.outcome).toBe("COMMITTED");
+        }
+        const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify(q)).digest("hex");
+        expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
+        a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
+        const nextObservation={...observation,epoch:nextEpoch};
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        await dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        const actors=(await dbAdmin.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string}>("SELECT login_name,principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+        for(const actor of actors){
+          const replacement=(await dbAdmin.query<{id:string}>("SELECT public.s03_p06_root_replace($1,$2,$3,$4) AS id",[lab.installationId,actor.login_name,actor.principal_id,actor.actor_kind])).rows[0]!;
+          expect(replacement.id).not.toBe(actor.actor_instance_id);
+        }
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,{...nextObservation,dataDigests:{[lab.table]:"f".repeat(64)}})).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+        const ready=await collectDisposableRecoveryReadiness(dbAdmin,nextObservation);
+        const sig=attestRecovery(a,"READY",ready);
+        expect(()=>a.activate(ready,"A".repeat(86))).toThrow();
+        if(mode==="rewound"){
+          expect(()=>a.activate(ready,sig)).toThrow();
+          expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"COMMITTED"}]});
+          await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+        }else{
+          a.activate(ready,sig);
+          expect(()=>a.activate(ready,sig)).toThrow();
+          expect(a.snapshot().pending).toBe(false);
+        }
+      }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+      const online={...restored,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole),current:mode==="rewound"?lab.current:lab.plan.proposedManifest};
+      labs[labs.indexOf(restored)]=online;
+      if(mode!=="rewound"){
+        await expect(executeP06Raw(online.operator,stale,new ExperimentalD1Budget(),a.proofAuthority(epochKeys.publicKey))).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        const scope={applicationId,installationId:lab.installationId};
+        const next=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+          {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+        const plan=planSchemaChanges(online.current,next,{scope,expectedCurrentDigest:online.current.digest});
+        const author=await connect(lab.name,lab.author);
+        try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(online.current),JSON.stringify(plan)]);}finally{await author.end();}
+        const fresh=await freshP06({...online,plan});
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
+        expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+      }
+      console.info(scenario+" ACTUAL_COMPONENT_PITR=PASS total_fixture_ms="+(performance.now()-start).toFixed(2));
+    }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+  },240000);
+});

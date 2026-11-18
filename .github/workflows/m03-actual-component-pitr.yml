@@ -1,0 +1,47 @@
+name: M03 actual component physical PITR
+on:
+  push:
+    branches: [experiment/m03-actual-component-pitr-20261118]
+permissions:
+  contents: read
+jobs:
+  physical:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [PHY-M03-01, PHY-M03-02, PHY-M03-03]
+    env:
+      M03_PHYSICAL_COMPONENT: "1"
+      M03_PHYSICAL_CONTAINER: vibress-m03-physical-ci
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Exact source, pinned toolchain, frozen install
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          node --version
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
+          bash -n tests/fixtures/m03-actual-physical-cluster.sh
+      - name: Focused source validation
+        run: |
+          pnpm --filter @vibress/schema-engine test
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts
+      - name: Dedicated physical PostgreSQL 16 cluster
+        run: bash tests/fixtures/m03-actual-physical-cluster.sh start
+      - name: Actual M03 component operator and physical recovery
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "${{ matrix.scenario }}"
+      - name: Cleanup isolated physical cluster
+        if: always()
+        run: bash tests/fixtures/m03-actual-physical-cluster.sh cleanup
