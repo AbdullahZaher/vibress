@@ -30,7 +30,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4009,7 +4009,7 @@ it("P06-E2E-39: admission anchor failure before SQL and outcome anchor failure a
   }};
   authority=DisposableDurableRecoveryAuthority.initialize(second,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,afterCommit,recoveryAdminKeys.publicKey);
   try{
-    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE",persistenceStatus:"UNCONFIRMED",transactionFacts:{mode:"EXECUTE",transaction:{outcome:"COMMITTED",commitDigest:lab.plan.proposedManifest.digest}}});
     expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
     expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
     authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(second,epochKeys.privateKey,secondAnchor,recoveryAdminKeys.publicKey)).toThrow();
@@ -4074,3 +4074,86 @@ it("P06-E2E-41: durable admitted whole-operation stage measurement includes ledg
     console.info("D1_DURABLE_RECONCILE_EXPLORATORY "+JSON.stringify({elapsedMs:2517-recoveryBudget.remainingMs(),n:1}));
   }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
 },30000);
+
+describe("P06 durable transaction facts",()=>{
+  it("P06-E2E-42: acknowledged rollback is persisted; consumed identities never retry; fresh approval works",async()=>{
+    const lab=await createLab("ch");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const approver=await connect(lab.name,lab.approver);
+    try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-rollback-fact-")),anchor=testAnchor(dir);
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    try{
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(a.snapshot()).toMatchObject({pending:false,operations:[{operationId:request.operationId,outcome:"ROLLED_BACK"}]});
+      a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().pending).toBe(false);
+      for(const replay of [request,{...request,operationId:randomUUID()},{...request,operationId:randomUUID(),submissionId:randomUUID()}])
+        await expect(a.execute(urlFor(lab.name,lab.operatorRole),replay,epochKeys.publicKey)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await a.execute(urlFor(lab.name,lab.operatorRole),await freshP06(lab),epochKeys.publicKey)).status).toBe("APPLIED");
+      expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["ROLLED_BACK","COMMITTED"]);
+    }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it.each([["P06-E2E-43","ci","ROLLBACK"],["P06-E2E-44","cj","COMMIT"]] as const)
+    ("%s: durable lost acknowledgment (%s, %s) stays uncertain",async(_name,key,command)=>{
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    if(command==="ROLLBACK"){
+      const approver=await connect(lab.name,lab.approver);
+      try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+    }
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-uncertain-fact-")),anchor=testAnchor(dir);
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    const proxy=await startStatementAckFaultProxy(command,"DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(a.execute(url.toString(),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+      expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+      a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().pending).toBe(true);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(command==="COMMIT");expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(command==="COMMIT"?1:0);
+    }finally{await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it("P06-E2E-45: late confirmed COMMIT persists independently of D1; reconciliation failure preserves history",async()=>{
+    const lab=await createLab("ck");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab);
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-late-fact-"));
+    const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+    let tick=0;
+    const proxy=await startStatementAckFaultProxy("COMMIT","OBSERVE",()=>{tick=2518;});
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      expect((await a.execute(url.toString(),request,epochKeys.publicKey,new ExperimentalD1Budget(()=>tick))).status).toBe("COMMITTED_LATE");
+      expect(a.snapshot().operations).toMatchObject([{outcome:"COMMITTED",newDigest:lab.plan.proposedManifest.digest}]);
+      await expect(a.reconcile(urlFor(lab.name,lab.operatorRole),request,generateKeyPairSync("ed25519").publicKey)).rejects.toThrow();
+      expect(a.snapshot().operations).toMatchObject([{outcome:"COMMITTED",newDigest:lab.plan.proposedManifest.digest}]);
+    }finally{await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it("P06-E2E-46: repeated durable execution under baseline and injected storage latency",async()=>{
+    const samples:{profile:string;executionMs:number;reconciliationMs:number}[]=[];
+    for(const [key,delay] of [["cl",0],["cm",0],["cn",0],["co",20],["cp",20]] as const){
+      const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+      const request=await freshP06(lab),dir=mkdtempSync(path.join(tmpdir(),"s03-repeat-"));
+      const anchor=testAnchor(dir);
+      const adapter:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+        if(delay)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,delay);
+        anchor.compareAndSet(p,n);
+      }};
+      const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,adapter,recoveryAdminKeys.publicKey);
+      try{
+        const b=new ExperimentalD1Budget(undefined,true);
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,b)).status).toBe("APPLIED");
+        const c=new ExperimentalD1Budget();
+        expect((await a.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,c)).status).toBe("ALREADY_APPLIED");
+        samples.push({profile:delay?"injected-sync-anchor-delay":"baseline",executionMs:2517-b.remainingMs(),reconciliationMs:2517-c.remainingMs()});
+      }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+    }
+    console.info("D1_DURABLE_REPEATED "+JSON.stringify({n:samples.length,margin:"NOT_DETERMINABLE",samples}));
+  },60000);
+});

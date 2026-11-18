@@ -18,6 +18,8 @@ export class ExperimentalSessionLifecycle {
   private commitAcknowledged = false;
   private retired = false;
   private closed = false;
+  private commitDigest: string | undefined;
+  private historicalJournal = false;
 
   constructor(private readonly budget: ExperimentalD1Budget, connecting = false) {
     this.phase = connecting ? "CONNECTING" : "READY";
@@ -32,6 +34,25 @@ export class ExperimentalSessionLifecycle {
   }
 
   usesBudget(budget: ExperimentalD1Budget): boolean { return this.budget === budget; }
+
+  // Record the validated content identity before COMMIT dispatch. It is not a
+  // transaction fact until the server acknowledgment is received.
+  bindCommitDigest(digest:string):void {
+    if(this.phase!=="TRANSACTION_ACTIVE"||this.cause!==undefined||this.commitDigest!==undefined||
+      !/^[0-9a-f]{64}$/.test(digest)) throw Error("invalid commit identity");
+    this.commitDigest=digest;
+  }
+  observeHistoricalJournal():void {
+    if(this.phase!=="TRANSACTION_ACTIVE"||this.cause!==undefined)throw Error("invalid journal observation");
+    this.historicalJournal=true;
+  }
+  transactionFacts(){
+    const outcome=this.phase==="ROLLED_BACK"?"ROLLED_BACK":
+      this.phase==="COMMIT_ACKNOWLEDGED"?"COMMITTED":"UNKNOWN";
+    return Object.freeze({outcome,commitDigest:this.commitAcknowledged?this.commitDigest:undefined,
+      historicalJournal:this.historicalJournal,beginDispatched:this.began,commitDispatched:this.commitSent,
+      terminalCause:this.cause,retired:this.retired,closed:this.closed,deadlineExpired:this.budget.expired()});
+  }
 
   // First terminal cause wins. A later receipt may still establish a fact
   // about the already-dispatched transaction but cannot reopen dispatch.

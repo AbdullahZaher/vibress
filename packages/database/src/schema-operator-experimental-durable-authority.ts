@@ -7,7 +7,7 @@ import { closeSync, fsyncSync, openSync, readFileSync, unlinkSync, writeFileSync
 import { join } from "node:path";
 import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 import { RecoveryEpochAuthority, recoveryEpochMessage } from "./schema-operator-experimental-recovery-epoch";
-import { superviseDisposableSchemaOperation, registerExperimentalAdmission } from "./schema-operator-experimental-supervisor";
+import { superviseDisposableSchemaOperation, registerExperimentalAdmission, type OwnedOperationFacts } from "./schema-operator-experimental-supervisor";
 import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } from "./schema-operator-experimental-anchor";
 import { SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
@@ -79,6 +79,12 @@ function reduce(s: State|undefined,e: Event): State {
   }
   return next;
 }
+export class DurableOutcomePersistenceError extends SchemaMigrationOperatorError {
+  readonly persistenceStatus="UNCONFIRMED" as const;
+  constructor(readonly transactionFacts:OwnedOperationFacts|undefined){
+    super("INDETERMINATE","external outcome unavailable; offline reconciliation required");
+  }
+}
 export class DisposableDurableRecoveryAuthority {
   private state: State|undefined;
   private head=ZERO;
@@ -108,6 +114,28 @@ export class DisposableDurableRecoveryAuthority {
       const dir=openSync(directory,"r");try{fsyncSync(dir);}finally{closeSync(dir);}
       return a;
     }catch(error){a.close();throw error;}
+  }
+  // Diagnostic only. No stale-lock removal, record truncation, anchor change,
+  // or authority activation. A matching chain is not proof of process death.
+  static inspectOffline(directory:string,anchor:ExperimentalRecoveryAnchor){
+    const raw=readFileSync(join(directory,"authority.jsonl"),"utf8");
+    if(!raw.endsWith("\n")||raw.length>16*1024*1024) return refuse();
+    let state:State|undefined,head=ZERO,sequence=0;
+    const trusted=anchor.read();
+    let anchoredPrefix=false;
+    for(const line of raw.trimEnd().split("\n")){
+      const record=JSON.parse(line) as RecordLine;
+      if(record.previous!==head||record.hash!==hash(head,record.event))return refuse();
+      state=reduce(state,record.event);head=record.hash;sequence++;
+      if(sameRecoveryHead(trusted,{ledgerId:state.ledgerId,installationId:state.installationId,
+        signingIdentity:state.signingIdentity,head,sequence}))anchoredPrefix=true;
+    }
+    if(!state)return refuse();
+    const disposition=trusted===null?"MISSING_ANCHOR":!anchoredPrefix?"ANCHOR_NOT_IN_CHAIN":
+      trusted.sequence===sequence?"MATCHED":"LEDGER_AHEAD";
+    return Object.freeze({disposition,ledgerId:state.ledgerId,installationId:state.installationId,
+      head,sequence,anchorSequence:trusted?.sequence,pending:state.pending,
+      unresolved:[...state.operations.values()].filter(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN").length});
   }
   static open(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
     const a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey);
@@ -238,27 +266,38 @@ export class DisposableDurableRecoveryAuthority {
     this.append({kind:"ADMIT",operation:{operationId:request.operationId,submissionId:request.submissionId,
       approvalId:request.approvalId,planDigest:request.planDigest,epoch:s.epoch,outcome:"ADMITTED"}},budget);
     const id=request.operationId;
+    const expectedAdmission=JSON.stringify(["EXECUTE",request.installationId,id,request.submissionId,request.approvalId,request.planDigest,request.envelopeVersion]);
+    let facts:OwnedOperationFacts|undefined;
+    const observed=()=>facts?.admissionKey===expectedAdmission&&facts.mode==="EXECUTE"?facts:undefined;
     try{
-      const admission={attach:(fence:()=>void)=>{
+      const admission={observeSettlement:(value:OwnedOperationFacts)=>{facts=value;},attach:(fence:()=>void)=>{
         this.fences.set(id,fence);
         if(this.current().pending) fence();
       }};
       registerExperimentalAdmission(admission,request,"EXECUTE");
       const result=await superviseDisposableSchemaOperation(connectionString,request,this.proofAuthority(publicKey),"EXECUTE",budget,admission);
-      this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:result.newDigest},budget);
+      const fact=observed()?.transaction;
+      if(fact?.outcome!=="COMMITTED"||fact.commitDigest!==result.newDigest)
+        throw new SchemaMigrationOperatorError("INDETERMINATE","supervisor transaction fact mismatch");
+      this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:fact.commitDigest},budget);
       budget.mark("FINAL_CLASSIFICATION");
       return budget.expired()&&result.status==="APPLIED"?{...result,status:"COMMITTED_LATE"}:
         budget.expired()&&result.status==="ALREADY_APPLIED"?{...result,status:"ALREADY_APPLIED_LATE"}:result;
     }catch(error){
-      // Includes external write failure following PostgreSQL COMMIT. A failed
-      // durable append poisons this instance; restart must reconcile ADMITTED.
-      if(!this.poisoned){
-        try{
+      // External persistence and transaction observation are separate. Never
+      // infer rollback from an exception code, socket close or elapsed time.
+      if(this.poisoned) throw new DurableOutcomePersistenceError(observed());
+      const fact=observed()?.transaction;
+      try{
+        if(fact?.outcome==="ROLLED_BACK"&&!fact.historicalJournal){
+          this.append({kind:"OUTCOME",operationId:id,outcome:"ROLLED_BACK"});
+        }else if(fact?.outcome==="COMMITTED"&&fact.commitDigest){
+          this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:fact.commitDigest});
+        }else{
           this.append({kind:"OUTCOME",operationId:id,outcome:"UNCERTAIN"});
           if(!this.current().pending) this.beginRecovery();
-        }catch{throw new SchemaMigrationOperatorError("INDETERMINATE","external outcome unavailable; offline reconciliation required");}
-      }
-      if(this.poisoned) throw new SchemaMigrationOperatorError("INDETERMINATE","external outcome unavailable; offline reconciliation required");
+        }
+      }catch{throw new DurableOutcomePersistenceError(observed());}
       throw error;
     }finally{this.fences.delete(id);}
   }

@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,7 +17,7 @@ function fixture(){
   const initialize=(adapter:ExperimentalRecoveryAnchor=anchor)=>DisposableDurableRecoveryAuthority.initialize(ledger,keys.privateKey,"s03-lab","vibress_s03_lab",epoch,adapter,admin.publicKey);
   const open=(adapter:ExperimentalRecoveryAnchor=anchor)=>DisposableDurableRecoveryAuthority.open(ledger,keys.privateKey,adapter,admin.publicKey);
   const attest=(a:DisposableDurableRecoveryAuthority,action:string,payload:unknown)=>sign(null,recoveryAdministrationMessage(a.snapshot(),action,payload),admin.privateKey).toString("base64url");
-  return {dir,ledger,anchorDir,keys,admin,anchor,epoch,initialize,open,attest};
+  return {dir,ledger,anchorDir,keys,admin,anchorKeys,anchor,epoch,initialize,open,attest};
 }
 describe("disposable durable recovery authority",()=>{
   it("persists intent and prohibits epoch reuse and unsigned or stale readiness",async()=>{
@@ -67,6 +68,40 @@ describe("disposable durable recovery authority",()=>{
     try{
       a=f.open(fault);expect(()=>a.beginRecovery()).toThrow();expect(()=>a.snapshot()).toThrow();
       a.close();a=f.open();expect(a.snapshot().pending).toBe(true);
+    }finally{a.close();rmSync(f.dir,{recursive:true,force:true});}
+  });
+});
+
+describe("offline authority crash diagnostics",()=>{
+  it.each(["BEFORE_CAS","AFTER_CAS"] as const)("actual child SIGKILL %s preserves lock and classifies chain",window=>{
+    const f=fixture();const a=f.initialize();a.close();
+    try{
+      writeFileSync(join(f.dir,"ledger-key.pem"),f.keys.privateKey.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+      writeFileSync(join(f.dir,"anchor-key.pem"),f.anchorKeys.privateKey.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+      writeFileSync(join(f.dir,"admin-key.pem"),f.admin.publicKey.export({type:"spki",format:"pem"}),{mode:0o600});
+      const child=spawnSync(process.execPath,["--import","tsx","scripts/platform/m03-s03-fault/crash-authority.ts",f.dir,window],
+        {env:{...process.env,NODE_ENV:"test"},timeout:15000});
+      expect(child.signal).toBe("SIGKILL");
+      const result=DisposableDurableRecoveryAuthority.inspectOffline(f.ledger,f.anchor);
+      expect(result).toMatchObject({disposition:window==="BEFORE_CAS"?"LEDGER_AHEAD":"MATCHED",pending:true,sequence:2});
+      // Even exact matching durable state does not authorize lock takeover.
+      expect(()=>f.open()).toThrow();
+    }finally{rmSync(f.dir,{recursive:true,force:true});}
+  },20000);
+  it("independently retained monotonic anchor rejects coordinated rollback of ledger and local anchor copy",()=>{
+    const f=fixture();const a=f.initialize();
+    try{
+      const file=join(f.ledger,"authority.jsonl"),headFile=join(f.anchorDir,"head.json");
+      const old=readFileSync(file),oldHead=readFileSync(headFile);
+      a.beginRecovery();a.close();
+      const retainedDir=join(f.dir,"retained-anchor");mkdirSync(retainedDir);
+      writeFileSync(join(retainedDir,"head.json"),readFileSync(headFile),{mode:0o600});
+      const retained=new FileExperimentalRecoveryAnchor(retainedDir,f.anchorKeys.privateKey);
+      writeFileSync(file,old);writeFileSync(headFile,oldHead);
+      expect(DisposableDurableRecoveryAuthority.inspectOffline(f.ledger,retained).disposition).toBe("ANCHOR_NOT_IN_CHAIN");
+      expect(()=>f.open(retained)).toThrow();
+      // This test models retained trust; local copied files are NOT an
+      // independent hardware/service rollback-resistant boundary.
     }finally{a.close();rmSync(f.dir,{recursive:true,force:true});}
   });
 });

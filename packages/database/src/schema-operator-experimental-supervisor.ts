@@ -9,8 +9,13 @@ import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 
 // Isolated recovery prototype can fence the owned session. No client or SQL handle escapes.
+export type OwnedOperationFacts = Readonly<{
+  admissionKey:string; mode:"EXECUTE"|"RECONCILE";
+  transaction: ReturnType<ExperimentalSessionLifecycle["transactionFacts"]>;
+}>;
 export interface ExperimentalRecoveryFence {
   attach(fence: () => void): void;
+  observeSettlement?(facts:OwnedOperationFacts):void;
 }
 // Internal one-shot registration. This constrains supported callers, not arbitrary
 // hostile JS or SQL possessing operator credentials. Vitest raw harness only.
@@ -107,5 +112,10 @@ export async function superviseDisposableSchemaOperation(
     // No waiting past the outcome deadline for a socket close that might stall.
     // The physical client is never handed out or reused.
     void close();
+    // Synchronous immutable settlement, bound to the one-shot admission. A
+    // later transport event cannot retroactively change the durable decision.
+    recoveryFence?.observeSettlement?.(Object.freeze({
+      admissionKey:admissionKey(request,mode),mode,transaction:session.transactionFacts(),
+    }));
   }
 }

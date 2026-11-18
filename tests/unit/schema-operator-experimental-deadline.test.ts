@@ -152,3 +152,19 @@ it("binds a lifecycle to the exact whole-operation budget instance", () => {
   expect(session.usesBudget(budget)).toBe(true);
   expect(session.usesBudget(new ExperimentalD1Budget(() => 0))).toBe(false);
 });
+
+it("preserves immutable settlement facts across contradictory late acknowledgments",()=>{
+  const s=new ExperimentalSessionLifecycle(new ExperimentalD1Budget(()=>0));
+  s.beforeDispatch("BEGIN");s.acknowledge("BEGIN","BEGIN");s.bindCommitDigest("a".repeat(64));
+  s.beforeDispatch("COMMIT");s.fence("DEADLINE_EXCEEDED");s.retire();
+  const uncertain=s.transactionFacts();expect(uncertain.outcome).toBe("UNKNOWN");
+  s.acknowledge("COMMIT","COMMIT");s.acknowledge("COMMIT","ROLLBACK");
+  expect(s.transactionFacts()).toMatchObject({outcome:"COMMITTED",commitDigest:"a".repeat(64),terminalCause:"DEADLINE_EXCEEDED",retired:true});
+  expect(uncertain.outcome).toBe("UNKNOWN");expect(Object.isFrozen(uncertain)).toBe(true);
+  expect(()=>s.beforeDispatch("SQL")).toThrow();
+  const r=new ExperimentalSessionLifecycle(new ExperimentalD1Budget(()=>0));
+  r.beforeDispatch("BEGIN");r.acknowledge("BEGIN","BEGIN");r.beforeDispatch("ROLLBACK");
+  r.markClosed();expect(r.transactionFacts().outcome).toBe("UNKNOWN");
+  r.acknowledge("ROLLBACK","ROLLBACK");r.acknowledge("COMMIT","COMMIT");
+  expect(r.transactionFacts().outcome).toBe("ROLLED_BACK");
+});

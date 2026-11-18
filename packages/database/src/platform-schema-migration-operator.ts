@@ -465,6 +465,7 @@ async function runP06(
       [request.installationId,request.operationId],
     )).rows[0];
     if (journal) {
+      session.observeHistoricalJournal();
       if (journal.submission_id!==request.submissionId || journal.approval_id!==request.approvalId ||
         journal.canonical_plan_digest!==request.planDigest || journal.previous_digest!==current.digest ||
         journal.new_digest!==plan.proposedManifest.digest || journal.operator_role!==identity.current_user ||
@@ -473,6 +474,7 @@ async function runP06(
       }
       await verifyCatalog(db,oid,next);
       const afterRows=await rowCount(db,ddl.tableName);
+      session.bindCommitDigest(plan.proposedManifest.digest);
       session.beforeDispatch("COMMIT");
       commitAttempted=true;
       const commitResult=await rawDb.query("COMMIT");
@@ -560,6 +562,7 @@ async function runP06(
     // Refresh before COMMIT, without selecting an unapproved numeric margin.
     await refreshTimeout();
     budget.mark("COMMIT_ADMISSION");
+    session.bindCommitDigest(plan.proposedManifest.digest);
     session.beforeDispatch("COMMIT");
     commitAttempted = true;
     const commitResult = await rawDb.query("COMMIT");
