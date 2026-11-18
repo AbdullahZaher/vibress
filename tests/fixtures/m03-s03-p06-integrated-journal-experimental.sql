@@ -12,7 +12,8 @@ CREATE TABLE public.s03_p06_recovery_epochs (
 );
 CREATE TABLE public.s03_p06_actor_enrollments (
  actor_instance_id uuid PRIMARY KEY REFERENCES public.s03_e2_actor_instance_history(actor_instance_id),
- epoch_id uuid NOT NULL
+ epoch_id uuid NOT NULL,
+ role_oid oid NOT NULL
 );
 ALTER TABLE public.s03_p06_submissions ADD COLUMN recovery_epoch uuid NOT NULL;
 REVOKE ALL ON public.s03_p06_recovery_epochs, public.s03_p06_actor_enrollments FROM PUBLIC;
@@ -23,7 +24,9 @@ BEGIN
  SELECT epoch_id INTO epoch FROM public.s03_p06_recovery_epochs
  WHERE (SELECT count(*) FROM public.s03_p06_recovery_epochs)=1;
  IF epoch IS NULL THEN RAISE EXCEPTION 'recovery enrollment unavailable' USING ERRCODE='42501'; END IF;
- INSERT INTO public.s03_p06_actor_enrollments(actor_instance_id,epoch_id) VALUES(NEW.actor_instance_id,epoch);
+ INSERT INTO public.s03_p06_actor_enrollments(actor_instance_id,epoch_id,role_oid)
+ SELECT NEW.actor_instance_id,epoch,oid FROM pg_catalog.pg_roles WHERE rolname=NEW.login_name;
+ IF NOT FOUND THEN RAISE EXCEPTION 'enrollment role unavailable' USING ERRCODE='42501'; END IF;
  RETURN NEW;
 END $body$;
 CREATE TRIGGER zzz_s03_p06_epoch_enroll AFTER INSERT ON public.platform_schema_trusted_actors
@@ -85,7 +88,9 @@ BEGIN
   SELECT epoch_id INTO epoch FROM public.s03_p06_recovery_epochs WHERE installation_id=p_installation;
   SELECT t.* INTO a FROM public.platform_schema_trusted_actors t
     JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
-    WHERE t.login_name=session_user AND t.actor_kind='AUTHOR' AND t.active AND e.epoch_id=epoch;
+    JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
+    WHERE t.login_name=session_user AND t.actor_kind='AUTHOR' AND t.active AND e.epoch_id=epoch
+      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication);
   IF NOT FOUND THEN RAISE EXCEPTION 'ineligible author' USING ERRCODE='42501'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.platform_schema_plans p
     JOIN public.platform_schema_registry r USING (installation_id)
@@ -119,11 +124,15 @@ BEGIN
     WHERE installation_id=s.installation_id AND epoch_id=s.recovery_epoch)
   THEN RAISE EXCEPTION 'fresh recovery submission required' USING ERRCODE='42501'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
-    WHERE t.login_name=s.author_login AND t.principal_id=s.author_principal AND t.actor_kind='AUTHOR'
+    JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
+    WHERE pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+      AND t.login_name=s.author_login AND t.principal_id=s.author_principal AND t.actor_kind='AUTHOR'
       AND t.active AND t.actor_instance_id=s.author_instance AND t.actor_generation=s.author_generation AND e.epoch_id=s.recovery_epoch)
   THEN RAISE EXCEPTION 'fresh submission required' USING ERRCODE='42501'; END IF;
   SELECT t.* INTO a FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
-    WHERE t.login_name=session_user AND t.actor_kind='APPROVER' AND t.active AND e.epoch_id=s.recovery_epoch;
+    JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
+    WHERE t.login_name=session_user AND t.actor_kind='APPROVER' AND t.active AND e.epoch_id=s.recovery_epoch
+      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication);
   IF NOT FOUND OR a.principal_id=s.author_principal OR session_user=s.author_login
   THEN RAISE EXCEPTION 'independent approver required' USING ERRCODE='42501'; END IF;
   IF EXISTS (SELECT 1 FROM public.s03_p06_approvals WHERE submission_id=p_submission)
@@ -161,6 +170,9 @@ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_tem
 DECLARE affected bigint;
 BEGIN
   PERFORM public.s03_p06_enter();
+  -- Capability mutations and uses serialize before actor fences. No registry
+  -- tuple lock here: P05 must remain able to deactivate during target waits.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_p06_capability'),pg_catalog.hashtext(session_user::text));
   IF p_active IS NULL OR NOT EXISTS (
     SELECT 1 FROM public.s03_p06_admin_capability c
       JOIN public.platform_schema_registry r USING (installation_id)
@@ -223,3 +235,72 @@ BEGIN
  RETURN removed;
 END $body$;
 REVOKE ALL ON FUNCTION public.s03_p06_prune_call_guard() FROM PUBLIC;
+
+-- Root-only purpose-specific administrative paths. Root remains capable of
+-- bypassing them; no ordinary caller gains roster or capability authority.
+CREATE FUNCTION public.s03_p06_root_enter(p_installation text) RETURNS void
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ IF current_user IS DISTINCT FROM session_user OR current_user IS DISTINCT FROM
+   (SELECT pg_catalog.pg_get_userbyid(relowner) FROM pg_catalog.pg_class
+    WHERE oid='public.platform_schema_trusted_actors'::pg_catalog.regclass)
+ THEN RAISE EXCEPTION 'authenticated roster owner required' USING ERRCODE='42501'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.platform_schema_registry WHERE installation_id=p_installation
+    AND database_name=current_database() AND environment IN ('test','development')
+    AND (SELECT count(*) FROM public.platform_schema_registry)=1)
+ THEN RAISE EXCEPTION 'root scope unavailable' USING ERRCODE='42501'; END IF;
+ PERFORM public.s03_p06_enter();
+ -- Serialize root administrative writers with each other, BEFORE any DML.
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_p06_root'),0);
+END $body$;
+CREATE FUNCTION public.s03_p06_root_register(p_installation text,p_login text,p_principal text,p_kind text)
+RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE result uuid;
+BEGIN
+ PERFORM public.s03_p06_root_enter(p_installation);
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(p_login));
+ INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind)
+ VALUES(p_login,p_principal,p_kind) RETURNING actor_instance_id INTO result;
+ RETURN result;
+END $body$;
+CREATE FUNCTION public.s03_p06_root_retire(p_installation text,p_login text)
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ PERFORM public.s03_p06_root_enter(p_installation);
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(p_login));
+ DELETE FROM public.platform_schema_trusted_actors WHERE login_name=p_login;
+ IF NOT FOUND THEN RAISE EXCEPTION 'actor unavailable' USING ERRCODE='42501'; END IF;
+END $body$;
+CREATE FUNCTION public.s03_p06_root_replace(p_installation text,p_login text,p_principal text,p_kind text)
+RETURNS uuid LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE result uuid;
+BEGIN
+ PERFORM public.s03_p06_root_enter(p_installation);
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(p_login));
+ DELETE FROM public.platform_schema_trusted_actors WHERE login_name=p_login;
+ IF NOT FOUND THEN RAISE EXCEPTION 'actor unavailable' USING ERRCODE='42501'; END IF;
+ INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind)
+ VALUES(p_login,p_principal,p_kind) RETURNING actor_instance_id INTO result;
+ RETURN result;
+END $body$;
+CREATE FUNCTION public.s03_p06_root_set_capability(p_installation text,p_delegate text,p_enabled boolean)
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ PERFORM public.s03_p06_root_enter(p_installation);
+ IF p_enabled IS NULL THEN RAISE EXCEPTION 'capability state required' USING ERRCODE='42501'; END IF;
+ -- FK on INSERT can acquire registry KEY SHARE. Establish registry first.
+ PERFORM 1 FROM public.platform_schema_registry WHERE installation_id=p_installation FOR SHARE;
+ PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_p06_capability'),pg_catalog.hashtext(p_delegate));
+ IF p_enabled THEN
+   IF NOT EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=p_delegate AND rolcanlogin
+      AND NOT (rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole OR rolreplication))
+   THEN RAISE EXCEPTION 'invalid delegate role' USING ERRCODE='42501'; END IF;
+   INSERT INTO public.s03_p06_admin_capability VALUES(p_installation,p_delegate);
+ ELSE
+   DELETE FROM public.s03_p06_admin_capability WHERE installation_id=p_installation AND delegate_login=p_delegate;
+ END IF;
+ IF NOT FOUND THEN RAISE EXCEPTION 'capability transition unavailable' USING ERRCODE='42501'; END IF;
+END $body$;
+REVOKE ALL ON FUNCTION public.s03_p06_root_enter(text),public.s03_p06_root_register(text,text,text,text),
+ public.s03_p06_root_retire(text,text),public.s03_p06_root_replace(text,text,text,text),
+ public.s03_p06_root_set_capability(text,text,boolean) FROM PUBLIC;
