@@ -44,6 +44,40 @@ CREATE TRIGGER zz_s03_e2_actor_lifecycle
 BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors
 FOR EACH ROW EXECUTE FUNCTION public.s03_e2_actor_lifecycle_guard();
 
+-- Preserve actor instance UUIDs across deletion/re-registration. This ledger is
+-- owner-only and append-only; the PK denies accidental reuse even after DELETE.
+CREATE TABLE public.s03_e2_actor_instance_history (
+  actor_instance_id uuid PRIMARY KEY,
+  login_name text NOT NULL,
+  principal_id text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+CREATE FUNCTION public.s03_e2_record_actor_instance()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+SET search_path=pg_catalog,pg_temp AS $e2$
+BEGIN
+  INSERT INTO public.s03_e2_actor_instance_history
+    (actor_instance_id,login_name,principal_id)
+  VALUES (NEW.actor_instance_id,NEW.login_name,NEW.principal_id);
+  RETURN NEW;
+END $e2$;
+CREATE TRIGGER zz_s03_e2_record_instance
+AFTER INSERT ON public.platform_schema_trusted_actors
+FOR EACH ROW EXECUTE FUNCTION public.s03_e2_record_actor_instance();
+
+CREATE FUNCTION public.s03_e2_identity_history_immutability()
+RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
+SET search_path=pg_catalog,pg_temp AS $e2$
+BEGIN
+  RAISE EXCEPTION 'actor instance identity history is append-only' USING ERRCODE='42501';
+END $e2$;
+CREATE TRIGGER s03_e2_identity_history_immutable
+BEFORE UPDATE OR DELETE ON public.s03_e2_actor_instance_history
+FOR EACH ROW EXECUTE FUNCTION public.s03_e2_identity_history_immutability();
+REVOKE ALL ON public.s03_e2_actor_instance_history FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.s03_e2_record_actor_instance() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.s03_e2_identity_history_immutability() FROM PUBLIC;
+
 -- Trigger names ensure existing 0060 provenance executes before E2 capture.
 CREATE FUNCTION public.s03_e2_bind_plan_author()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
