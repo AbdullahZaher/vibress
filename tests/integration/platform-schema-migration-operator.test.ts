@@ -4573,7 +4573,21 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     mkdirSync(anchorDir);
     const anchorKeys=generateKeyPairSync("ed25519"),anchor=new FileExperimentalRecoveryAnchor(anchorDir,anchorKeys.privateKey);
     const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
-    const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+    for(const [name,key] of [["ledger-key.pem",epochKeys.privateKey],["anchor-key.pem",anchorKeys.privateKey]] as const)
+      writeFileSync(path.join(dir,name),key.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+    writeFileSync(path.join(dir,"admin-key.pem"),recoveryAdminKeys.publicKey.export({type:"spki",format:"pem"}),{mode:0o600});
+    const child=(mode:"CLEAN"|"CRASH")=>{
+      const c=spawnSync(process.execPath,["--import","tsx","scripts/platform/m03-s03-fault/reopen-authority.ts",dir,mode],{env:{...process.env,NODE_ENV:"test"},encoding:"utf8",timeout:20000});
+      if(mode==="CRASH")expect(c.signal).toBe("SIGKILL");
+      else{expect(c.status,c.stderr).toBe(0);return JSON.parse(c.stdout.trim()) as ReturnType<typeof a.snapshot>;}
+    };
+    const reopen=()=>{
+      const expected=a.snapshot();a.close();
+      expect(child("CLEAN")).toEqual(expected);
+      a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot()).toEqual(expected);
+    };
     const esc=(v:string)=>cluster.escapeIdentifier(v);
     const ledgerFile=path.join(dir,"authority.jsonl"),anchorFile=path.join(anchorDir,"head.json");
     const oldLedger=readFileSync(ledgerFile),oldAnchor=readFileSync(anchorFile);
@@ -4615,6 +4629,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
       }else{
         expect((await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("APPLIED");
       }
+      reopen();
       const committed=await state(lab.dbAdmin),committedData=await data(lab.dbAdmin);
       expect(committed).not.toBe(initial);
       if(mode!=="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
@@ -4647,15 +4662,26 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
       expect((await cluster.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()")).rows).toEqual([{n:0}]);
       await cluster.end();
       mark("original_cluster_quiescence");
+      a.close();
+      const crash=mode==="committed";
+      if(crash)child("CRASH");else expect(child("CLEAN")).toEqual(authorityBefore);
       if(mode==="corrupt-input")physical("invalid-backup");
       physical("restore",mode==="corrupt-input"?segment:"");
+      if(crash){
+        const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+        const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
+        a=DisposableDurableRecoveryAuthority.takeoverMatchedPending(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey,{...payload,signature:sign(null,recoveryAdministrationMessage(view,"OFFLINE_TAKEOVER",payload),recoveryAdminKeys.privateKey).toString("base64url")});
+      }else a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().operations).toEqual(authorityBefore.operations);
+      expect(a.snapshot().pending).toBe(true);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
       mark("physical_restore");
       cluster=await connect("vibress");
       expect(await migrationDigest()).toBe(initialMigrations);
       const dbAdmin=await connect(lab.name);
       const restored={...lab,dbAdmin,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
       labs[labs.indexOf(lab)]=restored;
-      expect(a.snapshot()).toEqual(authorityBefore);
+      expect(a.snapshot().epoch).toBe(authorityBefore.epoch);
       const restoredState=await state(dbAdmin);
       mark("database_and_registry_verification");
       expect(restoredState).toBe(mode==="rewound"?initial:committed);
@@ -4680,7 +4706,11 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         mark("journal_and_authority_reconciliation");
         const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify(q)).digest("hex");
         expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
-        a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
+        const identity=(await dbAdmin.query<{systemIdentifier:string;databaseOid:string;timeline:number}>('SELECT (pg_control_system()).system_identifier::text AS "systemIdentifier",oid::text AS "databaseOid",(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database WHERE datname=current_database()')).rows[0]!;
+        const target={version:2 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,...identity,manifestDigest,dataDigests};
+        const advance={epoch:nextEpoch,quiescenceEvidenceDigest,target};
+        a.advanceScoped(nextEpoch,quiescenceEvidenceDigest,target,attestRecovery(a,"ADVANCE_V2",advance));
+        reopen();
         const nextObservation={...observation,epoch:nextEpoch};
         await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"CATALOG_DRIFT"});
         await dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
@@ -4695,15 +4725,30 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         mark("epoch_and_actor_reenrollment");
         const wrongEpoch={...ready,epoch};
         expect(()=>a.activate(wrongEpoch,attestRecovery(a,"READY",wrongEpoch))).toThrow();
-        const sig=attestRecovery(a,"READY",ready);
-        expect(()=>a.activate(ready,"A".repeat(86))).toThrow();
+        const scoped=await a.scopedReadiness(dbAdmin);
+        const sig=attestRecovery(a,"READY_V2",scoped);
+        expect(()=>a.activate(ready,attestRecovery(a,"READY",ready))).toThrow();
+        await expect(a.activateScoped(dbAdmin,scoped,"A".repeat(86))).rejects.toThrow();
+        for(const bad of [
+          {...scoped,context:{...scoped.context,version:1 as 2}},
+          {...scoped,context:{...scoped.context,intent:randomUUID()}},
+          {...scoped,context:{...scoped.context,head:"f".repeat(64)}},
+          {...scoped,observed:{...scoped.observed,epoch}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,applicationId:"wrong-app"}}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,installationId:"wrong-installation"}}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,databaseName:"vibress_s03_wrong"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,databaseOid:"99999"}}},
+          {...scoped,observed:{...scoped.observed,catalogManifestDigest:"f".repeat(64)}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,dataDigests:{[lab.table]:"f".repeat(64)}}}},
+        ])await expect(a.activateScoped(dbAdmin,bad,attestRecovery(a,"READY_V2",bad))).rejects.toThrow();
         if(mode==="rewound"){
-          expect(()=>a.activate(ready,sig)).toThrow();
+          await expect(a.activateScoped(dbAdmin,scoped,sig)).rejects.toThrow();
           expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"COMMITTED"}]});
           await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
         }else{
-          a.activate(ready,sig);
-          expect(()=>a.activate(ready,sig)).toThrow();
+          await a.activateScoped(dbAdmin,scoped,sig);
+          await expect(a.activateScoped(dbAdmin,scoped,sig)).rejects.toThrow();
+          reopen();
           expect(a.snapshot().pending).toBe(false);
         }
       }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
@@ -4728,3 +4773,61 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     }finally{a.close();rmSync(dir,{recursive:true,force:true});}
   },240000);
 });
+
+it("M03-COMPAT-01: actual additive operator preserves old prepared reader and refuses unsupported early reader",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab);
+  const table='"public".'+lab.runtime.escapeIdentifier(lab.table);
+  const query={name:"old_reader_projection",text:"SELECT name FROM "+table+" ORDER BY name"};
+  const old=(await lab.runtime.query(query)).rows;
+  expect(old).toEqual([{name:"Alice"},{name:"Bob"}]);
+  await expect(lab.runtime.query("SELECT name,website FROM "+table)).rejects.toMatchObject({code:"42703"});
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect((await lab.runtime.query(query)).rows).toEqual(old);
+  const restarted=await connect(lab.name,lab.runtimeRole);
+  try{
+    expect((await restarted.query("SELECT name,website FROM "+table+" ORDER BY name")).rows).toEqual([{name:"Alice",website:null},{name:"Bob",website:null}]);
+    await restarted.query("UPDATE "+table+" SET website=$1 WHERE name=$2",["https://example.invalid","Alice"]);
+    expect((await lab.runtime.query(query)).rows).toEqual(old);
+    expect((await restarted.query("SELECT website FROM "+table+" WHERE name=$1",["Alice"])).rows).toEqual([{website:"https://example.invalid"}]);
+    expect((await reconcileP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  }finally{await restarted.end();}
+},30000);
+
+it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL matrix",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const other=await createLab("cz");labs.push(other);await p06Install(other);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const roles=[lab.author,lab.approver,lab.runtimeRole,lab.operatorRole];
+  const matrix=(await lab.dbAdmin.query<{subject:string;target:string;can_set:boolean;can_use:boolean}>(
+    "SELECT a.rolname AS subject,b.rolname AS target,pg_has_role(a.oid,b.oid,'SET') AS can_set,pg_has_role(a.oid,b.oid,'USAGE') AS can_use FROM pg_roles a CROSS JOIN pg_roles b WHERE a.rolname=ANY($1::name[]) AND b.rolname=ANY($1::name[]) AND a.oid<>b.oid ORDER BY subject,target",[roles])).rows;
+  expect(matrix).toHaveLength(12);
+  expect(matrix.filter(row=>row.can_set||row.can_use)).toEqual([]);
+  const inventory=await disposableWriterInventory(lab);
+  const columnMatrix=(await lab.dbAdmin.query<{role:string;relation:string;column_name:string;can_update:boolean;can_insert:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,a.attname AS column_name,has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation,column_name",[roles])).rows;
+  expect(columnMatrix.filter(row=>row.role!==lab.operatorRole&&(row.can_update||row.can_insert))).toEqual([]);
+  const authors=await connect(lab.name,lab.author);
+  try{
+    await expect(authors.query("SET ROLE "+authors.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("SELECT public.s03_p06_submit($1,$2)",[other.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("UPDATE public.platform_schema_registry SET manifest_digest=manifest_digest")).rejects.toMatchObject({code:"42501"});
+  }finally{await authors.end();}
+  await expect(lab.runtime.query("SET ROLE "+lab.runtime.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+  await expect(lab.runtime.query("INSERT INTO public.s03_p06_completed_operations SELECT * FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("UPDATE public.platform_schema_registry SET application_id=application_id")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("DELETE FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  const foreign=new Client({connectionString:urlFor(other.name,lab.runtimeRole),connectionTimeoutMillis:4000});
+  try{await expect(foreign.connect()).rejects.toMatchObject({code:"42501"});}finally{await foreign.end().catch(()=>undefined);}
+  const signalling=(await lab.dbAdmin.query("SELECT rolname FROM pg_roles WHERE rolname=ANY($1::name[]) AND pg_has_role(oid,'pg_signal_backend','USAGE')",[roles])).rows;
+  expect(signalling).toEqual([]);
+  expect((await lab.dbAdmin.query("SELECT count(*)::int AS n FROM pg_prepared_xacts WHERE database=current_database()")).rows).toEqual([{n:0}]);
+  const routines=(await lab.dbAdmin.query("SELECT p.oid::regprocedure::text AS signature,p.prosecdef,pg_get_userbyid(p.proowner) AS owner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND (p.proname LIKE 'platform_schema_%' OR p.proname LIKE 's03_%') ORDER BY signature")).rows;
+  expect(routines.length).toBeGreaterThan(0);
+  expect(inventory.functions.filter(row=>[lab.runtimeRole,lab.operatorRole].includes(row.role)&&row.definer&&row.executable)).toEqual([]);
+  expect(await contentChecksum(lab)).toBe(checksum);
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect(await hasWebsite(other)).toBe(false);
+  console.info("M03_WRITER_MATRIX "+JSON.stringify({roleEdges:matrix.length,relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,routineOwners:routines.length,columnRoleRows:columnMatrix.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length}));
+},30000);

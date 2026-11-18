@@ -718,3 +718,31 @@ export async function collectDisposableRollbackEvidence(db:ClientBase,scope:{ins
   const readiness=await collectDisposableRecoveryReadiness(db,{...scope,manifestDigest:witness.previousDigest,dataDigests:witness.dataDigests},witness);
   return {...readiness,witness,transactionStatus:"aborted" as const};
 }
+
+
+/** V2 is experimental, physical-PITR-only, and not a normative runtime grant.
+ * Expected identity comes from a separately signed recovery transition.
+ * Logical restore changing database OID requires a separate policy.
+ */
+export interface ScopedRecoveryTarget {
+  readonly version: 2;
+  readonly applicationId: string;
+  readonly installationId: string;
+  readonly databaseName: string;
+  readonly systemIdentifier: string;
+  readonly databaseOid: string;
+  readonly timeline: number;
+  readonly manifestDigest: string;
+  readonly dataDigests: Readonly<Record<string,string>>;
+}
+export async function collectScopedRecoveryReadiness(db:ClientBase,target:ScopedRecoveryTarget,epoch:string){
+  const identity=async()=> (await db.query<{applicationId:string;systemIdentifier:string;databaseOid:string;timeline:number;recovering:boolean}>(
+    'SELECT i.application_id AS "applicationId",(pg_control_system()).system_identifier::text AS "systemIdentifier",d.oid::text AS "databaseOid",(pg_control_checkpoint()).timeline_id AS timeline,pg_is_in_recovery() AS recovering FROM public.platform_installations i CROSS JOIN pg_database d WHERE i.id=$1 AND d.datname=current_database()',[target.installationId])).rows[0];
+  const before=await identity();
+  if(!before||before.recovering||before.applicationId!==target.applicationId||before.systemIdentifier!==target.systemIdentifier||
+    before.databaseOid!==target.databaseOid||before.timeline!==target.timeline) return deny("CATALOG_DRIFT","scoped recovery physical identity mismatch");
+  const evidence=await collectDisposableRecoveryReadiness(db,{installationId:target.installationId,databaseName:target.databaseName,epoch,manifestDigest:target.manifestDigest,dataDigests:target.dataDigests});
+  const after=await identity();
+  if(JSON.stringify(before)!==JSON.stringify(after))return deny("CATALOG_DRIFT","scoped recovery observation changed");
+  return {...evidence,target:{...target,dataDigests:{...target.dataDigests}},physical:before};
+}

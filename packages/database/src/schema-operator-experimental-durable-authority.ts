@@ -12,7 +12,7 @@ import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } 
 import { acquireRecoveryLock,inspectDeadWriter,inspectDeadArchivedWriter,inspectDeadRecoveryLock,archiveDeadWriter,archiveDeadRecoveryLock,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
 import type { ClientBase } from "pg";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
-import { collectDisposableRollbackEvidence,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
+import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA = /^[0-9a-f]{64}$/;
@@ -30,10 +30,10 @@ type Event =
   | { kind:"ROLLBACK_WITNESS"; operationId:string; witness:RollbackWitness }
   | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
   | { kind: "INTENT"; intent: string }
-  | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
+  | { kind: "ADVANCE"; epoch: string; evidenceDigest: string; scopedTarget?:ScopedRecoveryTarget }
   | { kind: "READY"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; intent?: string; operations: Map<string,Operation> };
+  pending: boolean; advanced: boolean; intent?: string; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -47,6 +47,11 @@ const hash = (previous: string,event: Event) => createHash("sha256").update(JSON
 function validOperation(o: Operation): boolean {
   return UUID.test(o.operationId) && UUID.test(o.submissionId) && UUID.test(o.approvalId) &&
     SHA.test(o.planDigest) && UUID.test(o.epoch);
+}
+function validScopedTarget(t:ScopedRecoveryTarget,s:State):boolean{
+  return !!t&&t.version===2&&/^[a-z][a-z0-9_-]{1,62}$/.test(t.applicationId)&&t.installationId===s.installationId&&t.databaseName===s.databaseName&&
+    /^[0-9]{1,20}$/.test(t.systemIdentifier)&&/^[0-9]{1,10}$/.test(t.databaseOid)&&Number.isInteger(t.timeline)&&t.timeline>=2&&SHA.test(t.manifestDigest)&&
+    !!t.dataDigests&&Object.keys(t.dataDigests).length===1&&Object.entries(t.dataDigests).every(([k,v])=>/^vr_[a-z0-9_]+_[a-f0-9]{12}$/.test(k)&&SHA.test(v));
 }
 function validWitness(w:RollbackWitness):boolean{
   return !!w&&/^\d{1,20}$/.test(w.xid)&&/^\d{1,10}$/.test(w.databaseOid)&&/^\d+\.\d+$/.test(w.postmasterStart)&&
@@ -98,10 +103,13 @@ function reduce(s: State|undefined,e: Event): State {
     case "ADVANCE":
       if(!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")) return refuse();
-      next.epoch=e.epoch; next.epochs.push(e.epoch);next.advanced=true;break;
+      if(e.scopedTarget&&!validScopedTarget(e.scopedTarget,s))return refuse();
+      next.epoch=e.epoch; next.epochs.push(e.epoch);next.advanced=true;
+      if(e.scopedTarget)next.scopedTarget=JSON.parse(JSON.stringify(e.scopedTarget)) as ScopedRecoveryTarget;
+      break;
     case "READY":
       if(!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
-      next.pending=false;next.advanced=false;delete next.intent;break;
+      next.pending=false;next.advanced=false;delete next.intent;delete next.scopedTarget;break;
     default:return refuse();
   }
   return next;
@@ -363,7 +371,7 @@ export class DisposableDurableRecoveryAuthority {
   snapshot(){
     const s=this.current();
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
-      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,
+      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
   proofAuthority(publicKey:KeyObject):RecoveryEpochAuthority {
@@ -434,12 +442,39 @@ export class DisposableDurableRecoveryAuthority {
     this.requireAdministration("ADVANCE",{epoch,quiescenceEvidenceDigest},signature);
     this.append({kind:"ADVANCE",epoch,evidenceDigest:quiescenceEvidenceDigest});
   }
+  advanceScoped(epoch:string,quiescenceEvidenceDigest:string,target:ScopedRecoveryTarget,signature:string):void{
+    const s=this.current();
+    if(this.fences.size!==0||!validScopedTarget(target,s))return refuse();
+    this.requireAdministration("ADVANCE_V2",{epoch,quiescenceEvidenceDigest,target},signature);
+    this.append({kind:"ADVANCE",epoch,evidenceDigest:quiescenceEvidenceDigest,scopedTarget:target});
+  }
+  async scopedReadiness(db:ClientBase){
+    this.assertAnchor();
+    const s=this.current(),target=s.scopedTarget;
+    if(!target||!s.pending||!s.advanced||!s.intent||this.fences.size!==0)return refuse();
+    const context={version:2 as const,ledgerId:s.ledgerId,head:this.head,sequence:this.sequence,intent:s.intent,administrationIdentity:s.administrationIdentity};
+    const observed=await collectScopedRecoveryReadiness(db,target,s.epoch);
+    this.assertAnchor();
+    if(context.head!==this.head||context.sequence!==this.sequence)return refuse();
+    return {context,observed};
+  }
+  async activateScoped(db:ClientBase,evidence:Awaited<ReturnType<DisposableDurableRecoveryAuthority["scopedReadiness"]>>,signature:string):Promise<void>{
+    this.requireAdministration("READY_V2",evidence,signature);
+    const observed=await this.scopedReadiness(db);
+    if(JSON.stringify(observed)!==JSON.stringify(evidence))return refuse();
+    this.requireAdministration("READY_V2",evidence,signature);
+    this.commitReady(observed.observed);
+  }
   activate(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;
     journal:readonly JournalEvidence[]},signature?:string):void{
+    if(this.current().scopedTarget)return refuse();
+    this.requireAdministration("READY",evidence,signature);
+    this.commitReady(evidence);
+  }
+  private commitReady(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;journal:readonly JournalEvidence[]}):void{
     const s=this.current();
     if(!s.pending||!s.advanced||evidence.epoch!==s.epoch||!SHA.test(evidence.catalogManifestDigest)||
       !SHA.test(evidence.readinessEvidenceDigest)||this.fences.size!==0) refuse();
-    this.requireAdministration("READY",evidence,signature);
     const committed=[...s.operations.values()].filter(o=>o.outcome==="COMMITTED");
     if(evidence.journal.length!==committed.length||new Set(evidence.journal.map(j=>j.operationId)).size!==committed.length||
       committed.some(o=>!evidence.journal.some(j=>j.operationId===o.operationId&&j.submissionId===o.submissionId&&
