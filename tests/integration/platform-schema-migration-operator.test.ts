@@ -19,8 +19,9 @@ import {
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
 import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
+import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
 import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
-import { DisposableDurableRecoveryAuthority } from "../../packages/database/src/schema-operator-experimental-durable-authority";
+import { DisposableDurableRecoveryAuthority, recoveryAdministrationMessage } from "../../packages/database/src/schema-operator-experimental-durable-authority";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
 const BASE_URL = process.env.DATABASE_URL ??
@@ -29,7 +30,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -50,6 +51,14 @@ let cluster: Client;
 // External authority is deliberately outside all disposable databases. The
 // signing key is ephemeral and never printed or persisted in a DB dump.
 const epochKeys = generateKeyPairSync("ed25519");
+const recoveryAdminKeys=generateKeyPairSync("ed25519");
+function testAnchor(directory:string){
+  const anchorDirectory=path.join(directory,"separate-anchor");mkdirSync(anchorDirectory);
+  return new FileExperimentalRecoveryAnchor(anchorDirectory,generateKeyPairSync("ed25519").privateKey);
+}
+function attestRecovery(a:DisposableDurableRecoveryAuthority,action:string,payload:unknown){
+  return sign(null,recoveryAdministrationMessage(a.snapshot(),action,payload),recoveryAdminKeys.privateKey).toString("base64url");
+}
 const labEpochs = new Map<string, string>();
 const labRecoveryPending = new Set<string>();
 function proofFor(challenge: RecoveryEpochChallenge, epoch: string, state: RecoveryEpochState = "ACTIVE"): RecoveryEpochProof {
@@ -3348,7 +3357,7 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
     try { await approver.query("SELECT public.s03_p06_revoke($1::uuid)", [revoked.approvalId]); }
     finally { await approver.end(); }
     const authorityDirectory=mkdtempSync(path.join(tmpdir(),"s03-actual-restore-authority-"));
-    const durable=DisposableDurableRecoveryAuthority.initialize(authorityDirectory,epochKeys.privateKey,lab.installationId,lab.name,oldEpoch);
+    const durable=DisposableDurableRecoveryAuthority.initialize(authorityDirectory,epochKeys.privateKey,lab.installationId,lab.name,oldEpoch,testAnchor(authorityDirectory),recoveryAdminKeys.publicKey);
     try {
     expect((await durable.execute(urlFor(lab.name,lab.operatorRole),completed,epochKeys.publicKey)).status).toBe("APPLIED");
     durable.beginRecovery();
@@ -3372,7 +3381,8 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
       const nextEpoch = randomUUID();
       const sessions=(await cluster.query<{n:number}>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=$1",[retained])).rows[0]?.n;
       expect(sessions).toBe(0);
-      durable.advance(nextEpoch,createHash("sha256").update(JSON.stringify({retained,sessions})).digest("hex"));
+      const quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,sessions})).digest("hex");
+      durable.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(durable,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
       labEpochs.set(key,nextEpoch);
       labRecoveryPending.add(key);
       await cluster.query("CREATE DATABASE "+escaped(lab.name));
@@ -3393,7 +3403,8 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
       expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
       const restoredDigest=(await restored.dbAdmin.query<{manifest_digest:string}>("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]!.manifest_digest;
       const restoredJournal=(await restored.dbAdmin.query<{operationId:string;submissionId:string;approvalId:string;planDigest:string;newDigest:string}>('SELECT operation_id AS "operationId",submission_id AS "submissionId",approval_id AS "approvalId",canonical_plan_digest AS "planDigest",new_digest AS "newDigest" FROM public.s03_p06_completed_operations')).rows;
-      expect(()=>durable.activate({epoch:nextEpoch,catalogManifestDigest:restoredDigest,readinessEvidenceDigest:createHash("sha256").update(JSON.stringify(restoredJournal)).digest("hex"),journal:restoredJournal})).toThrow();
+      const readiness={epoch:nextEpoch,catalogManifestDigest:restoredDigest,readinessEvidenceDigest:createHash("sha256").update(JSON.stringify(restoredJournal)).digest("hex"),journal:restoredJournal};
+      expect(()=>durable.activate(readiness,attestRecovery(durable,"READY",readiness))).toThrow();
       expect(durable.snapshot().pending).toBe(true);
       // Test epoch mismatch independently even if an authority actively
       // attests the new epoch. The actual lab authority stays pending.
@@ -3824,20 +3835,27 @@ it("P06-E2E-30: durable external admission and history survive restart; rewind c
   const request=await freshP06(lab),checksum=await contentChecksum(lab);
   const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-authority-"));
   const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
-  let authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch);
+  const anchor=testAnchor(directory);
+  let authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
   try{
     const result=await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
     expect(result.status).toBe("APPLIED");
-    const head=authority.snapshot().head;authority.close();
-    authority=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,head);
+    expect((await authority.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("ALREADY_APPLIED");
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),{...request,operationId:randomUUID()},epochKeys.publicKey)).rejects.toThrow();
+    authority.close();
+    authority=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
     expect(authority.snapshot().operations).toMatchObject([{operationId:request.operationId,outcome:"COMMITTED",newDigest:result.newDigest}]);
     authority.beginRecovery();
     await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
     await expect(authority.proofAuthority(epochKeys.publicKey).prove(lab.installationId,lab.name,new ExperimentalD1Budget())).rejects.toThrow();
     expect(()=>authority.advance(epoch,"a".repeat(64))).toThrow();
-    const next=randomUUID();authority.advance(next,"a".repeat(64));
+    const next=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    // Here a synthetic signed administration assertion tests history gating;
+    // real backend quiescence and restore are exercised in E2E-18.
+    authority.advance(next,quiescenceEvidenceDigest,attestRecovery(authority,"ADVANCE",{epoch:next,quiescenceEvidenceDigest}));
     const readiness={epoch:next,catalogManifestDigest:result.newDigest,readinessEvidenceDigest:"b".repeat(64),journal:[]};
-    expect(()=>authority.activate(readiness)).toThrow();
+    expect(()=>authority.activate(readiness,attestRecovery(authority,"READY",readiness))).toThrow();
     expect(authority.snapshot().pending).toBe(true);
     expect(await hasWebsite(lab)).toBe(true);
     expect(await contentChecksum(lab)).toBe(checksum);
@@ -3871,7 +3889,7 @@ describe("P06 transport acknowledgment and recovery fencing",()=>{
     const request=await freshP06(lab),checksum=await contentChecksum(lab);
     const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-recovery-fence-"));
     const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
-    const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch);
+    const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch,testAnchor(directory),recoveryAdminKeys.publicKey);
     const blocker=await connect(lab.name);
     let operation:Promise<unknown>|undefined;
     try{
@@ -3907,7 +3925,11 @@ describe("P06 transport acknowledgment and recovery fencing",()=>{
       await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
       await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
       expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
-      expect((await superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority)).status).toBe("APPLIED");
+      await expect(superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority)).rejects.toMatchObject({code:"UNAUTHORIZED",message:"durable operation admission required"});
+      const directory=mkdtempSync(path.join(tmpdir(),"s03-cli-boundary-"));
+      const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(directory),recoveryAdminKeys.publicKey);
+      try{expect((await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("APPLIED");}
+      finally{authority.close();rmSync(directory,{recursive:true,force:true});}
     }finally{if(old===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=old;}
   },30000);
 });
@@ -3959,3 +3981,34 @@ describe("P06 supervised D1 classification and rollback acknowledgment",()=>{
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
   },30000);
 });
+
+it("P06-E2E-39: admission anchor failure before SQL and outcome anchor failure after COMMIT are fail-closed",async()=>{
+  const lab=await createLab("ce");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-anchor-fault-"));
+  const anchor=testAnchor(dir);
+  let failAt=2;
+  const fault:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+    if(n.sequence===failAt)throw Error("injected anchor failure");anchor.compareAndSet(p,n);
+  }};
+  let authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,fault,recoveryAdminKeys.publicKey);
+  try{
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey)).toThrow();
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+  // Independent fresh disposable ledger (not repair or reset of a live authority).
+  const second=mkdtempSync(path.join(tmpdir(),"s03-anchor-outcome-")),secondAnchor=testAnchor(second);
+  failAt=3;
+  const afterCommit:ExperimentalRecoveryAnchor={read:()=>secondAnchor.read(),compareAndSet:(p,n)=>{
+    if(n.sequence===failAt)throw Error("injected outcome anchor failure");secondAnchor.compareAndSet(p,n);
+  }};
+  authority=DisposableDurableRecoveryAuthority.initialize(second,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,afterCommit,recoveryAdminKeys.publicKey);
+  try{
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(second,epochKeys.privateKey,secondAnchor,recoveryAdminKeys.publicKey)).toThrow();
+  }finally{authority.close();rmSync(second,{recursive:true,force:true});}
+},30000);

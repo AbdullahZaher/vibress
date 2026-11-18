@@ -41,8 +41,10 @@ jobs:
           test "$(node -v)" = "v24.22.3"
           pnpm install --frozen-lockfile
           pnpm --filter @vibress/plugin-sdk build
+          pnpm --filter @vibress/database typecheck
           pnpm typecheck
-          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts tests/fixtures/m03-s03-legacy-operator-diagnostic.ts packages/database/src/platform-schema-migration-operator.ts
+          pnpm exec vitest run --config vitest.unit.config.ts tests/unit/schema-operator-experimental-durable-authority.test.ts tests/unit/schema-operator-experimental-deadline.test.ts tests/architecture/platform-boundaries.test.ts
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts tests/fixtures/m03-s03-legacy-operator-diagnostic.ts packages/database/src/platform-schema-migration-operator.ts packages/database/src/schema-operator-experimental-durable-authority.ts packages/database/src/schema-operator-experimental-anchor.ts packages/database/src/schema-operator-cli.ts packages/database/src/schema-operator-experimental-supervisor.ts
           pnpm verify:explicit-any
       - name: Start disposable PostgreSQL 16 only
         id: pg16

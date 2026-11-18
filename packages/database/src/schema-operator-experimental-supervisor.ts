@@ -12,6 +12,14 @@ import type { RecoveryEpochAuthority } from "./schema-operator-experimental-reco
 export interface ExperimentalRecoveryFence {
   attach(fence: () => void): void;
 }
+// Internal one-shot registration. This constrains supported callers, not arbitrary
+// hostile JS or SQL possessing operator credentials. Vitest raw harness only.
+const admissions=new WeakMap<ExperimentalRecoveryFence,string>();
+const admissionKey=(request:SchemaOperatorRequest,mode:string)=>JSON.stringify([mode,request.installationId,request.operationId,request.submissionId,request.approvalId,request.planDigest,request.envelopeVersion]);
+export function registerExperimentalAdmission(admission:ExperimentalRecoveryFence,request:SchemaOperatorRequest,mode:"EXECUTE"|"RECONCILE"):void{
+  if(admissions.has(admission)) throw Error("admission already registered");
+  admissions.set(admission,admissionKey(request,mode));
+}
 
 export async function superviseDisposableSchemaOperation(
   connectionString: string, request: SchemaOperatorRequest, authority: RecoveryEpochAuthority,
@@ -19,6 +27,12 @@ export async function superviseDisposableSchemaOperation(
   recoveryFence?: ExperimentalRecoveryFence,
 ): Promise<SchemaOperatorResult> {
   budget.checkpoint();
+  if(recoveryFence){
+    if(admissions.get(recoveryFence)!==admissionKey(request,mode)) throw new SchemaMigrationOperatorError("UNAUTHORIZED","durable operation admission required");
+    admissions.delete(recoveryFence);
+  }else if(!(process.env.NODE_ENV==="test"&&process.env.VITEST==="true")){
+    throw new SchemaMigrationOperatorError("UNAUTHORIZED","durable operation admission required");
+  }
   const url = new URL(connectionString);
   if (process.env.NODE_ENV === "production" ||
       !["postgres:", "postgresql:"].includes(url.protocol) ||

@@ -4,10 +4,11 @@
  * Not imported by API, worker, plugin SDK, routes or deployment startup.
  * No default DATABASE_URL fallback, no privilege provisioning.
  */
-import { createPublicKey } from "node:crypto";
-import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
+import { createPrivateKey, createPublicKey } from "node:crypto";
+import { readFileSync, realpathSync } from "node:fs";
+import { DisposableDurableRecoveryAuthority } from "./schema-operator-experimental-durable-authority";
+import { FileExperimentalRecoveryAnchor } from "./schema-operator-experimental-anchor";
 import { SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
-import { superviseDisposableSchemaOperation } from "./schema-operator-experimental-supervisor";
 import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 function testOnlyConnection(): string {
@@ -31,34 +32,21 @@ function testOnlyConnection(): string {
   return raw;
 }
 
-// Experimental-only loopback provider, configured through a trusted operator
-// host. Never accept a public key or epoch from the operation request.
-function testOnlyRecoveryAuthority(): RecoveryEpochAuthority {
-  const endpoint = new URL(process.env.VIBRESS_SCHEMA_RECOVERY_AUTHORITY_URL ?? "");
-  const publicKey = process.env.VIBRESS_SCHEMA_RECOVERY_AUTHORITY_PUBLIC_KEY;
-  if (!publicKey || endpoint.protocol !== "http:" ||
-      !["127.0.0.1", "localhost", "[::1]"].includes(endpoint.hostname) ||
-      endpoint.username || endpoint.password || endpoint.search || endpoint.hash ||
-      endpoint.pathname !== "/v1/recovery-epoch") throw Error("trusted disposable recovery authority required");
-  return new RecoveryEpochAuthority(createPublicKey(publicKey), async (challenge, signal) => {
-    const response = await fetch(endpoint, { method: "POST", redirect: "error", signal,
-      headers: {"content-type":"application/json"}, body: JSON.stringify(challenge) });
-    if (!response.ok || !response.body) throw Error("recovery authority unavailable");
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let count = 0;
-    try {
-      for (;;) {
-        const part = await reader.read();
-        if (part.done) break;
-        count += part.value.byteLength;
-        if (count > 4096) { await reader.cancel(); throw Error("recovery proof too large"); }
-        chunks.push(part.value);
-      }
-    } finally { reader.releaseLock(); }
-    const proof: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    return proof;
-  });
+// Trusted local host only. Provision the ledger and anchor out of band;
+// never create a missing authority or fall back to epoch-only proof.
+function required(name:string):string {
+  const value=process.env[name];if(!value)throw Error("durable authority configuration required");return value;
+}
+function testOnlyRecoveryAuthority(){
+  const ledger=realpathSync(required("VIBRESS_SCHEMA_RECOVERY_LEDGER_DIR"));
+  const anchorDir=realpathSync(required("VIBRESS_SCHEMA_RECOVERY_ANCHOR_DIR"));
+  if(ledger===anchorDir)throw Error("separate anchor directory required");
+  const key=createPrivateKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_SIGNING_KEY_FILE")));
+  const anchorKey=createPrivateKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_ANCHOR_KEY_FILE")));
+  const publicKey=createPublicKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_PUBLIC_KEY_FILE")));
+  const adminKey=createPublicKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_ADMIN_PUBLIC_KEY_FILE")));
+  const anchor=new FileExperimentalRecoveryAnchor(anchorDir,anchorKey);
+  return {authority:DisposableDurableRecoveryAuthority.open(ledger,key,anchor,adminKey),publicKey};
 }
 
 async function main(): Promise<void> {
@@ -71,11 +59,14 @@ async function main(): Promise<void> {
     throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest> <operationId> <submissionId> <approvalId> 1");
   }
   const connectionString = testOnlyConnection();
-  const authority = testOnlyRecoveryAuthority();
-  budget.checkpoint();
-  const result = await superviseDisposableSchemaOperation(connectionString,
-    {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},authority,
-    reconcile?"RECONCILE":"EXECUTE",budget);
+  const {authority,publicKey}=testOnlyRecoveryAuthority();
+  const request={installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1} as const;
+  let result;
+  try{
+    budget.checkpoint();
+    result=reconcile?await authority.reconcile(connectionString,request,publicKey,budget):
+      await authority.execute(connectionString,request,publicKey,budget);
+  }finally{authority.close();}
   // Recheck at the CLI outcome boundary, not just inside the database method.
   const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
     budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
