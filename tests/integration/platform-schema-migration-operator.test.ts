@@ -2236,6 +2236,32 @@ describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () 
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       expect(operatorWaiting, "must observe real PostgreSQL advisory wait").toBe(true);
+      // Source-pinned diagnostic evidence: PID, exact backend_start, blocking
+      // backend identity and PostgreSQL advisory/transaction locks. These
+      // metadata contain no credentials, actor secrets or raw SQL parameters.
+      const waitingEvidence = await cluster.query<{
+        pid:number; backend_start:string; wait_event_type:string|null;
+        wait_event:string|null; blockers:number[];
+      }>(
+        "SELECT pid,backend_start::text AS backend_start,wait_event_type,wait_event,"+
+        "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity "+
+        "WHERE pid=ANY($1::int[]) ORDER BY pid",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      const advisoryEvidence = await cluster.query<{
+        pid:number;locktype:string;mode:string;granted:boolean;
+        classid:number|null;objid:number|null;objsubid:number|null;
+      }>(
+        "SELECT pid,locktype,mode,granted,classid,objid,objsubid "+
+        "FROM pg_locks WHERE pid=ANY($1::int[]) "+
+        "AND locktype IN ('advisory','transactionid') ORDER BY pid,locktype,mode",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      console.info("R1_10_BACKEND_TRACE="+JSON.stringify(waitingEvidence.rows));
+      console.info("R1_10_ADVISORY_TRACE="+JSON.stringify(advisoryEvidence.rows));
+      expect(waitingEvidence.rows.some(x => x.pid===(operator.processID??-1) &&
+        x.wait_event_type==="Lock" &&
+        x.blockers.includes(admin.processID??-1))).toBe(true);
       // Admin already holds actor X; approval UPDATE trigger needs key A.
       // PostgreSQL detects the resulting two-backend cycle and aborts one.
       adminWait = settle(admin.query(
