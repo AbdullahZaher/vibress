@@ -1,0 +1,38 @@
+name: M04 external clean consumer evidence
+on:
+  push:
+    branches: [experiment/m04-external-clean-consumer-20261118]
+permissions:
+  contents: read
+jobs:
+  external:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Verify exact source and toolchain
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          node --version
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
+      - name: Existing contract regression and architecture
+        run: |
+          pnpm --filter @vibress/schema-engine typecheck
+          pnpm --filter @vibress/m04-consumer-tests typecheck
+          pnpm --filter @vibress/schema-engine test
+          pnpm --filter @vibress/m04-consumer-tests test
+          pnpm exec vitest run --config packages/schema-engine/vitest.config.ts --passWithNoTests=false tests/architecture/platform-boundaries.test.ts
+      - name: Install and consume local package artifacts outside workspace
+        run: bash tests/fixtures/m04-external-consumer.sh
+      - name: Verify source unchanged
+        run: git diff --exit-code
