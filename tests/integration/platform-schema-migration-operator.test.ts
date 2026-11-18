@@ -24,7 +24,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2912,7 +2912,7 @@ describe("Integrated P06 D1 and R1 safety",()=>{
     const request=await freshP06(lab),before=await contentChecksum(lab);let tick=0;
     const budget=new ExperimentalD1Budget(()=>tick);
     const issued:string[]=[];
-    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
       issued.push(sql);const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
       if(sql.startsWith("INSERT INTO public.s03_p06_completed_operations"))tick=2518;
       return result;
@@ -2924,7 +2924,7 @@ describe("Integrated P06 D1 and R1 safety",()=>{
   },30000);
   it("P06-E2E-06: lost ACK is indeterminate; fresh session reconciles exact UUID without second DDL",async()=>{
     const lab=await createLab("at");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
-    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
       const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
       if(sql==="COMMIT")throw new Error("simulated lost commit acknowledgment after actual server commit");
       return result;
@@ -2952,7 +2952,7 @@ describe("P06 integrated canonical and late-outcome regressions",()=>{
   it("P06-E2E-08: actual COMMIT with simulated late clock must not return APPLIED",async()=>{
     const lab=await createLab("av");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
     let tick=0;const budget=new ExperimentalD1Budget(()=>tick);
-    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
       const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
       if(sql==="COMMIT")tick=2518;return result;
     }} as unknown as ClientBase;
@@ -2993,6 +2993,7 @@ describe("Integrated P06 transaction-start acknowledgment safety", () => {
     const request = await freshP06(lab);
     const issued: string[] = [];
     const wrapped = {
+      getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
       query: async (sql: string) => {
         issued.push(sql);
         const result = await lab.operator.query(sql);
@@ -3020,6 +3021,7 @@ describe("Integrated P06 transaction-start acknowledgment safety", () => {
     const request = await freshP06(lab);
     const issued: string[] = [];
     const wrapped = {
+      getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
       query: async (sql: string) => {
         issued.push(sql);
         await lab.operator.query(sql);
@@ -3249,5 +3251,31 @@ describe("P06 actual Drizzle migration-framework rehearsal", () => {
       const request = await freshP06(lab);
       expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
     } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, 30000);
+});
+
+describe("P06 dedicated session transaction admission", () => {
+  it("P06-E2E-17: caller-owned active and aborted transactions cannot be committed by operator", async () => {
+    const lab = await createLab("be");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    try {
+      await lab.operator.query("BEGIN");
+      await lab.operator.query('INSERT INTO "public".'+lab.operator.escapeIdentifier(lab.table)+' ("name") VALUES ($1)', ["uncommitted"]);
+      await expect(executeP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session must be idle before operation",
+      });
+      expect(await contentChecksum(lab)).toBe(checksum);
+      await expect(lab.operator.query("SELECT 1/0")).rejects.toMatchObject({ code: "22012" });
+      await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session must be idle before operation",
+      });
+    } finally { await lab.operator.query("ROLLBACK"); }
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
   }, 30000);
 });

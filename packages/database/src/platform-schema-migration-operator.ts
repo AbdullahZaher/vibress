@@ -254,6 +254,18 @@ async function withSession(
 ): Promise<SchemaOperatorResult> {
   if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
   if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");
+  // pg >=8.22 exposes ReadyForQuery transaction status. Refuse borrowed
+  // active/aborted transactions; BEGIN would otherwise join the caller's
+  // transaction and COMMIT could commit unrelated work. Null is the driver's
+  // documented initial status before its first query.
+  const statusReader = db as ClientBase & { getTransactionStatus?: () => string | null };
+  if (typeof statusReader.getTransactionStatus !== "function") {
+    deny("OPERATION_FAILED", "dedicated session transaction status unavailable");
+  }
+  const status = statusReader.getTransactionStatus();
+  if (status !== "I" && status !== null) {
+    deny("OPERATION_FAILED", "dedicated session must be idle before operation");
+  }
   activeSessions.add(db);
   try {
     return await runP06(db, request, budget, mode);
