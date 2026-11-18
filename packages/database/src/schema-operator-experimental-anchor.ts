@@ -3,6 +3,7 @@
 import { createPublicKey, randomUUID, sign, verify, type KeyObject } from "node:crypto";
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { acquireRecoveryLock,inspectDeadRecoveryLock,archiveDeadRecoveryLock,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
 
 export interface RecoveryHead {
   readonly ledgerId:string;
@@ -14,6 +15,9 @@ export interface RecoveryHead {
 export interface ExperimentalRecoveryAnchor {
   read():RecoveryHead|null;
   compareAndSet(previous:RecoveryHead|null,next:RecoveryHead):void;
+  // Optional local adapter maintenance under the authority's exclusive gate.
+  inspectAbandonedMatchedLock?(expected:RecoveryHead):string|null;
+  archiveAbandonedMatchedLock?(expected:RecoveryHead,digest:string,nonce:string):void;
 }
 const SHA=/^[0-9a-f]{64}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -44,9 +48,35 @@ export class FileExperimentalRecoveryAnchor implements ExperimentalRecoveryAncho
       !verify(null,message(record.value),this.publicKey,Buffer.from(record.signature,"base64url")))throw Error("invalid anchor");
     return record.value;
   }
+  inspectAbandonedMatchedLock(expected:RecoveryHead):string|null{
+    if(!sameRecoveryHead(this.read(),expected))throw Error("anchor mismatch");
+    let record:ReturnType<typeof inspectDeadRecoveryLock>;
+    try{record=inspectDeadRecoveryLock(this.directory,"anchor",this.publicKey);}
+    catch(error){
+      if(typeof error==="object"&&error!==null&&"code" in error&&error.code==="ENOENT"){
+        // ENOENT must refer to the lock itself, not procfs or other identity input.
+        try{readFileSync(join(this.directory,"anchor.lock"));}
+        catch(missing){if(typeof missing==="object"&&missing!==null&&"code" in missing&&missing.code==="ENOENT")return null;throw missing;}
+      }
+      throw error;
+    }
+    const context=record.context as {previous:RecoveryHead|null;next:RecoveryHead};
+    if(!context||!context.next||!valid(context.next)||!sameRecoveryHead(context.next,expected)||
+      (context.previous===null?expected.sequence!==1:!context.previous||!valid(context.previous)||
+       context.previous.sequence+1!==expected.sequence||context.previous.ledgerId!==expected.ledgerId||
+       context.previous.installationId!==expected.installationId||context.previous.signingIdentity!==expected.signingIdentity))
+      throw Error("abandoned anchor transition is not uniquely matched");
+    return record.digest;
+  }
+  archiveAbandonedMatchedLock(expected:RecoveryHead,digest:string,nonce:string):void{
+    // Caller is the trusted anchor custodian acting under signed authority
+    // maintenance. This method never modifies head.json or advances CAS.
+    if(this.inspectAbandonedMatchedLock(expected)!==digest)throw Error("abandoned anchor witness changed");
+    archiveDeadRecoveryLock(this.directory,"anchor",nonce,this.publicKey,digest);
+  }
   compareAndSet(previous:RecoveryHead|null,next:RecoveryHead):void{
     const lockPath=join(this.directory,"anchor.lock");
-    const lock=openSync(lockPath,"wx",0o600);
+    const lock=acquireRecoveryLock(this.directory,"anchor",this.key,{previous,next});
     const temp=join(this.directory,"head-"+randomUUID()+".tmp");
     try{
       if(!sameRecoveryHead(this.read(),previous)||!valid(next)||
@@ -63,7 +93,7 @@ export class FileExperimentalRecoveryAnchor implements ExperimentalRecoveryAncho
       this.testProbe?.("AFTER_ANCHOR_DIR_FSYNC");
     }finally{
       try{unlinkSync(temp);}catch{/* temp may have been renamed */}
-      closeSync(lock);unlinkSync(lockPath);
+      closeSync(lock);unlinkSync(lockPath);syncRecoveryDirectory(this.directory);
     }
   }
 }

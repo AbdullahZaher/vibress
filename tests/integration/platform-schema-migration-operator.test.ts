@@ -17,7 +17,7 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
-import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,collectDisposableRollbackEvidence,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
 import { retireDisposableIdentity, completeDisposableIdentity } from "../../packages/database/src/schema-operator-experimental-lifecycle";
@@ -31,7 +31,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs" | "ct" | "cu" | "cv" | "cw" | "cx" | "cy";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs" | "ct" | "cu" | "cv" | "cw" | "cx" | "cy" | "cz" | "da";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4485,3 +4485,65 @@ if(process.env.M03_S03_OWNED_RESTART==="I_CONFIRM_OWNED_SERVICE"&&process.env.GI
     }finally{a.close();rmSync(root,{recursive:true,force:true});}
   },120000);
 }
+
+
+it.each([["P06-E2E-54","cz","ROLLBACK"],["P06-E2E-55","da","COMMIT"]] as const)("%s: real xid8 witness and fenced physical outcome control (%s, %s)",async(_name,key,command)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  if(command==="ROLLBACK"){
+    const approver=await connect(lab.name,lab.approver);
+    try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+  }
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-xid-rollback-")),anchor=testAnchor(dir);
+  let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+  const proxy=await startStatementAckFaultProxy(command,"DROP");
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  const esc=cluster.escapeIdentifier(lab.name);
+  let fenced=false;
+  try{
+    await expect(a.execute(url.toString(),request,epochKeys.publicKey,new ExperimentalD1Budget(),true)).rejects.toMatchObject({code:"INDETERMINATE"});
+    await proxy.serverCommitObserved;
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+    const witness=a.snapshot().operations[0]?.rollbackWitness;
+    if(!witness)throw Error("durable xid8 witness missing");
+    expect(witness.previousDigest).toBe(lab.current.digest);
+    const scope={installationId:lab.installationId,databaseName:lab.name,epoch:a.snapshot().epoch};
+    const generic={operationId:request.operationId,outcome:"ROLLED_BACK",evidenceDigest:"a".repeat(64),newDigest:undefined};
+    expect(()=>a.resolve(request.operationId,"ROLLED_BACK",generic.evidenceDigest,undefined,attestRecovery(a,"RESOLVE",generic))).toThrow();
+    await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await Promise.all([lab.operator.end(),lab.runtime.end()]);
+    await cluster.query("ALTER DATABASE "+esc+" ALLOW_CONNECTIONS false");fenced=true;
+    const tx=(await lab.dbAdmin.query<{status:string|null}>("SELECT pg_xact_status($1::xid8) AS status",[witness.xid])).rows[0]!;
+    expect(tx.status).toBe(command==="ROLLBACK"?"aborted":"committed");
+    if(command==="COMMIT"){
+      await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness)).rejects.toMatchObject({code:"INDETERMINATE"});
+      expect(a.snapshot().operations[0]?.outcome).toBe("UNCERTAIN");
+      return;
+    }
+    await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,{...witness,postmasterStart:"0.0"})).rejects.toMatchObject({code:"INDETERMINATE"});
+    const evidence=await collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness);
+    const payload={operationId:request.operationId,evidence};
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,"A".repeat(86))).rejects.toThrow();
+    const forged={...evidence,readinessEvidenceDigest:"f".repeat(64)};
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,forged,attestRecovery(a,"RESOLVE_OBSERVED_ROLLBACK",{operationId:request.operationId,evidence:forged}))).rejects.toThrow();
+    const signature=attestRecovery(a,"RESOLVE_OBSERVED_ROLLBACK",payload);
+    // A signed assertion cannot replace actual data equivalence. Mutate only
+    // this owned disposable fixture, then restore its exact original rows.
+    const seed=(await lab.dbAdmin.query<{name:string}>('SELECT name FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" ORDER BY name")).rows;
+    await lab.dbAdmin.query('UPDATE "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" SET name='unexpected'");
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature)).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+    await lab.dbAdmin.query('TRUNCATE "public".'+lab.dbAdmin.escapeIdentifier(lab.table));
+    for(const row of seed)await lab.dbAdmin.query('INSERT INTO "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" (name) VALUES ($1)",[row.name]);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    await a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature);
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"ROLLED_BACK"}]});
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+  }finally{
+    if(fenced)await cluster.query("ALTER DATABASE "+esc+" ALLOW_CONNECTIONS true");
+    await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});
+  }
+},30000);

@@ -3,7 +3,7 @@
 // conservatively reports uncertainty; disconnect alone is NOT rollback proof.
 import { Client } from "pg";
 import { D1DeadlineExceeded, ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
-import { ExperimentalSessionLifecycle, registerExperimentalOwnedSession, type SessionTerminalCause } from "./schema-operator-experimental-session";
+import { ExperimentalSessionLifecycle, registerExperimentalOwnedSession, type SessionTerminalCause, type RollbackWitness } from "./schema-operator-experimental-session";
 import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
@@ -16,6 +16,7 @@ export type OwnedOperationFacts = Readonly<{
 export interface ExperimentalRecoveryFence {
   attach(fence: () => void): void;
   observeSettlement?(facts:OwnedOperationFacts):void;
+  observeRollbackWitness?(witness:RollbackWitness):void;
 }
 // Internal one-shot registration. This constrains supported callers, not arbitrary
 // hostile JS or SQL possessing operator credentials. Vitest raw harness only.
@@ -49,7 +50,7 @@ export async function superviseDisposableSchemaOperation(
   const db = new Client({connectionString,
     connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
     statement_timeout: Math.max(1, Math.floor(budget.remainingMs()))});
-  const session = new ExperimentalSessionLifecycle(budget, true);
+  const session = new ExperimentalSessionLifecycle(budget, true,recoveryFence?.observeRollbackWitness);
   registerExperimentalOwnedSession(db,session);
   let closing: Promise<void> | undefined;
   const close = () => {

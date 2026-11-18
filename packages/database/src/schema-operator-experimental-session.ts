@@ -5,6 +5,7 @@ import type { ExperimentalD1Budget } from "./schema-operator-experimental-deadli
 
 type Phase = "CONNECTING" | "READY" | "BEGIN_DISPATCHED" | "TRANSACTION_ACTIVE" |
   "COMMIT_DISPATCHED" | "COMMIT_ACKNOWLEDGED" | "ROLLBACK_DISPATCHED" | "ROLLED_BACK";
+export type RollbackWitness=Readonly<{xid:string;databaseOid:string;postmasterStart:string;previousDigest:string;dataDigests:Readonly<Record<string,string>>}>;
 export type SessionTerminalCause = "DEADLINE_EXCEEDED" | "TRANSPORT_FAILED" |
   "CONNECTION_FAILED" | "OPERATION_FAILED" | "NORMAL_COMPLETION";
 type Dispatch = "BEGIN" | "SQL" | "COMMIT" | "ROLLBACK";
@@ -21,7 +22,7 @@ export class ExperimentalSessionLifecycle {
   private commitDigest: string | undefined;
   private journalObservation: "UNOBSERVED"|"ABSENT"|"PRESENT" = "UNOBSERVED";
 
-  constructor(private readonly budget: ExperimentalD1Budget, connecting = false) {
+  constructor(private readonly budget: ExperimentalD1Budget, connecting = false,private readonly rollbackObserver?:(witness:RollbackWitness)=>void) {
     this.phase = connecting ? "CONNECTING" : "READY";
   }
 
@@ -45,6 +46,13 @@ export class ExperimentalSessionLifecycle {
   observeJournal(present:boolean):void {
     if(this.phase!=="TRANSACTION_ACTIVE"||this.cause!==undefined||this.journalObservation!=="UNOBSERVED")throw Error("invalid journal observation");
     this.journalObservation=present?"PRESENT":"ABSENT";
+  }
+  needsRollbackWitness():boolean{return this.rollbackObserver!==undefined;}
+  persistRollbackWitness(witness:RollbackWitness):void{
+    this.assertOperational();
+    if(this.phase!=="TRANSACTION_ACTIVE"||this.journalObservation!=="ABSENT"||!this.rollbackObserver)throw Error("rollback witness unavailable");
+    this.rollbackObserver(Object.freeze({...witness,dataDigests:Object.freeze({...witness.dataDigests})}));
+    this.assertOperational();
   }
   transactionFacts(){
     const outcome=this.phase==="ROLLED_BACK"?"ROLLED_BACK":

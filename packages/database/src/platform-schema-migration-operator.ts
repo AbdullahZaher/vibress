@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { ClientBase } from "pg";
 import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
-import { ExperimentalSessionLifecycle, isExperimentalOwnedSession } from "./schema-operator-experimental-session";
+import { ExperimentalSessionLifecycle, isExperimentalOwnedSession, type RollbackWitness } from "./schema-operator-experimental-session";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -496,6 +496,14 @@ async function runP06(
     }
     await verifyCatalog(db, oid, resource);
     const beforeRows = await rowCount(db, ddl.tableName);
+    // Bounded witness under the same target lock, before FINAL_PRE_DDL.
+    // Larger or multi-resource operations remain ineligible for this recovery path.
+    if(session.needsRollbackWitness()&&current.resources.length===1&&Number(beforeRows)<=1000){
+      const tx=(await db.query<{xid:string;databaseOid:string;postmasterStart:string}>('SELECT pg_current_xact_id()::text AS xid,(SELECT oid::text FROM pg_database WHERE datname=current_database()) AS "databaseOid",extract(epoch FROM pg_postmaster_start_time())::text AS "postmasterStart"')).rows[0];
+      const data=await db.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+db.escapeIdentifier(ddl.tableName)+' t ORDER BY value LIMIT 1001');
+      if(!tx||data.rows.length!==Number(beforeRows))return deny("CATALOG_DRIFT","rollback witness unavailable");
+      session.persistRollbackWitness({...tx,previousDigest:current.digest,dataDigests:{[ddl.tableName]:createHash("sha256").update(JSON.stringify(data.rows.map(row=>row.value))).digest("hex")}});
+    }
 
     // Acquire actual advisory keys in numeric order, after target-table and catalog locks.
     const keys=await db.query<{k:number}>("SELECT DISTINCT hashtext(v) AS k FROM unnest($1::text[]) AS x(v) ORDER BY k",
@@ -623,7 +631,7 @@ async function runP06(
 // A malicious cluster superuser remains outside this trust boundary.
 export async function collectDisposableRecoveryReadiness(
   db:ClientBase, scope:{installationId:string;databaseName:string;epoch:string;manifestDigest:string;
-    dataDigests:Readonly<Record<string,string>>},
+    dataDigests:Readonly<Record<string,string>>}, rollbackWitness?:RollbackWitness,
 ){
   if(process.env.NODE_ENV==="production"||!/^vibress_s03_[a-z0-9_]+$/.test(scope.databaseName)||
     !UUID.test(scope.epoch)||!SHA.test(scope.manifestDigest)) return deny("UNAUTHORIZED","disposable recovery evidence required");
@@ -647,6 +655,15 @@ export async function collectDisposableRecoveryReadiness(
   try{
     await db.query("SET LOCAL search_path=pg_catalog");
     const before=await fence();
+    const assertAborted=async()=>{
+      if(!rollbackWitness)return;
+      const tx=(await db.query<{status:string|null;postmasterStart:string;databaseOid:string}>('SELECT pg_xact_status($1::xid8) AS status,extract(epoch FROM pg_postmaster_start_time())::text AS "postmasterStart",(SELECT oid::text FROM pg_database WHERE datname=current_database()) AS "databaseOid"',[rollbackWitness.xid])).rows[0];
+      // Same original running server/database only. No inference after restore,
+      // restart, transaction-status truncation or any ambiguous observation.
+      if(!tx||tx.status!=="aborted"||tx.databaseOid!==rollbackWitness.databaseOid||tx.postmasterStart!==rollbackWitness.postmasterStart||scope.manifestDigest!==rollbackWitness.previousDigest)
+        return deny("INDETERMINATE","definitive original transaction rollback unavailable");
+    };
+    await assertAborted();
     const registry=(await db.query<RegistryRow>("SELECT * FROM public.platform_schema_registry WHERE installation_id=$1",[scope.installationId])).rows[0];
     const installation=(await db.query<InstallationRow>("SELECT i.id,i.application_id,i.environment,(SELECT count(*)::int FROM public.platform_installations) AS total FROM public.platform_installations i WHERE i.id=$1",[scope.installationId])).rows[0];
     const epoch=(await db.query<{epoch_id:string}>("SELECT epoch_id FROM public.s03_p06_recovery_epochs WHERE installation_id=$1",[scope.installationId])).rows[0];
@@ -688,8 +705,16 @@ export async function collectDisposableRecoveryReadiness(
     await db.query("SELECT pg_stat_clear_snapshot()");
     const after=await fence();
     if(before.oid!==after.oid)return deny("CATALOG_DRIFT","recovery database identity changed");
+    await assertAborted();
     await db.query("COMMIT");
-    const readinessEvidenceDigest=createHash("sha256").update(JSON.stringify({scope,before,after,resources,actors,journal})).digest("hex");
+    const readinessEvidenceDigest=createHash("sha256").update(JSON.stringify({scope,before,after,resources,actors,journal,...(rollbackWitness?{rollbackWitness,transactionStatus:"aborted"}:{})})).digest("hex");
     return {installationId:scope.installationId,databaseName:scope.databaseName,epoch:scope.epoch,catalogManifestDigest:manifest.digest,readinessEvidenceDigest,journal};
   }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
+}
+
+// Must be used on the original non-rewound disposable PostgreSQL server with
+// the trusted DBA as the only session. A signed assertion alone is insufficient.
+export async function collectDisposableRollbackEvidence(db:ClientBase,scope:{installationId:string;databaseName:string;epoch:string},witness:RollbackWitness){
+  const readiness=await collectDisposableRecoveryReadiness(db,{...scope,manifestDigest:witness.previousDigest,dataDigests:witness.dataDigests},witness);
+  return {...readiness,witness,transactionStatus:"aborted" as const};
 }

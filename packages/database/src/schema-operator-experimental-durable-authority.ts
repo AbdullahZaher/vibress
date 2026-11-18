@@ -9,12 +9,14 @@ import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 import { RecoveryEpochAuthority, recoveryEpochMessage } from "./schema-operator-experimental-recovery-epoch";
 import { superviseDisposableSchemaOperation, registerExperimentalAdmission, type OwnedOperationFacts } from "./schema-operator-experimental-supervisor";
 import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } from "./schema-operator-experimental-anchor";
-import { persistWriterIdentity,inspectDeadWriter,archiveDeadWriter,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
-import { SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
+import { acquireRecoveryLock,inspectDeadWriter,inspectDeadArchivedWriter,inspectDeadRecoveryLock,archiveDeadWriter,archiveDeadRecoveryLock,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
+import type { ClientBase } from "pg";
+import type { RollbackWitness } from "./schema-operator-experimental-session";
+import { collectDisposableRollbackEvidence,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA = /^[0-9a-f]{64}$/;
-type OperationIdentity = { operationId:string; submissionId:string; approvalId:string; planDigest:string; epoch:string };
+type OperationIdentity = { operationId:string; submissionId:string; approvalId:string; planDigest:string; epoch:string; rollbackWitness?:RollbackWitness };
 type OperationOutcome = { outcome:"COMMITTED"; newDigest:string } |
   { outcome:"ADMITTED"|"UNCERTAIN"|"ROLLED_BACK"; newDigest?:never };
 type Operation = OperationIdentity & OperationOutcome;
@@ -25,7 +27,8 @@ type Event =
   | { kind: "GENESIS"; installationId: string; databaseName: string; epoch: string; ledgerId:string; signingIdentity:string; administrationIdentity:string }
   | { kind: "ADMIT"; operation: Operation }
   | ({ kind: "OUTCOME"; operationId: string; evidenceDigest?: string } & ({outcome:"COMMITTED";newDigest:string}|{outcome:"UNCERTAIN"|"ROLLED_BACK";newDigest?:never}))
-  | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string }
+  | { kind:"ROLLBACK_WITNESS"; operationId:string; witness:RollbackWitness }
+  | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
   | { kind: "INTENT"; intent: string }
   | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
   | { kind: "READY"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
@@ -45,6 +48,16 @@ function validOperation(o: Operation): boolean {
   return UUID.test(o.operationId) && UUID.test(o.submissionId) && UUID.test(o.approvalId) &&
     SHA.test(o.planDigest) && UUID.test(o.epoch);
 }
+function validWitness(w:RollbackWitness):boolean{
+  return !!w&&/^\d{1,20}$/.test(w.xid)&&/^\d{1,10}$/.test(w.databaseOid)&&/^\d+\.\d+$/.test(w.postmasterStart)&&
+    SHA.test(w.previousDigest)&&Object.keys(w.dataDigests).length===1&&Object.entries(w.dataDigests).every(([k,v])=>/^vr_[a-z0-9_]+_[a-f0-9]{12}$/.test(k)&&SHA.test(v));
+}
+type TakeoverDecision={nonce:string;writerDigest:string;signature:string;maintenanceDigest?:string;anchorLockDigest?:string};
+type MaintenanceContext={purpose:"OPEN"}|{purpose:"TAKEOVER";nonce:string;writerDigest:string};
+function missingFile(error:unknown):boolean{return typeof error==="object"&&error!==null&&"code" in error&&error.code==="ENOENT";}
+function assertNoRepairGate(directory:string):void{
+  try{readFileSync(join(directory,"repair.lock"));refuse();}catch(error){if(!missingFile(error))throw error;}
+}
 function reduce(s: State|undefined,e: Event): State {
   if(e.kind==="GENESIS"){
     if(s || !/^[a-z][a-z0-9_-]{1,62}$/.test(e.installationId) ||
@@ -60,18 +73,23 @@ function reduce(s: State|undefined,e: Event): State {
         e.operation.newDigest!==undefined || e.operation.epoch!==s.epoch || s.operations.has(e.operation.operationId)) return refuse();
       if([...s.operations.values()].some(o=>o.submissionId===e.operation.submissionId||o.approvalId===e.operation.approvalId)) return refuse();
       next.operations.set(e.operation.operationId,{...e.operation});break;
+    case "ROLLBACK_WITNESS": {
+      const o=s.operations.get(e.operationId);const w=e.witness;
+      if(!o||o.outcome!=="ADMITTED"||o.rollbackWitness||!validWitness(w))return refuse();
+      next.operations.set(e.operationId,{...o,rollbackWitness:w});break;
+    }
     case "OUTCOME": {
       const o=s.operations.get(e.operationId);
       if(!o || (o.outcome!=="ADMITTED" && o.outcome!=="UNCERTAIN") ||
         !["UNCERTAIN","COMMITTED","ROLLED_BACK"].includes(e.outcome) ||
         (e.evidenceDigest!==undefined&&!SHA.test(e.evidenceDigest)) ||
         (e.outcome==="COMMITTED" ? !e.newDigest||!SHA.test(e.newDigest) : e.newDigest!==undefined)) return refuse();
-      const identity:OperationIdentity={operationId:o.operationId,submissionId:o.submissionId,approvalId:o.approvalId,planDigest:o.planDigest,epoch:o.epoch};
+      const identity:OperationIdentity={operationId:o.operationId,submissionId:o.submissionId,approvalId:o.approvalId,planDigest:o.planDigest,epoch:o.epoch,...(o.rollbackWitness?{rollbackWitness:o.rollbackWitness}:{})};
       next.operations.set(o.operationId,e.outcome==="COMMITTED"?{...identity,outcome:"COMMITTED",newDigest:e.newDigest}:{...identity,outcome:e.outcome});break;
     }
     case "TAKEOVER":
-      if((!s.pending&&![...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))||
-        !UUID.test(e.nonce)||!SHA.test(e.writerDigest)||!/^[A-Za-z0-9_-]{86}$/.test(e.signature))return refuse();
+      if(!UUID.test(e.nonce)||!SHA.test(e.writerDigest)||!/^[A-Za-z0-9_-]{86}$/.test(e.signature)||
+        (e.maintenanceDigest!==undefined&&!SHA.test(e.maintenanceDigest))||(e.anchorLockDigest!==undefined&&!SHA.test(e.anchorLockDigest)))return refuse();
       if(!s.pending){next.pending=true;next.advanced=false;next.intent=e.nonce;}
       break;
     case "INTENT":
@@ -125,12 +143,13 @@ export class DisposableDurableRecoveryAuthority {
     this.path=join(directory,"authority.jsonl");this.lockPath=join(directory,"writer.lock");
     const maintenancePath=join(directory,"maintenance.lock");
     // Serialize every supported writer acquisition against offline maintenance.
-    const gate=maintenanceHeld?undefined:openSync(maintenancePath,"wx",0o600);
+    // A retained repair gate denies normal writer acquisition regardless of
+    // whether the interrupted maintenance lock was already released.
+    if(!maintenanceHeld)assertNoRepairGate(directory);
+    const gate=maintenanceHeld?undefined:acquireRecoveryLock(directory,"maintenance",key,{purpose:"OPEN"});
     try{
-      this.lock=openSync(this.lockPath,"wx",0o600);
-      try{persistWriterIdentity(this.lock,directory,key);}
-      catch(error){closeSync(this.lock);this.lock=undefined;throw error;}
-    }finally{if(gate!==undefined){closeSync(gate);unlinkSync(maintenancePath);}}
+      this.lock=acquireRecoveryLock(directory,"writer",key);
+    }finally{if(gate!==undefined){closeSync(gate);unlinkSync(maintenancePath);syncRecoveryDirectory(directory);}}
   }
   static initialize(directory:string,key:KeyObject,installationId:string,databaseName:string,epoch:string,
     anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
@@ -163,46 +182,131 @@ export class DisposableDurableRecoveryAuthority {
       trusted.sequence===sequence?"MATCHED":"LEDGER_AHEAD";
     return Object.freeze({disposition,ledgerId:state.ledgerId,installationId:state.installationId,
       head,sequence,anchorSequence:trusted?.sequence,pending:state.pending,
+      mismatch:trusted&&trusted.sequence>sequence?"ANCHOR_AHEAD":!anchoredPrefix?"UNMATCHED_HISTORY":undefined,
       unresolved:[...state.operations.values()].filter(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN").length});
   }
-  static inspectOfflineTakeover(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
+  // Non-mutating classification for the recovery console. No inferred repair.
+  static classifyOffline(directory:string,anchor:ExperimentalRecoveryAnchor){
+    try{readLedger(directory);}catch{return {disposition:"MALFORMED_OR_UNREADABLE_HISTORY"} as const;}
+    try{anchor.read();}catch{return {disposition:"UNAUTHENTICATED_OR_UNREADABLE_ANCHOR"} as const;}
+    const result=this.inspectOffline(directory,anchor);
+    if(result.mismatch==="ANCHOR_AHEAD")return {...result,disposition:"ANCHOR_AHEAD"} as const;
+    return result;
+  }
+  private static matchedView(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519"||
       administrationKey.type!=="public"||administrationKey.asymmetricKeyType!=="ed25519")return refuse();
     const {state,head,sequence}=readLedger(directory),publicKey=createPublicKey(key);
-    if((!state.pending&&![...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))||state.signingIdentity!==keyIdentity(publicKey)||state.administrationIdentity!==keyIdentity(administrationKey)||
-      !sameRecoveryHead(anchor.read(),{ledgerId:state.ledgerId,installationId:state.installationId,signingIdentity:state.signingIdentity,head,sequence}))return refuse();
-    const writerDigest=inspectDeadWriter(directory,publicKey);
-    return Object.freeze({ledgerId:state.ledgerId,installationId:state.installationId,head,epoch:state.epoch,sequence,writerDigest});
+    const expected={ledgerId:state.ledgerId,installationId:state.installationId,signingIdentity:state.signingIdentity,head,sequence};
+    if(state.signingIdentity!==keyIdentity(publicKey)||state.administrationIdentity!==keyIdentity(administrationKey)||
+      !sameRecoveryHead(anchor.read(),expected))return refuse();
+    const anchorLockDigest=anchor.inspectAbandonedMatchedLock?.(expected)??undefined;
+    return {ledgerId:state.ledgerId,installationId:state.installationId,head,epoch:state.epoch,sequence,
+      ...(anchorLockDigest?{anchorLockDigest}:{}),expected};
   }
-  // Explicit signed action only. No automatic lock deletion, no anchor repair,
-  // no activation. Other boots/hosts and mismatched histories are refused.
-  static takeoverMatchedPending(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,
-    decision:{nonce:string;writerDigest:string;signature:string}){
-    if(process.env.NODE_ENV==="production")return refuse();
-    const gatePath=join(directory,"maintenance.lock"),gate=openSync(gatePath,"wx",0o600);
-    let changed=false,completed=false;
+  static inspectOfflineTakeover(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
+    const {expected:_,...view}=this.matchedView(directory,key,anchor,administrationKey);
+    return Object.freeze({...view,writerDigest:inspectDeadWriter(directory,createPublicKey(key))});
+  }
+  // Require a signed dead maintenance owner; no empty/legacy lock is accepted.
+  // If its writer was unlinked, require the exact authenticated archived record.
+  static inspectInterruptedMaintenance(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
+    const {expected:_,...view}=this.matchedView(directory,key,anchor,administrationKey),publicKey=createPublicKey(key);
+    const maintenance=inspectDeadRecoveryLock(directory,"maintenance",publicKey);
+    const context=maintenance.context as MaintenanceContext;
+    if(!context||!["OPEN","TAKEOVER"].includes(context.purpose))return refuse();
+    let writerDigest:string|undefined;
+    try{writerDigest=inspectDeadWriter(directory,publicKey);}
+    catch(error){
+      if(!missingFile(error))throw error;
+      // Never treat inability to inspect a present writer as absence.
+      try{readFileSync(join(directory,"writer.lock"));return refuse();}
+      catch(missing){if(!missingFile(missing))throw missing;}
+    }
+    if(context.purpose==="TAKEOVER"){
+      if(!UUID.test(context.nonce)||!SHA.test(context.writerDigest))return refuse();
+      if(writerDigest!==context.writerDigest&&inspectDeadArchivedWriter(directory,context.nonce,publicKey)!==context.writerDigest)return refuse();
+    }
+    return Object.freeze({...view,maintenanceDigest:maintenance.digest,writerDigest:writerDigest??maintenance.digest});
+  }
+  private static authorizeTakeover(view:{ledgerId:string;installationId:string;head:string;epoch:string;writerDigest:string;maintenanceDigest?:string;anchorLockDigest?:string},
+    decision:TakeoverDecision,administrationKey:KeyObject,action:string):void{
+    const payload={nonce:decision.nonce,writerDigest:decision.writerDigest,
+      ...(decision.maintenanceDigest?{maintenanceDigest:decision.maintenanceDigest}:{}),
+      ...(decision.anchorLockDigest?{anchorLockDigest:decision.anchorLockDigest}:{})};
+    if(!UUID.test(decision.nonce)||decision.writerDigest!==view.writerDigest||decision.maintenanceDigest!==view.maintenanceDigest||
+      decision.anchorLockDigest!==view.anchorLockDigest||!/^[A-Za-z0-9_-]{86}$/.test(decision.signature)||
+      !verify(null,recoveryAdministrationMessage(view,action,payload),administrationKey,Buffer.from(decision.signature,"base64url")))return refuse();
+  }
+  private static repairMatchedAnchor(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,decision:TakeoverDecision):void{
+    if(!decision.anchorLockDigest)return;
+    const view=this.matchedView(directory,key,anchor,administrationKey);
+    if(view.anchorLockDigest!==decision.anchorLockDigest||!anchor.archiveAbandonedMatchedLock)return refuse();
+    anchor.archiveAbandonedMatchedLock(view.expected,decision.anchorLockDigest,decision.nonce);
+  }
+  private static resumeAfterArchive(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,
+    decision:TakeoverDecision,probe?:PersistenceProbe){
     let a:DisposableDurableRecoveryAuthority|undefined;
     try{
-      const observed=this.inspectOfflineTakeover(directory,key,anchor,administrationKey);
-      const payload={nonce:decision.nonce,writerDigest:decision.writerDigest};
-      if(!UUID.test(decision.nonce)||decision.writerDigest!==observed.writerDigest||
-        !/^[A-Za-z0-9_-]{86}$/.test(decision.signature)||
-        !verify(null,recoveryAdministrationMessage(observed,"OFFLINE_TAKEOVER",payload),administrationKey,Buffer.from(decision.signature,"base64url")))return refuse();
-      // On any failure after preservation of the old lock begins, leave
-      // maintenance fenced; a later operator cannot blindly retry.
-      changed=true;archiveDeadWriter(directory,decision.nonce,createPublicKey(key),decision.writerDigest);
-      a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey,true);
+      a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey,true,probe);
+      probe?.("AFTER_REPLACEMENT_WRITER_ACQUIRE");
       const loaded=readLedger(directory);a.state=loaded.state;a.head=loaded.head;a.sequence=loaded.sequence;
       a.assertAnchor();
-      a.append({kind:"TAKEOVER",nonce:decision.nonce,writerDigest:decision.writerDigest,signature:decision.signature});
+      a.append({kind:"TAKEOVER",nonce:decision.nonce,writerDigest:decision.writerDigest,signature:decision.signature,
+        ...(decision.maintenanceDigest?{maintenanceDigest:decision.maintenanceDigest,action:"MAINTENANCE_TAKEOVER" as const}:{}),
+        ...(decision.anchorLockDigest?{anchorLockDigest:decision.anchorLockDigest}:{})});
+      probe?.("AFTER_TAKEOVER_PERSIST");
       for(const operation of a.current().operations.values())if(operation.outcome==="ADMITTED")
         a.append({kind:"OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
-      syncRecoveryDirectory(directory);
+      syncRecoveryDirectory(directory);return a;
+    }catch(error){if(a?.lock!==undefined){closeSync(a.lock);a.lock=undefined;}throw error;}
+  }
+  // Clean, pending, or unresolved matched state is always recovered into PENDING.
+  static takeoverMatchedPending(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,
+    decision:TakeoverDecision,probe?:PersistenceProbe){
+    if(process.env.NODE_ENV==="production"||(probe&&process.env.NODE_ENV!=="test"))return refuse();
+    assertNoRepairGate(directory);
+    const initial=this.inspectOfflineTakeover(directory,key,anchor,administrationKey);
+    this.authorizeTakeover(initial,decision,administrationKey,"OFFLINE_TAKEOVER");
+    const gatePath=join(directory,"maintenance.lock"),gate=acquireRecoveryLock(directory,"maintenance",key,
+      {purpose:"TAKEOVER",nonce:decision.nonce,writerDigest:decision.writerDigest});
+    let changed=false,completed=false;
+    try{
+      assertNoRepairGate(directory);
+      probe?.("AFTER_MAINTENANCE_ACQUIRE");
+      this.authorizeTakeover(this.inspectOfflineTakeover(directory,key,anchor,administrationKey),decision,administrationKey,"OFFLINE_TAKEOVER");
+      changed=true;
+      this.repairMatchedAnchor(directory,key,anchor,administrationKey,decision);
+      archiveDeadWriter(directory,decision.nonce,createPublicKey(key),decision.writerDigest,probe);
+      const a=this.resumeAfterArchive(directory,key,anchor,administrationKey,decision,probe);
       completed=true;return a;
     }finally{
       closeSync(gate);
-      if(!changed||completed){unlinkSync(gatePath);syncRecoveryDirectory(directory);}
-      else if(a?.lock!==undefined){closeSync(a.lock);a.lock=undefined;}
+      if(!changed||completed){unlinkSync(gatePath);syncRecoveryDirectory(directory);probe?.("AFTER_MAINTENANCE_RELEASE");}
+    }
+  }
+  // A separate recovery gate serializes recovery of a signed, dead maintenance
+  // owner. The old gate remains present until a replacement writer is anchored.
+  // If this second-level repair itself dies, retain the repair lock for review.
+  static takeoverInterruptedMaintenance(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,decision:TakeoverDecision){
+    if(process.env.NODE_ENV==="production")return refuse();
+    const initial=this.inspectInterruptedMaintenance(directory,key,anchor,administrationKey);
+    this.authorizeTakeover(initial,decision,administrationKey,"MAINTENANCE_TAKEOVER");
+    const repairPath=join(directory,"repair.lock"),repair=acquireRecoveryLock(directory,"repair",key,{nonce:decision.nonce});
+    let changed=false,completed=false;
+    try{
+      const view=this.inspectInterruptedMaintenance(directory,key,anchor,administrationKey);
+      this.authorizeTakeover(view,decision,administrationKey,"MAINTENANCE_TAKEOVER");
+      changed=true;
+      this.repairMatchedAnchor(directory,key,anchor,administrationKey,decision);
+      if(view.writerDigest!==view.maintenanceDigest)archiveDeadWriter(directory,decision.nonce,createPublicKey(key),view.writerDigest);
+      const a=this.resumeAfterArchive(directory,key,anchor,administrationKey,decision);
+      try{archiveDeadRecoveryLock(directory,"maintenance",decision.nonce,createPublicKey(key),view.maintenanceDigest);}
+      catch(error){if(a.lock!==undefined){closeSync(a.lock);a.lock=undefined;}throw error;}
+      completed=true;return a;
+    }finally{
+      closeSync(repair);
+      if(!changed||completed){unlinkSync(repairPath);syncRecoveryDirectory(directory);}
     }
   }
   static open(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,testProbe?:PersistenceProbe){
@@ -260,7 +364,7 @@ export class DisposableDurableRecoveryAuthority {
     const s=this.current();
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
       epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,
-      operations:[...s.operations.values()].map(o=>({...o}))};
+      operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
   proofAuthority(publicKey:KeyObject):RecoveryEpochAuthority {
     const state=this.current();
@@ -287,18 +391,24 @@ export class DisposableDurableRecoveryAuthority {
   }
   // Trusted DBA supplies external evidence of backend quiescence and exact
   // journal outcome. Absence alone is not accepted as rollback evidence.
-  resolve(operationId:string,outcome:"COMMITTED"|"ROLLED_BACK",evidenceDigest:string,newDigest?:string,signature?:string):void{
-    const s=this.current();if(!s.pending||s.operations.get(operationId)?.outcome!=="UNCERTAIN"||this.fences.has(operationId)||!SHA.test(evidenceDigest)) refuse();
-    // Include the evidence digest in the append-only audit via a separate
-    // validated outcome record; no automatic claim of distributed atomicity.
-    this.requireAdministration("RESOLVE",{operationId,outcome,evidenceDigest,newDigest},signature);
-    if(outcome==="COMMITTED"){
-      if(!newDigest||!SHA.test(newDigest)) return refuse();
-      this.append({kind:"OUTCOME",operationId,outcome:"COMMITTED",newDigest,evidenceDigest});
-    }else{
-      if(newDigest!==undefined) refuse();
-      this.append({kind:"OUTCOME",operationId,outcome:"ROLLED_BACK",evidenceDigest});
-    }
+  // Legacy digest-only administrative boundary is denied. Historical callers
+  // must use an operation-specific physical evidence path.
+  resolve(_operationId:string,_outcome:"COMMITTED"|"ROLLED_BACK",_evidenceDigest:string,_newDigest?:string,_signature?:string):void{refuse();}
+  async resolveObservedRollback(db:ClientBase,operationId:string,evidence:Awaited<ReturnType<typeof collectDisposableRollbackEvidence>>,signature:string):Promise<void>{
+    const s=this.current(),operation=s.operations.get(operationId),witness=operation?.rollbackWitness;
+    if(!s.pending||s.advanced||this.fences.size!==0||operation?.outcome!=="UNCERTAIN"||!witness||
+      operation.epoch!==s.epoch||JSON.stringify(evidence.witness)!==JSON.stringify(witness))return refuse();
+    this.requireAdministration("RESOLVE_OBSERVED_ROLLBACK",{operationId,evidence},signature);
+    const observed=await collectDisposableRollbackEvidence(db,{installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch},witness);
+    if(JSON.stringify(observed)!==JSON.stringify(evidence))return refuse();
+    // Recheck the current signed head after awaiting the real observation.
+    this.requireAdministration("RESOLVE_OBSERVED_ROLLBACK",{operationId,evidence},signature);
+    const known=[...s.operations.values()].filter(o=>o.outcome==="COMMITTED");
+    if(evidence.journal.length!==known.length||new Set(evidence.journal.map(j=>j.operationId)).size!==known.length||
+      evidence.catalogManifestDigest!==witness.previousDigest||
+      (known.length&&known.at(-1)?.newDigest!==witness.previousDigest)||
+      known.some(o=>!evidence.journal.some(j=>j.operationId===o.operationId&&j.submissionId===o.submissionId&&j.approvalId===o.approvalId&&j.planDigest===o.planDigest&&j.newDigest===o.newDigest)))return refuse();
+    this.append({kind:"OUTCOME",operationId,outcome:"ROLLED_BACK",evidenceDigest:observed.readinessEvidenceDigest});
   }
   // Resolve only a positive, exact completed-operation witness from the trusted
   // fenced PostgreSQL observer. Missing rows are not rollback evidence.
@@ -341,7 +451,7 @@ export class DisposableDurableRecoveryAuthority {
       catalogManifestDigest:evidence.catalogManifestDigest,journalDigest});
   }
   async execute(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,
-    budget=new ExperimentalD1Budget()):Promise<SchemaOperatorResult>{
+    budget=new ExperimentalD1Budget(),captureRollbackWitness=false):Promise<SchemaOperatorResult>{
     this.assertAnchor();
     const s=this.current(),url=new URL(connectionString);
     if(this.fences.size!==0||keyIdentity(publicKey)!==s.signingIdentity||s.pending||request.installationId!==s.installationId||url.pathname!=="/"+s.databaseName) return refuse();
@@ -355,7 +465,9 @@ export class DisposableDurableRecoveryAuthority {
     let facts:OwnedOperationFacts|undefined;
     const observed=()=>facts?.admissionKey===expectedAdmission&&facts.mode==="EXECUTE"?facts:undefined;
     try{
-      const admission={observeSettlement:(value:OwnedOperationFacts)=>{facts=value;},attach:(fence:()=>void)=>{
+      const admission={observeSettlement:(value:OwnedOperationFacts)=>{facts=value;},...(captureRollbackWitness?{observeRollbackWitness:(witness:RollbackWitness)=>{
+        this.append({kind:"ROLLBACK_WITNESS",operationId:id,witness},budget);
+      }}:{}),attach:(fence:()=>void)=>{
         this.fences.set(id,fence);
         if(this.current().pending) fence();
       }};

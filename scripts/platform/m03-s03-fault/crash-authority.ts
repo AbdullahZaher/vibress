@@ -7,7 +7,7 @@ import type { SchemaOperatorRequest } from "../../../packages/database/src/platf
 import { DisposableDurableRecoveryAuthority } from "../../../packages/database/src/schema-operator-experimental-durable-authority";
 import { FileExperimentalRecoveryAnchor,type ExperimentalRecoveryAnchor } from "../../../packages/database/src/schema-operator-experimental-anchor";
 const [dir,window]=process.argv.slice(2);
-if(process.env.NODE_ENV!=="test"||!dir||!["BEFORE_CAS","AFTER_CAS","BEFORE_INTENT_WRITE","AFTER_INTENT_WRITE","AFTER_INTENT_FSYNC","AFTER_ANCHOR_TEMP_FSYNC","AFTER_ANCHOR_RENAME","AFTER_ANCHOR_DIR_FSYNC","BEFORE_OUTCOME_WRITE"].includes(window??""))throw Error("test-only crash fixture");
+if(process.env.NODE_ENV!=="test"||!dir||!["BEFORE_CAS","AFTER_CAS","BEFORE_INTENT_WRITE","AFTER_INTENT_WRITE","AFTER_INTENT_FSYNC","AFTER_ANCHOR_TEMP_FSYNC","AFTER_ANCHOR_RENAME","AFTER_ANCHOR_DIR_FSYNC","BEFORE_OUTCOME_WRITE","AFTER_MAINTENANCE_ACQUIRE","AFTER_WRITER_ARCHIVE","AFTER_OLD_WRITER_UNLINK","AFTER_REPLACEMENT_WRITER_ACQUIRE","AFTER_TAKEOVER_WRITE","AFTER_TAKEOVER_PERSIST","AFTER_MAINTENANCE_RELEASE"].includes(window??""))throw Error("test-only crash fixture");
 const key=createPrivateKey(readFileSync(join(dir,"ledger-key.pem")));
 const admin=createPublicKey(readFileSync(join(dir,"admin-key.pem")));
 const kill=()=>{process.kill(process.pid,"SIGKILL");throw Error("SIGKILL returned");};
@@ -17,6 +17,11 @@ const fault:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,
   if(window==="BEFORE_CAS")kill();
   anchor.compareAndSet(p,n);if(window==="AFTER_CAS")kill();
 }};
+if(["AFTER_MAINTENANCE_ACQUIRE","AFTER_WRITER_ARCHIVE","AFTER_OLD_WRITER_UNLINK","AFTER_REPLACEMENT_WRITER_ACQUIRE","AFTER_TAKEOVER_WRITE","AFTER_TAKEOVER_PERSIST","AFTER_MAINTENANCE_RELEASE"].includes(window)){
+  const decision=JSON.parse(readFileSync(join(dir,"takeover.json"),"utf8")) as Parameters<typeof DisposableDurableRecoveryAuthority.takeoverMatchedPending>[4];
+  DisposableDurableRecoveryAuthority.takeoverMatchedPending(join(dir,"ledger"),key,anchor,admin,decision,probe);
+  throw Error("expected process death");
+}
 const a=DisposableDurableRecoveryAuthority.open(join(dir,"ledger"),key,fault,admin,probe);
 if(window==="BEFORE_OUTCOME_WRITE"){
   const url=process.env.M03_S03_FAULT_DATABASE_URL??"";
