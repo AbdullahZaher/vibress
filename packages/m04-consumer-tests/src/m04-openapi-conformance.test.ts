@@ -1,7 +1,9 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import { crmConsumer } from "./fixtures/m04-crm-consumer";
+import { createMockContractClient } from "@vibress/schema-engine";
 
 function validator() {
   // OAI document schema allows extension vocabularies; no coercion/defaults,
@@ -33,17 +35,13 @@ describe("M04 independent OpenAPI 3.1 / JSON Schema conformance", () => {
       if (op.action === "list") params.push(...Object.keys(op.input.properties).map(name => ({name,in:"query",required:false})));
       expect(wire?.item).toMatchObject({ parameters: params, responses: {
         [op.action === "create" ? "201" : "200"]: { content: { "application/json": { schema: op.output } } },
-        "400": { content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        "503": { content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        "400": { content: { "application/json": { schema: { properties: {code:{enum:["INVALID_INPUT"]}},additionalProperties:false } } } },
+        "503": { content: { "application/json": { schema: { properties: {code:{enum:["RUNTIME_UNAVAILABLE"]}},additionalProperties:false } } } },
       } });
       if (op.input.properties.data) expect(wire?.item).toMatchObject({ requestBody: { required: true,
         content: { "application/json": { schema: op.input.properties.data } } } });
     }
     expect(ids.size).toBe(operations.length);
-    const errors = ajv.compile(f.contracts.openapi.components.schemas.Error);
-    expect(errors({ code: "FORBIDDEN" })).toBe(true);
-    expect(errors({ code: "FORBIDDEN", detail: "private" })).toBe(false);
-    expect(errors({ code: "unexpected" })).toBe(false);
     const json = JSON.stringify(f.contracts.openapi);
     expect(json).not.toContain("secret_note");
     expect(json).not.toContain(f.scope.installationId);
@@ -114,4 +112,37 @@ describe("M04 independent OpenAPI 3.1 / JSON Schema conformance", () => {
     expect(ajv.compile(f.contracts.operations.find(x=>x.operationId==="deals.list")!.output)(large)).toBe(true);
     expect(()=>f.contracts.validateOutput("deals.list",large)).not.toThrow();
   });
+});
+
+it("F04 status-specific emitted error schemas exactly match mock wire validation",async()=>{
+  const f=crmConsumer(),ajv=validator();
+  const expected={400:"INVALID_INPUT",401:"UNAUTHENTICATED",403:"FORBIDDEN",404:"NOT_FOUND",409:"CONFLICT",429:"RESOURCE_LIMIT",503:"RUNTIME_UNAVAILABLE"} as const;
+  type WireOperation={responses:Record<string,{content:{"application/json":{schema:object}}}>};
+  const op=f.contracts.openapi.paths["/generated/v1/deals/{id}"]?.get as WireOperation;
+  const codes=Object.values(expected);
+  let cases=0;
+  for(const [status,code] of Object.entries(expected)){
+    const schema=op.responses[status]!.content["application/json"].schema;
+    expect(ajv.validateSchema(schema)).toBe(true);
+    const external=ajv.compile(schema);
+    for(const body of [...codes.map(c=>({code:c})),{code:"TIMEOUT"},{code:"UNKNOWN"},{},{code,detail:"sensitive"},{code:null}]){
+      const allowed="code" in body&&body.code===code&&Object.keys(body).length===1;
+      const client=createMockContractClient(f.contracts,{mode:"MOCK_ONLY",transport:{async send(){return {status:Number(status),body};}}});
+      expect(external(body)).toBe(allowed);
+      expect(await client.invoke("deals.get",{id:"deal_1"})).toEqual({ok:false,code:allowed?code:"INVALID_RESPONSE"});
+      cases++;
+    }
+  }
+  // All operations expose precisely the same status-specific wire contracts.
+  for(const methods of Object.values(f.contracts.openapi.paths))for(const raw of Object.values(methods)){
+    const wire=raw as WireOperation;
+    for(const status of Object.keys(expected))expect(wire.responses[status]).toEqual(op.responses[status]);
+  }
+  for(const status of [402,418,500,599]){
+    expect(op.responses).not.toHaveProperty(String(status));
+    const client=createMockContractClient(f.contracts,{mode:"MOCK_ONLY",transport:{async send(){return {status,body:{code:"FORBIDDEN"}};}}});
+    expect(await client.invoke("deals.get",{id:"deal_1"})).toEqual({ok:false,code:"INVALID_RESPONSE"});
+    cases++;
+  }
+  expect(cases).toBe(88);
 });

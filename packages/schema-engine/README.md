@@ -237,3 +237,52 @@ https://github.com/ajv-validator/ajv/releases ; https://www.postgresql.org/docs/
 https://owasp.org/projects/api-security-project/ .
 
 Validator compatibility correction: actual intermediate job #135036278675 reported 84/85 package tests passing, with only full OAI document validation failing due to dynamic reference resolution. Python independently evaluates the exact official schema, including deliberately invalid document controls; Ajv retains per-operation meta-schema and differential validation. Source: https://github.com/cdimascio/express-openapi-validator/issues/573 ; https://pypi.org/project/jsonschema/4.26.0/ . No weakened internal validation.
+
+
+## M04-S01 independent review corrections F01–F04 (contract version 2)
+
+Architecture: standalone private `@vibress/m04-consumer-tests` workspace project
+uses actual workspace-linked public package exports; no production dependencies
+or published package. Internal tests continue relative imports. The dedicated
+focused workflow checks the actual Nx graph edges and invokes root `pnpm lint`
+(the Full CI entrypoint) without any rule change, then tests both projects;
+ordinary root Vitest discovers the relocated tests by its existing glob.
+Official OAI schema blob and Python validator provenance unchanged; Ajv dev
+imports moved to consumer project, same locked versions.
+
+Compatibility: the draft-only generated contract format advances from 1 to 2
+because the former generic callback binding and `authorization.fieldIds` were
+ambiguous. No merged DSL, Manifest, schema migration or active HTTP version
+changes. Regenerate older mock artifacts; they cannot bind to v2. Before source
+generation, SHA-256 hashes canonical sorted-key JSON with ordered arrays:
+domain VIBRESS-M04-MOCK-BINDING-V2, application/installation and manifest digest,
+version, operation descriptors with input/output schemas, authorization and
+admin projections, full OpenAPI/wire map, limits and named mock semantics.
+The digest is embedded in the generated adapter, separate from the final
+artifact digest which includes emitted source. Equivalent reviewed config
+orders yield identical identities. Only compiler-produced frozen contract
+instances can create supported mock clients; immutable binding identity and
+receiver-bound bindContract return the actual captured validated invocation
+only for the exact expected version/digest. Detached/copied/tampered metadata
+and mismatches are refused before dispatch. This is a trusted in-process mock
+API, not cryptographic authentication or isolation from arbitrary malicious JS
+or fabricated executable adapters. Generated assertion is conditional on the
+binding contract and runtime output validation, not an excuse to trust a callback.
+Version changes are required when validation/wire/binding semantics change.
+
+Authorization metadata distinguishes exposedFieldIds, readFieldIds,
+writeFieldIds, customInputFieldIds and customEffects. Delete has neither
+resource data read nor write fields; identifiers/version remain protocol
+metadata. Custom effects are UNRESOLVED_RUNTIME_REVIEW, not implicit permission
+for all writes; Admin and OpenAPI receive the same requirements. Runtime
+enforcement remains absent. Status-specific singleton error schemas are
+generated from the same fixed wire code map used by mock response validation.
+Local timeout/cancel/transport/invalid response codes are not HTTP wire errors.
+Mutation cancellation/timeout regression intentionally allows late mock
+completion, demonstrates no retry and makes no rollback/nonexecution assertion.
+
+Sources reviewed 2026-11-18: https://nx.dev/docs/features/enforce-module-boundaries ;
+https://spec.openapis.org/oas/v3.1.html ;
+https://api-security.owasp.org/editions/2023/en/0xa3-broken-object-property-level-authorization/ .
+All E01–E10 remain open; no runtime or production authorization. Agent 06 must
+re-review independently after exact focused and all full CI jobs succeed.

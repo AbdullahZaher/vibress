@@ -3,21 +3,23 @@ import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import { compileCrudContracts, compileResourceSchema, createSchemaManifest, createMockContractClient,
   type MockContractRequest, type MockContractTransport, type CrudAdminMetadata } from "@vibress/schema-engine";
 
-export function crmConsumer() {
-  const scope = { applicationId: asApplicationId("crm-consumer"), installationId: asInstallationId("crm-demo") };
+export function crmConsumer(options: { installation?: string; omitApproved?: boolean; editableApproved?: boolean; actionInput?: "reason" | "stage"; equivalentOrder?: boolean; manifestChange?: boolean } = {}) {
+  const scope = { applicationId: asApplicationId("crm-consumer"), installationId: asInstallationId(options.installation ?? "crm-demo") };
   const manifest = createSchemaManifest(compileResourceSchema([{ ...scope, id: "deals", ownership: "tenant", fields: [
     { id: "title", type: "text", required: true },
     { id: "amount", type: "number", required: false },
     { id: "reason", type: "text", required: false },
     { id: "approved", type: "boolean", required: false },
     { id: "stage", type: "enum", required: false, values: ["lead", "won"] },
-    { id: "secret_note", type: "text", required: false },
+    { id: "secret_note", type: "text", required: false, ...(options.manifestChange ? { default: "changed" } : {}) },
     { id: "occurred_at", type: "datetime", required: false },
   ] }], scope));
+  const fields = ["title", "amount", "reason", "approved", "stage", "occurred_at"].filter(id => !options.omitApproved || id !== "approved");
+  if (options.equivalentOrder) fields.reverse();
   const contracts = compileCrudContracts(manifest, { ...scope, expectedManifestDigest: manifest.digest,
-    exposure: [{ resourceId: "deals", fields: ["title", "amount", "reason", "approved", "stage", "occurred_at"], readOnly: ["approved"] }],
-    customOperations: [{ resourceId: "deals", actionId: "approve", fields: ["reason"] }] });
-  const row = { id: "deal_1", version: "rev_1", data: { title: "صفقة <demo>", amount: 20, reason: null, approved: false, stage: "lead", occurred_at: null } };
+    exposure: [{ resourceId: "deals", fields, ...(options.omitApproved || options.editableApproved ? {} : {readOnly: ["approved"]}) }],
+    customOperations: [{ resourceId: "deals", actionId: "approve", fields: [options.actionInput ?? "reason"] }] });
+  const row = { id: "deal_1", version: "rev_1", data: { title: "صفقة <demo>", amount: 20, reason: null, ...(!options.omitApproved ? {approved: false} : {}), stage: "lead", occurred_at: null } };
   const requests: MockContractRequest[] = [];
   function mock(fixture: { installation: string; tenant: string; permissions: readonly string[]; authenticated: boolean }) {
     const transport: MockContractTransport = { async send(request) {

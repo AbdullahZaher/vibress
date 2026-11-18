@@ -4,7 +4,15 @@ import { parseSchemaManifest } from "./planning";
 import type { FieldDefinition, ResourceOwnership } from "./schema";
 
 /** M04-S01. Offline contract compiler, NOT a route, permission check or executor. */
-export const CRUD_CONTRACT_VERSION = 1 as const;
+export const CRUD_CONTRACT_VERSION = 2 as const;
+export interface ContractBindingIdentity { readonly version: number; readonly digest: string }
+const compiledInstances = new WeakSet<object>();
+const wireErrors = Object.freeze({ 400: "INVALID_INPUT", 401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND", 409: "CONFLICT", 429: "RESOURCE_LIMIT", 503: "RUNTIME_UNAVAILABLE" } as const);
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
+  if (value !== null && typeof value === "object") return "{" + Object.entries(value).sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0).map(([k,v]) => JSON.stringify(k) + ":" + canonicalJson(v)).join(",") + "}";
+  return JSON.stringify(value);
+}
 export const CRUD_LIMITS = Object.freeze({
   resources: 16, fieldsPerResource: 16, textLength: 4096, maxTextBytes: 16384,
   maxPageSize: 25, maxInputBytes: 65536, maxOutputBytes: 1048576,
@@ -42,7 +50,8 @@ export interface CrudOperationDescriptor {
     ownership: ResourceOwnership; permission: string;
     authenticatedInstallationContext: true; requireTenantContext: boolean;
     rowAuthorization: true; fieldAuthorization: true;
-    fieldIds: readonly string[]; relationshipTraversal: false;
+    exposedFieldIds: readonly string[]; readFieldIds: readonly string[]; writeFieldIds: readonly string[];
+    customInputFieldIds: readonly string[]; customEffects: "NOT_APPLICABLE" | "UNRESOLVED_RUNTIME_REVIEW"; relationshipTraversal: false;
     enforcement: "REQUIRED_NOT_IMPLEMENTED";
   }>;
   readonly cost: Readonly<{
@@ -59,6 +68,7 @@ export interface CrudAdminMetadata {
   readonly ownership: ResourceOwnership;
   readonly fields: readonly Readonly<{ id: string; kind: FieldDefinition["type"]; required: boolean; editable: boolean; widget: "text" | "number" | "checkbox" | "datetime" | "select"; validation: CrudValueSchema; values?: readonly string[] }>[];
   readonly forms: readonly Readonly<{ operationId: string; fields: readonly string[]; permission: string }>[];
+  readonly operationAuthorization: readonly Readonly<{ operationId: string; requirements: CrudOperationDescriptor["authorization"] }>[];
   readonly columns: readonly string[];
   readonly states: readonly ["loading", "error", "runtime-disabled"];
   readonly operations: readonly string[];
@@ -192,7 +202,9 @@ function typeSource(schema: Schema): string {
 }
 function openApi(operations: readonly CrudOperationDescriptor[]) {
   const paths: Record<string, Record<string, unknown>> = {};
-  const errorResponse = (description: string) => ({ description, content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } });
+  const errorResponses = Object.fromEntries(Object.entries(wireErrors).map(([status, code]) => [status, {
+    description: code, content: { "application/json": { schema: { type: "object", properties: { code: { type: "string", enum: [code] } }, required: ["code"], additionalProperties: false } } },
+  }]));
   for (const op of operations) {
     const parameters: object[] = [];
     if (op.path.endsWith("/{id}")) parameters.push({ name: "id", in: "path", required: true, schema: token });
@@ -213,19 +225,16 @@ function openApi(operations: readonly CrudOperationDescriptor[]) {
       ...(data ? { requestBody: { required: true, content: { "application/json": { schema: data } } } } : {}),
       responses: {
         [status]: { description: "Proposed successful response after runtime approval", content: { "application/json": { schema: op.output } } },
-        "400": errorResponse("Invalid input"), "401": errorResponse("Authentication required"),
-        "403": errorResponse("Authorization denied"), "404": errorResponse("Not found"),
-        "409": errorResponse("Version conflict"), "429": errorResponse("Resource budget exceeded"),
-        "503": errorResponse("Runtime unavailable"),
+        ...errorResponses,
       },
       "x-vibress-runtime": op.runtime, "x-vibress-authorization": op.authorization, "x-vibress-cost": op.cost,
       "x-vibress-transaction-required": op.transactionRequired, "x-vibress-idempotency-required": op.idempotencyRequired,
     };
   }
-  return freeze({ openapi: "3.1.0", info: { title: "Vibress generated CRUD (offline)", version: "1.0.0",
+  return freeze({ openapi: "3.1.0", info: { title: "Vibress generated CRUD (offline)", version: "2.0.0",
     description: "Private design artifact; not an exposed API. Authentication and persistence are not implemented." },
     "x-vibress-runtime": "DISABLED", paths,
-    components: { schemas: { Error: { type: "object", properties: { code: { type: "string", enum: ["INVALID_INPUT", "UNAUTHENTICATED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "RESOURCE_LIMIT", "RUNTIME_UNAVAILABLE"] } }, required: ["code"], additionalProperties: false } }, securitySchemes: { futureBearer: { type: "http", scheme: "bearer", description: "Proposed only; no token validation provided." } } } });
+    components: { securitySchemes: { futureBearer: { type: "http", scheme: "bearer", description: "Proposed only; no token validation provided." } } } });
 }
 
 /**
@@ -293,7 +302,10 @@ export function compileCrudContracts(manifestInput: unknown, trustedConfiguratio
         path: "/generated/v1/" + resourceId + (item ? "/{id}" : ""), input, output,
         authorization: { ownership: resource.ownership, permission: "resource:" + resourceId + ":" + action,
           authenticatedInstallationContext: true, requireTenantContext: resource.ownership === "tenant",
-          rowAuthorization: true, fieldAuthorization: true, fieldIds, relationshipTraversal: false, enforcement: "REQUIRED_NOT_IMPLEMENTED" },
+          rowAuthorization: true, fieldAuthorization: true, exposedFieldIds: fieldIds,
+          readFieldIds: action === "delete" ? [] : Object.keys(properties),
+          writeFieldIds: action === "create" || action === "update" ? Object.keys(writable) : [],
+          customInputFieldIds: [], customEffects: "NOT_APPLICABLE", relationshipTraversal: false, enforcement: "REQUIRED_NOT_IMPLEMENTED" },
         cost: { maxRows: action === "list" ? CRUD_LIMITS.maxPageSize : 1, maxInputBytes: CRUD_LIMITS.maxInputBytes,
           maxOutputBytes: CRUD_LIMITS.maxOutputBytes, maxRelationDepth: 0, maxMutationBatch: 1,
           allowCount: false, allowFilter: false, allowSort: false, allowExport: false,
@@ -310,7 +322,8 @@ export function compileCrudContracts(manifestInput: unknown, trustedConfiguratio
         input: object({ id: token, version: token, idempotencyKey: token,
           data: object(Object.fromEntries(entry.fields.map(id => [id, writable[id]!])), entry.fields) },
         ["id", "version", "idempotencyKey", "data"]), output: row,
-        authorization: { ...base.authorization, permission: "resource:" + resourceId + ":action:" + entry.actionId },
+        authorization: { ...base.authorization, permission: "resource:" + resourceId + ":action:" + entry.actionId,
+          writeFieldIds: entry.fields, customInputFieldIds: entry.fields, customEffects: "UNRESOLVED_RUNTIME_REVIEW" },
         transactionRequired: true, idempotencyRequired: true });
     }
     admin.push({ resourceId, ownership: resource.ownership,
@@ -319,25 +332,36 @@ export function compileCrudContracts(manifestInput: unknown, trustedConfiguratio
         validation: properties[f.id]!, ...(f.type === "enum" ? { values: [...f.values] } : {}) })),
       forms: (["create", "update"] as const).map(a => ({ operationId: resourceId + "." + a,
         fields: editable.map(f => f.id), permission: "resource:" + resourceId + ":" + a })),
+      operationAuthorization: ops.filter(op => op.resourceId === resourceId).map(op => ({ operationId: op.operationId, requirements: op.authorization })),
       columns: fieldIds, states: ["loading", "error", "runtime-disabled"],
       operations: ops.filter(op => op.resourceId === resourceId).map(op => op.operationId), runtime: "DISABLED" });
   }
   const operations = freeze(ops);
-  const generated = {
-    contractVersion: CRUD_CONTRACT_VERSION, runtime: "DISABLED" as const, manifestDigest: manifest.digest,
-    operations, admin: freeze(admin), openapi: openApi(operations),
+  // Pre-generation identity: canonical sorted-key JSON, ordered descriptor arrays,
+  // scope, manifest, wire and semantic contract. Excludes source and artifact digest.
+  const payload = { contractVersion: CRUD_CONTRACT_VERSION, runtime: "DISABLED" as const, manifestDigest: manifest.digest,
+    operations, admin: freeze(admin), openapi: openApi(operations) };
+  const bindingIdentity = freeze({version: CRUD_CONTRACT_VERSION, digest: createHash("sha256").update(canonicalJson({
+    domain: "VIBRESS-M04-MOCK-BINDING-V2", applicationId: manifest.applicationId, installationId: manifest.installationId,
+    payload, limits: CRUD_LIMITS, wireErrors, semantics: { mockOnly: true, normalizedUtf8Budgets: true, requestRelativeResponseChecks: true, automaticRetry: false, timeoutProvesRollback: false },
+  }), "utf8").digest("hex")});
+  const generated = { ...payload, bindingIdentity,
     typescript: "// Offline mock-only declarations. No runtime authorization implementation.\n" +
-      "export type GeneratedErrorCode = \"INVALID_INPUT\" | \"UNAUTHENTICATED\" | \"FORBIDDEN\" | \"NOT_FOUND\" | \"CONFLICT\" | \"RESOURCE_LIMIT\" | \"RUNTIME_UNAVAILABLE\";\n" +
+      "export type GeneratedErrorCode = " + Object.values(wireErrors).map(code => JSON.stringify(code)).join(" | ") + ";\n" +
       "export interface GeneratedOptions { readonly timeoutMs?: number; readonly signal?: AbortSignal; }\n" +
       "export type GeneratedResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly code: GeneratedErrorCode | \"INVALID_RESPONSE\" | \"CANCELLED\" | \"TIMEOUT\" | \"TRANSPORT_FAILURE\" };\n" +
       "export interface GeneratedClient {\n" + operations.map(op =>
         "  " + JSON.stringify(op.operationId) + "(input: " + typeSource(op.input) + ", options?: GeneratedOptions): Promise<GeneratedResult<" + typeSource(op.output) + ">>;").join("\n") + "\n}\n" +
-      "export function bindGeneratedMockClient(invoke: (operation: string, input: unknown, options?: GeneratedOptions) => Promise<GeneratedResult<unknown>>): GeneratedClient {\n  return {\n" +
-      operations.map(op => "    " + JSON.stringify(op.operationId) + ": (input, options) => invoke(" + JSON.stringify(op.operationId) + ", input, options) as Promise<GeneratedResult<" + typeSource(op.output) + ">>,").join("\n") + "\n  };\n}\n",
+      "export const expectedBindingIdentity = Object.freeze(" + JSON.stringify(bindingIdentity) + ");\n" +
+      "export interface GeneratedMockBinding { readonly bindingIdentity: Readonly<{version: number; digest: string}>; bindContract(expected: Readonly<{version:number;digest:string}>): (operation:string,input:unknown,options?:GeneratedOptions)=>Promise<GeneratedResult<unknown>>; }\n" +
+      "export function bindGeneratedMockClient(client: GeneratedMockBinding): GeneratedClient {\n" +
+      "  if (!client || client.bindingIdentity?.version !== expectedBindingIdentity.version || client.bindingIdentity.digest !== expectedBindingIdentity.digest || typeof client.bindContract !== \"function\") throw new Error(\"INVALID_CONTRACT\");\n" +
+      "  const invoke = client.bindContract(expectedBindingIdentity);\n  const bound: GeneratedClient = {\n" +
+      operations.map(op => "    " + JSON.stringify(op.operationId) + ": (input, options) => invoke(" + JSON.stringify(op.operationId) + ", input, options) as Promise<GeneratedResult<" + typeSource(op.output) + ">>,").join("\n") + "\n  };\n  return Object.freeze(bound);\n}\n",
   };
   const digest = createHash("sha256").update(JSON.stringify(generated), "utf8").digest("hex");
   const descriptor = (id: string) => operations.find(op => op.operationId === id) ?? fail("INVALID_INPUT");
-  return Object.freeze({
+  const compiled = Object.freeze({
     ...generated, digest,
     validateInput(id: string, value: unknown): unknown { return checked(descriptor(id).input, value, "INVALID_INPUT", CRUD_LIMITS.maxInputBytes); },
     validateOutput(id: string, value: unknown): unknown {
@@ -346,12 +370,13 @@ export function compileCrudContracts(manifestInput: unknown, trustedConfiguratio
     },
     assertRuntimeAvailable(): never { return fail("RUNTIME_UNAVAILABLE"); },
   });
+  compiledInstances.add(compiled);
+  return compiled;
 }
 
 
 export type CompiledCrudContracts = ReturnType<typeof compileCrudContracts>;
-export type MockClientErrorCode = "INVALID_INPUT" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" |
-  "CONFLICT" | "RESOURCE_LIMIT" | "RUNTIME_UNAVAILABLE" | "INVALID_RESPONSE" | "CANCELLED" | "TIMEOUT" | "TRANSPORT_FAILURE";
+export type MockClientErrorCode = (typeof wireErrors)[keyof typeof wireErrors] | "INVALID_RESPONSE" | "CANCELLED" | "TIMEOUT" | "TRANSPORT_FAILURE";
 export type MockClientResult<T = unknown> =
   | Readonly<{ ok: true; value: T }>
   | Readonly<{ ok: false; code: MockClientErrorCode }>;
@@ -367,10 +392,7 @@ export interface MockContractTransport {
   /** Test/in-memory only. No URL, origin, credential, principal or tenant input. */
   send(request: MockContractRequest, signal: AbortSignal): Promise<unknown>;
 }
-const errorCodes: Readonly<Record<number, MockClientErrorCode>> = Object.freeze({
-  400: "INVALID_INPUT", 401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND",
-  409: "CONFLICT", 429: "RESOURCE_LIMIT", 503: "RUNTIME_UNAVAILABLE",
-});
+const errorCodes: Readonly<Partial<Record<number, MockClientErrorCode>>> = wireErrors;
 const clientError = (code: MockClientErrorCode): MockClientResult => Object.freeze({ ok: false, code });
 /** Explicitly injected trusted mock only. No built-in network implementation.
  * No transport is installed by default; this cannot enable actual runtime.
@@ -378,8 +400,9 @@ const clientError = (code: MockClientErrorCode): MockClientResult => Object.free
  */
 export function createMockContractClient(contracts: CompiledCrudContracts,
   config?: Readonly<{ mode: "MOCK_ONLY"; transport: MockContractTransport }>) {
-  return Object.freeze({
-    async invoke(operationId: string, input: unknown, options: MockClientOptions = {}): Promise<MockClientResult> {
+  if (!compiledInstances.has(contracts)) return fail("INVALID_CONTRACT");
+  const bindingIdentity: ContractBindingIdentity = contracts.bindingIdentity;
+  const invoke = async (operationId: string, input: unknown, options: MockClientOptions = {}): Promise<MockClientResult> => {
       if (config?.mode !== "MOCK_ONLY") return clientError("RUNTIME_UNAVAILABLE");
       const op = contracts.operations.find(candidate => candidate.operationId === operationId);
       if (!op) return clientError("INVALID_INPUT");
@@ -441,6 +464,16 @@ export function createMockContractClient(contracts: CompiledCrudContracts,
         if (timer !== undefined) clearTimeout(timer);
         if (onAbort) options.signal?.removeEventListener("abort", onAbort);
       }
+  };
+  // A supported client owns the compiled identity and its validated invocation.
+  // Reject detached/copied methods (receiver check); not a hostile JS sandbox.
+  const client = Object.freeze({ bindingIdentity, invoke,
+    bindContract(expected: ContractBindingIdentity): typeof invoke {
+      if (this !== client) return fail("INVALID_CONTRACT");
+      const identity = plainRecord(expected, ["version", "digest"], "INVALID_CONTRACT");
+      if (identity.version !== bindingIdentity.version || identity.digest !== bindingIdentity.digest) return fail("INVALID_CONTRACT");
+      return invoke;
     },
   });
+  return client;
 }

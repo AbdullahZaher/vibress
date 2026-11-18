@@ -1,10 +1,11 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 import { createRequire } from "node:module";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMockContractClient, type MockContractRequest, type MockClientResult, type MockClientOptions } from "@vibress/schema-engine";
+import { createMockContractClient, type MockContractRequest, type MockClientResult, type ContractBindingIdentity, type CompiledCrudContracts } from "@vibress/schema-engine";
 import { crmConsumer, renderMockAdmin } from "./fixtures/m04-crm-consumer";
 
 describe("M04 mock-only public export consumer", () => {
@@ -99,22 +100,119 @@ describe("M04 mock-only public export consumer", () => {
 });
 
 
-it("executes emitted typed adapter over the validated public mock transport", async () => {
-  const f = crmConsumer();
+type BoundFixture = { "deals.get"(input: {id:string}): Promise<MockClientResult>;
+  "deals.approve"(input:{id:string;version:string;idempotencyKey:string;data:{reason:string}}): Promise<MockClientResult> };
+type GeneratedModule = { expectedBindingIdentity: ContractBindingIdentity; bindGeneratedMockClient(client: unknown): BoundFixture };
+function emitted(contracts: CompiledCrudContracts, callback: (module: GeneratedModule) => Promise<void>, source = contracts.typescript) {
   const directory = mkdtempSync(join(tmpdir(), "m04-generated-"));
   try {
-    const source = ts.transpileModule(f.contracts.typescript, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-    const filename = join(directory, "generated.cjs");
-    writeFileSync(filename, source);
-    // Trusted generator output only; no downloaded/user executable code.
-    const loaded: unknown = createRequire(import.meta.url)(filename);
-    const module = loaded as { bindGeneratedMockClient(invoke: (id: string, input: unknown, options?: MockClientOptions) => Promise<MockClientResult>): {
-      "deals.get"(input: {id:string}): Promise<MockClientResult>;
-      "deals.approve"(input: {id:string;version:string;idempotencyKey:string;data:{reason:string}}): Promise<MockClientResult>;
-    }};
-    const client = module.bindGeneratedMockClient(f.mock(f.permitted).invoke);
+    const js = ts.transpileModule(source, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+    const filename = join(directory, "generated.cjs"); writeFileSync(filename,js);
+    // Only trusted generator output (or explicit version regression fixture).
+    const module: unknown = createRequire(import.meta.url)(filename);
+    return callback(module as GeneratedModule).finally(() => rmSync(directory,{recursive:true,force:true}));
+  } catch (error) { rmSync(directory,{recursive:true,force:true}); throw error; }
+}
+it("executes emitted typed adapter over its own validated public mock client", async () => {
+  const f = crmConsumer();
+  await emitted(f.contracts,async module=>{
+    const client = module.bindGeneratedMockClient(f.mock(f.permitted));
     expect(await client["deals.get"]({id:"deal_1"})).toMatchObject({ok:true,value:f.row});
     expect(await client["deals.approve"]({id:"deal_1",version:"rev_1",idempotencyKey:"approval_1",data:{reason:"ok"}})).toMatchObject({ok:true});
     expect(f.requests.map(req=>req.operationId)).toEqual(["deals.get","deals.approve"]);
-  } finally { rmSync(directory, {recursive:true,force:true}); }
+  });
+});
+
+it("F02 reproduces legitimate cross-contract output mismatch and refuses binding before dispatch",async()=>{
+  const a=crmConsumer(),b=crmConsumer({omitApproved:true});
+  expect(a.contracts.operations.map(op=>op.operationId)).toEqual(b.contracts.operations.map(op=>op.operationId));
+  const bClient=b.mock(b.permitted);
+  // The old binder simply passed A's operation ID to B.invoke and asserted A's output type.
+  const original=await bClient.invoke("deals.get",{id:"deal_1"});
+  expect(original).toMatchObject({ok:true,value:b.row});
+  expect(b.row.data).not.toHaveProperty("approved");
+  expect(()=>a.contracts.validateOutput("deals.get",b.row)).toThrow("INVALID_OUTPUT");
+  b.requests.length=0;
+  await emitted(a.contracts,async module=>{
+    expect(()=>module.bindGeneratedMockClient(bClient)).toThrow("INVALID_CONTRACT");
+    expect(b.requests).toHaveLength(0);
+  });
+});
+it.each([{editableApproved:true},{actionInput:"stage" as const},{installation:"crm-other"},{manifestChange:true}])(
+  "F02 rejects distinct legitimately compiled projection, custom input, installation or manifest %j",async options=>{
+    const a=crmConsumer(),b=crmConsumer(options);
+    expect(a.contracts.bindingIdentity.digest).not.toBe(b.contracts.bindingIdentity.digest);
+    await emitted(a.contracts,async module=>{
+      expect(()=>module.bindGeneratedMockClient(b.mock(b.permitted))).toThrow("INVALID_CONTRACT");
+      expect(b.requests).toHaveLength(0);
+    });
+  });
+it("F02 equivalent independently compiled contracts bind; frozen identity and receiver reject copied/tampered/missing metadata",async()=>{
+  const a=crmConsumer(),b=crmConsumer({equivalentOrder:true});
+  expect(a.contracts.bindingIdentity).toEqual(b.contracts.bindingIdentity);
+  expect(a.contracts.digest).toBe(b.contracts.digest);
+  const client=b.mock(b.permitted),identity=client.bindingIdentity;
+  expect(Object.isFrozen(identity)).toBe(true);expect(Object.isFrozen(client)).toBe(true);
+  expect(Reflect.set(identity,"digest","0".repeat(64))).toBe(false);
+  expect(Reflect.set(client,"bindingIdentity",{version:2,digest:"0".repeat(64)})).toBe(false);
+  await emitted(a.contracts,async module=>{
+    expect(Object.isFrozen(module.expectedBindingIdentity)).toBe(true);
+    const bound=module.bindGeneratedMockClient(client);
+    for(const wrong of [undefined,client.invoke,{invoke:client.invoke},{...client},{...client,bindingIdentity:{...identity,digest:"0".repeat(64)}},{...client,bindingIdentity:{...identity,version:1}}])
+      expect(()=>module.bindGeneratedMockClient(wrong)).toThrow("INVALID_CONTRACT");
+    expect(()=>client.bindContract({version:1,digest:identity.digest})).toThrow("INVALID_CONTRACT");
+    const detached=client.bindContract;
+    expect(()=>detached(identity)).toThrow("INVALID_CONTRACT");
+    expect(()=>createMockContractClient({...b.contracts,bindingIdentity:{...identity,digest:"0".repeat(64)}})).toThrow("INVALID_CONTRACT");
+    expect(b.requests).toHaveLength(0);
+    expect(await bound["deals.get"]({id:"deal_1"})).toMatchObject({ok:true,value:b.row});
+  });
+  const incompatible=a.contracts.typescript.replace(JSON.stringify(a.contracts.bindingIdentity),JSON.stringify({...a.contracts.bindingIdentity,version:1}));
+  expect(incompatible).not.toBe(a.contracts.typescript);
+  await emitted(a.contracts,async module=>{
+    const before=b.requests.length;
+    expect(()=>module.bindGeneratedMockClient(client)).toThrow("INVALID_CONTRACT");
+    expect(b.requests).toHaveLength(before);
+  },incompatible);
+});
+
+it("F03 operation-specific projections match schemas, OpenAPI and Admin; custom effects remain unresolved",()=>{
+  const f=crmConsumer();
+  const exposed=["amount","approved","occurred_at","reason","stage","title"];
+  const editable=exposed.filter(x=>x!=="approved");
+  for(const op of f.contracts.operations){
+    const custom=op.action==="custom";
+    const write=custom?["reason"]:op.action==="create"||op.action==="update"?editable:[];
+    const read=op.action==="delete"?[]:exposed;
+    expect(op.authorization).toMatchObject({exposedFieldIds:exposed,readFieldIds:read,writeFieldIds:write,
+      customInputFieldIds:custom?["reason"]:[],customEffects:custom?"UNRESOLVED_RUNTIME_REVIEW":"NOT_APPLICABLE",
+      enforcement:"REQUIRED_NOT_IMPLEMENTED"});
+    const data=op.input.properties.data;
+    expect(data&&"type" in data&&data.type==="object"?Object.keys(data.properties):[]).toEqual(write);
+    expect(op.authorization).not.toHaveProperty("fieldIds");
+    for(const fields of [op.authorization.exposedFieldIds,op.authorization.readFieldIds,op.authorization.writeFieldIds,op.authorization.customInputFieldIds]){
+      expect(fields).not.toContain("secret_note");expect(fields).not.toContain("id");expect(fields).not.toContain("version");
+    }
+    expect(f.contracts.openapi.paths[op.path]?.[op.method]).toMatchObject({"x-vibress-authorization":op.authorization});
+    expect(f.contracts.admin[0]?.operationAuthorization).toContainEqual({operationId:op.operationId,requirements:op.authorization});
+  }
+  expect(f.contracts.admin[0]?.forms.every(form=>JSON.stringify(form.fields)===JSON.stringify(editable))).toBe(true);
+  expect(()=>f.contracts.validateInput("deals.approve",{id:"x",version:"v",idempotencyKey:"k",data:{approved:true}})).toThrow();
+});
+
+it.each(["CANCELLED","TIMEOUT"] as const)("mutation %s is local observation, not rollback; late mock completion and no retry",async expected=>{
+  const f=crmConsumer();let calls=0,effects=0;
+  let release!:()=>void,done!:()=>void;
+  const gate=new Promise<void>(resolve=>{release=resolve;});
+  const settled=new Promise<void>(resolve=>{done=resolve;});
+  const c=createMockContractClient(f.contracts,{mode:"MOCK_ONLY",transport:{async send(){
+    calls++;await gate;effects++;done();return {status:200,body:f.row};
+  }}});
+  const controller=new AbortController();
+  const pending=c.invoke("deals.update",{id:"deal_1",version:"rev_1",data:{title:"late"}},{signal:controller.signal,timeoutMs:expected==="TIMEOUT"?5:1000});
+  if(expected==="CANCELLED")controller.abort();
+  expect(await pending).toEqual({ok:false,code:expected});
+  expect(calls).toBe(1);expect(effects).toBe(0);
+  release();await settled;
+  expect(effects).toBe(1);expect(calls).toBe(1);
 });
