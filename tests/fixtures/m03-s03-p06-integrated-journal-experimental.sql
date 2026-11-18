@@ -90,7 +90,8 @@ BEGIN
     JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
     JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
     WHERE t.login_name=session_user AND t.actor_kind='AUTHOR' AND t.active AND e.epoch_id=epoch
-      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication);
+      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid);
   IF NOT FOUND THEN RAISE EXCEPTION 'ineligible author' USING ERRCODE='42501'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.platform_schema_plans p
     JOIN public.platform_schema_registry r USING (installation_id)
@@ -107,18 +108,18 @@ END $body$;
 
 CREATE OR REPLACE FUNCTION public.s03_p06_approve(p_submission uuid)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
-DECLARE s record; a record; k text; result uuid;
+DECLARE s record; a record; k int; result uuid;
 BEGIN
   PERFORM public.s03_p06_enter();
   -- Serialize creation without holding an UPDATE tuple lock needed by journal FKs.
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_p06_submission'),pg_catalog.hashtext(p_submission::text));
   SELECT * INTO s FROM public.s03_p06_submissions WHERE submission_id=p_submission;
   IF NOT FOUND THEN RAISE EXCEPTION 'submission unavailable' USING ERRCODE='42501'; END IF;
-  FOR k IN SELECT v FROM pg_catalog.unnest(ARRAY[s.author_login, session_user::text]) AS x(v)
-    ORDER BY pg_catalog.hashtext(v),v COLLATE "C"
+  FOR k IN SELECT DISTINCT pg_catalog.hashtext(v) FROM pg_catalog.unnest(ARRAY[s.author_login, session_user::text]) AS x(v)
+    ORDER BY 1
   LOOP
     PERFORM pg_catalog.pg_advisory_xact_lock(
-      pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(k));
+      pg_catalog.hashtext('vibress_m03s03_actor'),k);
   END LOOP;
   IF NOT EXISTS (SELECT 1 FROM public.s03_p06_recovery_epochs
     WHERE installation_id=s.installation_id AND epoch_id=s.recovery_epoch)
@@ -126,13 +127,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
     JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
     WHERE pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid)
       AND t.login_name=s.author_login AND t.principal_id=s.author_principal AND t.actor_kind='AUTHOR'
       AND t.active AND t.actor_instance_id=s.author_instance AND t.actor_generation=s.author_generation AND e.epoch_id=s.recovery_epoch)
   THEN RAISE EXCEPTION 'fresh submission required' USING ERRCODE='42501'; END IF;
   SELECT t.* INTO a FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
     JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=t.login_name
     WHERE t.login_name=session_user AND t.actor_kind='APPROVER' AND t.active AND e.epoch_id=s.recovery_epoch
-      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication);
+      AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid);
   IF NOT FOUND OR a.principal_id=s.author_principal OR session_user=s.author_login
   THEN RAISE EXCEPTION 'independent approver required' USING ERRCODE='42501'; END IF;
   IF EXISTS (SELECT 1 FROM public.s03_p06_approvals WHERE submission_id=p_submission)
@@ -160,6 +163,14 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'content registration scope denied' USING ERRCODE='42501'; END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(session_user::text));
+  IF NOT EXISTS(SELECT 1 FROM public.platform_schema_trusted_actors a
+    JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
+    JOIN public.s03_p06_recovery_epochs re ON re.installation_id=p_installation_id AND re.epoch_id=e.epoch_id
+    JOIN pg_catalog.pg_roles pr ON pr.oid=e.role_oid AND pr.rolname=a.login_name
+    WHERE a.login_name=session_user AND a.active AND a.actor_kind='AUTHOR' AND pr.rolcanlogin
+      AND NOT(pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)
+      AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid))
+  THEN RAISE EXCEPTION 'author enrollment unavailable' USING ERRCODE='42501'; END IF;
   INSERT INTO public.platform_schema_plans(installation_id,plan_digest,expected_manifest,plan,author)
   VALUES(p_installation_id,p_plan_digest,p_expected_manifest,p_plan,session_user);
 END $body$;
@@ -178,7 +189,8 @@ BEGIN
       JOIN public.platform_schema_registry r USING (installation_id)
     WHERE c.installation_id=p_installation AND c.delegate_login=session_user
       AND EXISTS(SELECT 1 FROM pg_catalog.pg_roles pr WHERE pr.oid=c.delegate_role_oid AND pr.rolname=session_user
-        AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreaterole OR pr.rolcreatedb OR pr.rolreplication))
+        AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreaterole OR pr.rolcreatedb OR pr.rolreplication)
+        AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid))
       AND r.database_name=current_database() AND r.environment IN ('test','development')
       AND (SELECT count(*) FROM public.platform_schema_registry)=1)
     THEN RAISE EXCEPTION 'actor mutation capability denied' USING ERRCODE='42501'; END IF;
@@ -350,3 +362,43 @@ END $body$;
 CREATE TRIGGER aa_s03_p06_delegate_oid BEFORE INSERT ON public.s03_p06_admin_capability
  FOR EACH ROW EXECUTE FUNCTION public.s03_p06_bind_delegate_oid();
 REVOKE ALL ON FUNCTION public.s03_p06_bind_delegate_oid() FROM PUBLIC;
+
+-- Integrated-only legacy entrypoints cannot be resurrected by EXECUTE drift.
+CREATE OR REPLACE FUNCTION public.platform_schema_approve_operation(
+  p_installation_id text, p_plan_digest text, p_operation_id text, p_expires_at timestamptz)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN RAISE EXCEPTION 'legacy authorization disabled' USING ERRCODE='42501'; END $body$;
+CREATE OR REPLACE FUNCTION public.platform_schema_revoke_operation(
+  p_installation_id text, p_plan_digest text, p_operation_id text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN RAISE EXCEPTION 'legacy authorization disabled' USING ERRCODE='42501'; END $body$;
+REVOKE ALL ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),
+ public.platform_schema_revoke_operation(text,text,text) FROM PUBLIC;
+CREATE TRIGGER aa_s03_p06_roster_truncate BEFORE TRUNCATE ON public.platform_schema_trusted_actors
+ FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_metadata_owner_guard();
+CREATE TRIGGER aa_s03_p06_plan_truncate BEFORE TRUNCATE ON public.platform_schema_plans
+ FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_metadata_owner_guard();
+DO $body$
+DECLARE relation text;
+BEGIN
+ FOREACH relation IN ARRAY ARRAY['platform_schema_approvals','platform_schema_revocation_audit','platform_schema_migration_journal']
+ LOOP
+  EXECUTE pg_catalog.format('CREATE TRIGGER aa_s03_p06_legacy_owner BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_metadata_owner_guard()',relation);
+ END LOOP;
+END $body$;
+-- The dedicated operator owns the target table and is a restricted execution
+-- trust boundary, not an arbitrary SQL client. Other logins cannot forge journal
+-- records even when an accidental INSERT ACL is present.
+CREATE FUNCTION public.s03_p06_journal_writer_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ IF current_user IS DISTINCT FROM session_user OR NOT EXISTS(
+   SELECT 1 FROM public.platform_schema_registry r WHERE r.installation_id=NEW.installation_id
+     AND r.operator_role=session_user AND NEW.operator_role=session_user
+     AND r.database_name=current_database() AND r.environment IN ('test','development'))
+ THEN RAISE EXCEPTION 'journal writer denied' USING ERRCODE='42501'; END IF;
+ RETURN NEW;
+END $body$;
+CREATE TRIGGER aa_s03_p06_journal_writer BEFORE INSERT ON public.s03_p06_completed_operations
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_journal_writer_guard();
+REVOKE ALL ON FUNCTION public.s03_p06_journal_writer_guard() FROM PUBLIC;

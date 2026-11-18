@@ -28,7 +28,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3761,3 +3761,31 @@ it("P06-E2E-28: actual operator refuses all dispatch after fence while proof is 
   expect(await contentChecksum(lab)).toBe(checksum);
   expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
 }, 30000);
+
+it("P06-E2E-29: same-OID membership drift and accidental legacy EXECUTE deny authorization", async () => {
+  const lab=await createLab("bu"); labs.push(lab); await p06Install(lab);
+  const stale=await freshP06(lab), checksum=await contentChecksum(lab);
+  const esc=(v:string)=>lab.dbAdmin.escapeIdentifier(v);
+  const author=await connect(lab.name,lab.author), approver=await connect(lab.name,lab.approver);
+  try {
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),public.platform_schema_revoke_operation(text,text,text) TO "+esc(lab.approver));
+    await expect(approver.query("SELECT public.platform_schema_approve_operation($1,$2,$3,clock_timestamp()+interval '1 hour')",[lab.installationId,lab.plan.digest,stale.operationId])).rejects.toMatchObject({code:"42501"});
+    await expect(approver.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",[lab.installationId,lab.plan.digest,stale.operationId])).rejects.toMatchObject({code:"42501"});
+    const oid=(await cluster.query("SELECT oid FROM pg_roles WHERE rolname=$1",[lab.author])).rows;
+    await cluster.query("GRANT "+esc(lab.runtimeRole)+" TO "+esc(lab.author));
+    try {
+      expect((await cluster.query("SELECT oid FROM pg_roles WHERE rolname=$1",[lab.author])).rows).toEqual(oid);
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    } finally {await cluster.query("REVOKE "+esc(lab.runtimeRole)+" FROM "+esc(lab.author));}
+    // Trusted administration must invalidate provenance after an authority
+    // change, including a change reversed before it is observed by the operator.
+    const principal=(await lab.dbAdmin.query<{principal_id:string}>("SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_replace($1,$2,$3,'AUTHOR')",[lab.installationId,lab.author,principal.principal_id]);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  } finally {await author.end();await approver.end();}
+},30000);

@@ -503,10 +503,12 @@ async function runP06(
       "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid AND s.recovery_epoch=$6::uuid "+
       "AND EXISTS (SELECT 1 FROM public.s03_p06_actor_enrollments x JOIN pg_catalog.pg_roles pr ON pr.oid=x.role_oid "+
       "WHERE x.actor_instance_id=u.actor_instance_id AND x.epoch_id=$6::uuid AND pr.rolname=s.author_login "+
-      "AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)) "+
+      "AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication) "+
+      "AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid)) "+
       "AND EXISTS (SELECT 1 FROM public.s03_p06_actor_enrollments x JOIN pg_catalog.pg_roles pr ON pr.oid=x.role_oid "+
       "WHERE x.actor_instance_id=v.actor_instance_id AND x.epoch_id=$6::uuid AND pr.rolname=a.approver_login "+
-      "AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication)) "+
+      "AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreatedb OR pr.rolcreaterole OR pr.rolreplication) "+
+      "AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.member=pr.oid)) "+
       "AND u.active AND v.active AND u.actor_kind='AUTHOR' AND v.actor_kind='APPROVER' "+
       "AND u.identity_mode='INDIVIDUAL_DATABASE_LOGIN' AND v.identity_mode='INDIVIDUAL_DATABASE_LOGIN' "+
       "AND u.principal_id=s.author_principal AND v.principal_id=a.approver_principal "+
