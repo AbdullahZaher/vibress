@@ -52,6 +52,14 @@ CREATE TABLE public.s03_e2_actor_instance_history (
   principal_id text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
 );
+-- Existing actors receive a newly assigned identity at this migration boundary.
+-- Reserve those UUIDs before installing the INSERT trigger. Never backfill old
+-- plan or approval provenance with the current identity or generation.
+INSERT INTO public.s03_e2_actor_instance_history
+  (actor_instance_id,login_name,principal_id)
+SELECT actor_instance_id,login_name,principal_id
+FROM public.platform_schema_trusted_actors;
+
 CREATE FUNCTION public.s03_e2_record_actor_instance()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER
 SET search_path=pg_catalog,pg_temp AS $e2$

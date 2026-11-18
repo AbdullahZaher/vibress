@@ -14,6 +14,19 @@ export interface CommitAckDrop {
   close(): Promise<void>;
 }
 export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
+  return startTransactionAckFaultProxy("COMMIT", "DROP");
+}
+
+/** Test-only real PostgreSQL wire fault for transaction-control acknowledgments. */
+export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT", fault: "DROP" | "STALL"): Promise<CommitAckDrop> {
+  return startStatementAckFaultProxy(command, fault);
+}
+
+export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | "ALTER TABLE" | "UPDATE" | "INSERT" | "ROLLBACK", fault: "DROP" | "STALL" | "OBSERVE", onObserved?:()=>void): Promise<CommitAckDrop> {
+  const marker = command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" :
+    command === "ALTER TABLE" ? "ALTER TABLE " :
+    command === "UPDATE" ? "UPDATE public.platform_schema_registry SET manifest" :
+    command === "INSERT" ? "INSERT INTO public.s03_p06_completed_operations " : command+"\u0000";
   const clients = new Set<Socket>();
   const upstreams = new Set<Socket>();
   let resolveCommit: (() => void) | undefined;
@@ -29,12 +42,19 @@ export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
     let armed = false;
     let held = Buffer.alloc(0);
     let seenCommit = false;
+    let stalled = false;
+    let tail = Buffer.alloc(0);
     downstream.on("data", (bytes: Buffer) => {
-      // node-postgres uses the simple Query message for bare COMMIT.
-      if (bytes.includes(Buffer.from("COMMIT\u0000", "utf8"))) armed = true;
+      // Known fixture statements only; tolerate packet fragmentation.
+      if (!armed) {
+        const combined=Buffer.concat([tail,bytes]);
+        if(combined.includes(Buffer.from(marker,"utf8"))) {armed=true;tail=Buffer.alloc(0);}
+        else tail=Buffer.from(combined.subarray(Math.max(0,combined.length-marker.length+1)));
+      }
       if (!upstream.destroyed) upstream.write(bytes);
     });
     upstream.on("data", (bytes: Buffer) => {
+      if (stalled) return;
       if (!armed) {
         if (!downstream.destroyed) downstream.write(bytes);
         return;
@@ -56,11 +76,17 @@ export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
         if (held.length < size + 1) return;
         const frame = held.subarray(0, size + 1);
         held = held.subarray(size + 1);
-        if (frame[0] === 0x43 && frame.subarray(5).toString("utf8").startsWith("COMMIT")) {
+        if (frame[0] === 0x43 && frame.subarray(5).toString("utf8").startsWith(command)) {
           // Received PostgreSQL CommandComplete for COMMIT. Never deliver
           // this acknowledgment to the application client.
           seenCommit = true;
           resolveCommit?.();
+          onObserved?.();
+          if (fault === "OBSERVE") {
+            if (!downstream.destroyed) downstream.write(frame);
+            continue;
+          }
+          if (fault === "STALL") { stalled = true; return; }
           downstream.destroy();
           upstream.destroy();
           return;

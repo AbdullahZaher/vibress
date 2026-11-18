@@ -4,8 +4,12 @@
  * Not imported by API, worker, plugin SDK, routes or deployment startup.
  * No default DATABASE_URL fallback, no privilege provisioning.
  */
-import { Client } from "pg";
-import { executeApprovedAdditiveColumn } from "./platform-schema-migration-operator";
+import { createPrivateKey, createPublicKey } from "node:crypto";
+import { readFileSync, realpathSync } from "node:fs";
+import { DisposableDurableRecoveryAuthority } from "./schema-operator-experimental-durable-authority";
+import { FileExperimentalRecoveryAnchor } from "./schema-operator-experimental-anchor";
+import { SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
+import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 function testOnlyConnection(): string {
   if (process.env.NODE_ENV === "production" ||
@@ -28,29 +32,50 @@ function testOnlyConnection(): string {
   return raw;
 }
 
+// Trusted local host only. Provision the ledger and anchor out of band;
+// never create a missing authority or fall back to epoch-only proof.
+function required(name:string):string {
+  const value=process.env[name];if(!value)throw Error("durable authority configuration required");return value;
+}
+function testOnlyRecoveryAuthority(){
+  const ledger=realpathSync(required("VIBRESS_SCHEMA_RECOVERY_LEDGER_DIR"));
+  const anchorDir=realpathSync(required("VIBRESS_SCHEMA_RECOVERY_ANCHOR_DIR"));
+  if(ledger===anchorDir)throw Error("separate anchor directory required");
+  const key=createPrivateKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_SIGNING_KEY_FILE")));
+  const anchorKey=createPrivateKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_ANCHOR_KEY_FILE")));
+  const publicKey=createPublicKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_PUBLIC_KEY_FILE")));
+  const adminKey=createPublicKey(readFileSync(required("VIBRESS_SCHEMA_RECOVERY_ADMIN_PUBLIC_KEY_FILE")));
+  const anchor=new FileExperimentalRecoveryAnchor(anchorDir,anchorKey);
+  return {authority:DisposableDurableRecoveryAuthority.open(ledger,key,anchor,adminKey),publicKey};
+}
+
 async function main(): Promise<void> {
-  const [installationId, planDigest, unexpected] = process.argv.slice(2);
-  if (!installationId || !planDigest || unexpected) {
-    throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest>");
+  const budget = new ExperimentalD1Budget();
+  const args=process.argv.slice(2);
+  const reconcile=args[0]==="--reconcile";
+  if(reconcile) args.shift();
+  const [installationId,planDigest,operationId,submissionId,approvalId,version,unexpected]=args;
+  if (!installationId||!planDigest||!operationId||!submissionId||!approvalId||version!=="1"||unexpected) {
+    throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest> <operationId> <submissionId> <approvalId> 1");
   }
   const connectionString = testOnlyConnection();
-  const db = new Client({
-    connectionString,
-    connectionTimeoutMillis: 4000,
-    statement_timeout: 10000,
-    query_timeout: 12000,
-  });
-  await db.connect();
-  try {
-    const result = await executeApprovedAdditiveColumn(db, { installationId, planDigest });
-    console.log(JSON.stringify(result));
-  } finally {
-    await db.end().catch(() => undefined);
-  }
+  const {authority,publicKey}=testOnlyRecoveryAuthority();
+  const request={installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1} as const;
+  let result;
+  try{
+    budget.checkpoint();
+    result=reconcile?await authority.reconcile(connectionString,request,publicKey,budget):
+      await authority.execute(connectionString,request,publicKey,budget);
+  }finally{authority.close();}
+  // Recheck at the CLI outcome boundary, not just inside the database method.
+  const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
+    budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
+  console.log(JSON.stringify(classified));
+  if (classified.status === "COMMITTED_LATE" || classified.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
 }
 
 main().catch(error => {
   // Never print connection strings, SQL, credentials, schema data or stack traces.
-  console.error("[M03-S03] refused:", error instanceof Error ? error.name : "Error");
+  console.error("[M03-S03] refused:", error instanceof SchemaMigrationOperatorError ? error.code : error instanceof Error ? error.name : "Error");
   process.exitCode = 1;
 });
