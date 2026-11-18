@@ -16,7 +16,7 @@ export async function superviseDisposableSchemaOperation(
   if (process.env.NODE_ENV === "production" ||
       !["postgres:", "postgresql:"].includes(url.protocol) ||
       !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) ||
-      !/^\\/vibress_s03_[a-z0-9_]+$/.test(url.pathname) || url.search || url.hash ||
+      !url.pathname.startsWith("/") || !/^vibress_s03_[a-z0-9_]+$/.test(url.pathname.slice(1)) || url.search || url.hash ||
       !url.username || !url.password) {
     throw new SchemaMigrationOperatorError("UNAUTHORIZED", "isolated dedicated connection required");
   }
