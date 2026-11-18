@@ -37,6 +37,16 @@ jobs:
           pnpm --filter @vibress/schema-engine lint
       - name: Execute pure contract and historical schema-engine tests
         run: pnpm --filter @vibress/schema-engine test -- --reporter=verbose
+      - name: Independently validate unchanged OAI document schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/m04-openapi-venv"
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" -m pip install --disable-pip-version-check --no-deps --only-binary=:all: -r packages/schema-engine/src/__tests__/fixtures/openapi-validator-requirements.txt
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" -m pip check
+          test "$(git hash-object packages/schema-engine/src/__tests__/fixtures/openapi-3.1-2025-11-23.json)" = "0c7bc4817b28fbf6ddbdd08b5ab84e81912c86b2"
+          pnpm exec tsx --tsconfig packages/schema-engine/tsconfig.json packages/schema-engine/src/__tests__/fixtures/m04-openapi-document.ts > "$RUNNER_TEMP/m04-openapi-documents.json"
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" packages/schema-engine/src/__tests__/fixtures/validate-openapi.py "$RUNNER_TEMP/m04-openapi-documents.json"
       - name: Execute architecture isolation without database setup
         run: pnpm exec vitest run --config packages/schema-engine/vitest.config.ts --passWithNoTests=false tests/architecture/platform-boundaries.test.ts
       - name: Verify clean source

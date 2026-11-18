@@ -184,9 +184,12 @@ Independent conformance uses already locked Ajv 8.20.0 and ajv-formats 3.0.1,
 dev-only direct imports with exact versions. Vendored unmodified OAI document
 schema 2025-11-23 has Git blob 0c7bc4817b28fbf6ddbdd08b5ab84e81912c86b2 and
 Apache license alongside it. Source: https://github.com/OAI/spec.openapis.org/blob/main/oas/3.1/schema/2025-11-23
-. OAI document validation is independent of our compiler; per-operation Schema
-Objects are additionally checked against Draft 2020-12, with explicit format
-assertion and differential JSON corpus. Manual semantic assertions verify unique
+. Document validation uses python-jsonschema 4.26.0 in a dedicated CI virtualenv
+with all six dependency versions fixed and pip check; the unchanged OAI schema
+uses dynamic references which Ajv 8.20.0 misresolved in the actual job. No
+schema rewrite, bypass or suppressed test. Per-operation Schema Objects are
+checked separately with Ajv Draft 2020-12, explicit format assertion and
+differential JSON corpus. The focused gate requires both validators. Manual semantic assertions verify unique
 operation IDs, path/header/query declarations, exact request/response fields and
 error references. This is not a claim that a structural schema proves the
 entire OpenAPI specification. JSON Schema does not validate JS object prototypes,
@@ -232,3 +235,5 @@ Research 2026-11-18: https://spec.openapis.org/oas/v3.1.html ;
 https://json-schema.org/draft/2020-12/ ; https://ajv.js.org/json-schema ;
 https://github.com/ajv-validator/ajv/releases ; https://www.postgresql.org/docs/16/datatype-character.html ;
 https://owasp.org/projects/api-security-project/ .
+
+Validator compatibility correction: actual intermediate job #135036278675 reported 84/85 package tests passing, with only full OAI document validation failing due to dynamic reference resolution. Python independently evaluates the exact official schema, including deliberately invalid document controls; Ajv retains per-operation meta-schema and differential validation. Source: https://github.com/cdimascio/express-openapi-validator/issues/573 ; https://pypi.org/project/jsonschema/4.26.0/ . No weakened internal validation.
