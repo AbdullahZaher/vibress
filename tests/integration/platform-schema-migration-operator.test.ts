@@ -2255,7 +2255,8 @@ describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () 
  * L1 global admin order (fixture-only). The supported protocol takes the
  * approval-specific transaction advisory key first, then actor keys in stable
  * order, BEFORE the first UPDATE acquires any implicit tuple locks. This is
- * a test orchestration protocol, NOT an authorized production admin function.
+ * an owner-only SECURITY INVOKER disposable gateway, NOT an authorized
+ * production administrative entrypoint or privileged function.
  */
 describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
   it("R1-10-FIX: approval-first admin cannot hold actor X while waiting for operator approval A", async () => {
@@ -2273,11 +2274,11 @@ describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
         [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
       );
       await admin.query("BEGIN");
-      // L1: no actor UPDATE, no tuple locks before approval fence acquisition.
+      // L1 test-only SECURITY INVOKER admin gateway serializes I/R/A/X
+      // before actor UPDATE and approval UPDATE. This is not a migration.
       adminWait = admin.query(
-        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
-        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
-        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id, lab.author],
       );
       let blocked = false;
       for (let attempt=0; attempt<100; attempt+=1) {
@@ -2298,20 +2299,7 @@ describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
         [lab.author],
       );
       await operator.query("COMMIT");
-      await adminWait; // Now admin has A and no competing X holder.
-      await admin.query(
-        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), hashtext($1::text))",
-        [lab.author],
-      );
-      await admin.query(
-        "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
-        [lab.author],
-      );
-      await admin.query(
-        "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp() " +
-        "WHERE installation_id=$1 AND plan_digest=$2 AND operation_id=$3",
-        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
-      );
+      await adminWait; // Gateway took A and X before the row DML.
       await admin.query("COMMIT");
     } finally {
       await operator.query("ROLLBACK").catch(()=>undefined);
