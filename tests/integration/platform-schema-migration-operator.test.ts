@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { randomBytes, randomUUID, generateKeyPairSync, sign } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
+import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof, type RecoveryEpochState } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
@@ -48,14 +48,16 @@ let cluster: Client;
 // signing key is ephemeral and never printed or persisted in a DB dump.
 const epochKeys = generateKeyPairSync("ed25519");
 const labEpochs = new Map<string, string>();
-function proofFor(challenge: RecoveryEpochChallenge, epoch: string): RecoveryEpochProof {
-  return { ...challenge, epoch, signature: sign(null, recoveryEpochMessage(challenge, epoch),
+const labRecoveryPending = new Set<string>();
+function proofFor(challenge: RecoveryEpochChallenge, epoch: string, state: RecoveryEpochState = "ACTIVE"): RecoveryEpochProof {
+  return { ...challenge, epoch, state, signature: sign(null, recoveryEpochMessage(challenge, epoch, state),
     epochKeys.privateKey).toString("base64url") };
 }
 const labRecoveryAuthority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
   const epoch = labEpochs.get(challenge.installationId + ":" + challenge.databaseName);
   if (!epoch) throw Error("lab recovery authority unavailable");
-  return proofFor(challenge, epoch);
+  return proofFor(challenge, epoch, labRecoveryPending.has(challenge.installationId+":"+challenge.databaseName)
+    ? "RECOVERY_PENDING" : "ACTIVE");
 });
 function executeP06(db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget) {
   return executeP06Raw(db, request, budget, labRecoveryAuthority);
@@ -3346,6 +3348,7 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
       retainedExists = true;
       const nextEpoch = randomUUID();
       labEpochs.set(key,nextEpoch);
+      labRecoveryPending.add(key);
       await cluster.query("CREATE DATABASE "+escaped(lab.name));
       await cluster.query("REVOKE CONNECT ON DATABASE "+escaped(lab.name)+" FROM PUBLIC");
       for (const role of [lab.author,lab.approver,lab.operatorRole,lab.runtimeRole])
@@ -3362,9 +3365,14 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
       expect(await hasWebsite(restored)).toBe(false);
       expect(await contentChecksum(restored)).toBe(checksum);
       expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+      // Test epoch mismatch independently even if an authority actively
+      // attests the new epoch. The actual lab authority stays pending.
+      const activeNewEpoch = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => proofFor(challenge,nextEpoch));
       for (const request of [stale,revoked,completed]) {
-        await expect(executeP06(restored.operator,request,new ExperimentalD1Budget()))
+        await expect(executeP06Raw(restored.operator,request,new ExperimentalD1Budget(),activeNewEpoch))
           .rejects.toMatchObject({code:"UNAUTHORIZED",message:"recovery epoch mismatch; re-enrollment required"});
+        await expect(executeP06(restored.operator,request,new ExperimentalD1Budget()))
+          .rejects.toMatchObject({code:"UNAUTHORIZED",message:"fresh recovery authority proof unavailable"});
       }
       await expect(reconcileP06(restored.operator,completed,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
       await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
@@ -3399,18 +3407,22 @@ describe("P06 isolated same-name backup and external recovery epoch", () => {
         await restored.dbAdmin.query("INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES($1,$2,$3)",
           [login,row.principal_id,kind]);
       }
-      await expect(executeP06(restored.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),activeNewEpoch))
+        .rejects.toMatchObject({code:"UNAUTHORIZED",message:"independent P06 authorization unavailable"});
       const fresh = await freshP06(restored);
       expect(fresh.planDigest).toBe(stale.planDigest);
       expect(fresh.operationId).not.toBe(stale.operationId);
       expect(fresh.approvalId).not.toBe(stale.approvalId);
-      // Do NOT execute a new DDL across the known rewound completed operation:
-      // that requires an independently governed historical journal decision.
+      // Fresh enrollment and approval are insufficient while the authority
+      // marks the rewound completed operation as requiring recovery review.
+      await expect(executeP06(restored.operator,fresh,new ExperimentalD1Budget()))
+        .rejects.toMatchObject({code:"UNAUTHORIZED",message:"fresh recovery authority proof unavailable"});
       expect(await hasWebsite(restored)).toBe(false);
       expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
     } finally {
       if (retainedExists) await cluster.query("DROP DATABASE "+escaped(retained));
       labEpochs.delete(key);
+      labRecoveryPending.delete(key);
     }
   }, 90000);
 });
