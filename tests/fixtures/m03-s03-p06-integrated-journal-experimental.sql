@@ -177,6 +177,8 @@ BEGIN
     SELECT 1 FROM public.s03_p06_admin_capability c
       JOIN public.platform_schema_registry r USING (installation_id)
     WHERE c.installation_id=p_installation AND c.delegate_login=session_user
+      AND EXISTS(SELECT 1 FROM pg_catalog.pg_roles pr WHERE pr.oid=c.delegate_role_oid AND pr.rolname=session_user
+        AND pr.rolcanlogin AND NOT (pr.rolsuper OR pr.rolbypassrls OR pr.rolcreaterole OR pr.rolcreatedb OR pr.rolreplication))
       AND r.database_name=current_database() AND r.environment IN ('test','development')
       AND (SELECT count(*) FROM public.platform_schema_registry)=1)
     THEN RAISE EXCEPTION 'actor mutation capability denied' USING ERRCODE='42501'; END IF;
@@ -295,7 +297,7 @@ BEGIN
    IF NOT EXISTS(SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=p_delegate AND rolcanlogin
       AND NOT (rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole OR rolreplication))
    THEN RAISE EXCEPTION 'invalid delegate role' USING ERRCODE='42501'; END IF;
-   INSERT INTO public.s03_p06_admin_capability VALUES(p_installation,p_delegate);
+   INSERT INTO public.s03_p06_admin_capability(installation_id,delegate_login) VALUES(p_installation,p_delegate);
  ELSE
    DELETE FROM public.s03_p06_admin_capability WHERE installation_id=p_installation AND delegate_login=p_delegate;
  END IF;
@@ -304,3 +306,47 @@ END $body$;
 REVOKE ALL ON FUNCTION public.s03_p06_root_enter(text),public.s03_p06_root_register(text,text,text,text),
  public.s03_p06_root_retire(text,text),public.s03_p06_root_replace(text,text,text,text),
  public.s03_p06_root_set_capability(text,text,boolean) FROM PUBLIC;
+
+-- Before-statement guard prevents accidental ordinary grants from taking
+-- row locks or changing security metadata. SECURITY DEFINER entrypoints
+-- have the intended table-owner current_user; no trust-root containment claim.
+CREATE FUNCTION public.s03_p06_metadata_owner_guard() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ IF current_user IS DISTINCT FROM
+   (SELECT pg_catalog.pg_get_userbyid(relowner) FROM pg_catalog.pg_class WHERE oid=TG_RELID)
+ THEN RAISE EXCEPTION 'protected metadata requires table owner' USING ERRCODE='42501'; END IF;
+ RETURN NULL;
+END $body$;
+REVOKE ALL ON FUNCTION public.s03_p06_metadata_owner_guard() FROM PUBLIC;
+DO $body$
+DECLARE relation text;
+BEGIN
+ FOREACH relation IN ARRAY ARRAY['s03_p06_admin_capability','s03_p06_actor_enrollments',
+ 's03_p06_recovery_epochs','s03_p06_call_guard','s03_e2_actor_instance_history','s03_p06_lifecycle_audit']
+ LOOP
+  EXECUTE pg_catalog.format('CREATE TRIGGER aa_s03_p06_metadata_owner BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_metadata_owner_guard()',relation);
+ END LOOP;
+ -- These authorization/journal records are immutable even if DML grants drift.
+ FOREACH relation IN ARRAY ARRAY['s03_p06_submissions','s03_p06_approvals','s03_p06_revocations','s03_p06_completed_operations']
+ LOOP
+  EXECUTE pg_catalog.format('CREATE TRIGGER aa_s03_p06_metadata_immutable BEFORE UPDATE OR DELETE OR TRUNCATE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION public.s03_p06_immutable()',relation);
+ END LOOP;
+END $body$;
+
+-- Bind delegated capability to actual PostgreSQL role identity as well as name.
+-- Integrated installation starts with empty capability table.
+ALTER TABLE public.s03_p06_admin_capability ADD COLUMN delegate_role_oid oid NOT NULL;
+CREATE FUNCTION public.s03_p06_bind_delegate_oid() RETURNS trigger
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+ IF NEW.delegate_role_oid IS NOT NULL THEN
+   RAISE EXCEPTION 'delegate OID cannot be supplied' USING ERRCODE='42501'; END IF;
+ SELECT oid INTO NEW.delegate_role_oid FROM pg_catalog.pg_roles WHERE rolname=NEW.delegate_login
+    AND rolcanlogin AND NOT (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb OR rolreplication);
+ IF NOT FOUND THEN RAISE EXCEPTION 'delegate login unavailable' USING ERRCODE='42501'; END IF;
+ RETURN NEW;
+END $body$;
+CREATE TRIGGER aa_s03_p06_delegate_oid BEFORE INSERT ON public.s03_p06_admin_capability
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_bind_delegate_oid();
+REVOKE ALL ON FUNCTION public.s03_p06_bind_delegate_oid() FROM PUBLIC;

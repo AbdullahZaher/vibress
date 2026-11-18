@@ -27,7 +27,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2911,7 +2911,7 @@ describe("Integrated P06 D1 and R1 safety",()=>{
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_enter() TO "+esc(gateway));
     await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO "+esc(gateway));
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO "+esc(delegate));
-    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability VALUES($1,$2)",[lab.installationId,delegate]);
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability(installation_id,delegate_login) VALUES($1,$2)",[lab.installationId,delegate]);
     const admin=await connect(lab.name,delegate),blocker=await connect(lab.name);
     let pending:ReturnType<typeof executeP06>|undefined;
     try{
@@ -3577,4 +3577,75 @@ describe("P06 owned physical session supervisor and capability ordering", () => 
       await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
     }finally{await proxy.close();}
   },30000);
+});
+
+describe("P06 administrative metadata, cancellation diagnostic and D1 measurement", () => {
+  it("P06-E2E-23: accidental metadata DML/TRUNCATE grants cannot forge capability, epoch, enrollment or journal", async () => {
+    const lab=await createLab("bk");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const rootTables=["s03_p06_admin_capability","s03_p06_actor_enrollments","s03_p06_recovery_epochs",
+      "s03_p06_call_guard","s03_e2_actor_instance_history","s03_p06_lifecycle_audit"];
+    const immutableTables=["s03_p06_submissions","s03_p06_approvals","s03_p06_revocations","s03_p06_completed_operations"];
+    const author=await connect(lab.name,lab.author);
+    try {
+      for(const table of [...rootTables,...immutableTables]){
+        const qualified="public."+lab.dbAdmin.escapeIdentifier(table);
+        await lab.dbAdmin.query("GRANT INSERT,UPDATE,DELETE,TRUNCATE ON "+qualified+" TO "+lab.dbAdmin.escapeIdentifier(lab.author));
+        if(rootTables.includes(table)) await expect(author.query("INSERT INTO "+qualified+" DEFAULT VALUES")).rejects.toMatchObject({code:"42501"});
+        await expect(author.query("DELETE FROM "+qualified)).rejects.toMatchObject({code:"42501"});
+        await expect(author.query("TRUNCATE "+qualified)).rejects.toMatchObject({code:"42501"});
+      }
+    }finally{await author.end();}
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_admin_capability")).rowCount).toBe(0);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_actor_enrollments")).rowCount).toBe(2);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_recovery_epochs")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_submissions")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_approvals")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+
+  it("P06-E2E-24: delayed same-role cancellation can strike a subsequent query on reused backend, not a separate session", async () => {
+    const lab=await createLab("bl");labs.push(lab);await p06Install(lab);
+    const checksum=await contentChecksum(lab);
+    const reused=await connect(lab.name,lab.operatorRole),signaler=await connect(lab.name,lab.operatorRole),fresh=await connect(lab.name,lab.operatorRole);
+    let second:Promise<unknown>|undefined;
+    try {
+      await reused.query("SELECT 1");
+      second=reused.query("SELECT pg_sleep(5) /* s03_next_statement */");
+      void second.catch(()=>undefined);
+      let running=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{running:boolean}>("SELECT state='active' AND query LIKE '%s03_next_statement%' AS running FROM pg_stat_activity WHERE pid=$1",[reused.processID])).rows[0];
+        if(row?.running){running=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(running).toBe(true);
+      // Diagnostic only: ordinary same-role permission, NOT a privileged
+      // cancellation gateway or wire CancelRequest implementation.
+      expect((await signaler.query<{sent:boolean}>("SELECT pg_cancel_backend($1) AS sent",[reused.processID])).rows[0]?.sent).toBe(true);
+      await expect(second).rejects.toMatchObject({code:"57014"});
+      expect((await fresh.query("SELECT 1 AS ok")).rows).toEqual([{ok:1}]);
+    }finally{await second?.catch(()=>undefined);await Promise.all([reused.end(),signaler.end(),fresh.end()]);}
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+
+  it("P06-E2E-25: measure five isolated integrated one-shot operations from before connect through outcome", async () => {
+    const samples:number[]=[];
+    for(const key of ["bm","bn","bo","bp","bq"] as const){
+      const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+      const request=await freshP06(lab),checksum=await contentChecksum(lab);
+      const budget=new ExperimentalD1Budget();
+      const result=await superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority,"EXECUTE",budget);
+      const elapsed=2517-budget.remainingMs();
+      samples.push(Math.round(elapsed*1000)/1000);
+      expect(result.status).toBe("APPLIED");expect(elapsed).toBeLessThan(2517);
+      expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    }
+    // Exploratory only: two fixture rows, ephemeral in-process signing provider,
+    // one runner; no inferential percentile, no approved admission margin.
+    console.info("D1_INTEGRATED_EXPLORATORY "+JSON.stringify({samplesMs:samples,n:samples.length,rows:2,margin:"NOT_DETERMINABLE"}));
+  },60000);
 });
