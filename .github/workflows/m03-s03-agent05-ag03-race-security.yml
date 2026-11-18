@@ -58,6 +58,14 @@ jobs:
       - name: Preserve real PostgreSQL fault-injection baseline
         run: |
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts --testTimeout=90000 --hookTimeout=120000
+      - name: Three independently executed PostgreSQL R1-10 and E2 concurrency repetitions
+        run: |
+          for repetition in 1 2 3; do
+            echo "R1_E2_REPETITION=$repetition SOURCE_SHA=$(git rev-parse HEAD)"
+            # Each Vitest invocation starts a fresh Node process and creates
+            # separately named disposable PG16 fixture databases.
+            pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "R1-10|E2-0|E2-REPLAY" --testTimeout=90000 --hookTimeout=120000
+          done
       - name: Confirm disposable fixture databases fully cleaned
         if: success()
         run: |
