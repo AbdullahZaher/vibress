@@ -690,6 +690,6 @@ export async function collectDisposableRecoveryReadiness(
     if(before.oid!==after.oid)return deny("CATALOG_DRIFT","recovery database identity changed");
     await db.query("COMMIT");
     const readinessEvidenceDigest=createHash("sha256").update(JSON.stringify({scope,before,after,resources,actors,journal})).digest("hex");
-    return {epoch:scope.epoch,catalogManifestDigest:manifest.digest,readinessEvidenceDigest,journal};
+    return {installationId:scope.installationId,databaseName:scope.databaseName,epoch:scope.epoch,catalogManifestDigest:manifest.digest,readinessEvidenceDigest,journal};
   }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
 }

@@ -55,6 +55,9 @@ jobs:
       - name: Verify targeted unit and architecture tests against ready database setup
         run: |
           pnpm exec vitest run --passWithNoTests=false --config vitest.unit.config.ts tests/unit/schema-operator-experimental-durable-authority.test.ts tests/unit/schema-operator-experimental-deadline.test.ts tests/architecture/platform-boundaries.test.ts
+      - name: Run targeted same-principal and replacement-principal provenance controls
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-E2E-48[AB]" --testTimeout=90000 --hookTimeout=120000
       - name: Run actual integrated P06 operator tests (separate evidence)
         run: |
           pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-E2E-" --testTimeout=90000 --hookTimeout=120000

@@ -18,6 +18,8 @@ type OperationOutcome = { outcome:"COMMITTED"; newDigest:string } |
   { outcome:"ADMITTED"|"UNCERTAIN"|"ROLLED_BACK"; newDigest?:never };
 type Operation = OperationIdentity & OperationOutcome;
 type JournalEvidence = Pick<Operation,"operationId"|"submissionId"|"approvalId"|"planDigest"> & { newDigest: string };
+type ObservedCommitEvidence = Readonly<{installationId:string;databaseName:string;epoch:string;
+  catalogManifestDigest:string;readinessEvidenceDigest:string;journal:readonly JournalEvidence[]}>;
 type Event =
   | { kind: "GENESIS"; installationId: string; databaseName: string; epoch: string; ledgerId:string; signingIdentity:string; administrationIdentity:string }
   | { kind: "ADMIT"; operation: Operation }
@@ -233,6 +235,25 @@ export class DisposableDurableRecoveryAuthority {
       if(newDigest!==undefined) refuse();
       this.append({kind:"OUTCOME",operationId,outcome:"ROLLED_BACK",evidenceDigest});
     }
+  }
+  // Resolve only a positive, exact completed-operation witness from the trusted
+  // fenced PostgreSQL observer. Missing rows are not rollback evidence.
+  resolveObservedCommit(operationId:string,evidence:ObservedCommitEvidence,signature:string):void{
+    const s=this.current(),operation=s.operations.get(operationId);
+    if(!s.pending||s.advanced||this.fences.size!==0||operation?.outcome!=="UNCERTAIN"||
+      evidence.installationId!==s.installationId||evidence.databaseName!==s.databaseName||
+      evidence.epoch!==s.epoch||operation.epoch!==s.epoch||
+      !SHA.test(evidence.catalogManifestDigest)||!SHA.test(evidence.readinessEvidenceDigest))return refuse();
+    this.requireAdministration("RESOLVE_OBSERVED_COMMIT",{operationId,evidence},signature);
+    const known=[...s.operations.values()].filter(o=>o.outcome==="COMMITTED"||o.operationId===operationId);
+    if(evidence.journal.length!==known.length||new Set(evidence.journal.map(j=>j.operationId)).size!==known.length)return refuse();
+    for(const item of known){
+      const row=evidence.journal.find(j=>j.operationId===item.operationId);
+      if(!row||row.submissionId!==item.submissionId||row.approvalId!==item.approvalId||row.planDigest!==item.planDigest||
+        !SHA.test(row.newDigest)||(item.outcome==="COMMITTED"&&row.newDigest!==item.newDigest)||
+        (item.operationId===operationId&&row.newDigest!==evidence.catalogManifestDigest))return refuse();
+    }
+    this.append({kind:"OUTCOME",operationId,outcome:"COMMITTED",newDigest:evidence.catalogManifestDigest,evidenceDigest:evidence.readinessEvidenceDigest});
   }
   advance(epoch:string,quiescenceEvidenceDigest:string,signature?:string):void{
     this.current();if(this.fences.size!==0) refuse();
