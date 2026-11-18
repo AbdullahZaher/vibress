@@ -13,12 +13,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24"
+      - name: Install frozen workspace dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify merged manifest contract
+        run: |
+          pnpm --filter @vibress/schema-engine typecheck
+          pnpm --filter @vibress/schema-engine test
       - name: Verify source and run isolated physical rehearsal
         run: |
           set -euo pipefail
           git rev-parse HEAD HEAD^{tree}
           bash -n tests/fixtures/m03-m04-physical-readiness.sh
-          docker pull postgres:16-alpine
-          image_id=$(docker image inspect --format '{{.Id}}' postgres:16-alpine)
+          manifest_file="$RUNNER_TEMP/m03-m04-test-manifest.json"
+          pnpm exec tsx tests/fixtures/m03-m04-physical-manifest.ts > "$manifest_file"
+          chmod 644 "$manifest_file"
+          echo MERGED_CONTRACT_MANIFEST_PROBES=PASS
+          postgres_image=postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
+          docker pull "$postgres_image"
+          image_id=$(docker image inspect --format '{{.Id}}' "$postgres_image")
           docker image inspect --format '{{json .RepoDigests}}' "$image_id"
-          docker run --rm -i --network none --user postgres --entrypoint bash "$image_id" -s < tests/fixtures/m03-m04-physical-readiness.sh
+          docker run --rm -i --network none --user postgres --mount "type=bind,source=$manifest_file,target=/fixture-manifest.json,readonly" --entrypoint bash "$image_id" -s < tests/fixtures/m03-m04-physical-readiness.sh
