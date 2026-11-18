@@ -3,6 +3,32 @@ DO $scope$ BEGIN
  IF current_database() !~ '^vibress_s03_[a-z0-9_]+$' OR current_setting('server_version_num')::int NOT BETWEEN 160000 AND 169999
  THEN RAISE EXCEPTION 'disposable PostgreSQL 16 only' USING ERRCODE='42501'; END IF;
 END $scope$;
+-- Independent epoch is provisioned by the lab recovery authority, never
+-- auto-generated from the database being restored. The existing new P06
+-- submission table is empty at this additive fixture boundary.
+CREATE TABLE public.s03_p06_recovery_epochs (
+ installation_id text PRIMARY KEY REFERENCES public.platform_schema_registry(installation_id),
+ epoch_id uuid NOT NULL UNIQUE
+);
+CREATE TABLE public.s03_p06_actor_enrollments (
+ actor_instance_id uuid PRIMARY KEY REFERENCES public.s03_e2_actor_instance_history(actor_instance_id),
+ epoch_id uuid NOT NULL
+);
+ALTER TABLE public.s03_p06_submissions ADD COLUMN recovery_epoch uuid NOT NULL;
+REVOKE ALL ON public.s03_p06_recovery_epochs, public.s03_p06_actor_enrollments FROM PUBLIC;
+CREATE FUNCTION public.s03_p06_record_epoch_enrollment() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE epoch uuid;
+BEGIN
+ SELECT epoch_id INTO epoch FROM public.s03_p06_recovery_epochs
+ WHERE (SELECT count(*) FROM public.s03_p06_recovery_epochs)=1;
+ IF epoch IS NULL THEN RAISE EXCEPTION 'recovery enrollment unavailable' USING ERRCODE='42501'; END IF;
+ INSERT INTO public.s03_p06_actor_enrollments(actor_instance_id,epoch_id) VALUES(NEW.actor_instance_id,epoch);
+ RETURN NEW;
+END $body$;
+CREATE TRIGGER zzz_s03_p06_epoch_enroll AFTER INSERT ON public.platform_schema_trusted_actors
+ FOR EACH ROW EXECUTE FUNCTION public.s03_p06_record_epoch_enrollment();
+REVOKE ALL ON FUNCTION public.s03_p06_record_epoch_enrollment() FROM PUBLIC;
 ALTER TABLE public.s03_p06_submissions ADD UNIQUE(installation_id,operation_id,submission_id,canonical_plan_digest);
 ALTER TABLE public.s03_p06_approvals ADD UNIQUE(approval_id,submission_id);
 CREATE TABLE public.s03_p06_revocations (
@@ -51,13 +77,15 @@ REVOKE ALL ON FUNCTION public.s03_p06_revoke(uuid) FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION public.s03_p06_submit(p_installation text, p_digest text)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
-DECLARE a record; result uuid;
+DECLARE a record; result uuid; epoch uuid;
 BEGIN
   PERFORM public.s03_p06_enter();
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(session_user::text));
-  SELECT * INTO a FROM public.platform_schema_trusted_actors
-    WHERE login_name=session_user AND actor_kind='AUTHOR' AND active;
+  SELECT epoch_id INTO epoch FROM public.s03_p06_recovery_epochs WHERE installation_id=p_installation;
+  SELECT t.* INTO a FROM public.platform_schema_trusted_actors t
+    JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
+    WHERE t.login_name=session_user AND t.actor_kind='AUTHOR' AND t.active AND e.epoch_id=epoch;
   IF NOT FOUND THEN RAISE EXCEPTION 'ineligible author' USING ERRCODE='42501'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.platform_schema_plans p
     JOIN public.platform_schema_registry r USING (installation_id)
@@ -66,8 +94,8 @@ BEGIN
     AND r.database_name=current_database() AND r.environment IN ('test','development'))
   THEN RAISE EXCEPTION 'content scope unavailable' USING ERRCODE='42501'; END IF;
   INSERT INTO public.s03_p06_submissions
-    (installation_id,canonical_plan_digest,author_login,author_principal,author_instance,author_generation)
-  VALUES (p_installation,p_digest,session_user,a.principal_id,a.actor_instance_id,a.actor_generation)
+    (installation_id,canonical_plan_digest,author_login,author_principal,author_instance,author_generation,recovery_epoch)
+  VALUES (p_installation,p_digest,session_user,a.principal_id,a.actor_instance_id,a.actor_generation,epoch)
   RETURNING submission_id INTO result;
   RETURN result;
 END $body$;
@@ -87,12 +115,15 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtext('vibress_m03s03_actor'),pg_catalog.hashtext(k));
   END LOOP;
-  IF NOT EXISTS (SELECT 1 FROM public.platform_schema_trusted_actors
-    WHERE login_name=s.author_login AND principal_id=s.author_principal AND actor_kind='AUTHOR'
-      AND active AND actor_instance_id=s.author_instance AND actor_generation=s.author_generation)
+  IF NOT EXISTS (SELECT 1 FROM public.s03_p06_recovery_epochs
+    WHERE installation_id=s.installation_id AND epoch_id=s.recovery_epoch)
+  THEN RAISE EXCEPTION 'fresh recovery submission required' USING ERRCODE='42501'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
+    WHERE t.login_name=s.author_login AND t.principal_id=s.author_principal AND t.actor_kind='AUTHOR'
+      AND t.active AND t.actor_instance_id=s.author_instance AND t.actor_generation=s.author_generation AND e.epoch_id=s.recovery_epoch)
   THEN RAISE EXCEPTION 'fresh submission required' USING ERRCODE='42501'; END IF;
-  SELECT * INTO a FROM public.platform_schema_trusted_actors
-    WHERE login_name=session_user AND actor_kind='APPROVER' AND active;
+  SELECT t.* INTO a FROM public.platform_schema_trusted_actors t JOIN public.s03_p06_actor_enrollments e USING(actor_instance_id)
+    WHERE t.login_name=session_user AND t.actor_kind='APPROVER' AND t.active AND e.epoch_id=s.recovery_epoch;
   IF NOT FOUND OR a.principal_id=s.author_principal OR session_user=s.author_login
   THEN RAISE EXCEPTION 'independent approver required' USING ERRCODE='42501'; END IF;
   IF EXISTS (SELECT 1 FROM public.s03_p06_approvals WHERE submission_id=p_submission)

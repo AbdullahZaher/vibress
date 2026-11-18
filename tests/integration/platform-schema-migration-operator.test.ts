@@ -1,5 +1,7 @@
 // @vitest-environment node
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID, generateKeyPairSync, sign } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
@@ -14,7 +16,7 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
-import { executeApprovedAdditiveColumn as executeP06,reconcileApprovedAdditiveColumn as reconcileP06,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
@@ -24,7 +26,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -42,6 +44,25 @@ interface Lab {
 }
 const labs: Lab[] = [];
 let cluster: Client;
+// External authority is deliberately outside all disposable databases. The
+// signing key is ephemeral and never printed or persisted in a DB dump.
+const epochKeys = generateKeyPairSync("ed25519");
+const labEpochs = new Map<string, string>();
+function proofFor(challenge: RecoveryEpochChallenge, epoch: string): RecoveryEpochProof {
+  return { ...challenge, epoch, signature: sign(null, recoveryEpochMessage(challenge, epoch),
+    epochKeys.privateKey).toString("base64url") };
+}
+const labRecoveryAuthority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+  const epoch = labEpochs.get(challenge.installationId + ":" + challenge.databaseName);
+  if (!epoch) throw Error("lab recovery authority unavailable");
+  return proofFor(challenge, epoch);
+});
+function executeP06(db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget) {
+  return executeP06Raw(db, request, budget, labRecoveryAuthority);
+}
+function reconcileP06(db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget) {
+  return reconcileP06Raw(db, request, budget, labRecoveryAuthority);
+}
 
 function urlFor(database: string, role?: string): string {
   const url = new URL(BASE_URL);
@@ -2797,12 +2818,18 @@ async function p06Install(lab:Lab):Promise<void> {
   try {
     for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-l1-actor-gateway-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
       await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
+    const epoch = randomUUID();
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_recovery_epochs VALUES($1,$2::uuid)", [lab.installationId,epoch]);
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_actor_enrollments(actor_instance_id,epoch_id) "+
+      "SELECT actor_instance_id,$1::uuid FROM public.platform_schema_trusted_actors", [epoch]);
+    await lab.dbAdmin.query("GRANT SELECT ON public.s03_p06_recovery_epochs,public.s03_p06_actor_enrollments TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+lab.dbAdmin.escapeIdentifier(lab.author));
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid),public.s03_p06_revoke(uuid) TO "+lab.dbAdmin.escapeIdentifier(lab.approver));
     await lab.dbAdmin.query("GRANT SELECT ON public.s03_p06_submissions,public.s03_p06_approvals,public.s03_p06_revocations,public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
     await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
     await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),public.platform_schema_revoke_operation(text,text,text) FROM "+lab.dbAdmin.escapeIdentifier(lab.approver));
     await lab.dbAdmin.query("COMMIT");
+    labEpochs.set(lab.installationId+":"+lab.name,epoch);
   } catch(error){await lab.dbAdmin.query("ROLLBACK");throw error;}
 }
 async function freshP06(lab:Lab):Promise<SchemaOperatorRequest>{
@@ -3278,4 +3305,112 @@ describe("P06 dedicated session transaction admission", () => {
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
     expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
   }, 30000);
+});
+
+describe("P06 isolated same-name backup and external recovery epoch", () => {
+  it("P06-E2E-18: actual pg_dump/pg_restore rewinds local state but fresh signed epoch prevents historical replay", async () => {
+    const lab = await createLab("bf");
+    labs.push(lab);
+    await p06Install(lab);
+    const stale = await freshP06(lab);
+    const revoked = await freshP06(lab);
+    const completed = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const key = lab.installationId+":"+lab.name;
+    const oldEpoch = labEpochs.get(key)!;
+    const archive = spawnSync("docker", ["compose","-f","compose.dev.yml","exec","-T","postgres",
+      "pg_dump","-U","vibress","--format=custom","--dbname",lab.name],
+      { timeout: 20000, maxBuffer: 16*1024*1024 });
+    expect(archive.status).toBe(0);
+    expect(archive.stdout.length).toBeGreaterThan(0);
+    const approver = await connect(lab.name, lab.approver);
+    try { await approver.query("SELECT public.s03_p06_revoke($1::uuid)", [revoked.approvalId]); }
+    finally { await approver.end(); }
+    expect((await executeP06(lab.operator, completed, new ExperimentalD1Budget())).status).toBe("APPLIED");
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",[lab.author]);
+    const prior = (await lab.dbAdmin.query<{principal_id:string}>(
+      "SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.approver]);
+    await lab.dbAdmin.query("INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES($1,$2,'APPROVER')",
+      [lab.approver,prior.principal_id]);
+    // The harness is the disposable recovery orchestrator. Fence all sessions
+    // first, advance the external epoch, and retain the original DB until the
+    // same-name restore is checked. It is never a production recovery command.
+    await Promise.all([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    const retained = lab.name+"_retained";
+    const escaped = (value:string) => cluster.escapeIdentifier(value);
+    let retainedExists = false;
+    let restored: Lab | undefined;
+    try {
+      await cluster.query("ALTER DATABASE "+escaped(lab.name)+" RENAME TO "+escaped(retained));
+      retainedExists = true;
+      const nextEpoch = randomUUID();
+      labEpochs.set(key,nextEpoch);
+      await cluster.query("CREATE DATABASE "+escaped(lab.name));
+      await cluster.query("REVOKE CONNECT ON DATABASE "+escaped(lab.name)+" FROM PUBLIC");
+      for (const role of [lab.author,lab.approver,lab.operatorRole,lab.runtimeRole])
+        await cluster.query("GRANT CONNECT ON DATABASE "+escaped(lab.name)+" TO "+escaped(role));
+      const restore = spawnSync("docker", ["compose","-f","compose.dev.yml","exec","-T","postgres",
+        "pg_restore","-U","vibress","--exit-on-error","--single-transaction","--dbname",lab.name],
+        { input: archive.stdout, timeout: 20000, maxBuffer: 16*1024*1024 });
+      expect(restore.status).toBe(0);
+      restored = {...lab,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),
+        runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.indexOf(lab)] = restored;
+      expect((await restored.dbAdmin.query("SELECT epoch_id FROM public.s03_p06_recovery_epochs")).rows)
+        .toEqual([{epoch_id:oldEpoch}]);
+      expect(await hasWebsite(restored)).toBe(false);
+      expect(await contentChecksum(restored)).toBe(checksum);
+      expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+      for (const request of [stale,revoked,completed]) {
+        await expect(executeP06(restored.operator,request,new ExperimentalD1Budget()))
+          .rejects.toMatchObject({code:"UNAUTHORIZED",message:"recovery epoch mismatch; re-enrollment required"});
+      }
+      await expect(reconcileP06(restored.operator,completed,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      const unavailable = new RecoveryEpochAuthority(epochKeys.publicKey, async () => {throw Error("unavailable");});
+      const replay = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge =>
+        proofFor({...challenge,nonce:randomUUID()},oldEpoch));
+      const forged = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge =>
+        ({...proofFor(challenge,nextEpoch),signature:"A".repeat(86)}));
+      for (const invalid of [unavailable,replay,forged])
+        await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),invalid))
+          .rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // Explicit disposable recovery enrollment, under I -> registry fence.
+      // No automatic approval or historical journal reconstruction.
+      await restored.dbAdmin.query("BEGIN");
+      try {
+        await restored.dbAdmin.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'),hashtext($1))",[lab.installationId]);
+        await restored.dbAdmin.query("SELECT 1 FROM public.platform_schema_registry WHERE installation_id=$1 FOR UPDATE",[lab.installationId]);
+        await restored.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+        await restored.dbAdmin.query("COMMIT");
+      } catch (error) {await restored.dbAdmin.query("ROLLBACK");throw error;}
+      const actor = await connect(lab.name,lab.author);
+      try {
+        await expect(actor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]))
+          .rejects.toMatchObject({code:"42501"});
+      } finally {await actor.end();}
+      // Simulate separately authenticated root re-enrollment. Prior UUIDs stay
+      // in the restored history. This does not certify external journal recovery.
+      for (const [login,kind] of [[lab.author,"AUTHOR"],[lab.approver,"APPROVER"]]) {
+        const row=(await restored.dbAdmin.query<{principal_id:string}>(
+          "SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[login])).rows[0]!;
+        await restored.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",[login]);
+        await restored.dbAdmin.query("INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES($1,$2,$3)",
+          [login,row.principal_id,kind]);
+      }
+      await expect(executeP06(restored.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      const fresh = await freshP06(restored);
+      expect(fresh.planDigest).toBe(stale.planDigest);
+      expect(fresh.operationId).not.toBe(stale.operationId);
+      expect(fresh.approvalId).not.toBe(stale.approvalId);
+      // Do NOT execute a new DDL across the known rewound completed operation:
+      // that requires an independently governed historical journal decision.
+      expect(await hasWebsite(restored)).toBe(false);
+      expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    } finally {
+      if (retainedExists) await cluster.query("DROP DATABASE "+escaped(retained));
+      labEpochs.delete(key);
+    }
+  }, 90000);
 });

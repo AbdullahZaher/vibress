@@ -1,4 +1,5 @@
 import type { ClientBase } from "pg";
+import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
@@ -250,7 +251,7 @@ const quarantinedSessions = new WeakSet<ClientBase>();
 
 async function withSession(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
-  mode: "EXECUTE" | "RECONCILE",
+  mode: "EXECUTE" | "RECONCILE", authority?: RecoveryEpochAuthority,
 ): Promise<SchemaOperatorResult> {
   if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
   if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");
@@ -268,23 +269,23 @@ async function withSession(
   }
   activeSessions.add(db);
   try {
-    return await runP06(db, request, budget, mode);
+    return await runP06(db, request, budget, mode, authority);
   } finally {
     activeSessions.delete(db);
   }
 }
 
 export function executeApprovedAdditiveColumn(
-  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
+  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget, authority?: RecoveryEpochAuthority,
 ): Promise<SchemaOperatorResult> {
-  return withSession(db,request,budget,"EXECUTE");
+  return withSession(db,request,budget,"EXECUTE",authority);
 }
 
 /** Reconcile only, on a fresh dedicated session. Absence of evidence never dispatches DDL. */
 export function reconcileApprovedAdditiveColumn(
-  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
+  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget, authority?: RecoveryEpochAuthority,
 ): Promise<SchemaOperatorResult> {
-  return withSession(db,request,budget,"RECONCILE");
+  return withSession(db,request,budget,"RECONCILE",authority);
 }
 
 async function runP06(
@@ -292,6 +293,7 @@ async function runP06(
   request: SchemaOperatorRequest,
   budget: ExperimentalD1Budget,
   mode: "EXECUTE" | "RECONCILE",
+  authority?: RecoveryEpochAuthority,
 ): Promise<SchemaOperatorResult> {
   if (!request || request.envelopeVersion !== 1 ||
       !INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest) ||
@@ -299,6 +301,8 @@ async function runP06(
       !(budget instanceof ExperimentalD1Budget)) {
     return deny("UNAUTHORIZED", "complete P06 identity and D1 budget required");
   }
+  if (!(authority instanceof RecoveryEpochAuthority)) deny("UNAUTHORIZED", "trusted recovery authority required");
+  const recoveryAuthority = authority;
   const rawDb = db;
   let transactionActive = false;
   let finalCheckCompleted = false;
@@ -376,6 +380,24 @@ async function runP06(
       registry.runtime_role === identity.current_user) {
       deny("UNAUTHORIZED", "registry identity/environment/database binding failed");
     }
+    // Recovery rotates under the same installation/registry fence after
+    // all sessions are quiesced. A restored DB is not its own epoch authority.
+    async function assertRecoveryEpoch(databaseName: string): Promise<string> {
+      let external: string;
+      try {
+        external = await recoveryAuthority.prove(request.installationId, databaseName, budget);
+      } catch (error) {
+        if (error instanceof D1DeadlineExceeded || budget.expired()) throw new D1DeadlineExceeded();
+        return deny("UNAUTHORIZED", "fresh recovery authority proof unavailable");
+      }
+      const local = (await db.query<{ epoch_id: string }>(
+        "SELECT epoch_id FROM public.s03_p06_recovery_epochs WHERE installation_id=$1",
+        [request.installationId],
+      )).rows[0];
+      if (!local || local.epoch_id !== external) deny("UNAUTHORIZED", "recovery epoch mismatch; re-enrollment required");
+      return external;
+    }
+    const recoveryEpoch = await assertRecoveryEpoch(identity.database_name);
     const planRecord = (await db.query<PlanRow>(
       "SELECT plan_digest,expected_manifest,plan FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",
       [request.installationId,request.planDigest],
@@ -395,8 +417,8 @@ async function runP06(
       "SELECT s.author_login,s.author_principal,a.approver_login,a.approver_principal "+
       "FROM public.s03_p06_submissions s JOIN public.s03_p06_approvals a USING(submission_id) "+
       "WHERE s.installation_id=$1 AND s.canonical_plan_digest=$2 AND s.operation_id=$3::uuid "+
-      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid",
-      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId],
+      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid AND s.recovery_epoch=$6::uuid",
+      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId,recoveryEpoch],
     )).rows[0];
     if (!auth || auth.author_login===auth.approver_login || auth.author_principal===auth.approver_principal ||
         [auth.author_login,auth.approver_login].some(login=>login===registry.operator_role||login===registry.runtime_role)) {
@@ -460,6 +482,8 @@ async function runP06(
     for (const key of keys.rows) {
       await db.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),$1::int)",[key.k]);
     }
+    if (await assertRecoveryEpoch(identity.database_name) !== recoveryEpoch)
+      deny("UNAUTHORIZED", "recovery epoch changed; fresh enrollment required");
     // One fresh server timestamp, exact identity tuple, actor fences and approval fence held until COMMIT.
     const final=(await db.query<{checked_at:Date}>(
       "WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS checked_at) "+
@@ -467,7 +491,9 @@ async function runP06(
       "JOIN public.platform_schema_trusted_actors u ON u.login_name=s.author_login "+
       "JOIN public.platform_schema_trusted_actors v ON v.login_name=a.approver_login CROSS JOIN stamp "+
       "WHERE s.installation_id=$1 AND s.canonical_plan_digest=$2 AND s.operation_id=$3::uuid "+
-      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid "+
+      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid AND s.recovery_epoch=$6::uuid "+
+      "AND EXISTS (SELECT 1 FROM public.s03_p06_actor_enrollments x WHERE x.actor_instance_id=u.actor_instance_id AND x.epoch_id=$6::uuid) "+
+      "AND EXISTS (SELECT 1 FROM public.s03_p06_actor_enrollments x WHERE x.actor_instance_id=v.actor_instance_id AND x.epoch_id=$6::uuid) "+
       "AND u.active AND v.active AND u.actor_kind='AUTHOR' AND v.actor_kind='APPROVER' "+
       "AND u.identity_mode='INDIVIDUAL_DATABASE_LOGIN' AND v.identity_mode='INDIVIDUAL_DATABASE_LOGIN' "+
       "AND u.principal_id=s.author_principal AND v.principal_id=a.approver_principal "+
@@ -476,7 +502,7 @@ async function runP06(
       "AND s.author_login<>a.approver_login AND s.author_principal<>a.approver_principal "+
       "AND a.approved_at<=stamp.checked_at AND a.expires_at>stamp.checked_at "+
       "AND NOT EXISTS(SELECT 1 FROM public.s03_p06_revocations z WHERE z.approval_id=a.approval_id)",
-      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId],
+      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId,recoveryEpoch],
     )).rows[0];
     if (!final) deny("UNAUTHORIZED","final P06 authorization stale, revoked, expired or invalid");
     finalCheckCompleted=true;
@@ -499,7 +525,7 @@ async function runP06(
       [request.installationId,request.operationId,request.submissionId,request.approvalId,request.planDigest,
        current.digest,plan.proposedManifest.digest,identity.current_user,final.checked_at,
        JSON.stringify({operation:"ADD_FIELD",table:ddl.tableName,column:ddl.columnName,beforeRows,afterRows,
-         postgres:16,authorizationPolicy:"FINAL_PRE_DDL",envelopeVersion:1})],
+         postgres:16,authorizationPolicy:"FINAL_PRE_DDL",envelopeVersion:1,recoveryEpoch})],
     );
     // Refresh before COMMIT, without selecting an unapproved numeric margin.
     await refreshTimeout();
