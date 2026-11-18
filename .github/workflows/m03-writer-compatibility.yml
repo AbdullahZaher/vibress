@@ -1,0 +1,51 @@
+name: M03 writer and compatibility evidence
+on:
+  push:
+    branches: [experiment/m03-writer-compatibility-20261118]
+permissions:
+  contents: read
+jobs:
+  disposable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      REDIS_URL: redis://127.0.0.1:6380
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Exact source and validation
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          node --version
+          test "$(node -v)" = v24.22.3
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts
+          pnpm verify:explicit-any
+      - name: Boot disposable pinned PG16 service
+        run: |
+          printf 'services:\n  postgres:\n    image: postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e\n' > "$RUNNER_TEMP/pg-pin.yml"
+          docker compose -f compose.dev.yml -f "$RUNNER_TEMP/pg-pin.yml" up -d --wait postgres redis
+          test "$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc 'SHOW server_version_num')" = 160016
+          docker inspect "$(docker compose -f compose.dev.yml ps -q postgres)" --format '{{.Image}}'
+      - name: New actual role matrix and additive compatibility
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t 'M03-(WRITER|COMPAT)-01'
+      - name: Historical operator, logical recovery and wire faults
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts tests/integration/platform-schema-migration-fault-injection.test.ts
+      - name: Historical schema, authority and architecture checks
+        run: |
+          pnpm --filter @vibress/schema-engine test
+          pnpm exec vitest run tests/unit/schema-operator-experimental-deadline.test.ts tests/unit/schema-operator-experimental-durable-authority.test.ts tests/architecture/platform-boundaries.test.ts apps/worker/tests/worker-job-scope.test.ts
+      - name: Actual existing worker scheduling and outbox regression
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/worker-scheduling.test.ts tests/integration/outbox.test.ts
+      - name: Cleanup owned disposable services
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes

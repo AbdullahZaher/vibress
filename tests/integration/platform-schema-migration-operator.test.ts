@@ -4547,3 +4547,63 @@ it.each([["P06-E2E-54","cz","ROLLBACK"],["P06-E2E-55","da","COMMIT"]] as const)(
     await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});
   }
 },30000);
+
+
+
+it("M03-COMPAT-01: actual additive operator preserves old prepared reader and refuses unsupported early reader",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab);
+  const table='"public".'+lab.runtime.escapeIdentifier(lab.table);
+  const query={name:"old_reader_projection",text:"SELECT name FROM "+table+" ORDER BY name"};
+  const old=(await lab.runtime.query(query)).rows;
+  expect(old).toEqual([{name:"Alice"},{name:"Bob"}]);
+  await expect(lab.runtime.query("SELECT name,website FROM "+table)).rejects.toMatchObject({code:"42703"});
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect((await lab.runtime.query(query)).rows).toEqual(old);
+  const restarted=await connect(lab.name,lab.runtimeRole);
+  try{
+    expect((await restarted.query("SELECT name,website FROM "+table+" ORDER BY name")).rows).toEqual([{name:"Alice",website:null},{name:"Bob",website:null}]);
+    await restarted.query("UPDATE "+table+" SET website=$1 WHERE name=$2",["https://example.invalid","Alice"]);
+    expect((await lab.runtime.query(query)).rows).toEqual(old);
+    expect((await restarted.query("SELECT website FROM "+table+" WHERE name=$1",["Alice"])).rows).toEqual([{website:"https://example.invalid"}]);
+    expect((await reconcileP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  }finally{await restarted.end();}
+},30000);
+
+it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL matrix",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const other=await createLab("cz");labs.push(other);await p06Install(other);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const roles=[lab.author,lab.approver,lab.runtimeRole,lab.operatorRole];
+  const matrix=(await lab.dbAdmin.query<{subject:string;target:string;can_set:boolean;can_use:boolean}>(
+    "SELECT a.rolname AS subject,b.rolname AS target,pg_has_role(a.oid,b.oid,'SET') AS can_set,pg_has_role(a.oid,b.oid,'USAGE') AS can_use FROM pg_roles a CROSS JOIN pg_roles b WHERE a.rolname=ANY($1::name[]) AND b.rolname=ANY($1::name[]) AND a.oid<>b.oid ORDER BY subject,target",[roles])).rows;
+  expect(matrix).toHaveLength(12);
+  expect(matrix.filter(row=>row.can_set||row.can_use)).toEqual([]);
+  const inventory=await disposableWriterInventory(lab);
+  const columnMatrix=(await lab.dbAdmin.query<{role:string;relation:string;column:string;can_update:boolean;can_insert:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,a.attname AS column,has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation,column",[roles])).rows;
+  expect(columnMatrix.filter(row=>row.role!==lab.operatorRole&&(row.can_update||row.can_insert))).toEqual([]);
+  const authors=await connect(lab.name,lab.author);
+  try{
+    await expect(authors.query("SET ROLE "+authors.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("SELECT public.s03_p06_submit($1,$2)",[other.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("UPDATE public.platform_schema_registry SET manifest_digest=manifest_digest")).rejects.toMatchObject({code:"42501"});
+  }finally{await authors.end();}
+  await expect(lab.runtime.query("SET ROLE "+lab.runtime.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+  await expect(lab.runtime.query("INSERT INTO public.s03_p06_completed_operations SELECT * FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("UPDATE public.platform_schema_registry SET application_id=application_id")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("DELETE FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  const foreign=new Client({connectionString:urlFor(other.name,lab.runtimeRole),connectionTimeoutMillis:4000});
+  try{await expect(foreign.connect()).rejects.toMatchObject({code:"42501"});}finally{await foreign.end().catch(()=>undefined);}
+  const signalling=(await lab.dbAdmin.query("SELECT rolname FROM pg_roles WHERE rolname=ANY($1::name[]) AND pg_has_role(oid,'pg_signal_backend','USAGE')",[roles])).rows;
+  expect(signalling).toEqual([]);
+  expect((await lab.dbAdmin.query("SELECT count(*)::int AS n FROM pg_prepared_xacts WHERE database=current_database()")).rows).toEqual([{n:0}]);
+  const routines=(await lab.dbAdmin.query("SELECT p.oid::regprocedure::text AS signature,p.prosecdef,pg_get_userbyid(p.proowner) AS owner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND (p.proname LIKE 'platform_schema_%' OR p.proname LIKE 's03_%') ORDER BY signature")).rows;
+  expect(routines.length).toBeGreaterThan(0);
+  expect(inventory.functions.filter(row=>[lab.runtimeRole,lab.operatorRole].includes(row.role)&&row.definer&&row.executable)).toEqual([]);
+  expect(await contentChecksum(lab)).toBe(checksum);
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect(await hasWebsite(other)).toBe(false);
+  console.info("M03_WRITER_MATRIX "+JSON.stringify({roleEdges:matrix.length,relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,routineOwners:routines.length,columnRoleRows:columnMatrix.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length}));
+},30000);
