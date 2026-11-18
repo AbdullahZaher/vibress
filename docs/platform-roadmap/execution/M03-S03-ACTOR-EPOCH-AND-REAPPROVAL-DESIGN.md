@@ -68,3 +68,25 @@ P05/R1: privileged actor deactivation committed **before final pre-DDL authoriza
 ## 6. New experimentally verified design constraint (2026-11-18)
 
 PostgreSQL 16 SELECT FOR SHARE requires UPDATE privilege on the trusted-actor roster, which violates the dedicated operator's least-privilege contract. The first row-lock prototype failed CI #44234590759; no UPDATE privilege expansion is acceptable. The revised experiment uses operator transaction advisory keys and a **disposable-fixture-only SECURITY INVOKER writer trigger**, not an approved migration. E2 generation binding is still recommended to prevent deactivate→reactivate replay, and an authenticated privileged lifecycle function plus durable identity/event provenance would need separate human IAM/DBA and owner decisions. The trigger is installed only after 0060 in disposable test databases. [Official PG16 privileges](https://www.postgresql.org/docs/16/ddl-priv.html).
+
+
+## 2026-11-18 — FINAL EXECUTABLE-SOURCE TEST EVIDENCE ADDENDUM (supersedes earlier PENDING CI notices)
+
+**Exact tested executable commit:** `e340e92154dde6d98cad441cddc87793dde4d756` (root tree `3a0514cd5a44b3a2bee70306df7a1265f1044161`); **operator blob** `292b6275769aec77b408e13c9432643007b627c4`; **test blob** `6098d225817bba9280ffb383823cd3038e70e75a`. [GitHub Actions CI #44236955524](https://github.com/AbdullahZaher/vibress/actions/runs/44236955524) **SUCCESS**; platform-roadmap documentation workflow [#44236955480](https://github.com/AbdullahZaher/vibress/actions/runs/44236955480) **SUCCESS**. Real **Node 24.22.3 / PostgreSQL 16.16** (`server_version_num=160016`); frozen pnpm install, TypeScript typecheck, ESLint and explicit-any checks succeeded. This addendum is **documentation-only**; each new documentation head needs its own CI when required by release policy.
+
+| Real PostgreSQL test execution group | Exact run result |
+|---|---|
+| Focused actor/race/watchdog/P05/R1 including R1-10 | **12 passed, 47 skipped by filter (59 total definitions)** |
+| Full authenticated operator, approval and R1 tests | **59/59 passed** |
+| Original fault-injection/COMMIT/rollback suite | **21/21 passed** |
+| Disposable test database leaks | **0** |
+| Owned test PostgreSQL cleanup | **SUCCESS** |
+
+**Counting:** 92 passing *executions* across 3 sequential groups. The 12 focused definitions are repeated in the 59 full-suite tests; there are **80 distinct test definitions** (59+21), not 92. No failing or skipped tests in the two full suites. Test-only CI rerun on `e340e...` verified previously failing fixture dollar quoting and the no-new-grant advisory fence.
+
+**R1-10 confirmed dangerous global lock inversion:** real PostgreSQL positive assertion to *observe* a `40P01` deadlock between actor-first privileged admin and approval-key-first operator transactions (test ran both in the focused cohort and full suite). The test asserts transaction rollback integrity and no unauthorized physical DDL, manifest mutation or completed journal. **A passing negative test does NOT close the deadlock risk**. It confirms a required admin protocol redesign before implementation admission.
+
+**Narrow lab result:** the revised actor advisory + disposable-only mutation trigger passes tested R1-01/R1-02 race-denial and approved pre/post-final ordering scenarios. **Not a full policy implementation:** normative actor writer trigger is absent from 0059/0060, adversarial privileged bypass paths remain, actor deactivate→reactivate still allows older approval reuse pending E2, D1 supervisor still unintegrated, numerical M unknown, SQLSTATE classification and watchdog open. No production or canonical code changed. **Agent05, Agent02, Agent03 technical dispositions remain REQUEST CHANGES; human IAM/DBA PENDING.**
+
+
+**Epoch decision:** E2 immutable instance+generation remains RECOMMENDED, not approved or tested. The passing R1-10 test does not cure old approval replay after reactivation; require a separately authorized owner + human IAM/DBA design and migration decision.

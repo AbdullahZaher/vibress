@@ -49,3 +49,25 @@ No change to migrations 0059/0060, table privileges, production or canonical #19
 **Next:** source-pinned revised PG16 CI; fix observed defects; independently review writer trigger and global lock ordering; obtain human IAM/DBA and owner epoch/reapproval decisions before normative code/migration.
 
 **Primary sources checked 2026-11-18:** [PG16 privileges](https://www.postgresql.org/docs/16/ddl-priv.html), [advisory locks](https://www.postgresql.org/docs/16/functions-admin.html), [READ COMMITTED](https://www.postgresql.org/docs/16/transaction-iso.html), [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), [PG16.16 release](https://www.postgresql.org/docs/release/16.16/).
+
+
+## 2026-11-18 — FINAL EXECUTABLE-SOURCE TEST EVIDENCE ADDENDUM (supersedes earlier PENDING CI notices)
+
+**Exact tested executable commit:** `e340e92154dde6d98cad441cddc87793dde4d756` (root tree `3a0514cd5a44b3a2bee70306df7a1265f1044161`); **operator blob** `292b6275769aec77b408e13c9432643007b627c4`; **test blob** `6098d225817bba9280ffb383823cd3038e70e75a`. [GitHub Actions CI #44236955524](https://github.com/AbdullahZaher/vibress/actions/runs/44236955524) **SUCCESS**; platform-roadmap documentation workflow [#44236955480](https://github.com/AbdullahZaher/vibress/actions/runs/44236955480) **SUCCESS**. Real **Node 24.22.3 / PostgreSQL 16.16** (`server_version_num=160016`); frozen pnpm install, TypeScript typecheck, ESLint and explicit-any checks succeeded. This addendum is **documentation-only**; each new documentation head needs its own CI when required by release policy.
+
+| Real PostgreSQL test execution group | Exact run result |
+|---|---|
+| Focused actor/race/watchdog/P05/R1 including R1-10 | **12 passed, 47 skipped by filter (59 total definitions)** |
+| Full authenticated operator, approval and R1 tests | **59/59 passed** |
+| Original fault-injection/COMMIT/rollback suite | **21/21 passed** |
+| Disposable test database leaks | **0** |
+| Owned test PostgreSQL cleanup | **SUCCESS** |
+
+**Counting:** 92 passing *executions* across 3 sequential groups. The 12 focused definitions are repeated in the 59 full-suite tests; there are **80 distinct test definitions** (59+21), not 92. No failing or skipped tests in the two full suites. Test-only CI rerun on `e340e...` verified previously failing fixture dollar quoting and the no-new-grant advisory fence.
+
+**R1-10 confirmed dangerous global lock inversion:** real PostgreSQL positive assertion to *observe* a `40P01` deadlock between actor-first privileged admin and approval-key-first operator transactions (test ran both in the focused cohort and full suite). The test asserts transaction rollback integrity and no unauthorized physical DDL, manifest mutation or completed journal. **A passing negative test does NOT close the deadlock risk**. It confirms a required admin protocol redesign before implementation admission.
+
+**Narrow lab result:** the revised actor advisory + disposable-only mutation trigger passes tested R1-01/R1-02 race-denial and approved pre/post-final ordering scenarios. **Not a full policy implementation:** normative actor writer trigger is absent from 0059/0060, adversarial privileged bypass paths remain, actor deactivate→reactivate still allows older approval reuse pending E2, D1 supervisor still unintegrated, numerical M unknown, SQLSTATE classification and watchdog open. No production or canonical code changed. **Agent05, Agent02, Agent03 technical dispositions remain REQUEST CHANGES; human IAM/DBA PENDING.**
+
+
+**Independent certification conclusion:** experimental correctness demonstrated for selected real PG16 races only, not a complete independent Agent06 or human IAM/DBA certification. P05/R1 final authorization implementation gate stays BLOCKED.
