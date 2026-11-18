@@ -101,6 +101,34 @@ describe("platform dependency boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps M04 pure compilation inside the merged schema-engine boundary", () => {
+    const sources = readSources(path.join(ROOT, "packages/schema-engine/src"));
+    expect(scan(sources, {packageDir: "packages/schema-engine", label: "schema-engine",
+      allowedBareSpecifiers: ["@vibress/platform-kernel"]})).toEqual([]);
+    const crud = sources.find(file => file.path.endsWith("/crud-contracts.ts"));
+    expect(crud).toBeDefined();
+    expect(specifiers(crud!.content).sort()).toEqual(["./planning", "./schema", "node:crypto", "node:util"]);
+  });
+
+  it("keeps the M04 independent consumer project on public exports and mock-only dependencies", () => {
+    const pkg = "packages/m04-consumer-tests";
+    const sources = readSources(path.join(ROOT, pkg, "src"));
+    const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, pkg, "package.json"), "utf8")) as {private:boolean; nx:{tags:string[]}; dependencies?:unknown; devDependencies:Record<string,string>};
+    expect(manifest.private).toBe(true);
+    expect(manifest.nx.tags).toEqual(["type:platform"]);
+    expect(manifest.dependencies).toBeUndefined();
+    expect(Object.keys(manifest.devDependencies).sort()).toEqual(["@types/node","@vibress/platform-kernel","@vibress/schema-engine","ajv","ajv-formats","typescript","vitest"]);
+    expect(scan(sources,{packageDir:pkg,label:"M04 consumer",allowedBareSpecifiers:["@vibress/platform-kernel","@vibress/schema-engine","vitest","typescript","ajv/dist/2020","ajv-formats"]})).toEqual([]);
+    for (const file of ["m04-crm-consumer.ts","m04-openapi-document.ts","m04-consumer.test.ts"]) {
+      const found = sources.find(source => source.path.endsWith("/"+file));
+      expect(found).toBeDefined();
+      expect(specifiers(found!.content)).toContain("@vibress/schema-engine");
+    }
+    expect(sources.map(source=>source.content).join("\n")).not.toMatch(/pg_signal_backend|SECURITY DEFINER|DATABASE_URL|schema-operator-experimental|fetch\s*\(/);
+    expect(fs.existsSync(path.join(ROOT,"packages/schema-engine/src/__tests__/m04-consumer.test.ts"))).toBe(false);
+    expect(fs.existsSync(path.join(ROOT,"packages/schema-engine/src/__tests__/fixtures/m04-openapi-document.ts"))).toBe(false);
+  });
+
   it("keeps tenancy dependent only on the kernel", () => {
     const violations = scan(
       readSources(path.join(ROOT, "packages/tenancy/src")),

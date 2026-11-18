@@ -1,0 +1,64 @@
+name: M04-S01 Pure Contract Evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/schema-engine/**"
+      - "packages/m04-consumer-tests/**"
+      - "pnpm-lock.yaml"
+      - "tests/architecture/platform-boundaries.test.ts"
+      - ".github/workflows/m04-s01-pure-contracts.yml"
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Verify exact source and frozen dependencies
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD HEAD^{tree}
+          node --version
+          pnpm install --frozen-lockfile
+      - name: Verify actual Nx project graph and run root workspace lint
+        env:
+          NX_DAEMON: "false"
+        run: |
+          pnpm exec nx graph --file="$RUNNER_TEMP/m04-nx.json"
+          node packages/m04-consumer-tests/verify-nx-graph.cjs "$RUNNER_TEMP/m04-nx.json"
+          pnpm lint
+      - name: Check pure compiler and consumer types
+        run: |
+          pnpm --filter @vibress/schema-engine typecheck
+          pnpm --filter @vibress/m04-consumer-tests typecheck
+      - name: Execute pure contract and historical schema-engine tests
+        run: pnpm --filter @vibress/schema-engine test -- --reporter=verbose
+      - name: Execute relocated public-export consumer suite
+        run: pnpm --filter @vibress/m04-consumer-tests test -- --reporter=verbose
+      - name: Independently validate unchanged OAI document schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/m04-openapi-venv"
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" -m pip install --disable-pip-version-check --no-deps --only-binary=:all: -r packages/m04-consumer-tests/src/fixtures/openapi-validator-requirements.txt
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" -m pip check
+          test "$(git hash-object packages/m04-consumer-tests/src/fixtures/openapi-3.1-2025-11-23.json)" = "0c7bc4817b28fbf6ddbdd08b5ab84e81912c86b2"
+          pnpm exec tsx --tsconfig packages/m04-consumer-tests/tsconfig.json packages/m04-consumer-tests/src/fixtures/m04-openapi-document.ts > "$RUNNER_TEMP/m04-openapi-documents.json"
+          "$RUNNER_TEMP/m04-openapi-venv/bin/python" packages/m04-consumer-tests/src/fixtures/validate-openapi.py "$RUNNER_TEMP/m04-openapi-documents.json"
+      - name: Execute architecture isolation without database setup
+        run: pnpm exec vitest run --config packages/schema-engine/vitest.config.ts --passWithNoTests=false tests/architecture/platform-boundaries.test.ts
+      - name: Verify clean source
+        run: git diff --exit-code

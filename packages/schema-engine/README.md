@@ -121,3 +121,168 @@ Existing CMS, plugin, theme, worker, tenancy and migration contracts are unchang
 - **Compatibility:** M03-S01 Canonical IR v1, M03-S02 Manifest v1, installation/application binding, ordering and SHA-256 digest algorithms are unchanged for existing admissible IDs. Previously accidentally accepted PostgreSQL reserved IDs now fail validation deliberately; a historical document using one of these names needs an explicit owner-reviewed upgrade path, never silent renaming.
 - No SQL rendering or quoting API was introduced. Future M03-S03 executor must authorize and validate fresh input and independently check **live PostgreSQL catalog/namespace** (tables, indexes, constraints, other installations, privileges), consistent 63-byte identifier limits and RLS/ACL; these are **not certified** by the current pure compiler.
 - References: [PostgreSQL 16 keyword classification](https://www.postgresql.org/docs/16/sql-keywords-appendix.html), [PostgreSQL 16 lexical structure](https://www.postgresql.org/docs/16/sql-syntax-lexical.html), and PostgreSQL upstream `src/include/parser/kwlist.h` (`REL_16_STABLE`, `RESERVED_KEYWORD`).
+
+
+## M04-S01 — offline CRUD contract compilation (restricted draft)
+
+From trusted merged CanonicalSchemaIR v1 and SchemaManifest v1 only:
+
+~~~ts
+import { compileCrudContracts } from "@vibress/schema-engine";
+
+const contracts = compileCrudContracts(manifest, {
+  applicationId: manifest.applicationId,
+  installationId: manifest.installationId,
+  expectedManifestDigest: manifest.digest,
+  exposure: [{ resourceId: "customers", fields: ["name", "active"] }],
+});
+// Configuration MUST actually be selected from reviewed trusted installation
+// configuration, not reconstructed from a caller's request. This example is offline.
+contracts.validateInput("customers.create", { data: { name: "Example" } });
+contracts.openapi; // OpenAPI 3.1 proposed paths, NOT registered routes.
+contracts.typescript; // standalone interface declarations, no HTTP implementation.
+contracts.admin; // metadata, NOT rendered Admin UI.
+contracts.assertRuntimeAvailable(); // always throws RUNTIME_UNAVAILABLE.
+~~~
+
+Explicit resource/field projection, deterministic descriptors and SHA-256 contract digest;
+no physical names, defaults or unselected fields in public-shaped artifacts. Private
+offline artifacts are not authorized for public exposure. Required-but-unexposed fields
+and exposed relationships fail compilation, even if a default exists. Scalar/enum
+logical validation, required fields, nullable optional fields, exact projected output,
+version token on update/delete; actual concurrency enforcement remains future work.
+List limit 1–25, optional opaque cursor (encoding/scope/default page behavior not
+implemented); filters, search, count, sort, export, aggregation, bulk, custom actions
+and relationship expansion are excluded. Max 16 resources, 16 exposed fields/resource,
+4096 Unicode code points/text, 64 KiB normalized input, 1 MiB normalized output.
+Transport preparse byte limits, cursor integrity, limits relative to actual request,
+rate limits, timeout, idempotency, atomic version compare, field/row/RLS enforcement,
+installation/principal/tenant context and SSR/cache isolation remain runtime gates.
+Input/output validation is shape validation, not authentication or authorization.
+The bearer scheme and X-Resource-Version header in OpenAPI are proposed wire shapes,
+not approved authentication, HTTP middleware or an active protocol. No credentials,
+network access, DB imports, SQL generation, new package dependencies or migrations.
+S01 groups pure projections in existing schema-engine to avoid workspace duplication;
+separate api-generator/admin/SDK publication packages deferred until approved interfaces.
+Issue #156 M04-E01–04/05/06/08/09 partial pure evidence only; E07/E10 and runtime/clean
+consumer execution gates remain open. No milestone checkbox is closed by this slice.
+
+
+## M04-S01 closure — mock-only consumer generation
+
+Batch 01: generated PATCH uses a deterministic union requiring at least one declared
+editable property; compile consumers with strict + exactOptionalPropertyTypes.
+TypeScript does not prove absence of arbitrary runtime input or validation of
+numeric/date/byte limits. Portable scalar contract rejects NUL, lone UTF-16
+surrogates, non-finite numbers, noncalendar dates, year zero, leap seconds and
+non-UTC date spellings. Text is limited to 4096 Unicode code points and 16 KiB
+UTF-8 (Arabic and supplementary code points retained). Existing Canonical IR,
+Manifest and migrations unchanged. Aggregate normalized JSON budgets unchanged;
+transport preparse limits remain a future adapter responsibility.
+
+Independent conformance uses already locked Ajv 8.20.0 and ajv-formats 3.0.1,
+dev-only direct imports with exact versions. Vendored unmodified OAI document
+schema 2025-11-23 has Git blob 0c7bc4817b28fbf6ddbdd08b5ab84e81912c86b2 and
+Apache license alongside it. Source: https://github.com/OAI/spec.openapis.org/blob/main/oas/3.1/schema/2025-11-23
+. Document validation uses python-jsonschema 4.26.0 in a dedicated CI virtualenv
+with all six dependency versions fixed and pip check; the unchanged OAI schema
+uses dynamic references which Ajv 8.20.0 misresolved in the actual job. No
+schema rewrite, bypass or suppressed test. Per-operation Schema Objects are
+checked separately with Ajv Draft 2020-12, explicit format assertion and
+differential JSON corpus. The focused gate requires both validators. Manual semantic assertions verify unique
+operation IDs, path/header/query declarations, exact request/response fields and
+error references. This is not a claim that a structural schema proves the
+entire OpenAPI specification. JSON Schema does not validate JS object prototypes,
+accessors, proxies, raw transport bytes, aggregate normalized byte budgets,
+request-relative response identity/page limits or permissions. The portable
+UTC policy is stricter than RFC3339 leap-second semantics. No runtime validator
+has been weakened to conform to the independent validator.
+
+Batch 02: explicit reviewed configuration supports optional readOnly field IDs
+and bounded customOperations (resource/action/selected writable input fields).
+A required read-only field is refused for this create-capable slice. Custom
+actions require a separate permission, version token, idempotency key and
+transaction requirement; output is the existing allowed row projection, not
+a new schema authority. No actual action/transaction/idempotency enforcement.
+Admin metadata includes form fields, permission, columns, widgets, validation
+and view states. Isolated HTML reference renders disabled forms and escaped
+tables, not a production host UI or browser integration.
+
+createMockContractClient is disabled unless a trusted caller explicitly injects
+a MOCK_ONLY transport; no built-in URL, network, credentials or DB. It validates
+before dispatch and after response, constructs deterministic relative paths,
+headers and bounded queries, matches status/code and request-relative id/page.
+Cancellation/timeout are local cooperative signals; do not assert transport or
+mutation rollback, and do not retry. Generated bindGeneratedMockClient supplies
+operation-specific TS input/result types over the validated mock invocation;
+arbitrary in-process executable callbacks remain trusted test code. Mock
+authorization fixtures are explicitly separate from request data and prove
+only fixture behavior, not tenant/row/field enforcement. Generated artifacts
+are private offline contracts; the package remains private.
+
+M04-E01–E04 tested pure/mocked subset pending exact CI; E05 declarative only;
+E06 validation/limits and custom descriptor; E07 public-export in-repository
+consumer (not published standalone clean install); E08/E09 shape/exposure/cost
+negatives and mock denial; E10 pure deal-approval example only. Runtime integration
+requires accepted normative registry, live catalog/drift, physical provisioning,
+RLS/effective ACL, scoped transactions, atomic version comparison, cursor integrity,
+server row/field authorization, SSR/cache principal+tenant isolation, actual
+consumer security and clean external install. Human IAM/DBA, external protected
+anchor/custody/DR/PITR, P07 adoption and separate runtime authorization remain
+pending. No M03 mapping or milestone checkbox altered. Batch 03 not authorized.
+
+Research 2026-11-18: https://spec.openapis.org/oas/v3.1.html ;
+https://json-schema.org/draft/2020-12/ ; https://ajv.js.org/json-schema ;
+https://github.com/ajv-validator/ajv/releases ; https://www.postgresql.org/docs/16/datatype-character.html ;
+https://owasp.org/projects/api-security-project/ .
+
+Validator compatibility correction: actual intermediate job #135036278675 reported 84/85 package tests passing, with only full OAI document validation failing due to dynamic reference resolution. Python independently evaluates the exact official schema, including deliberately invalid document controls; Ajv retains per-operation meta-schema and differential validation. Source: https://github.com/cdimascio/express-openapi-validator/issues/573 ; https://pypi.org/project/jsonschema/4.26.0/ . No weakened internal validation.
+
+
+## M04-S01 independent review corrections F01–F04 (contract version 2)
+
+Architecture: standalone private `@vibress/m04-consumer-tests` workspace project
+uses actual workspace-linked public package exports; no production dependencies
+or published package. Internal tests continue relative imports. The dedicated
+focused workflow checks the actual Nx graph edges and invokes root `pnpm lint`
+(the Full CI entrypoint) without any rule change, then tests both projects;
+ordinary root Vitest discovers the relocated tests by its existing glob.
+Official OAI schema blob and Python validator provenance unchanged; Ajv dev
+imports moved to consumer project, same locked versions.
+
+Compatibility: the draft-only generated contract format advances from 1 to 2
+because the former generic callback binding and `authorization.fieldIds` were
+ambiguous. No merged DSL, Manifest, schema migration or active HTTP version
+changes. Regenerate older mock artifacts; they cannot bind to v2. Before source
+generation, SHA-256 hashes canonical sorted-key JSON with ordered arrays:
+domain VIBRESS-M04-MOCK-BINDING-V2, application/installation and manifest digest,
+version, operation descriptors with input/output schemas, authorization and
+admin projections, full OpenAPI/wire map, limits and named mock semantics.
+The digest is embedded in the generated adapter, separate from the final
+artifact digest which includes emitted source. Equivalent reviewed config
+orders yield identical identities. Only compiler-produced frozen contract
+instances can create supported mock clients; immutable binding identity and
+receiver-bound bindContract return the actual captured validated invocation
+only for the exact expected version/digest. Detached/copied/tampered metadata
+and mismatches are refused before dispatch. This is a trusted in-process mock
+API, not cryptographic authentication or isolation from arbitrary malicious JS
+or fabricated executable adapters. Generated assertion is conditional on the
+binding contract and runtime output validation, not an excuse to trust a callback.
+Version changes are required when validation/wire/binding semantics change.
+
+Authorization metadata distinguishes exposedFieldIds, readFieldIds,
+writeFieldIds, customInputFieldIds and customEffects. Delete has neither
+resource data read nor write fields; identifiers/version remain protocol
+metadata. Custom effects are UNRESOLVED_RUNTIME_REVIEW, not implicit permission
+for all writes; Admin and OpenAPI receive the same requirements. Runtime
+enforcement remains absent. Status-specific singleton error schemas are
+generated from the same fixed wire code map used by mock response validation.
+Local timeout/cancel/transport/invalid response codes are not HTTP wire errors.
+Mutation cancellation/timeout regression intentionally allows late mock
+completion, demonstrates no retry and makes no rollback/nonexecution assertion.
+
+Sources reviewed 2026-11-18: https://nx.dev/docs/features/enforce-module-boundaries ;
+https://spec.openapis.org/oas/v3.1.html ;
+https://api-security.owasp.org/editions/2023/en/0xa3-broken-object-property-level-authorization/ .
+All E01–E10 remain open; no runtime or production authorization. Agent 06 must
+re-review independently after exact focused and all full CI jobs succeed.
