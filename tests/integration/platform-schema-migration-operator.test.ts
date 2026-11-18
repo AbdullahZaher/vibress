@@ -4581,8 +4581,8 @@ it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL ma
   expect(matrix).toHaveLength(12);
   expect(matrix.filter(row=>row.can_set||row.can_use)).toEqual([]);
   const inventory=await disposableWriterInventory(lab);
-  const columnMatrix=(await lab.dbAdmin.query<{role:string;relation:string;column:string;can_update:boolean;can_insert:boolean}>(
-    "SELECT r.rolname AS role,c.relname AS relation,a.attname AS column,has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation,column",[roles])).rows;
+  const columnMatrix=(await lab.dbAdmin.query<{role:string;relation:string;column_name:string;can_update:boolean;can_insert:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,a.attname AS column_name,has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation,column_name",[roles])).rows;
   expect(columnMatrix.filter(row=>row.role!==lab.operatorRole&&(row.can_update||row.can_insert))).toEqual([]);
   const authors=await connect(lab.name,lab.author);
   try{
