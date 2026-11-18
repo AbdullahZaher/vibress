@@ -51,11 +51,43 @@ archive)
  end=$(cut -d " " -f1 /proc/uptime); awk -v s="$start" -v e="$end" "BEGIN{print \"ARCHIVE_WAIT_SECONDS=\" e-s}"
  ' -- "$2"
  ;;
+invalid-backup)
+ docker exec -u postgres "$name" bash -euc '
+ r=/tmp/m03-physical
+ cp -a "$r/backup" "$r/invalid"
+ printf x >> "$r/invalid/PG_VERSION"
+ if pg_verifybackup "$r/invalid" >"$r/invalid.log" 2>&1; then exit 1; fi
+ grep -E "size|checksum|PG_VERSION" "$r/invalid.log"
+ echo INVALID_PHYSICAL_BACKUP_REFUSED=PASS
+ '
+ ;;
 restore)
+ [[ -z "$2" || "$2" =~ ^[0-9A-F]{24}$ ]]
  docker exec -u postgres "$name" bash -euc '
  r=/tmp/m03-physical
  pg_ctl -D "$r/primary" -m fast -w stop
  ! pg_ctl -D "$r/primary" status
+ if [[ -n "$1" ]]; then
+   # The needed target segment must not be part of the streamed base backup.
+   [[ ! -f "$r/backup/pg_wal/$1" ]]
+   cp -a "$r/backup" "$r/missing"
+   mkdir "$r/incomplete-archive"
+   for f in "$r/archive/"*; do [[ "$(basename "$f")" == "$1" ]] || cp "$f" "$r/incomplete-archive/"; done
+   cat >> "$r/missing/postgresql.auto.conf" <<BAD
+archive_mode = off
+restore_command = '\''cp /tmp/m03-physical/incomplete-archive/%f %p'\''
+recovery_target_name = '\''vibress_component_target'\''
+recovery_target_action = promote
+BAD
+   touch "$r/missing/recovery.signal"
+   if pg_ctl -D "$r/missing" -l "$r/missing.log" -w -t 30 start; then
+     pg_ctl -D "$r/missing" -m fast -w stop
+     exit 1
+   fi
+   ! pg_ctl -D "$r/missing" status
+   grep -E "recovery ended before configured recovery target was reached|could not locate required checkpoint record" "$r/missing.log"
+   echo MISSING_TARGET_WAL_REFUSED=PASS
+ fi
  start=$(cut -d " " -f1 /proc/uptime)
  cp -a "$r/backup" "$r/restored"
  cat >> "$r/restored/postgresql.auto.conf" <<CONF
@@ -74,7 +106,7 @@ CONF
  end=$(cut -d " " -f1 /proc/uptime); awk -v s="$start" -v e="$end" "BEGIN{print \"RESTORE_DATABASE_AVAILABLE_SECONDS=\" e-s}"
  pg_controldata "$r/restored" | grep -E "Database system identifier|TimeLineID"
  grep -E "recovery stopping|redo done|selected new timeline|archive recovery complete" "$r/restored.log"
- '
+ ' -- "$2"
  ;;
 cleanup)
  if [[ "$(docker inspect -f '{{index .Config.Labels "vibress.m03.physical"}}' "$name" 2>/dev/null || true)" == ci ]]; then docker rm -f "$name" >/dev/null; fi

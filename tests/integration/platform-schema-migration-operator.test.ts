@@ -4557,6 +4557,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     ["PHY-M03-01", "cq", "committed"],
     ["PHY-M03-02", "cu", "rewound"],
     ["PHY-M03-03", "cz", "lost-ack"],
+    ["PHY-M03-07", "da", "corrupt-input"],
   ] as const)("%s: actual component physical WAL recovery (%s, %s)", async (scenario, key, mode) => {
     const container=process.env.M03_PHYSICAL_CONTAINER;
     if(container!=="vibress-m03-physical-ci" || process.env.GITHUB_ACTIONS!=="true") throw Error("dedicated CI container required");
@@ -4568,10 +4569,18 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
     const start=performance.now();
     const lab=await createLab(key);labs.push(lab);await p06Install(lab);
     const request=await freshP06(lab),stale=await freshP06(lab);
-    const dir=mkdtempSync(path.join(tmpdir(),"s03-actual-physical-")),anchor=testAnchor(dir);
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-actual-physical-")),anchorDir=path.join(dir,"separate-anchor");
+    mkdirSync(anchorDir);
+    const anchorKeys=generateKeyPairSync("ed25519"),anchor=new FileExperimentalRecoveryAnchor(anchorDir,anchorKeys.privateKey);
     const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
     const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
     const esc=(v:string)=>cluster.escapeIdentifier(v);
+    const ledgerFile=path.join(dir,"authority.jsonl"),anchorFile=path.join(anchorDir,"head.json");
+    const oldLedger=readFileSync(ledgerFile),oldAnchor=readFileSync(anchorFile);
+    const elapsed:Record<string,number>={};
+    let stage=performance.now();
+    const mark=(name:string)=>{elapsed[name]=Number((performance.now()-stage).toFixed(2));stage=performance.now();};
+    const migrationDigest=async()=>createHash("sha256").update(JSON.stringify((await cluster.query("SELECT to_jsonb(t)::text AS value FROM drizzle.__drizzle_migrations t ORDER BY id")).rows)).digest("hex");
     const state=async(db:Client)=>{
       const entries:Record<string,unknown>={};
       for(const table of ["platform_schema_registry","platform_schema_plans","platform_schema_trusted_actors","s03_p06_actor_enrollments","s03_p06_submissions","s03_p06_approvals","s03_p06_revocations","s03_p06_completed_operations","s03_p06_recovery_epochs",lab.table]){
@@ -4588,8 +4597,11 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
       return {[lab.table]:createHash("sha256").update(JSON.stringify(rows.map(row=>row.value))).digest("hex")};
     };
     try{
-      const initial=await state(lab.dbAdmin),initialData=await data(lab.dbAdmin);
+      const initial=await state(lab.dbAdmin),initialData=await data(lab.dbAdmin),initialMigrations=await migrationDigest();
+      mark("baseline");
       physical("backup");
+      mark("backup_and_verify");
+      await lab.dbAdmin.query("SELECT pg_switch_wal()");
       if(mode==="rewound")await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_target')");
       if(mode==="lost-ack"){
         const proxy=await startStatementAckFaultProxy("COMMIT","DROP");
@@ -4613,19 +4625,39 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
       if(!a.snapshot().pending)a.beginRecovery();
       await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
       const authorityBefore=a.snapshot();
+      const retainedLedger=readFileSync(ledgerFile),retainedAnchor=readFileSync(anchorFile);
+      // Only detached copies are rewound. Never touch the retained live authority.
+      for(const [label,ledger,head] of [["ledger-only",oldLedger,retainedAnchor],["anchor-only",retainedLedger,oldAnchor]] as const){
+        const copy=path.join(dir,"copy-"+label),copyAnchor=path.join(copy,"anchor");
+        mkdirSync(copy);mkdirSync(copyAnchor);
+        writeFileSync(path.join(copy,"authority.jsonl"),ledger,{mode:0o600});
+        writeFileSync(path.join(copyAnchor,"head.json"),head,{mode:0o600});
+        const adapter=new FileExperimentalRecoveryAnchor(copyAnchor,anchorKeys.privateKey);
+        expect(DisposableDurableRecoveryAuthority.classifyOffline(copy,adapter).disposition).not.toBe("MATCHED");
+        expect(()=>DisposableDurableRecoveryAuthority.open(copy,epochKeys.privateKey,adapter,recoveryAdminKeys.publicKey)).toThrow();
+      }
+      await expect(a.proofAuthority(epochKeys.publicKey).prove("other-installation",lab.name,new ExperimentalD1Budget())).rejects.toThrow();
+      expect(a.snapshot()).toEqual(authorityBefore);
+      mark("authority_fence_and_mismatch_controls");
       for(const l of labs) await Promise.allSettled([l.operator.end(),l.runtime.end(),l.dbAdmin.end()]);
       await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
       const q=(await cluster.query("SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity s WHERE s.datid=d.oid) AS sessions,(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[lab.name])).rows[0];
       expect(q).toMatchObject({datallowconn:false,sessions:0,prepared:0});
       expect((await cluster.query("SELECT count(*)::int AS n FROM pg_prepared_xacts")).rows).toEqual([{n:0}]);
+      expect((await cluster.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()")).rows).toEqual([{n:0}]);
       await cluster.end();
-      physical("restore");
+      mark("original_cluster_quiescence");
+      if(mode==="corrupt-input")physical("invalid-backup");
+      physical("restore",mode==="corrupt-input"?segment:"");
+      mark("physical_restore");
       cluster=await connect("vibress");
+      expect(await migrationDigest()).toBe(initialMigrations);
       const dbAdmin=await connect(lab.name);
       const restored={...lab,dbAdmin,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
       labs[labs.indexOf(lab)]=restored;
       expect(a.snapshot()).toEqual(authorityBefore);
       const restoredState=await state(dbAdmin);
+      mark("database_and_registry_verification");
       expect(restoredState).toBe(mode==="rewound"?initial:committed);
       expect(await hasWebsite(restored)).toBe(mode!=="rewound");
       const dataDigests=mode==="rewound"?initialData:committedData;
@@ -4640,9 +4672,12 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
           expect(a.snapshot().operations[0]?.outcome).toBe("UNCERTAIN");
           const payload={operationId:request.operationId,evidence};
           expect(()=>a.resolveObservedCommit(request.operationId,evidence,"A".repeat(86))).toThrow();
+          const wrong={...evidence,installationId:"other-installation"};
+          expect(()=>a.resolveObservedCommit(request.operationId,wrong,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",{operationId:request.operationId,evidence:wrong}))).toThrow();
           a.resolveObservedCommit(request.operationId,evidence,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",payload));
           expect(a.snapshot().operations[0]?.outcome).toBe("COMMITTED");
         }
+        mark("journal_and_authority_reconciliation");
         const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify(q)).digest("hex");
         expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
         a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
@@ -4657,6 +4692,9 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         }
         await expect(collectDisposableRecoveryReadiness(dbAdmin,{...nextObservation,dataDigests:{[lab.table]:"f".repeat(64)}})).rejects.toMatchObject({code:"CATALOG_DRIFT"});
         const ready=await collectDisposableRecoveryReadiness(dbAdmin,nextObservation);
+        mark("epoch_and_actor_reenrollment");
+        const wrongEpoch={...ready,epoch};
+        expect(()=>a.activate(wrongEpoch,attestRecovery(a,"READY",wrongEpoch))).toThrow();
         const sig=attestRecovery(a,"READY",ready);
         expect(()=>a.activate(ready,"A".repeat(86))).toThrow();
         if(mode==="rewound"){
@@ -4669,6 +4707,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
           expect(a.snapshot().pending).toBe(false);
         }
       }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+      mark("readiness_activation_or_refusal");
       const online={...restored,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole),current:mode==="rewound"?lab.current:lab.plan.proposedManifest};
       labs[labs.indexOf(restored)]=online;
       if(mode!=="rewound"){
@@ -4683,6 +4722,8 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
         expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
       }
+      mark("fresh_operation_or_pending");
+      console.info(scenario+" ACTUAL_COMPONENT_STAGES_MS="+JSON.stringify(elapsed));
       console.info(scenario+" ACTUAL_COMPONENT_PITR=PASS total_fixture_ms="+(performance.now()-start).toFixed(2));
     }finally{a.close();rmSync(dir,{recursive:true,force:true});}
   },240000);

@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: [PHY-M03-01, PHY-M03-02, PHY-M03-03]
+        scenario: [PHY-M03-01, PHY-M03-02, PHY-M03-03, PHY-M03-07]
     env:
       M03_PHYSICAL_COMPONENT: "1"
       M03_PHYSICAL_CONTAINER: vibress-m03-physical-ci
