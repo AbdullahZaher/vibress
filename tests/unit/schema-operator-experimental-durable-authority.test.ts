@@ -89,6 +89,10 @@ describe("offline authority crash diagnostics",()=>{
       expect(result).toMatchObject({disposition:matched?"MATCHED":"LEDGER_AHEAD",pending:!beforeWrite,sequence:beforeWrite?1:2});
       expect(()=>f.open()).toThrow();
       if(process.platform==="linux"&&window==="AFTER_CAS"){
+        const writerPath=join(f.ledger,"writer.lock"),writer=readFileSync(writerPath,"utf8");
+        writeFileSync(writerPath,writer.replace(/"signature":"[^"]+"/,'"signature":"'+"A".repeat(86)+'"'));
+        expect(()=>DisposableDurableRecoveryAuthority.inspectOfflineTakeover(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey)).toThrow();
+        writeFileSync(writerPath,writer);
         const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey);
         const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
         const take=(signature:string)=>DisposableDurableRecoveryAuthority.takeoverMatchedPending(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey,{...payload,signature});
