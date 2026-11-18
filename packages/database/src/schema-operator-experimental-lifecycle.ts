@@ -8,6 +8,10 @@ type Ticket=Readonly<{nonce:string;installationId:string;databaseName:string;log
   roleOid:string;oldInstance:string;principal:string;kind:ActorKind;systemId:string}>;
 const tickets=new WeakSet<Ticket>();
 function refuse():never{throw Error("disposable identity lifecycle refused; keep actor retired and NOLOGIN");}
+function idle(c:ClientBase):boolean{
+  const typed=c as ClientBase & {getTransactionStatus?:()=>string|null};
+  return typeof typed.getTransactionStatus==="function" && typed.getTransactionStatus()==="I";
+}
 async function rootContext(db:ClientBase,cluster:ClientBase,installationId:string){
   if(process.env.NODE_ENV!=="test")return refuse();
   const read=async(c:ClientBase)=>(await c.query<{database:string;root:boolean;system:string;version:number}>(
@@ -18,7 +22,7 @@ async function rootContext(db:ClientBase,cluster:ClientBase,installationId:strin
     target.version<160000||target.version>=170000||maintenance.database!=="vibress"||!/^vibress_s03_[a-z0-9_]+$/.test(target.database))return refuse();
   const registry=(await db.query<{database_name:string;environment:string;operator_role:string;runtime_role:string}>(
     "SELECT database_name,environment,operator_role,runtime_role FROM public.platform_schema_registry WHERE installation_id=$1",[installationId])).rows[0];
-  if(!registry||registry.database_name!==target.database||registry.environment!=="test")return refuse();
+  if(!registry||registry.database_name!==target.database||registry.environment!=="test"||!idle(db)||!idle(cluster))return refuse();
   return {target,registry};
 }
 async function role(cluster:ClientBase,login:string){
@@ -45,8 +49,6 @@ export async function retireDisposableIdentity(db:ClientBase,cluster:ClientBase,
     "SELECT principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors WHERE login_name=$1 AND active",[login])).rows[0];
   if(!actor||!["AUTHOR","APPROVER"].includes(actor.actor_kind))return refuse();
   // Require idle dedicated root clients; avoid accidentally joining a caller transaction.
-  const idle=(c:ClientBase)=>{const typed=c as ClientBase & {getTransactionStatus?:()=>string|null};
-    return typeof typed.getTransactionStatus==="function" && typed.getTransactionStatus()==="I";};
   if(!idle(db)||!idle(cluster))return refuse();
   await db.query("SELECT public.s03_p06_root_retire($1,$2)",[installationId,login]);
   await cluster.query("ALTER ROLE "+cluster.escapeIdentifier(login)+" NOLOGIN");
@@ -67,9 +69,10 @@ export async function completeDisposableIdentity(db:ClientBase,cluster:ClientBas
   if(target.system!==ticket.systemId||target.database!==ticket.databaseName||native.oid!==ticket.roleOid||native.canlogin||native.members||
     !await quiescent(cluster,ticket.roleOid))return refuse();
   const stale=(await db.query<{n:number}>("SELECT count(*)::int AS n FROM public.platform_schema_trusted_actors WHERE login_name=$1 OR actor_instance_id=$2::uuid",[ticket.login,ticket.oldInstance])).rows[0];
-  if(stale?.n!==0)return refuse();
-  // Consume before privilege change; errors do not permit blind retry.
-  tickets.delete(ticket);
+  if(stale?.n!==0||!idle(db)||!idle(cluster))return refuse();
+  // The delete result is the synchronous one-shot claim after async checks.
+  // Competing completion must not execute another native privilege mutation.
+  if(!tickets.delete(ticket))return refuse();
   try{
     await cluster.query("ALTER ROLE "+cluster.escapeIdentifier(ticket.login)+" LOGIN");
     const replacement=(await db.query<{id:string}>("SELECT public.s03_p06_root_register($1,$2,$3,$4) AS id",[ticket.installationId,ticket.login,principal,ticket.kind])).rows[0];

@@ -289,7 +289,7 @@ export class DisposableDurableRecoveryAuthority {
       if(this.poisoned) throw new DurableOutcomePersistenceError(observed());
       const fact=observed()?.transaction;
       try{
-        if(fact?.outcome==="ROLLED_BACK"&&!fact.historicalJournal){
+        if(fact?.outcome==="ROLLED_BACK"&&fact.journalObservation==="ABSENT"){
           this.append({kind:"OUTCOME",operationId:id,outcome:"ROLLED_BACK"});
         }else if(fact?.outcome==="COMMITTED"&&fact.commitDigest){
           this.append({kind:"OUTCOME",operationId:id,outcome:"COMMITTED",newDigest:fact.commitDigest});

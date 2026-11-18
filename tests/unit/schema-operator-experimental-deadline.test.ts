@@ -158,6 +158,7 @@ it("preserves immutable settlement facts across contradictory late acknowledgmen
   s.beforeDispatch("BEGIN");s.acknowledge("BEGIN","BEGIN");s.bindCommitDigest("a".repeat(64));
   s.beforeDispatch("COMMIT");s.fence("DEADLINE_EXCEEDED");s.retire();
   const uncertain=s.transactionFacts();expect(uncertain.outcome).toBe("UNKNOWN");
+  expect(uncertain.journalObservation).toBe("UNOBSERVED");
   s.acknowledge("COMMIT","COMMIT");s.acknowledge("COMMIT","ROLLBACK");
   expect(s.transactionFacts()).toMatchObject({outcome:"COMMITTED",commitDigest:"a".repeat(64),terminalCause:"DEADLINE_EXCEEDED",retired:true});
   expect(uncertain.outcome).toBe("UNKNOWN");expect(Object.isFrozen(uncertain)).toBe(true);

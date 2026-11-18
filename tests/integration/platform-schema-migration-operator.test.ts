@@ -31,7 +31,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4252,11 +4252,28 @@ it("P06-E2E-48: disposable trusted lifecycle waits for real actor-session exit a
     await cluster.query("GRANT "+esc(lab.runtimeRole)+" TO "+esc(lab.author));
     try{await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();}
     finally{await cluster.query("REVOKE "+esc(lab.runtimeRole)+" FROM "+esc(lab.author));}
-    const instance=await completeDisposableIdentity(lab.dbAdmin,cluster,ticket,"individual:replacement_"+lab.author);
-    expect(instance).not.toBe(ticket.oldInstance);
+    const outcomes=await Promise.allSettled([
+      completeDisposableIdentity(lab.dbAdmin,cluster,ticket,"individual:replacement_"+lab.author),
+      completeDisposableIdentity(lab.dbAdmin,cluster,ticket,"individual:replacement_"+lab.author)]);
+    expect(outcomes.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    const success=outcomes.find(result=>result.status==="fulfilled");
+    expect(success?.value).not.toBe(ticket.oldInstance);
     await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();
     await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
     expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
     expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
   }finally{await actor.end().catch(()=>undefined);}
+},30000);
+
+
+it("P06-E2E-49: rollback before historical journal observation is not operation rollback proof",async()=>{
+  const lab=await createLab("cs");labs.push(lab);await p06Install(lab);
+  const valid=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-unobserved-history-"));
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+    await expect(a.execute(urlFor(lab.name,lab.operatorRole),{...valid,approvalId:randomUUID()},epochKeys.publicKey)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:valid.operationId,outcome:"UNCERTAIN"}]});
+    expect(await hasWebsite(lab)).toBe(false);
+  }finally{a.close();rmSync(dir,{recursive:true,force:true});}
 },30000);

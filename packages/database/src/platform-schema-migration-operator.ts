@@ -465,8 +465,8 @@ async function runP06(
       "FROM public.s03_p06_completed_operations WHERE installation_id=$1 AND operation_id=$2::uuid",
       [request.installationId,request.operationId],
     )).rows[0];
+    session.observeJournal(journal!==undefined);
     if (journal) {
-      session.observeHistoricalJournal();
       if (journal.submission_id!==request.submissionId || journal.approval_id!==request.approvalId ||
         journal.canonical_plan_digest!==request.planDigest || journal.previous_digest!==current.digest ||
         journal.new_digest!==plan.proposedManifest.digest || journal.operator_role!==identity.current_user ||
@@ -640,6 +640,9 @@ export async function collectDisposableRecoveryReadiness(
     if(!f||f.datallowconn||f.others!==0||f.prepared!==0)return deny("UNAUTHORIZED","recovery database not fenced and quiescent");
     return f;
   };
+  const status=db as ClientBase & {getTransactionStatus?:()=>string|null};
+  if(typeof status.getTransactionStatus!=="function"||status.getTransactionStatus()!=="I")
+    return deny("UNAUTHORIZED","dedicated idle recovery observer required");
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   try{
     await db.query("SET LOCAL search_path=pg_catalog");
