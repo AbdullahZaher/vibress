@@ -42,21 +42,28 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter @vibress/plugin-sdk build
           pnpm typecheck
-          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts tests/fixtures/m03-s03-legacy-operator-diagnostic.ts packages/database/src/platform-schema-migration-operator.ts
           pnpm verify:explicit-any
       - name: Start disposable PostgreSQL 16 only
+        id: pg16
         run: |
           docker compose -f compose.dev.yml up -d --wait postgres
           pg_ver="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
           test "$pg_ver" -ge 160000 && test "$pg_ver" -lt 170000
           echo "POSTGRES_VERSION_NUM=$pg_ver"
-      - name: Run adversarial actor-state and watchdog observation tests
+      - name: Run actual integrated P06 operator tests (separate evidence)
         run: |
-          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-|P06-01|P06-E2E-|L1-P06-01|D1-0|AG06-S03-10" --testTimeout=90000 --hookTimeout=120000
-      - name: Rerun full original authenticated operator and expiry regressions
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-E2E-" --testTimeout=90000 --hookTimeout=120000
+      - name: Run adversarial historical actor-state and watchdog observation tests
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
         run: |
-          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts --testTimeout=90000 --hookTimeout=120000
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-|P06-01|L1-P06-01|D1-0|AG06-S03-10" --testTimeout=90000 --hookTimeout=120000
+      - name: Rerun full original authenticated operator and expiry regressions (exclude integrated P06)
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "^(?!.*P06-E2E-).*" --testTimeout=90000 --hookTimeout=120000
       - name: Preserve real PostgreSQL fault-injection baseline
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
         run: |
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts --testTimeout=90000 --hookTimeout=120000
       - name: Three independently executed PostgreSQL R1-10 and E2 concurrency repetitions
@@ -68,7 +75,7 @@ jobs:
             pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "R1-10|E2-0|E2-REPLAY" --testTimeout=90000 --hookTimeout=120000
           done
       - name: Confirm disposable fixture databases fully cleaned
-        if: success()
+        if: always() && steps.pg16.outcome == 'success'
         run: |
           leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
           echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"

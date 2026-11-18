@@ -2,11 +2,11 @@
 import type { ClientBase } from "pg";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { inspectSchemaOperatorEffectivePrivileges } from "../../packages/database/src/platform-schema-effective-privileges";
-import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
+import { asApplicationId, asInstallationId } from "../../packages/platform-kernel/src";
 import {
   renderTrustedAdditiveColumn,
   type ManifestResource,
-} from "@vibress/schema-engine";
+} from "../../packages/schema-engine/src";
 
 /**
  * M03-S03 operator-only connector. This module is deliberately NOT exported by
@@ -619,11 +619,11 @@ export async function executeApprovedAdditiveColumn(
     const sqlstate = typeof error === "object" && error !== null && "code" in error
       ? error.code : undefined;
     switch (sqlstate) {
-      case "55P03": deny("LOCK_NOT_AVAILABLE", "database lock not available; transaction rolled back");
-      case "40P01": deny("DEADLOCK", "database deadlock; transaction rolled back");
-      case "57014": deny("QUERY_CANCELED", "database query canceled; transaction rolled back");
-      case "42501": deny("DATABASE_PRIVILEGE_FAILURE", "database privilege or configuration failure; inspect sanitized audit");
-      default: deny("UNAUTHORIZED", "operator verification or execution failed; inspect sanitized audit");
+      case "55P03": return deny("LOCK_NOT_AVAILABLE", "database lock not available; transaction rolled back");
+      case "40P01": return deny("DEADLOCK", "database deadlock; transaction rolled back");
+      case "57014": return deny("QUERY_CANCELED", "database query canceled; transaction rolled back");
+      case "42501": return deny("DATABASE_PRIVILEGE_FAILURE", "database privilege or configuration failure; inspect sanitized audit");
+      default: return deny("UNAUTHORIZED", "operator verification or execution failed; inspect sanitized audit");
     }
   }
 }
