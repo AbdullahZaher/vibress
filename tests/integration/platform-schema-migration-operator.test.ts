@@ -1972,3 +1972,147 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
     }
   },15000);
 });
+
+
+/**
+ * Isolated P05/R1 post-catalog actor-row locking. These deterministic tests
+ * observe actual PG16 blocked backends; poll sleeps only observe wait state,
+ * never determine correctness of transaction ordering.
+ */
+describe("P05/R1 final row-lock serialization (EXPERIMENT ONLY)", () => {
+  it("R1-06: deactivation queued after final authorization commits after DDL", async () => {
+    const lab = await createLab("y");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const admin = await connect(lab.name);
+    let reached!: () => void;
+    let release!: () => void;
+    const atFinal = new Promise<void>(resolve => { reached = resolve; });
+    const proceed = new Promise<void>(resolve => { release = resolve; });
+    let migrating: ReturnType<typeof executeApprovedAdditiveColumn> | undefined;
+    let deactivating: Promise<unknown> | undefined;
+    try {
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          const result = params ? await lab.operator.query(sql, params) :
+            await lab.operator.query(sql);
+          if (sql.includes("clock_timestamp() AS checked_at")) {
+            reached();
+            await proceed; // ONLY test proxy delays after valid final decision.
+          }
+          return result;
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        atFinal,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("R1_FINAL_BARRIER_TIMEOUT")), 4000)),
+      ]);
+      deactivating = admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+      let blocked = false;
+      for (let j = 0; j < 100; j += 1) {
+        const probe = await lab.dbAdmin.query<{wait_event_type: string | null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [admin.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked = true; break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked, "actor UPDATE must wait for FOR SHARE held by operator").toBe(true);
+      release();
+      expect((await migrating).status).toBe("APPLIED");
+      await deactivating;
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const row = await lab.dbAdmin.query<{active: boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      );
+      expect(row.rows[0]?.active).toBe(false);
+      const journal = await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(journal.rowCount).toBe(1);
+    } finally {
+      release();
+      await Promise.allSettled([migrating ?? Promise.resolve(),
+        deactivating ?? Promise.resolve()]);
+      await admin.end().catch(() => undefined);
+    }
+  }, 30000);
+
+  it("R1-09: an uncommitted deactivation blocks final row lock; COMMIT then denies", async () => {
+    const lab = await createLab("z");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const admin = await connect(lab.name);
+    let reached!: () => void;
+    const atActor = new Promise<void>(resolve => { reached = resolve; });
+    let migrating: ReturnType<typeof executeApprovedAdditiveColumn> | undefined;
+    try {
+      await admin.query("BEGIN");
+      await admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          if (sql.includes("FROM public.platform_schema_trusted_actors " +
+            "WHERE login_name = $1 FOR SHARE")) reached();
+          return params ? lab.operator.query(sql, params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        atActor,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("R1_ACTOR_ROW_BARRIER_TIMEOUT")), 4000)),
+      ]);
+      let blocked = false;
+      for (let j = 0; j < 100; j += 1) {
+        const probe = await lab.dbAdmin.query<{wait_event_type: string | null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked = true; break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked, "operator must wait for an uncommitted actor UPDATE").toBe(true);
+      await admin.query("COMMIT");
+      await expect(migrating).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const journal = await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(journal.rowCount).toBe(0);
+      const registry = await lab.dbAdmin.query<{manifest_digest: string}>(
+        "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    } finally {
+      await admin.query("ROLLBACK").catch(() => undefined);
+      await Promise.allSettled([migrating ?? Promise.resolve()]);
+      await admin.end().catch(() => undefined);
+    }
+  }, 30000);
+});
