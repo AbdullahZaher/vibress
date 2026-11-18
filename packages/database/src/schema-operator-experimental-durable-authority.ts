@@ -463,7 +463,7 @@ export class DisposableDurableRecoveryAuthority {
     const observed=await this.scopedReadiness(db);
     if(JSON.stringify(observed)!==JSON.stringify(evidence))return refuse();
     this.requireAdministration("READY_V2",evidence,signature);
-    this.commitReady(observed.observed);
+    this.commitReady(observed.observed,createHash("sha256").update(JSON.stringify(observed)).digest("hex"));
   }
   activate(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;
     journal:readonly JournalEvidence[]},signature?:string):void{
@@ -471,7 +471,7 @@ export class DisposableDurableRecoveryAuthority {
     this.requireAdministration("READY",evidence,signature);
     this.commitReady(evidence);
   }
-  private commitReady(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;journal:readonly JournalEvidence[]}):void{
+  private commitReady(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;journal:readonly JournalEvidence[]},boundDigest?:string):void{
     const s=this.current();
     if(!s.pending||!s.advanced||evidence.epoch!==s.epoch||!SHA.test(evidence.catalogManifestDigest)||
       !SHA.test(evidence.readinessEvidenceDigest)||this.fences.size!==0) refuse();
@@ -482,8 +482,32 @@ export class DisposableDurableRecoveryAuthority {
     const last=committed.at(-1);
     if(last&&last.newDigest!==evidence.catalogManifestDigest) refuse();
     const journalDigest=createHash("sha256").update(JSON.stringify([...evidence.journal].sort((a,b)=>a.operationId.localeCompare(b.operationId)))).digest("hex");
-    this.append({kind:"READY",evidenceDigest:evidence.readinessEvidenceDigest,
+    this.append({kind:"READY",evidenceDigest:boundDigest??evidence.readinessEvidenceDigest,
       catalogManifestDigest:evidence.catalogManifestDigest,journalDigest});
+  }
+  /** Test-only, authority-local lease. Not distributed fencing or a runtime
+   * grant. No new admission after durable INTENT; settlement holds the lease.
+   * A process crash or a bypassing direct DB path still requires external fencing.
+   */
+  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},work:(check:()=>void)=>Promise<T>):Promise<T>{
+    if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY")return refuse();
+    this.assertAnchor();
+    const state=this.current();
+    if(state.pending||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
+    const lease=randomUUID();let invalid=false;
+    const check=()=>{
+      this.assertAnchor();
+      const s=this.current();
+      if(invalid||s.pending||s.epoch!==scope.epoch||!this.fences.has(lease))return refuse();
+    };
+    this.fences.set(lease,()=>{invalid=true;});
+    try{check();return await work(check);}
+    catch(error){
+      // Unknown callback settlement must not automatically retry. Conservatively
+      // enter durable pending even for ordinary failures in this prototype.
+      if(!this.current().pending)this.beginRecovery();
+      throw error;
+    }finally{this.fences.delete(lease);}
   }
   async execute(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,
     budget=new ExperimentalD1Budget(),captureRollbackWitness=false):Promise<SchemaOperatorResult>{

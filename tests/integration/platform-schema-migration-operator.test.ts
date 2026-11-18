@@ -1,4 +1,6 @@
 // @vitest-environment node
+import { runExperimentalRecoveryUnit } from "../../packages/database/src/schema-operator-experimental-admission";
+import { TenantUnitOfWork,verifyTenantScope } from "@vibress/tenancy";
 import { randomBytes, randomUUID, generateKeyPairSync, sign, createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof, type RecoveryEpochState } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
@@ -8,9 +10,9 @@ import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__
 import { superviseDisposableSchemaOperation } from "../../packages/database/src/schema-operator-experimental-supervisor";
 import { startCommitAckDropProxy, startTransactionAckFaultProxy, startStatementAckFaultProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import path from "node:path";
-import { Client, type ClientBase } from "pg";
+import { Client, Pool, type ClientBase } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
+import { asApplicationId, asInstallationId, asPrincipalId, asTenantId } from "@vibress/platform-kernel";
 import {
   compileResourceSchema,
   createSchemaManifest,
@@ -4830,4 +4832,41 @@ it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL ma
   expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
   expect(await hasWebsite(other)).toBe(false);
   console.info("M03_WRITER_MATRIX "+JSON.stringify({roleEdges:matrix.length,relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,routineOwners:routines.length,columnRoleRows:columnMatrix.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length}));
+},30000);
+
+
+it("M03-ADMISSION-01: authority-local transaction fence through actual TenantUnitOfWork",async()=>{
+  const lab=await createLab("cr");labs.push(lab);await p06Install(lab);
+  const root=mkdtempSync(path.join(tmpdir(),"s03-business-admission-")),anchor=testAnchor(root);
+  const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+  const auth=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+  const pool=new Pool({connectionString:urlFor(lab.name,lab.runtimeRole),max:1});
+  const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
+  const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
+    membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
+  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(auth,uow,expected,scope,work);
+  const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
+  try{
+    expect(await run(async tx=>(await tx.query("SELECT name FROM "+q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
+    await expect(runExperimentalRecoveryUnit(auth,uow,{...expected,epoch:randomUUID()},scope,async()=>{throw Error("should not admit stale epoch");})).rejects.toThrow();
+    let entered!:()=>void,release!:()=>void;
+    const started=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
+    const active=run(async tx=>{await tx.query("UPDATE "+q+" SET name='uncommitted' WHERE name='Alice'");entered();await hold;});
+    const settled=active.then(()=>false,()=>true);
+    try{
+      await started;
+      await expect(run(async()=>{throw Error("should not admit concurrently");})).rejects.toThrow();
+      auth.beginRecovery();
+      await expect(run(async()=>{throw Error("should not admit pending");})).rejects.toThrow();
+      const next=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+      expect(()=>auth.advance(next,quiescenceEvidenceDigest,attestRecovery(auth,"ADVANCE",{epoch:next,quiescenceEvidenceDigest}))).toThrow();
+    }finally{release();}
+    expect(await settled).toBe(true);
+    expect(await contentChecksum(lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+    expect(auth.snapshot().pending).toBe(true);
+    auth.close();
+    await expect(run(async()=>{throw Error("should not admit offline authority");})).rejects.toThrow();
+    console.info("M03_LOCAL_UOW_ADMISSION=PASS");
+  }finally{auth.close();await pool.end();rmSync(root,{recursive:true,force:true});}
 },30000);
