@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1532,8 +1532,8 @@ describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)
 /**
  * AG05 + AG03: test-only PostgreSQL 16 adversarial actor-state and watchdog
  * evidence. No production watchdog, privilege grant, DDL interface or policy
- * alteration. An observed APPLIED while an actor was deactivated is
- * CONTRACT_DEPENDENT until owner/IAM decide privileged roster semantics.
+ * alteration. Owner P05/R1 requires denial after committed pre-final actor
+ * deactivation; epoch and reapproval semantics remain unapproved.
  */
 describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
   async function assertNoWrite(lab: Lab, before: string): Promise<void> {
@@ -1609,35 +1609,16 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
         [original, kind],
       );
       await lab.dbAdmin.query("COMMIT");
-      const committed = await lab.dbAdmin.query<{observed_at:Date}>(
-        "SELECT clock_timestamp() AS observed_at",
-      );
-      const deactivatedAt = committed.rows[0]!.observed_at;
       const state = await lab.dbAdmin.query<{active:boolean}>(
         "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
         [original],
       );
       expect(state.rows[0]?.active).toBe(false);
-      // Release independent blocker only AFTER deactivation is committed.
+      // Owner-approved P05/R1: committed deactivation during the real
+      // ACCESS EXCLUSIVE wait MUST deny final authorization.
       await blocker.query("ROLLBACK");
-      const result = await pending;
-      expect(result.status).toBe("APPLIED");
-      expect(await hasWebsite(lab)).toBe(true);
-      expect(await contentChecksum(lab)).toBe(before);
-      const journal = await lab.dbAdmin.query<{
-        after_deactivation:boolean; policy:string;
-      }>(
-        "SELECT (catalog_evidence->>'finalAuthorizedAt')::timestamptz " +
-        "> $1::timestamptz AS after_deactivation, " +
-        "catalog_evidence->>'authorizationPolicy' AS policy " +
-        "FROM public.platform_schema_migration_journal WHERE installation_id=$2",
-        [deactivatedAt, lab.installationId],
-      );
-      expect(journal.rows).toHaveLength(1);
-      expect(journal.rows[0]?.after_deactivation).toBe(true);
-      expect(journal.rows[0]?.policy).toBe("FINAL_PRE_DDL");
-      // This proves a time-ordered behavior, NOT a policy violation:
-      // privileged roster deactivation's in-flight semantics are UNDECIDED.
+      await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await assertNoWrite(lab, before);
       await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
     } finally {
       await blocker.query("ROLLBACK").catch(() => undefined);
@@ -1646,11 +1627,11 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
     }
   }
 
-  it("IAM-RACE-01A: approver deactivated/committed during actual table wait, current code still APPLIES", async () => {
+  it("R1-02: approver committed inactive during real table wait, experimental source DENIES", async () => {
     await deactivateDuringTargetWait("o", "APPROVER");
   }, 30000);
 
-  it("IAM-RACE-01B: author deactivated/committed during actual table wait, current code still APPLIES", async () => {
+  it("R1-01: author committed inactive during real table wait, experimental source DENIES", async () => {
     await deactivateDuringTargetWait("p", "AUTHOR");
   }, 30000);
 
@@ -1931,14 +1912,16 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
         "WHERE login_name=$1", [lab.author],
       );
       await blocker.query("ROLLBACK");
-      expect((await migrating).status).toBe("APPLIED");
+      // Actor deactivation was committed before the final decision. Deny.
+      // Approval revocation still awaits the operator's transaction fence.
+      await expect(migrating).rejects.toMatchObject({code:"UNAUTHORIZED"});
       await revoking;
       await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
-      expect(await hasWebsite(lab)).toBe(true);
+      expect(await hasWebsite(lab)).toBe(false);
       expect(await contentChecksum(lab)).toBe(checksum);
       expect((await lab.dbAdmin.query(
         "SELECT 1 FROM public.platform_schema_migration_journal"
-      )).rowCount).toBe(1);
+      )).rowCount).toBe(0);
       expect((await lab.dbAdmin.query(
         "SELECT 1 FROM public.platform_schema_revocation_audit"
       )).rowCount).toBe(1);
