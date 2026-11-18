@@ -3593,7 +3593,8 @@ describe("P06 administrative metadata, cancellation diagnostic and D1 measuremen
         await lab.dbAdmin.query("GRANT INSERT,UPDATE,DELETE,TRUNCATE ON "+qualified+" TO "+lab.dbAdmin.escapeIdentifier(lab.author));
         if(rootTables.includes(table)) await expect(author.query("INSERT INTO "+qualified+" DEFAULT VALUES")).rejects.toMatchObject({code:"42501"});
         await expect(author.query("DELETE FROM "+qualified)).rejects.toMatchObject({code:"42501"});
-        await expect(author.query("TRUNCATE "+qualified)).rejects.toMatchObject({code:"42501"});
+        // FK prechecks may reject TRUNCATE before its BEFORE STATEMENT trigger.
+        await expect(author.query("TRUNCATE "+qualified)).rejects.toMatchObject({code:expect.stringMatching(/^(42501|0A000)$/)});
       }
     }finally{await author.end();}
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_admin_capability")).rowCount).toBe(0);
