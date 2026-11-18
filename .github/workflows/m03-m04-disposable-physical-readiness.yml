@@ -1,0 +1,24 @@
+name: M03-M04 isolated physical readiness rehearsal
+on:
+  push:
+    branches:
+      - experiment/m03-m04-disposable-physical-readiness-20261118
+permissions:
+  contents: read
+jobs:
+  disposable-pg16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify source and run isolated physical rehearsal
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD HEAD^{tree}
+          bash -n tests/fixtures/m03-m04-physical-readiness.sh
+          docker pull postgres:16-alpine
+          image_id=$(docker image inspect --format '{{.Id}}' postgres:16-alpine)
+          docker image inspect --format '{{json .RepoDigests}}' "$image_id"
+          docker run --rm -i --network none --user postgres --entrypoint bash "$image_id" -s < tests/fixtures/m03-m04-physical-readiness.sh
