@@ -159,7 +159,7 @@ describe("M04-S01 restricted pure CRUD contracts", () => {
     const file = "/m04-generated-contract.ts";
     const source = compiled.typescript + "\ndeclare const client: GeneratedClient;\n";
     function diagnostics(suffix: string) {
-      const options: ts.CompilerOptions = { noEmit: true, strict: true, skipLibCheck: true,
+      const options: ts.CompilerOptions = { noEmit: true, strict: true, exactOptionalPropertyTypes: true, skipLibCheck: true,
         types: [], target: ts.ScriptTarget.ES2022 };
       const host = ts.createCompilerHost(options);
       const original = host.getSourceFile.bind(host);
@@ -168,6 +168,13 @@ describe("M04-S01 restricted pure CRUD contracts", () => {
       return ts.getPreEmitDiagnostics(ts.createProgram([file], options, host));
     }
     expect(diagnostics('void client["customers.create"]({data:{name:"x",status:"lead"}});')).toHaveLength(0);
-    expect(diagnostics('void client["customers.update"]({id:"x",data:{private_note:"x"}});').length).toBeGreaterThan(0);
+    expect(diagnostics('void client["customers.update"]({id:"x",version:"v",data:{active:null}});')).toHaveLength(0);
+    for (const invalid of [
+      'void client["customers.update"]({id:"x",version:"v",data:{}});',
+      'void client["customers.update"]({id:"x",version:"v",data:{name:null}});',
+      'void client["customers.update"]({id:"x",version:"v",data:{status:"other"}});',
+      'void client["customers.update"]({id:"x",version:"v",data:{active:undefined}});',
+      'void client["customers.update"]({id:"x",data:{private_note:"x"}});',
+    ]) expect(diagnostics(invalid).length).toBeGreaterThan(0);
   });
 });

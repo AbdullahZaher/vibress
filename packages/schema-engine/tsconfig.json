@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "paths": { "@vibress/schema-engine": ["./src/index.ts"] },
     "types": [
       "node"
     ],

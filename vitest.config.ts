@@ -35,6 +35,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@vibress/schema-engine": path.resolve("./packages/schema-engine/src/index.ts"),
       "@vibress/database": path.resolve(
         __dirname,
         "./packages/database/src/index.ts",

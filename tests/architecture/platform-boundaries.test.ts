@@ -110,6 +110,12 @@ describe("platform dependency boundaries", () => {
     expect(specifiers(crud!.content).sort()).toEqual(["./planning", "./schema", "node:crypto", "node:util"]);
   });
 
+  it("keeps the M04 consumer fixture on public exports and mocks", () => {
+    const source = fs.readFileSync(path.join(ROOT, "packages/schema-engine/src/__tests__/fixtures/m04-crm-consumer.ts"), "utf8");
+    expect(specifiers(source).sort()).toEqual(["@vibress/platform-kernel", "@vibress/schema-engine"]);
+    expect(source).not.toMatch(/pg_signal_backend|SECURITY DEFINER|DATABASE_URL|schema-operator-experimental|fetch\s*\(/);
+  });
+
   it("keeps tenancy dependent only on the kernel", () => {
     const violations = scan(
       readSources(path.join(ROOT, "packages/tenancy/src")),
