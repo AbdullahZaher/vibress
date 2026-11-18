@@ -1,7 +1,7 @@
 import type { ClientBase } from "pg";
 import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
-import { ExperimentalSessionLifecycle } from "./schema-operator-experimental-session";
+import { ExperimentalSessionLifecycle, isExperimentalOwnedSession } from "./schema-operator-experimental-session";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -255,6 +255,10 @@ async function withSession(
   mode: "EXECUTE" | "RECONCILE", authority?: RecoveryEpochAuthority,
   session = new ExperimentalSessionLifecycle(budget),
 ): Promise<SchemaOperatorResult> {
+  if (process.env.NODE_ENV === "production" ||
+    (!isExperimentalOwnedSession(db,session) && !(process.env.NODE_ENV === "test" && process.env.VITEST === "true"))) {
+    deny("UNAUTHORIZED", "dedicated supervisor required");
+  }
   if (!session.usesBudget(budget)) deny("OPERATION_FAILED", "session budget mismatch");
   if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
   if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");

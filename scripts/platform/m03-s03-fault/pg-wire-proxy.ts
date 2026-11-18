@@ -19,6 +19,14 @@ export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
 
 /** Test-only real PostgreSQL wire fault for transaction-control acknowledgments. */
 export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT", fault: "DROP" | "STALL"): Promise<CommitAckDrop> {
+  return startStatementAckFaultProxy(command, fault);
+}
+
+export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | "ALTER TABLE" | "UPDATE" | "INSERT" | "ROLLBACK", fault: "DROP" | "STALL"): Promise<CommitAckDrop> {
+  const marker = command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" :
+    command === "ALTER TABLE" ? "ALTER TABLE " :
+    command === "UPDATE" ? "UPDATE public.platform_schema_registry SET manifest" :
+    command === "INSERT" ? "INSERT INTO public.s03_p06_completed_operations " : command+"\u0000";
   const clients = new Set<Socket>();
   const upstreams = new Set<Socket>();
   let resolveCommit: (() => void) | undefined;
@@ -35,9 +43,14 @@ export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT",
     let held = Buffer.alloc(0);
     let seenCommit = false;
     let stalled = false;
+    let tail = Buffer.alloc(0);
     downstream.on("data", (bytes: Buffer) => {
-      // node-postgres uses the simple Query message for bare COMMIT.
-      if (bytes.includes(Buffer.from(command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" : "COMMIT\u0000", "utf8"))) armed = true;
+      // Known fixture statements only; tolerate packet fragmentation.
+      if (!armed) {
+        const combined=Buffer.concat([tail,bytes]);
+        if(combined.includes(Buffer.from(marker,"utf8"))) {armed=true;tail=Buffer.alloc(0);}
+        else tail=Buffer.from(combined.subarray(Math.max(0,combined.length-marker.length+1)));
+      }
       if (!upstream.destroyed) upstream.write(bytes);
     });
     upstream.on("data", (bytes: Buffer) => {

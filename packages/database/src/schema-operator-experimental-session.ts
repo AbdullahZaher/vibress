@@ -1,5 +1,6 @@
 // Internal, per-operation SQL dispatch fence. The transaction phase and
 // terminal cause are intentionally independent: fencing never proves rollback.
+import type { ClientBase } from "pg";
 import type { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 type Phase = "CONNECTING" | "READY" | "BEGIN_DISPATCHED" | "TRANSACTION_ACTIVE" |
@@ -95,4 +96,14 @@ export class ExperimentalSessionLifecycle {
       this.phase = "ROLLED_BACK";
     }
   }
+}
+
+// Supported-path ownership marker; not a sandbox against arbitrary host JS.
+const ownedSessions = new WeakMap<ClientBase, ExperimentalSessionLifecycle>();
+export function registerExperimentalOwnedSession(db: ClientBase, session: ExperimentalSessionLifecycle): void {
+  if (ownedSessions.has(db)) throw Error("physical session already registered");
+  ownedSessions.set(db,session);
+}
+export function isExperimentalOwnedSession(db: ClientBase, session: ExperimentalSessionLifecycle): boolean {
+  return ownedSessions.get(db)===session;
 }

@@ -22,7 +22,7 @@ type Event =
   | { kind: "OUTCOME"; operationId: string; outcome: "UNCERTAIN"|"COMMITTED"|"ROLLED_BACK"; newDigest?: string; evidenceDigest?: string }
   | { kind: "INTENT"; intent: string }
   | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
-  | { kind: "READY"; evidenceDigest: string };
+  | { kind: "READY"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[];
   pending: boolean; advanced: boolean; intent?: string; operations: Map<string,Operation> };
 type RecordLine = { previous: string; event: Event; hash: string };
@@ -44,7 +44,7 @@ function reduce(s: State|undefined,e: Event): State {
   const next:State={...s,epochs:[...s.epochs],operations:new Map(s.operations)};
   switch(e.kind){
     case "ADMIT":
-      if(s.pending || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
+      if(s.pending || [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN") || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
         e.operation.newDigest!==undefined || e.operation.epoch!==s.epoch || s.operations.has(e.operation.operationId)) return refuse();
       if([...s.operations.values()].some(o=>o.submissionId===e.operation.submissionId||o.approvalId===e.operation.approvalId)) return refuse();
       next.operations.set(e.operation.operationId,{...e.operation});break;
@@ -64,7 +64,7 @@ function reduce(s: State|undefined,e: Event): State {
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")) return refuse();
       next.epoch=e.epoch; next.epochs.push(e.epoch);next.advanced=true;break;
     case "READY":
-      if(!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)) return refuse();
+      if(!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
       next.pending=false;next.advanced=false;next.intent=undefined;break;
     default:return refuse();
   }
@@ -79,7 +79,7 @@ export class DisposableDurableRecoveryAuthority {
   private readonly lockPath: string;
   private readonly fences=new Map<string,()=>void>();
 
-  private constructor(private readonly directory:string, private readonly key:KeyObject) {
+  private constructor(directory:string, private readonly key:KeyObject) {
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519") refuse();
     this.path=join(directory,"authority.jsonl");this.lockPath=join(directory,"writer.lock");
     // No stale-lock auto-break. Crash takeover requires verified old-process
@@ -95,7 +95,7 @@ export class DisposableDurableRecoveryAuthority {
       return a;
     }catch(error){a.close();throw error;}
   }
-  static open(directory:string,key:KeyObject,expectedHead?:string){
+  static open(directory:string,key:KeyObject,expectedHead:string){
     const a=new DisposableDurableRecoveryAuthority(directory,key);
     try{
       const raw=readFileSync(a.path,"utf8");
@@ -105,9 +105,9 @@ export class DisposableDurableRecoveryAuthority {
         if(record.previous!==a.head||record.hash!==hash(a.head,record.event)) refuse();
         a.state=reduce(a.state,record.event);a.head=record.hash;
       }
-      if(!a.state||(expectedHead!==undefined&&expectedHead!==a.head)) refuse();
+      if(!a.state||!SHA.test(expectedHead)||expectedHead!==a.head) refuse();
       // A restarted authority never assumes in-flight outcomes or dead sessions.
-      if([...a.state.operations.values()].some(o=>o.outcome==="ADMITTED")){
+      if([...a.state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")){
         if(!a.state.pending) a.beginRecovery();
         for(const o of a.state.operations.values()) if(o.outcome==="ADMITTED")
           a.append({kind:"OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
@@ -154,7 +154,7 @@ export class DisposableDurableRecoveryAuthority {
   // Trusted DBA supplies external evidence of backend quiescence and exact
   // journal outcome. Absence alone is not accepted as rollback evidence.
   resolve(operationId:string,outcome:"COMMITTED"|"ROLLED_BACK",evidenceDigest:string,newDigest?:string):void{
-    const s=this.current();if(!s.pending||this.fences.has(operationId)||!SHA.test(evidenceDigest)) refuse();
+    const s=this.current();if(!s.pending||s.operations.get(operationId)?.outcome!=="UNCERTAIN"||this.fences.has(operationId)||!SHA.test(evidenceDigest)) refuse();
     // Include the evidence digest in the append-only audit via a separate
     // validated outcome record; no automatic claim of distributed atomicity.
     this.append({kind:"OUTCOME",operationId,outcome,newDigest,evidenceDigest});
@@ -172,7 +172,11 @@ export class DisposableDurableRecoveryAuthority {
     if(evidence.journal.length!==committed.length||new Set(evidence.journal.map(j=>j.operationId)).size!==committed.length||
       committed.some(o=>!evidence.journal.some(j=>j.operationId===o.operationId&&j.submissionId===o.submissionId&&
         j.approvalId===o.approvalId&&j.planDigest===o.planDigest&&j.newDigest===o.newDigest))) refuse();
-    this.append({kind:"READY",evidenceDigest:evidence.readinessEvidenceDigest});
+    const last=committed.at(-1);
+    if(last&&last.newDigest!==evidence.catalogManifestDigest) refuse();
+    const journalDigest=createHash("sha256").update(JSON.stringify([...evidence.journal].sort((a,b)=>a.operationId.localeCompare(b.operationId)))).digest("hex");
+    this.append({kind:"READY",evidenceDigest:evidence.readinessEvidenceDigest,
+      catalogManifestDigest:evidence.catalogManifestDigest,journalDigest});
   }
   async execute(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,
     budget=new ExperimentalD1Budget()):Promise<SchemaOperatorResult>{

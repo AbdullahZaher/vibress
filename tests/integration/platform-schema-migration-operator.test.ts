@@ -6,7 +6,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
 import { superviseDisposableSchemaOperation } from "../../packages/database/src/schema-operator-experimental-supervisor";
-import { startCommitAckDropProxy, startTransactionAckFaultProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
+import { startCommitAckDropProxy, startTransactionAckFaultProxy, startStatementAckFaultProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -29,7 +29,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3816,3 +3816,70 @@ it("P06-E2E-30: durable external admission and history survive restart; rewind c
     expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
   }finally{authority.close();rmSync(directory,{recursive:true,force:true});}
 },30000);
+
+describe("P06 transport acknowledgment and recovery fencing",()=>{
+  it.each([
+    ["P06-E2E-31","bw","ALTER TABLE"],
+    ["P06-E2E-32","bx","UPDATE"],
+    ["P06-E2E-33","by","INSERT"],
+  ] as const)("%s: lost statement acknowledgment (%s, %s)",async(_name,key,command)=>{
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const proxy=await startStatementAckFaultProxy(command,"DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(superviseDisposableSchemaOperation(url.toString(),request,labRecoveryAuthority)).rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+    }finally{await proxy.close();}
+    await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows).toEqual([{manifest_digest:lab.current.digest}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+
+  it("P06-E2E-34: recovery intent fences operator holding an older proof during target wait",async()=>{
+    const lab=await createLab("bz");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-recovery-fence-"));
+    const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+    const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch);
+    const blocker=await connect(lab.name);
+    let operation:Promise<unknown>|undefined;
+    try{
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      operation=authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+      void operation.catch(()=>undefined);
+      let waiting=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{waiting:boolean}>(
+          "SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE datname=$1 AND usename=$2 AND $3::int=ANY(pg_blocking_pids(a.pid))) AS waiting",
+          [lab.name,lab.operatorRole,blocker.processID])).rows[0];
+        if(row?.waiting){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(waiting).toBe(true);
+      authority.beginRecovery();
+      await expect(operation).rejects.toMatchObject({code:"INDETERMINATE"});
+      await blocker.query("ROLLBACK");
+      expect(authority.snapshot().operations).toMatchObject([{outcome:"UNCERTAIN",operationId:request.operationId}]);
+      expect(()=>authority.advance(randomUUID(),"a".repeat(64))).toThrow();
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await operation?.catch(()=>undefined);
+      await blocker.end();authority.close();rmSync(directory,{recursive:true,force:true});}
+  },30000);
+
+  it("P06-E2E-35: unsupported non-test raw operator cannot bypass supervisor",async()=>{
+    const lab=await createLab("ca");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const old=process.env.NODE_ENV;
+    try{
+      process.env.NODE_ENV="development";
+      await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
+      await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority)).status).toBe("APPLIED");
+    }finally{if(old===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=old;}
+  },30000);
+});

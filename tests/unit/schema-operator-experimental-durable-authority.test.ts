@@ -15,7 +15,7 @@ describe("disposable durable recovery authority",()=>{
     let a=DisposableDurableRecoveryAuthority.initialize(dir,keys.privateKey,"s03-lab","vibress_s03_lab",epoch);
     try{
       expect(await a.proofAuthority(keys.publicKey).prove("s03-lab","vibress_s03_lab",new ExperimentalD1Budget())).toBe(epoch);
-      expect(()=>DisposableDurableRecoveryAuthority.open(dir,keys.privateKey)).toThrow();
+      expect(()=>DisposableDurableRecoveryAuthority.open(dir,keys.privateKey,a.snapshot().head)).toThrow();
       a.beginRecovery();
       const head=a.snapshot().head;a.close();
       a=DisposableDurableRecoveryAuthority.open(dir,keys.privateKey,head);
@@ -39,7 +39,7 @@ describe("disposable durable recovery authority",()=>{
       writeFileSync(file,old);
       expect(()=>DisposableDurableRecoveryAuthority.open(dir,keys.privateKey,head)).toThrow();
       writeFileSync(file,old.slice(0,-1));
-      expect(()=>DisposableDurableRecoveryAuthority.open(dir,keys.privateKey)).toThrow();
+      expect(()=>DisposableDurableRecoveryAuthority.open(dir,keys.privateKey,head)).toThrow();
     }finally{a.close();rmSync(dir,{recursive:true,force:true});}
   });
 });

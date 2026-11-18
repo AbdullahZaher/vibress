@@ -3,7 +3,7 @@
 // conservatively reports uncertainty; disconnect alone is NOT rollback proof.
 import { Client } from "pg";
 import { D1DeadlineExceeded, ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
-import { ExperimentalSessionLifecycle, type SessionTerminalCause } from "./schema-operator-experimental-session";
+import { ExperimentalSessionLifecycle, registerExperimentalOwnedSession, type SessionTerminalCause } from "./schema-operator-experimental-session";
 import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
@@ -31,6 +31,7 @@ export async function superviseDisposableSchemaOperation(
     connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
     statement_timeout: Math.max(1, Math.floor(budget.remainingMs()))});
   const session = new ExperimentalSessionLifecycle(budget, true);
+  registerExperimentalOwnedSession(db,session);
   let closing: Promise<void> | undefined;
   const close = () => {
     session.retire();
