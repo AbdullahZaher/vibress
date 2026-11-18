@@ -20,6 +20,7 @@ import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operat
 import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
+import { DisposableDurableRecoveryAuthority } from "../../packages/database/src/schema-operator-experimental-durable-authority";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
 const BASE_URL = process.env.DATABASE_URL ??
@@ -28,7 +29,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3788,4 +3789,30 @@ it("P06-E2E-29: same-OID membership drift and accidental legacy EXECUTE deny aut
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
     expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
   } finally {await author.end();await approver.end();}
+},30000);
+
+it("P06-E2E-30: durable external admission and history survive restart; rewind cannot activate", async()=>{
+  const lab=await createLab("bv");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-authority-"));
+  const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+  let authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch);
+  try{
+    const result=await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+    expect(result.status).toBe("APPLIED");
+    const head=authority.snapshot().head;authority.close();
+    authority=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,head);
+    expect(authority.snapshot().operations).toMatchObject([{operationId:request.operationId,outcome:"COMMITTED",newDigest:result.newDigest}]);
+    authority.beginRecovery();
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(authority.proofAuthority(epochKeys.publicKey).prove(lab.installationId,lab.name,new ExperimentalD1Budget())).rejects.toThrow();
+    expect(()=>authority.advance(epoch,"a".repeat(64))).toThrow();
+    const next=randomUUID();authority.advance(next,"a".repeat(64));
+    const readiness={epoch:next,catalogManifestDigest:result.newDigest,readinessEvidenceDigest:"b".repeat(64),journal:[]};
+    expect(()=>authority.activate(readiness)).toThrow();
+    expect(authority.snapshot().pending).toBe(true);
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  }finally{authority.close();rmSync(directory,{recursive:true,force:true});}
 },30000);

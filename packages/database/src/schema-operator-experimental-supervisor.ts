@@ -8,9 +8,15 @@ import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 
+// Isolated recovery prototype can fence the owned session. No client or SQL handle escapes.
+export interface ExperimentalRecoveryFence {
+  attach(fence: () => void): void;
+}
+
 export async function superviseDisposableSchemaOperation(
   connectionString: string, request: SchemaOperatorRequest, authority: RecoveryEpochAuthority,
   mode: "EXECUTE" | "RECONCILE" = "EXECUTE", budget = new ExperimentalD1Budget(),
+  recoveryFence?: ExperimentalRecoveryFence,
 ): Promise<SchemaOperatorResult> {
   budget.checkpoint();
   const url = new URL(connectionString);
@@ -53,6 +59,8 @@ export async function superviseDisposableSchemaOperation(
   });
   const cancelDeadline = scheduleExperimentalD1Deadline(budget, () => stop("DEADLINE_EXCEEDED"));
   const operation = (async () => {
+    if (recoveryFence) recoveryFence.attach(() => stop("OPERATION_FAILED"));
+    if (session.snapshot().terminalCause) throw new SchemaMigrationOperatorError("INDETERMINATE", "recovery admission fenced");
     budget.checkpoint();
     try {
       await db.connect();
