@@ -136,6 +136,11 @@ it("F02 reproduces legitimate cross-contract output mismatch and refuses binding
   await emitted(a.contracts,async module=>{
     expect(()=>module.bindGeneratedMockClient(bClient)).toThrow("INVALID_CONTRACT");
     expect(b.requests).toHaveLength(0);
+    // CommonJS exposes a writable export slot even if the exported object is
+    // frozen. The generated private bindingRequirement must not read that slot.
+    expect(Reflect.set(module,"expectedBindingIdentity",bClient.bindingIdentity)).toBe(true);
+    expect(()=>module.bindGeneratedMockClient(bClient)).toThrow("INVALID_CONTRACT");
+    expect(b.requests).toHaveLength(0);
   });
 });
 it.each([{editableApproved:true},{actionInput:"stage" as const},{installation:"crm-other"},{manifestChange:true}])(
@@ -163,7 +168,7 @@ it("F02 equivalent independently compiled contracts bind; frozen identity and re
     expect(()=>client.bindContract({version:1,digest:identity.digest})).toThrow("INVALID_CONTRACT");
     const detached=client.bindContract;
     expect(()=>detached(identity)).toThrow("INVALID_CONTRACT");
-    expect(()=>createMockContractClient({...b.contracts,bindingIdentity:{...identity,digest:"0".repeat(64)}})).toThrow("INVALID_CONTRACT");
+    expect(()=>createMockContractClient({...b.contracts,bindingIdentity:{...b.contracts.bindingIdentity,digest:"0".repeat(64)}})).toThrow("INVALID_CONTRACT");
     expect(b.requests).toHaveLength(0);
     expect(await bound["deals.get"]({id:"deal_1"})).toMatchObject({ok:true,value:b.row});
   });

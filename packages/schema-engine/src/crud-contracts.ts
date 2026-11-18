@@ -352,11 +352,12 @@ export function compileCrudContracts(manifestInput: unknown, trustedConfiguratio
       "export type GeneratedResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly code: GeneratedErrorCode | \"INVALID_RESPONSE\" | \"CANCELLED\" | \"TIMEOUT\" | \"TRANSPORT_FAILURE\" };\n" +
       "export interface GeneratedClient {\n" + operations.map(op =>
         "  " + JSON.stringify(op.operationId) + "(input: " + typeSource(op.input) + ", options?: GeneratedOptions): Promise<GeneratedResult<" + typeSource(op.output) + ">>;").join("\n") + "\n}\n" +
-      "export const expectedBindingIdentity = Object.freeze(" + JSON.stringify(bindingIdentity) + ");\n" +
+      "const bindingRequirement = Object.freeze(" + JSON.stringify(bindingIdentity) + ");\n" +
+      "export const expectedBindingIdentity = bindingRequirement;\n" +
       "export interface GeneratedMockBinding { readonly bindingIdentity: Readonly<{version: number; digest: string}>; bindContract(expected: Readonly<{version:number;digest:string}>): (operation:string,input:unknown,options?:GeneratedOptions)=>Promise<GeneratedResult<unknown>>; }\n" +
       "export function bindGeneratedMockClient(client: GeneratedMockBinding): GeneratedClient {\n" +
-      "  if (!client || client.bindingIdentity?.version !== expectedBindingIdentity.version || client.bindingIdentity.digest !== expectedBindingIdentity.digest || typeof client.bindContract !== \"function\") throw new Error(\"INVALID_CONTRACT\");\n" +
-      "  const invoke = client.bindContract(expectedBindingIdentity);\n  const bound: GeneratedClient = {\n" +
+      "  if (!client || client.bindingIdentity?.version !== bindingRequirement.version || client.bindingIdentity.digest !== bindingRequirement.digest || typeof client.bindContract !== \"function\") throw new Error(\"INVALID_CONTRACT\");\n" +
+      "  const invoke = client.bindContract(bindingRequirement);\n  const bound: GeneratedClient = {\n" +
       operations.map(op => "    " + JSON.stringify(op.operationId) + ": (input, options) => invoke(" + JSON.stringify(op.operationId) + ", input, options) as Promise<GeneratedResult<" + typeSource(op.output) + ">>,").join("\n") + "\n  };\n  return Object.freeze(bound);\n}\n",
   };
   const digest = createHash("sha256").update(JSON.stringify(generated), "utf8").digest("hex");
