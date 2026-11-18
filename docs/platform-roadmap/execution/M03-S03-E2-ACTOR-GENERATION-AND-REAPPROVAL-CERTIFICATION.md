@@ -72,3 +72,25 @@ ROLLBACK of any lifecycle update: no authoritative generation change
 **Rollback:** test branch reversion, drop only disposable test databases. For an eventually approved additive migration, retain generation history and disable operations until reapproved; never implement automatic rollback by erasing invalidation metadata.
 
 **Research checked 2026-11-18:** [PG16 triggers](https://www.postgresql.org/docs/16/trigger-definition.html), [PG16 isolation](https://www.postgresql.org/docs/16/transaction-iso.html), [PG16 explicit locks](https://www.postgresql.org/docs/16/explicit-locking.html), [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+## Verified final experimental executable-SHA CI addendum — 2026-11-18
+
+**This supersedes earlier PENDING / incomplete test notes in this report, but does not supersede the owner or human approval gates.** Tested executable commit: `3a8dce2fa296fd6a3b51c14bdd193d757cc4aa5c`, Git tree `30fd302094db904ed537f1809c6b69e607312d00`. [GitHub Actions run #44242532694](https://github.com/AbdullahZaher/vibress/actions/runs/44242532694): **COMPLETED SUCCESS**, all required workflow steps including clean teardown SUCCESS. Node v24.22.3, PostgreSQL 16.16 (`server_version_num=160016`). Verified pinned dependencies, TypeScript typecheck, ESLint and explicit-any checks PASS.
+
+| Suite / runner execution | Observed |
+|---|---|
+| Focused `IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-` | 20 PASS, 47 filter-skipped |
+| Full operator suite (includes R1-10 original and R1-10-FIX/FIX2 plus E2 cases) | 67/67 PASS |
+| Full fault-injection suite using same disposable actor/E2 fixtures | 21/21 PASS |
+| Repeated independent Vitest processes with R1-10 and E2 tests | 3 separate process runs, each 10 PASS (57 filter-skipped) |
+| Disposable PG16 fixture DB leak count | 0 |
+| Owned Docker service/volumes teardown | PASS |
+
+**Counting:** 138 successful test *executions* across these groups; the full suites contain **88 distinct test definitions** (67 operator + 21 fault). The 20 focused and 30 repeated executions overlap with full operator suite, therefore NOT 138 distinct cases. All three repetitions used fresh Vitest processes on one GitHub-hosted runner, not three independent runner machines. No statistical D1 guarantee follows. The run includes sanitized `R1_10_BACKEND_TRACE` of actual backend PID, backend_start, pg_blocking_pids, wait_event and `pg_locks` class/object identity. In the first run, backend 172 waited for advisory lock held by backend 170; it proves a real PG wait; the diagnostic R1-10 also induced PostgreSQL `40P01`. Corrected governed L1 cases passed on the supported fixture protocol; this does NOT imply universal deadlock absence.
+
+**Gate disposition:** the corrected experimental R1-10 test scenario and E2 anti-replay regressions are VERIFIED for the exact executable snapshot only. **Global lock-order implementation is NOT accepted**: legacy privileged direct DML and human DBA/IAM authority remain unreviewed, fixture gateway not normative. **E2-A** fresh plan+independent approval remains a recommendation ONLY; owner has NOT selected E2-A/B/C. Human IAM PENDING; human PostgreSQL DBA PENDING; Agent06 exact integrated candidate review PENDING. Agent04 standalone timing certification PENDING. D1 2517ms cumulative supervisor and pre-COMMIT M NOT IMPLEMENTED / NOT DETERMINABLE; IAM-WD-01 and AG06-S03-10 OPEN; canonical PR #198 untouched and Draft. No risk accepted.
+
+**Containment and rollback:** all schema alterations and `SECURITY INVOKER` gateway remain in owned disposable PG16 fixture SQL, with **zero new GRANT statements**, no changes to migrations 0059/0060, no runtime/operator privilege expansion. Reverse experimental branch changes or discard disposable fixtures. If a future COMMIT is uncertain, isolate/fence and reconcile via fresh trusted catalog/registry/journal; never infer rollback or blindly retry DDL.
+
+**Research provenance checked 2026-11-18:** [PostgreSQL 16 explicit locks](https://www.postgresql.org/docs/16/explicit-locking.html), [PG16 transaction isolation](https://www.postgresql.org/docs/16/transaction-iso.html), [PG16 trigger definition](https://www.postgresql.org/docs/16/trigger-definition.html), [PG16 error codes](https://www.postgresql.org/docs/16/errcodes-appendix.html), [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html).
+
+**Exact next permitted step:** independent human IAM and DBA review with E2/reapproval owner policy decision and globally governed mutation lock ordering; require source-pinned new test+review for any modification, then independent Agent06 before any new canonical integration authorization. **REQUEST CHANGES; MERGE BLOCKED; PRODUCTION NO-GO.**
