@@ -91,6 +91,13 @@ async function createLab(key: Key): Promise<Lab> {
   await dbAdmin.query(schema);
   await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
     "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
+  // The experimental E2 operator requires actor-generation provenance. Every
+  // separate fault harness fixture must install the SAME isolated contract,
+  // otherwise an unrelated missing-column UNAUTHORIZED hides COMMIT faults.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-r1-actor-fence-experimental.sql"), "utf8"));
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
   compileResourceSchema,
@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -87,36 +87,13 @@ async function createLab(key: Key): Promise<Lab> {
   await dbAdmin.query(schema);
   await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
     "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
-  // EXPERIMENT ONLY, installed in each owned disposable PG16 fixture AFTER
-  // the unchanged 0060 migration. SECURITY INVOKER with no extra operator
-  // grants: the actor roster writer and reader share per-login xact advisory
-  // keys. This is NOT a deployable 0061 or approved production mechanism.
-  await dbAdmin.query(
-    "CREATE FUNCTION public.s03_test_actor_xact_fence() " +
-    "RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER " +
-    "SET search_path=pg_catalog,pg_temp AS $actor$ " +
-    "DECLARE k text; BEGIN " +
-    "IF TG_OP = 'INSERT' THEN " +
-    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
-    "    pg_catalog.hashtext(NEW.login_name)); RETURN NEW; " +
-    "ELSIF TG_OP = 'DELETE' THEN " +
-    "  PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "    pg_catalog.hashtext('vibress_m03s03_actor'), " +
-    "    pg_catalog.hashtext(OLD.login_name)); RETURN OLD; " +
-    "ELSE " +
-    "  FOR k IN SELECT DISTINCT a.login FROM " +
-    "    pg_catalog.unnest(ARRAY[OLD.login_name,NEW.login_name]) AS a(login) " +
-    "    ORDER BY a.login LOOP " +
-    "    PERFORM pg_catalog.pg_advisory_xact_lock(" +
-    "      pg_catalog.hashtext('vibress_m03s03_actor'), pg_catalog.hashtext(k)); " +
-    "  END LOOP; RETURN NEW; " +
-    "END IF; END $actor$; " +
-    "CREATE TRIGGER s03_test_actor_xact_fence " +
-    "BEFORE INSERT OR UPDATE OR DELETE ON public.platform_schema_trusted_actors " +
-    "FOR EACH ROW EXECUTE FUNCTION public.s03_test_actor_xact_fence(); " +
-    "REVOKE ALL ON FUNCTION public.s03_test_actor_xact_fence() FROM PUBLIC"
-  );
+  // Reuse the identical disposable-only PostgreSQL actor fence as fault harness.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-r1-actor-fence-experimental.sql"), "utf8"));
+  // E2-A is ONLY a disposable test fixture, not a numbered migration and not
+  // an approved real actor reactivation policy. 0059/0060 remain unchanged.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
   await dbAdmin.query(
     "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
     [applicationId, "Fixture CRM"],
@@ -260,6 +237,29 @@ beforeAll(async () => {
   labs.push(await createLab("g")); // Execution-before-revocation fixture.
   labs.push(await createLab("h")); // Forced rollback and replay fixture.
 }, 120000);
+
+// The eight baseline labs stay available for regression cases; every
+// additional disposable lab is dismantled immediately after its owning test.
+// Previously retaining each extra lab's 3 sessions until afterAll exhausted
+// PostgreSQL max_connections and hid later security regressions.
+afterEach(async () => {
+  if (!cluster) return;
+  const extra=labs.splice(8);
+  for (const lab of extra) {
+    if (!lab.name.startsWith("vibress_s03_") || !lab.name.endsWith("_"+id)) {
+      throw new Error("REFUSE_NONOWNED_DISPOSABLE_FIXTURE_CLEANUP");
+    }
+    await Promise.allSettled([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    await cluster.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+      "WHERE datname=$1 AND pid<>pg_backend_pid()",[lab.name],
+    );
+    await cluster.query("DROP DATABASE IF EXISTS "+cluster.escapeIdentifier(lab.name));
+    for (const role of [lab.runtimeRole,lab.operatorRole,lab.approver,lab.author]) {
+      await cluster.query("DROP ROLE IF EXISTS "+cluster.escapeIdentifier(role));
+    }
+  }
+});
 
 afterAll(async () => {
   for (const lab of labs) {
@@ -1369,7 +1369,11 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
         .toBe(true);
       release();
       expect((await execution).status).toBe("APPLIED");
-      await expect(inserted).rejects.toMatchObject({code:"23505"});
+      // E2's additional SECURITY INVOKER provenance trigger now denies
+      // a direct, mistakenly granted INSERT rather than fetching privileged
+      // roster data. Existing registry-before-approval lock ordering above
+      // is still verified; E2 fails closed with 42501, not duplicate 23505.
+      await expect(inserted).rejects.toMatchObject({code:"42501"});
       expect(await hasWebsite(lab)).toBe(true);
       expect((await lab.dbAdmin.query(
         "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
@@ -1721,7 +1725,7 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
     await assertNoWrite(lab,checksum);
   }, 30000);
 
-  it("IAM-RACE-01E: deactivate-then-reactivate before first roster check is allowed by present schema", async () => {
+  it("E2-REPLAY-01: deactivate-reactivate must NOT revive old approval (test-only E2-A)", async () => {
     const lab = await createLab("s");
     labs.push(lab);
     await approve(lab);
@@ -1734,13 +1738,13 @@ describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
       "UPDATE public.platform_schema_trusted_actors SET active=true " +
       "WHERE login_name=$1", [lab.approver],
     );
-    expect((await run(lab)).status).toBe("APPLIED");
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
     expect(await contentChecksum(lab)).toBe(before);
+    expect(await hasWebsite(lab)).toBe(false);
     expect((await lab.dbAdmin.query(
       "SELECT 1 FROM public.platform_schema_migration_journal"
-    )).rowCount).toBe(1);
-    // No generation/epoch field exists today: a later active=true masks the
-    // earlier privileged deactivation. A policy decision is required.
+    )).rowCount).toBe(0);
+    // Experimental E2-A generation bound reapproval is NOT owner approved.
   }, 30000);
 });
 
@@ -2205,6 +2209,32 @@ describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () 
         await new Promise(resolve => setTimeout(resolve, 10));
       }
       expect(operatorWaiting, "must observe real PostgreSQL advisory wait").toBe(true);
+      // Source-pinned diagnostic evidence: PID, exact backend_start, blocking
+      // backend identity and PostgreSQL advisory/transaction locks. These
+      // metadata contain no credentials, actor secrets or raw SQL parameters.
+      const waitingEvidence = await cluster.query<{
+        pid:number; backend_start:string; wait_event_type:string|null;
+        wait_event:string|null; blockers:number[];
+      }>(
+        "SELECT pid,backend_start::text AS backend_start,wait_event_type,wait_event,"+
+        "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity "+
+        "WHERE pid=ANY($1::int[]) ORDER BY pid",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      const advisoryEvidence = await cluster.query<{
+        pid:number;locktype:string;mode:string;granted:boolean;
+        classid:number|null;objid:number|null;objsubid:number|null;
+      }>(
+        "SELECT pid,locktype,mode,granted,classid,objid,objsubid "+
+        "FROM pg_locks WHERE pid=ANY($1::int[]) "+
+        "AND locktype IN ('advisory','transactionid') ORDER BY pid,locktype,mode",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      console.info("R1_10_BACKEND_TRACE="+JSON.stringify(waitingEvidence.rows));
+      console.info("R1_10_ADVISORY_TRACE="+JSON.stringify(advisoryEvidence.rows));
+      expect(waitingEvidence.rows.some(x => x.pid===(operator.processID??-1) &&
+        x.wait_event_type==="Lock" &&
+        x.blockers.includes(admin.processID??-1))).toBe(true);
       // Admin already holds actor X; approval UPDATE trigger needs key A.
       // PostgreSQL detects the resulting two-backend cycle and aborts one.
       adminWait = settle(admin.query(
@@ -2244,4 +2274,321 @@ describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () 
     );
     expect(actor.rows[0]?.active).toBe(true);
   }, 30000);
+});
+
+
+/**
+ * L1 global admin order (fixture-only). The supported protocol takes the
+ * approval-specific transaction advisory key first, then actor keys in stable
+ * order, BEFORE the first UPDATE acquires any implicit tuple locks. This is
+ * an owner-only SECURITY INVOKER disposable gateway, NOT an authorized
+ * production administrative entrypoint or privileged function.
+ */
+describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
+  it("R1-10-FIX: approval-first admin cannot hold actor X while waiting for operator approval A", async () => {
+    const lab = await createLab("ab");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const operator = lab.operator, admin = lab.dbAdmin;
+    let adminWait: Promise<unknown> | undefined;
+    try {
+      await operator.query("BEGIN");
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      await admin.query("BEGIN");
+      // L1 test-only SECURITY INVOKER admin gateway serializes I/R/A/X
+      // before actor UPDATE and approval UPDATE. This is not a migration.
+      adminWait = admin.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id, lab.author],
+      );
+      let blocked = false;
+      for (let attempt=0; attempt<100; attempt+=1) {
+        const probe = await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [admin.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked=true; break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(blocked, "admin must wait for approval key BEFORE any actor row lock").toBe(true);
+      // Operator already has approval A, and can now acquire actor X without
+      // waiting: admin holds NO actor-row/advisory lock in the corrected order.
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), hashtext($1::text))",
+        [lab.author],
+      );
+      await operator.query("COMMIT");
+      await adminWait; // Gateway took A and X before the row DML.
+      await admin.query("COMMIT");
+    } finally {
+      await operator.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([adminWait ?? Promise.resolve()]);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(false);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals " +
+      "WHERE installation_id=$1", [lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+});
+
+/**
+ * Experimental E2-A: immutable instance + increasing generation bound into
+ * plan and approval via fixture-only triggers. Owner has NOT approved E2-A.
+ * Neither fixture-only DDL nor these test outcomes imply policy authorization.
+ */
+describe("E2 actor generation/provenance adversarial tests (TEST-ONLY POLICY)", () => {
+  it("E2-01: APPROVER deactivate/reactivate increments epoch and rejects old signed approval", async () => {
+    const lab=await createLab("ac"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const before=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.approver],
+    );
+    const after=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(after.actor_instance_id).toBe(before.actor_instance_id);
+    expect(BigInt(after.actor_generation)).toBe(BigInt(before.actor_generation)+2n);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+
+  it("E2-02: AUTHOR deactivate/reactivate rejects old plan and approval", async () => {
+    const lab=await createLab("ad"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.author],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.author],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET actor_generation=actor_generation+1 " +
+      "WHERE login_name=$1", [lab.author],
+    )).rejects.toMatchObject({code:"42501"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-03: DELETE and re-register same LOGIN gets new actor instance; old approval denied", async () => {
+    const lab=await createLab("ae"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const saved=(await lab.dbAdmin.query<{
+      actor_instance_id:string;principal_id:string
+    }>("SELECT actor_instance_id, principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) " +
+      "VALUES($1,$2,'APPROVER')",
+      [lab.approver,saved.principal_id],
+    );
+    const restored=(await lab.dbAdmin.query<{
+      actor_instance_id:string
+    }>("SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).not.toBe(saved.actor_instance_id);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-04: legacy NULL approval generation fails closed", async () => {
+    const lab=await createLab("af"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    // Fixture database owner simulates an old/unauthenticated imported row.
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_approvals SET approver_actor_generation=NULL " +
+      "WHERE installation_id=$1", [lab.installationId],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+});
+
+
+describe("R1-10 governed ADMIN vs legacy revoker (TEST-ONLY)", () => {
+  it("R1-10-FIX2: legacy approval UPDATE row-before-A and governed gateway remain acyclic", async () => {
+    const lab=await createLab("ag"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const op=lab.operator, admin=lab.dbAdmin;
+    const revoker=await connect(lab.name,lab.approver);
+    type Result={ok:boolean;code:string|null};
+    const settle=(p:Promise<unknown>):Promise<Result>=>p.then(
+      ()=>({ok:true,code:null}),
+      (e:unknown)=>({ok:false,code:typeof e==="object"&&e!==null&&
+        "code" in e&&typeof e.code==="string"?e.code:null}),
+    );
+    const waitBlocked=async (pid:number):Promise<boolean>=>{
+      for(let i=0;i<120;i+=1){
+        const row=await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",[pid]);
+        if(row.rows[0]?.wait_event_type==="Lock")return true;
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      return false;
+    };
+    let revoking:Promise<Result>|undefined;
+    let adminCall:Promise<Result>|undefined;
+    try {
+      await op.query("BEGIN");
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'),"+
+        "hashtext($1::text||':'||$2::text||':'||$3::text))",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id]);
+      await revoker.query("BEGIN");
+      revoking=settle(revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      ));
+      expect(await waitBlocked(revoker.processID??-1),
+        "real direct revoker must wait on operator approval A while holding approval row").toBe(true);
+      await admin.query("BEGIN");
+      adminCall=settle(admin.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      ));
+      expect(await waitBlocked(admin.processID??-1),
+        "governed gateway must wait before obtaining actor X").toBe(true);
+      // Operator can acquire X; admin has only the earlier independent lock
+      // chain and cannot hold the actor fence before its approval row/A locks.
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),"+
+        "hashtext($1::text))",[lab.author]);
+      await op.query("COMMIT");
+      expect((await revoking).ok).toBe(true);
+      await revoker.query("COMMIT");
+      const adminOutcome=await adminCall;
+      expect(adminOutcome).toEqual({ok:false,code:"42501"});
+      await admin.query("ROLLBACK");
+    } finally {
+      await op.query("ROLLBACK").catch(()=>undefined);
+      await revoker.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([revoking??Promise.resolve(),adminCall??Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(true);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals "+
+      "WHERE installation_id=$1",[lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query("SELECT 1 FROM public.platform_schema_migration_journal "+
+      "WHERE installation_id=$1",[lab.installationId])).rowCount).toBe(0);
+  },30000);
+});
+
+describe("E2 negative privilege, UUID tombstone and rollback tests (EXPERIMENT ONLY)",()=>{
+  it("E2-05: operator/runtime cannot mutate roster or execute governed admin gateway",async()=>{
+    const lab=await createLab("ah");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    for(const actor of [lab.operator,lab.runtime]){
+      await expect(actor.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.approver],
+      )).rejects.toMatchObject({code:"42501"});
+      await expect(actor.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+    }
+    const grants=await lab.dbAdmin.query<{operator_update:boolean;runtime_update:boolean;
+      operator_admin_exec:boolean;runtime_admin_exec:boolean}>(
+      "SELECT has_table_privilege($1,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS operator_update, "+
+      "has_table_privilege($2,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS runtime_update, "+
+      "has_function_privilege($1,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS operator_admin_exec, "+
+      "has_function_privilege($2,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS runtime_admin_exec",
+      [lab.operatorRole,lab.runtimeRole],
+    );
+    expect(grants.rows[0]).toEqual({operator_update:false,runtime_update:false,
+      operator_admin_exec:false,runtime_admin_exec:false});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-06: append-only actor-instance history blocks UUID resurrection after DELETE",async()=>{
+    const lab=await createLab("ai");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const actor=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query("BEGIN");
+    try{
+      await lab.dbAdmin.query(
+        "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      );
+      await expect(lab.dbAdmin.query(
+        "INSERT INTO public.platform_schema_trusted_actors "+
+        "(login_name,principal_id,actor_kind,actor_instance_id) "+
+        "VALUES($1,$2,'APPROVER',$3::uuid)",
+        [lab.approver,actor.principal_id,actor.actor_instance_id],
+      )).rejects.toMatchObject({code:"23505"});
+    }finally{
+      await lab.dbAdmin.query("ROLLBACK").catch(()=>undefined);
+    }
+    const restored=(await lab.dbAdmin.query<{actor_instance_id:string}>(
+      "SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).toBe(actor.actor_instance_id);
+    await expect(lab.dbAdmin.query(
+      "DELETE FROM public.s03_e2_actor_instance_history WHERE actor_instance_id=$1::uuid",
+      [actor.actor_instance_id],
+    )).rejects.toMatchObject({code:"42501"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
 });
