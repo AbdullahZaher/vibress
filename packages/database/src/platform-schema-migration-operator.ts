@@ -295,10 +295,16 @@ async function runP06(
     },
   });
   let began = false;
+  let beginAcknowledged = false;
   let commitAttempted = false;
   try {
-    await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+    // The server may have opened a transaction even if the BEGIN reply is lost.
+    // Mark possible transaction ownership at dispatch, not at acknowledgment.
+    budget.checkpoint();
     began = true;
+    const beginResult = await rawDb.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+    if (beginResult.command !== "BEGIN") throw new Error("unexpected begin response");
+    beginAcknowledged = true;
     transactionActive=true;
     await refreshTimeout();
     await db.query("SET LOCAL idle_in_transaction_session_timeout = '15000ms'");
@@ -490,6 +496,9 @@ async function runP06(
     }
     if (commitAttempted) {
       deny("INDETERMINATE", "commit outcome unknown; reconcile registry and journal on a fresh connection");
+    }
+    if (began && !beginAcknowledged) {
+      deny("VERIFIED_ROLLBACK", "begin acknowledgment unavailable; rollback acknowledged before operation SQL");
     }
     if (error instanceof SchemaMigrationOperatorError) throw error;
     if (error instanceof D1DeadlineExceeded) {

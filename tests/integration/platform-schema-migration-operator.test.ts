@@ -21,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2978,4 +2978,60 @@ describe("P06 disposable additive migration recovery",()=>{
     const request=await freshP06(lab);
     expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
   },30000);
+});
+
+describe("Integrated P06 transaction-start acknowledgment safety", () => {
+  it("P06-E2E-10: lost BEGIN acknowledgment rolls back actual server transaction before reporting failure", async () => {
+    const lab = await createLab("ax");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const issued: string[] = [];
+    const wrapped = {
+      query: async (sql: string) => {
+        issued.push(sql);
+        const result = await lab.operator.query(sql);
+        if (sql.startsWith("BEGIN")) throw new Error("simulated lost BEGIN acknowledgment");
+        return result;
+      },
+    } as unknown as ClientBase;
+    await expect(executeP06(wrapped, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "VERIFIED_ROLLBACK" });
+    expect(issued).toEqual(["BEGIN ISOLATION LEVEL READ COMMITTED", "ROLLBACK"]);
+    const activity = await lab.dbAdmin.query<{ idle: boolean; no_xact: boolean }>(
+      "SELECT state='idle' AS idle,xact_start IS NULL AS no_xact FROM pg_stat_activity WHERE pid=$1",
+      [lab.operator.processID],
+    );
+    expect(activity.rows).toEqual([{ idle: true, no_xact: true }]);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+
+  it("P06-E2E-11: lost BEGIN and ROLLBACK acknowledgments remain indeterminate without dispatching operation SQL", async () => {
+    const lab = await createLab("ay");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const issued: string[] = [];
+    const wrapped = {
+      query: async (sql: string) => {
+        issued.push(sql);
+        await lab.operator.query(sql);
+        throw new Error("simulated lost transaction-control acknowledgment");
+      },
+    } as unknown as ClientBase;
+    await expect(executeP06(wrapped, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "INDETERMINATE" });
+    expect(issued).toEqual(["BEGIN ISOLATION LEVEL READ COMMITTED", "ROLLBACK"]);
+    const other = await connect(lab.name, lab.operatorRole);
+    try {
+      await expect(reconcileP06(other, request, new ExperimentalD1Budget()))
+        .rejects.toMatchObject({ code: "INDETERMINATE" });
+    } finally {
+      await other.end();
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  }, 30000);
 });
