@@ -21,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2954,5 +2954,28 @@ describe("P06 integrated canonical and late-outcome regressions",()=>{
     expect((await executeP06(wrapped,request,budget)).status).toBe("COMMITTED_LATE");
     expect(await hasWebsite(lab)).toBe(true);
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
+  },30000);
+});
+
+describe("P06 disposable additive migration recovery",()=>{
+  it("P06-E2E-09: interrupted additive transaction preserves legacy rows; retry installs with legacy authorization denied",async()=>{
+    const lab=await createLab("aw");labs.push(lab);await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const count=await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals");
+    await lab.dbAdmin.query("BEGIN");
+    try{
+      for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-l1-actor-gateway-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
+        await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
+      await expect(lab.dbAdmin.query("SELECT 1/0")).rejects.toMatchObject({code:"22012"});
+    }finally{await lab.dbAdmin.query("ROLLBACK");}
+    expect((await lab.dbAdmin.query("SELECT to_regclass('public.s03_p06_completed_operations') AS journal")).rows[0]?.journal).toBeNull();
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals")).rows).toEqual(count.rows);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    await p06Install(lab);
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals")).rows).toEqual(count.rows);
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.s03_p06_approvals")).rows[0]?.n).toBe("0");
+    await expect(executeP06(lab.operator,{installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const request=await freshP06(lab);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
   },30000);
 });
