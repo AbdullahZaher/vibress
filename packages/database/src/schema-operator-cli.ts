@@ -31,22 +31,21 @@ function testOnlyConnection(): string {
 
 async function main(): Promise<void> {
   const budget = new ExperimentalD1Budget();
-  const [installationId, planDigest, unexpected] = process.argv.slice(2);
-  if (!installationId || !planDigest || unexpected) {
-    throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest>");
+  const [installationId,planDigest,operationId,submissionId,approvalId,version,unexpected]=process.argv.slice(2);
+  if (!installationId||!planDigest||!operationId||!submissionId||!approvalId||version!=="1"||unexpected) {
+    throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest> <operationId> <submissionId> <approvalId> 1");
   }
   const connectionString = testOnlyConnection();
   budget.checkpoint();
   const db = new Client({
     connectionString,
     connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
-    statement_timeout: 10000,
-    query_timeout: 12000,
+    statement_timeout:Math.max(1,Math.floor(budget.remainingMs())),
   });
   try {
     await db.connect();
     budget.checkpoint();
-    const result = await executeApprovedAdditiveColumn(db, { installationId, planDigest }, budget);
+    const result = await executeApprovedAdditiveColumn(db, {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},budget);
     console.log(JSON.stringify(result));
     if (result.status === "COMMITTED_LATE" || result.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
   } finally {

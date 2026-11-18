@@ -17,7 +17,7 @@ export class SchemaMigrationOperatorError extends Error {
     | "UNAUTHORIZED" | "STALE_PLAN" | "CATALOG_DRIFT" | "UNSUPPORTED"
     | "JOURNAL_CONFLICT" | "INDETERMINATE" | "LOCK_NOT_AVAILABLE"
     | "DEADLOCK" | "QUERY_CANCELED" | "DATABASE_PRIVILEGE_FAILURE"
-    | "DEADLINE_EXCEEDED" | "VERIFIED_ROLLBACK", reason: string) {
+    | "DEADLINE_EXCEEDED" | "VERIFIED_ROLLBACK" | "OPERATION_FAILED", reason: string) {
     super(reason);
     this.name = "SchemaMigrationOperatorError";
   }
@@ -49,47 +49,11 @@ interface RegistryRow {
   manifest: string;
   manifest_digest: string;
 }
-interface PlanRow {
-  plan_digest: string;
-  expected_manifest: string;
-  plan: string;
-  author: string;
-  author_login: string | null;
-  author_principal_id: string | null;
-  author_application_id: string | null;
-  author_environment: string | null;
-  author_actor_instance_id: string | null; // E2 experiment only
-  author_actor_generation: string | null;
-}
-interface FinalApprovalDecision {
-  approved_at: Date;
-  expires_at: Date;
-  revoked_at: Date | null;
-  checked_at: Date;
-}
-interface ApprovalRow {
-  operation_id: string;
-  approver: string;
-  approver_login: string | null;
-  approver_principal_id: string | null;
-  approved_application_id: string | null;
-  author_actor_instance_id: string | null; // E2 experiment only
-  author_actor_generation: string | null;
-  approver_actor_instance_id: string | null;
-  approver_actor_generation: string | null;
-  operator_role: string;
-  environment: string;
-  approved_at: Date;
-  expires_at: Date;
-  revoked_at: Date | null;
-  server_now: Date;
-}
-interface JournalRow {
-  plan_digest: string;
-  previous_digest: string;
-  new_digest: string;
-  operator_role: string;
-  status: string;
+interface PlanRow { plan_digest: string; expected_manifest: string; plan: string; }
+interface AuthorizationRow { author_login: string; author_principal: string; approver_login: string; approver_principal: string; }
+interface CompletedRow {
+  submission_id: string; approval_id: string; canonical_plan_digest: string;
+  previous_digest: string; new_digest: string; operator_role: string;
 }
 interface RoleRow {
   rolsuper: boolean;
@@ -127,6 +91,10 @@ interface ColumnRow {
 export interface SchemaOperatorRequest {
   readonly installationId: string;
   readonly planDigest: string;
+  readonly operationId: string;
+  readonly submissionId: string;
+  readonly approvalId: string;
+  readonly envelopeVersion: 1;
 }
 export interface SchemaOperatorResult {
   readonly status: "APPLIED" | "ALREADY_APPLIED" | "COMMITTED_LATE" | "ALREADY_APPLIED_LATE";
@@ -140,6 +108,7 @@ export interface SchemaOperatorResult {
 }
 
 const SHA = /^[0-9a-f]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const INSTALLATION = /^[a-z][a-z0-9_-]{1,62}$/;
 
 async function assertAuthority(
@@ -276,34 +245,35 @@ async function rowCount(db: ClientBase, tableName: string): Promise<string> {
 export async function executeApprovedAdditiveColumn(
   db: ClientBase,
   request: SchemaOperatorRequest,
-  // Explicit opt-in only for the disposable experiment; old tests retain their historic contract.
-  budget?: ExperimentalD1Budget,
+  budget: ExperimentalD1Budget,
 ): Promise<SchemaOperatorResult> {
+  if (!request || request.envelopeVersion !== 1 ||
+      !INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest) ||
+      ![request.operationId,request.submissionId,request.approvalId].every(v => typeof v === "string" && UUID.test(v)) ||
+      !(budget instanceof ExperimentalD1Budget)) {
+    return deny("UNAUTHORIZED", "complete P06 identity and D1 budget required");
+  }
   const rawDb = db;
-  if (budget) {
-    db = new Proxy(rawDb, {
-      get(target, property) {
-        const value: unknown = Reflect.get(target, property, target);
-        if (property === "query" && typeof value === "function") {
-          return (...args: unknown[]) => {
-            budget.checkpoint();
-            return Reflect.apply(value, target, args);
-          };
-        }
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  }
-  if (!INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest)) {
-    return deny("UNAUTHORIZED", "invalid operator invocation");
-  }
+  db = new Proxy(rawDb, {
+    get(target, property) {
+      const value: unknown = Reflect.get(target, property, target);
+      if (property === "query" && typeof value === "function") {
+        return (...args: unknown[]) => {
+          budget.checkpoint();
+          return Reflect.apply(value, target, args);
+        };
+      }
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
   let began = false;
   let commitAttempted = false;
   try {
     await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
     began = true;
-    await db.query("SET LOCAL lock_timeout = '2000ms'");
-    await db.query("SET LOCAL statement_timeout = '10000ms'");
+    const remaining = Math.max(1,Math.floor(budget.remainingMs()));
+    await db.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)",
+      [String(Math.min(2000,remaining))+"ms",String(remaining)+"ms"]);
     await db.query("SET LOCAL idle_in_transaction_session_timeout = '15000ms'");
     await db.query("SET LOCAL search_path = pg_catalog");
     // Advisory transaction lock is crash-safe. Hash collisions may over-serialize,
@@ -316,7 +286,8 @@ export async function executeApprovedAdditiveColumn(
       "current_setting('server_version_num')::int AS postgres_version",
     )).rows[0];
     if (!identity || identity.postgres_version < 160000 || identity.postgres_version >= 170000 ||
-      identity.current_user !== identity.session_user) {
+      identity.current_user !== identity.session_user ||
+        !/^vibress_s03_[a-z0-9_]+$/.test(identity.database_name)) {
       deny("UNAUTHORIZED", "unsupported PG version or operator session identity");
     }
     const installation = (await db.query<InstallationRow>(
@@ -341,95 +312,30 @@ export async function executeApprovedAdditiveColumn(
       deny("UNAUTHORIZED", "registry identity/environment/database binding failed");
     }
     const planRecord = (await db.query<PlanRow>(
-      "SELECT * FROM public.platform_schema_plans " +
-      "WHERE installation_id = $1 AND plan_digest = $2",
-      [request.installationId, request.planDigest],
+      "SELECT plan_digest,expected_manifest,plan FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",
+      [request.installationId,request.planDigest],
     )).rows[0];
-    if (!planRecord || planRecord.plan_digest !== request.planDigest ||
-      !planRecord.author_login || !planRecord.author_principal_id ||
-      planRecord.author !== planRecord.author_login ||
-      planRecord.author_application_id !== registry.application_id ||
-      planRecord.author_environment !== registry.environment) {
-      deny("UNAUTHORIZED", "operator plan was not registered");
+    if (!planRecord || planRecord.plan_digest !== request.planDigest) deny("UNAUTHORIZED","canonical plan unavailable");
+    const scope = {applicationId:asApplicationId(registry.application_id),installationId:asInstallationId(registry.installation_id)};
+    let validated: ReturnType<typeof renderTrustedAdditiveColumn>;
+    try { validated=renderTrustedAdditiveColumn(JSON.parse(planRecord.plan),JSON.parse(planRecord.expected_manifest),scope); }
+    catch { return deny("UNAUTHORIZED","canonical plan failed independent rehydration"); }
+    const {plan,current,ddl}=validated;
+    if (plan.digest!==request.planDigest || plan.operations.length!==1 ||
+        current.applicationId!==scope.applicationId || current.installationId!==scope.installationId) {
+      deny("UNAUTHORIZED","canonical plan digest or scope mismatch");
     }
-    const scope = {
-      applicationId: asApplicationId(registry.application_id),
-      installationId: asInstallationId(registry.installation_id),
-    };
-    const validated = renderTrustedAdditiveColumn(
-      JSON.parse(planRecord.plan), JSON.parse(planRecord.expected_manifest), scope);
-    const { plan, current, ddl } = validated;
-    if (plan.digest !== request.planDigest || plan.operations.length !== 1 ||
-      current.applicationId !== scope.applicationId ||
-      current.installationId !== scope.installationId) {
-      deny("UNAUTHORIZED", "registered plan did not rehydrate");
-    }
-    // SERIALIZED AUTHORIZATION BOUNDARY: this advisory transaction lock must
-    // be acquired before the approval read. The 0060 approval DML trigger
-    // takes the identical key on INSERT/UPDATE/DELETE, including misgranted
-    // direct DML. With READ COMMITTED the following statement sees the most
-    // recently committed revocation. No approval UPDATE ACL is granted.
-    await db.query(
-      "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
-      "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
-      [request.installationId, request.planDigest, ddl.operationId],
-    );
-    const approval = (await db.query<ApprovalRow>(
-      "SELECT operation_id, approver, approver_login, approver_principal_id, " +
-      "approved_application_id, author_actor_instance_id, author_actor_generation, " +
-      "approver_actor_instance_id, approver_actor_generation, operator_role, environment, " +
-      "approved_at, expires_at, revoked_at, clock_timestamp() AS server_now " +
-      "FROM public.platform_schema_approvals " +
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
-      [request.installationId, request.planDigest, ddl.operationId],
+    await db.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_p06_approval'),hashtext($1::text))",[request.approvalId]);
+    const auth=(await db.query<AuthorizationRow>(
+      "SELECT s.author_login,s.author_principal,a.approver_login,a.approver_principal "+
+      "FROM public.s03_p06_submissions s JOIN public.s03_p06_approvals a USING(submission_id) "+
+      "WHERE s.installation_id=$1 AND s.canonical_plan_digest=$2 AND s.operation_id=$3::uuid "+
+      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid",
+      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId],
     )).rows[0];
-    if (!approval || !approval.approver_login || !approval.approver_principal_id ||
-      approval.approver !== approval.approver_login ||
-      approval.approved_application_id !== registry.application_id ||
-      approval.approver_login === planRecord.author_login ||
-      approval.approver_principal_id === planRecord.author_principal_id ||
-      approval.approver === planRecord.author ||
-      approval.approver === identity.current_user ||
-      approval.operator_role !== identity.current_user ||
-      approval.environment !== registry.environment ||
-      approval.revoked_at !== null ||
-      approval.approved_at > approval.server_now ||
-      approval.expires_at <= approval.server_now) {
-      deny("UNAUTHORIZED", "independent plan approval is absent, revoked or expired");
-    }
-    // The owner-provisioned identity registry is trusted only for individually
-    // authenticated PostgreSQL logins; pooled service accounts are not humans.
-    // Legacy 0059 approvals without captured provenance always fail closed.
-    const actors = await db.query<{
-      login_name: string; principal_id: string; actor_kind: string;
-      identity_mode: string; active: boolean;
-      actor_instance_id: string; actor_generation: string;
-    }>(
-      "SELECT login_name, principal_id, actor_kind, identity_mode, active, " +
-      "actor_instance_id, actor_generation " +
-      "FROM public.platform_schema_trusted_actors " +
-      "WHERE login_name = $1 OR login_name = $2",
-      [planRecord.author_login, approval.approver_login],
-    );
-    const authored = actors.rows.find(row => row.login_name === planRecord.author_login);
-    const approved = actors.rows.find(row => row.login_name === approval.approver_login);
-    if (!authored || !approved || actors.rows.length !== 2 ||
-      authored.principal_id !== planRecord.author_principal_id ||
-      approved.principal_id !== approval.approver_principal_id ||
-      authored.actor_kind !== "AUTHOR" || approved.actor_kind !== "APPROVER" ||
-      authored.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
-      approved.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
-      !authored.active || !approved.active ||
-      !planRecord.author_actor_instance_id || !planRecord.author_actor_generation ||
-      !approval.author_actor_instance_id || !approval.author_actor_generation ||
-      !approval.approver_actor_instance_id || !approval.approver_actor_generation ||
-      planRecord.author_actor_instance_id !== approval.author_actor_instance_id ||
-      planRecord.author_actor_generation !== approval.author_actor_generation ||
-      authored.actor_instance_id !== planRecord.author_actor_instance_id ||
-      authored.actor_generation !== planRecord.author_actor_generation ||
-      approved.actor_instance_id !== approval.approver_actor_instance_id ||
-      approved.actor_generation !== approval.approver_actor_generation) {
-      deny("UNAUTHORIZED", "trusted independent E2 actor generation/provenance unavailable");
+    if (!auth || auth.author_login===auth.approver_login || auth.author_principal===auth.approver_principal ||
+        [auth.author_login,auth.approver_login].some(login=>login===registry.operator_role||login===registry.runtime_role)) {
+      deny("UNAUTHORIZED","independent P06 authorization unavailable");
     }
     const resource = current.resources.find(item => item.tableName === ddl.tableName);
     const next = plan.proposedManifest.resources.find(item => item.tableName === ddl.tableName);
@@ -449,38 +355,29 @@ export async function executeApprovedAdditiveColumn(
       " IN ACCESS EXCLUSIVE MODE",
     );
     const oid = await assertAuthority(db, identity, registry, resource);
-    const journal = (await db.query<JournalRow>(
-      "SELECT plan_digest, previous_digest, new_digest, operator_role, status " +
-      "FROM public.platform_schema_migration_journal " +
-      "WHERE installation_id = $1 AND operation_id = $2",
-      [request.installationId, ddl.operationId],
+    const journal=(await db.query<CompletedRow>(
+      "SELECT submission_id,approval_id,canonical_plan_digest,previous_digest,new_digest,operator_role "+
+      "FROM public.s03_p06_completed_operations WHERE installation_id=$1 AND operation_id=$2::uuid",
+      [request.installationId,request.operationId],
     )).rows[0];
     if (journal) {
-      if (journal.plan_digest !== request.planDigest ||
-        journal.previous_digest !== current.digest ||
-        journal.new_digest !== plan.proposedManifest.digest ||
-        journal.operator_role !== identity.current_user ||
-        journal.status !== "COMPLETED" ||
-        registry.manifest_digest !== plan.proposedManifest.digest) {
-        deny("JOURNAL_CONFLICT", "migration journal or expected schema does not match");
+      if (journal.submission_id!==request.submissionId || journal.approval_id!==request.approvalId ||
+        journal.canonical_plan_digest!==request.planDigest || journal.previous_digest!==current.digest ||
+        journal.new_digest!==plan.proposedManifest.digest || journal.operator_role!==identity.current_user ||
+        registry.manifest_digest!==plan.proposedManifest.digest || registry.manifest!==JSON.stringify(plan.proposedManifest)) {
+        deny("JOURNAL_CONFLICT","completed operation or registry mismatch");
       }
-      await verifyCatalog(db, oid, next);
-      const afterRows = await rowCount(db, ddl.tableName);
-      budget?.checkpoint();
-      commitAttempted = true;
-      const commitResult = await rawDb.query("COMMIT");
-      began = false;
-      if (commitResult.command === "ROLLBACK") {
-        commitAttempted = false;
-        deny("VERIFIED_ROLLBACK", "server acknowledged rollback instead of commit");
-      }
-      if (commitResult.command !== "COMMIT") deny("INDETERMINATE", "unexpected commit response; reconcile before retry");
-      return {
-        status: budget?.expired() ? "ALREADY_APPLIED_LATE" : "ALREADY_APPLIED", installationId: request.installationId,
-        operationId: ddl.operationId, planDigest: request.planDigest,
-        previousDigest: current.digest, newDigest: plan.proposedManifest.digest,
-        beforeRows: afterRows, afterRows,
-      };
+      await verifyCatalog(db,oid,next);
+      const afterRows=await rowCount(db,ddl.tableName);
+      budget.checkpoint();
+      commitAttempted=true;
+      const commitResult=await rawDb.query("COMMIT");
+      began=false;
+      if (commitResult.command==="ROLLBACK") {commitAttempted=false;deny("VERIFIED_ROLLBACK","server acknowledged rollback");}
+      if (commitResult.command!=="COMMIT") deny("INDETERMINATE","unexpected commit response");
+      return {installationId:request.installationId,operationId:request.operationId,planDigest:request.planDigest,
+        previousDigest:current.digest,newDigest:plan.proposedManifest.digest,beforeRows:afterRows,afterRows,
+        status:budget.expired()?"ALREADY_APPLIED_LATE":"ALREADY_APPLIED"};
     }
     if (registry.manifest_digest !== current.digest ||
       registry.manifest !== JSON.stringify(current)) {
@@ -489,69 +386,31 @@ export async function executeApprovedAdditiveColumn(
     await verifyCatalog(db, oid, resource);
     const beforeRows = await rowCount(db, ddl.tableName);
 
-    // EXPERIMENTAL P05/R1 + E2-A ONLY: cooperative transaction advisory fencing.
-    // PostgreSQL SELECT FOR SHARE would require UPDATE privilege on this
-    // owner-controlled roster and MUST NOT be granted to the operator.
-    // The disposable-only fixture installs a nonprivileged BEFORE actor-
-    // mutation trigger that acquires the SAME per-login advisory xact key.
-    // This permits a read-only operator to serialize final actor state
-    // without actor DML/ownership rights. The trigger is NOT in 0059/0060;
-    // normative adoption needs human IAM/DBA + migration/lock-order approval.
-    for (const actorLogin of [planRecord.author_login, approval.approver_login].sort()) {
-      await db.query(
-        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), " +
-        "hashtext($1::text))",
-        [actorLogin],
-      );
-      const expectedAuthor = actorLogin === planRecord.author_login;
-      const row = await db.query<{
-        login_name: string; principal_id: string; actor_kind: string;
-        identity_mode: string; active: boolean;
-        actor_instance_id: string; actor_generation: string;
-      }>(
-        "SELECT login_name, principal_id, actor_kind, identity_mode, active, " +
-        "actor_instance_id, actor_generation " +
-        "FROM public.platform_schema_trusted_actors WHERE login_name = $1",
-        [actorLogin],
-      );
-      const actor = row.rows[0];
-      if (row.rows.length !== 1 || !actor || !actor.active ||
-          actor.login_name !== actorLogin ||
-          actor.principal_id !== (expectedAuthor ?
-            planRecord.author_principal_id : approval.approver_principal_id) ||
-          actor.actor_kind !== (expectedAuthor ? "AUTHOR" : "APPROVER") ||
-          actor.identity_mode !== "INDIVIDUAL_DATABASE_LOGIN" ||
-          actor.actor_instance_id !== (expectedAuthor ?
-            planRecord.author_actor_instance_id : approval.approver_actor_instance_id) ||
-          actor.actor_generation !== (expectedAuthor ?
-            planRecord.author_actor_generation : approval.approver_actor_generation) ||
-          (expectedAuthor &&
-            (actor.actor_instance_id !== approval.author_actor_instance_id ||
-             actor.actor_generation !== approval.author_actor_generation))) {
-        deny("UNAUTHORIZED", "trusted actor changed before final DDL authorization");
-      }
+    // Acquire actual advisory keys in numeric order, after target-table and catalog locks.
+    const keys=await db.query<{k:number}>("SELECT DISTINCT hashtext(v) AS k FROM unnest($1::text[]) AS x(v) ORDER BY k",
+      [[auth.author_login,auth.approver_login]]);
+    for (const key of keys.rows) {
+      await db.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),$1::int)",[key.k]);
     }
-
-    // Proposed Policy A (owner approval pending): expiry linearizes at the
-    // last database-observed authorization read, AFTER all potentially blocking
-    // target-lock waits and catalog/row checks, IMMEDIATELY BEFORE DDL.
-    // clock_timestamp() is fresh wall time, not BEGIN/statement time.
-    // The existing approval xact advisory lock is held until COMMIT, so any
-    // competing revocation must finish before this decision or wait until
-    // the migration commits/rolls back. No intervening external await.
-    const finalApproval = (await db.query<FinalApprovalDecision>(
-      "SELECT approved_at, expires_at, revoked_at, clock_timestamp() AS checked_at " +
-      "FROM public.platform_schema_approvals " +
-      "WHERE installation_id = $1 AND plan_digest = $2 AND operation_id = $3",
-      [request.installationId, request.planDigest, ddl.operationId],
+    // One fresh server timestamp, exact identity tuple, actor fences and approval fence held until COMMIT.
+    const final=(await db.query<{checked_at:Date}>(
+      "WITH stamp AS MATERIALIZED (SELECT clock_timestamp() AS checked_at) "+
+      "SELECT stamp.checked_at FROM public.s03_p06_submissions s JOIN public.s03_p06_approvals a USING(submission_id) "+
+      "JOIN public.platform_schema_trusted_actors u ON u.login_name=s.author_login "+
+      "JOIN public.platform_schema_trusted_actors v ON v.login_name=a.approver_login CROSS JOIN stamp "+
+      "WHERE s.installation_id=$1 AND s.canonical_plan_digest=$2 AND s.operation_id=$3::uuid "+
+      "AND s.submission_id=$4::uuid AND a.approval_id=$5::uuid "+
+      "AND u.active AND v.active AND u.actor_kind='AUTHOR' AND v.actor_kind='APPROVER' "+
+      "AND u.identity_mode='INDIVIDUAL_DATABASE_LOGIN' AND v.identity_mode='INDIVIDUAL_DATABASE_LOGIN' "+
+      "AND u.principal_id=s.author_principal AND v.principal_id=a.approver_principal "+
+      "AND u.actor_instance_id=s.author_instance AND u.actor_generation=s.author_generation "+
+      "AND v.actor_instance_id=a.approver_instance AND v.actor_generation=a.approver_generation "+
+      "AND s.author_login<>a.approver_login AND s.author_principal<>a.approver_principal "+
+      "AND a.approved_at<=stamp.checked_at AND a.expires_at>stamp.checked_at "+
+      "AND NOT EXISTS(SELECT 1 FROM public.s03_p06_revocations z WHERE z.approval_id=a.approval_id)",
+      [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId],
     )).rows[0];
-    if (!finalApproval || finalApproval.revoked_at !== null ||
-      finalApproval.approved_at > finalApproval.checked_at ||
-      finalApproval.expires_at <= finalApproval.checked_at ||
-      finalApproval.approved_at.getTime() !== approval.approved_at.getTime() ||
-      finalApproval.expires_at.getTime() !== approval.expires_at.getTime()) {
-      deny("UNAUTHORIZED", "approval expired or changed before final DDL authorization");
-    }
+    if (!final) deny("UNAUTHORIZED","final P06 authorization stale, revoked, expired or invalid");
     await db.query(ddl.sql);
     await verifyCatalog(db, oid, next);
     const afterRows = await rowCount(db, ddl.tableName);
@@ -565,26 +424,17 @@ export async function executeApprovedAdditiveColumn(
     );
     if (update.rowCount !== 1) deny("STALE_PLAN", "manifest compare-and-swap failed");
     await db.query(
-      "INSERT INTO public.platform_schema_migration_journal " +
-      "(installation_id,operation_id,plan_digest,previous_digest,new_digest,authorization_ref," +
-      "operator_role,status,started_at,completed_at,catalog_evidence) " +
-      "VALUES ($1,$2,$3,$4,$5,$6,$7,'COMPLETED',transaction_timestamp()," +
-      "clock_timestamp(),$8::jsonb)",
-      [
-        request.installationId, ddl.operationId, request.planDigest,
-        current.digest, plan.proposedManifest.digest,
-        approval.approver_principal_id + ":" + approval.approver_login + ":" +
-          approval.approved_at.toISOString(),
-        identity.current_user,
-        JSON.stringify({ operation: "ADD_FIELD", table: ddl.tableName,
-          column: ddl.columnName, beforeRows, afterRows, postgres: 16,
-          finalAuthorizedAt: finalApproval.checked_at.toISOString(),
-          authorizationPolicy: "FINAL_PRE_DDL" }),
-      ],
+      "INSERT INTO public.s03_p06_completed_operations "+
+      "(installation_id,operation_id,submission_id,approval_id,canonical_plan_digest,previous_digest,new_digest,"+
+      "operator_role,final_authorized_at,catalog_evidence) VALUES($1,$2::uuid,$3::uuid,$4::uuid,$5,$6,$7,$8,$9,$10::jsonb)",
+      [request.installationId,request.operationId,request.submissionId,request.approvalId,request.planDigest,
+       current.digest,plan.proposedManifest.digest,identity.current_user,final.checked_at,
+       JSON.stringify({operation:"ADD_FIELD",table:ddl.tableName,column:ddl.columnName,beforeRows,afterRows,
+         postgres:16,authorizationPolicy:"FINAL_PRE_DDL",envelopeVersion:1})],
     );
     // No numeric admission margin has been approved. This experiment only
     // prevents dispatch after observed deadline and distinguishes late ACK.
-    budget?.checkpoint();
+    budget.checkpoint();
     commitAttempted = true;
     const commitResult = await rawDb.query("COMMIT");
     began = false;
@@ -594,15 +444,15 @@ export async function executeApprovedAdditiveColumn(
     }
     if (commitResult.command !== "COMMIT") deny("INDETERMINATE", "unexpected commit response; reconcile before retry");
     return {
-      status: budget?.expired() ? "COMMITTED_LATE" : "APPLIED", installationId: request.installationId,
-      operationId: ddl.operationId, planDigest: request.planDigest,
-      previousDigest: current.digest, newDigest: plan.proposedManifest.digest,
-      beforeRows, afterRows,
+      installationId: request.installationId, operationId: request.operationId,planDigest: request.planDigest,
+      previousDigest: current.digest,newDigest: plan.proposedManifest.digest,
+      beforeRows, afterRows,status: budget.expired() ? "COMMITTED_LATE" : "APPLIED",
     };
   } catch (error) {
     if (began && !commitAttempted) {
       try {
-        await rawDb.query("ROLLBACK");
+        const rolled=await rawDb.query("ROLLBACK");
+        if (rolled.command!=="ROLLBACK") deny("INDETERMINATE","rollback response unexpected");
       } catch {
         deny("INDETERMINATE", "rollback failed; discard the operator connection and reconcile journal");
       }
@@ -622,7 +472,7 @@ export async function executeApprovedAdditiveColumn(
       case "40P01": deny("DEADLOCK", "database deadlock; transaction rolled back");
       case "57014": deny("QUERY_CANCELED", "database query canceled; transaction rolled back");
       case "42501": deny("DATABASE_PRIVILEGE_FAILURE", "database privilege or configuration failure; inspect sanitized audit");
-      default: deny("UNAUTHORIZED", "operator verification or execution failed; inspect sanitized audit");
+      default: deny("OPERATION_FAILED", "operator execution failed; inspect sanitized audit");
     }
   }
 }

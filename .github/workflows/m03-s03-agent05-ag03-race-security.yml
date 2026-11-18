@@ -52,7 +52,7 @@ jobs:
           echo "POSTGRES_VERSION_NUM=$pg_ver"
       - name: Run adversarial actor-state and watchdog observation tests
         run: |
-          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-|P06-01|L1-P06-01|D1-0|AG06-S03-10" --testTimeout=90000 --hookTimeout=120000
+          pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-|P06-01|P06-E2E-|L1-P06-01|D1-0|AG06-S03-10" --testTimeout=90000 --hookTimeout=120000
       - name: Rerun full original authenticated operator and expiry regressions
         run: |
           pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts --testTimeout=90000 --hookTimeout=120000

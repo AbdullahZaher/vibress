@@ -14,7 +14,7 @@ import {
   createSchemaManifest,
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
-import { executeApprovedAdditiveColumn } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
 
 /** Agent 04 disposable PG16 fault harness — no production database, no production injection. */
 const BASE_URL = process.env.DATABASE_URL ??

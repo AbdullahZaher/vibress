@@ -10,7 +10,8 @@ import {
   createSchemaManifest,
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
-import { executeApprovedAdditiveColumn } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
+import { executeApprovedAdditiveColumn as executeP06,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
@@ -20,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2784,4 +2785,75 @@ describe("L1 delegated actor-only lifecycle gateway (disposable, narrow path)", 
       await admin.end();
     }
   }, 30000);
+});
+
+async function p06Install(lab:Lab):Promise<void> {
+  await lab.dbAdmin.query("BEGIN");
+  try {
+    for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
+      await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+lab.dbAdmin.escapeIdentifier(lab.author));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid),public.s03_p06_revoke(uuid) TO "+lab.dbAdmin.escapeIdentifier(lab.approver));
+    await lab.dbAdmin.query("GRANT SELECT ON public.s03_p06_submissions,public.s03_p06_approvals,public.s03_p06_revocations,public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),public.platform_schema_revoke_operation(text,text,text) FROM "+lab.dbAdmin.escapeIdentifier(lab.approver));
+    await lab.dbAdmin.query("COMMIT");
+  } catch(error){await lab.dbAdmin.query("ROLLBACK");throw error;}
+}
+async function freshP06(lab:Lab):Promise<SchemaOperatorRequest>{
+  const author=await connect(lab.name,lab.author),approver=await connect(lab.name,lab.approver);
+  try{
+    const submissionId=(await author.query<{id:string}>("SELECT public.s03_p06_submit($1,$2) AS id",[lab.installationId,lab.plan.digest])).rows[0]!.id;
+    const approvalId=(await approver.query<{id:string}>("SELECT public.s03_p06_approve($1::uuid) AS id",[submissionId])).rows[0]!.id;
+    const operationId=(await lab.dbAdmin.query<{operation_id:string}>("SELECT operation_id FROM public.s03_p06_submissions WHERE submission_id=$1::uuid",[submissionId])).rows[0]!.operation_id;
+    return {installationId:lab.installationId,planDigest:lab.plan.digest,submissionId,approvalId,operationId,envelopeVersion:1};
+  } finally {await author.end();await approver.end();}
+}
+describe("P06-E2E integrated actual operator and atomic journal",()=>{
+  it("P06-E2E-01: reject legacy, mismatched approval, concurrent retry and stale same-content precondition",async()=>{
+    const lab=await createLab("ao");labs.push(lab);await approve(lab);await p06Install(lab);
+    await expect(executeP06(lab.operator,{installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const first=await freshP06(lab),second=await freshP06(lab);
+    expect(first.planDigest).toBe(second.planDigest);expect(first.operationId).not.toBe(second.operationId);
+    await expect(executeP06(lab.operator,{...first,approvalId:second.approvalId},new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const other=await connect(lab.name,lab.operatorRole);
+    try{
+      const both=await Promise.all([executeP06(lab.operator,first,new ExperimentalD1Budget()),executeP06(other,first,new ExperimentalD1Budget())]);
+      expect(both.map(x=>x.status).sort()).toEqual(["ALREADY_APPLIED","APPLIED"]);
+    }finally{await other.end();}
+    await expect(executeP06(lab.operator,second,new ExperimentalD1Budget())).rejects.toMatchObject({code:"STALE_PLAN"});
+    const evidence=await lab.dbAdmin.query("SELECT operation_id,submission_id,approval_id,canonical_plan_digest FROM public.s03_p06_completed_operations");
+    expect(evidence.rows).toEqual([{operation_id:first.operationId,submission_id:first.submissionId,approval_id:first.approvalId,canonical_plan_digest:first.planDigest}]);
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.platform_schema_migration_journal")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-02: reactivation, revocation and repeated submission in one transaction fail closed",async()=>{
+    const lab=await createLab("ap");labs.push(lab);await p06Install(lab);
+    const old=await freshP06(lab);
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",[lab.approver]);
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",[lab.approver]);
+    await expect(executeP06(lab.operator,old,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const fresh=await freshP06(lab);const approver=await connect(lab.name,lab.approver),author=await connect(lab.name,lab.author);
+    try{
+      await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[fresh.approvalId]);
+      await expect(executeP06(lab.operator,fresh,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await author.query("BEGIN");
+      await author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]);
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await author.query("ROLLBACK");
+    }finally{await author.end();await approver.end();}
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-03: journal constraint failure rolls back DDL and CAS; same identity can retry",async()=>{
+    const lab=await createLab("aq");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE public.s03_p06_completed_operations ADD CONSTRAINT p06_test_fail CHECK(false)");
+    await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"OPERATION_FAILED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest).toBe(lab.current.digest);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    await lab.dbAdmin.query("ALTER TABLE public.s03_p06_completed_operations DROP CONSTRAINT p06_test_fail");
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
 });

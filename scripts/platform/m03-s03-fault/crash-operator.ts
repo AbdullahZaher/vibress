@@ -4,7 +4,7 @@
  * The parent sends SIGKILL after receiving AFTER_DDL over IPC.
  */
 import { Client } from "pg";
-import { executeApprovedAdditiveColumn } from "../../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn } from "../../../tests/fixtures/m03-s03-legacy-operator-diagnostic";
 
 const url = process.env.M03_S03_FAULT_DATABASE_URL ?? "";
 const installationId = process.env.M03_S03_FAULT_INSTALLATION ?? "";
