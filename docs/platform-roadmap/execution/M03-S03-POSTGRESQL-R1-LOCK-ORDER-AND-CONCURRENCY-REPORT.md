@@ -1,63 +1,48 @@
-# M03-S03 — PostgreSQL 16 P05/R1 Lock Order & Concurrency Report
+# M03-S03 — PostgreSQL R1 Lock Ordering & Concurrency Report (Revised)
 
-**Date:** 2026-11-18 Asia/Riyadh. **Status:** EXPERIMENT ONLY / REQUEST CHANGES / NOT DBA-CERTIFIED. This is a role-based AI technical assessment, not an independently accountable human DBA signature.
+**Date:** 2026-11-18 Asia/Riyadh · **Verdict: REQUEST CHANGES / NO DBA CERTIFICATION.**  
+**Source:** canonical b5cfc0687076c86a7450a8a785a072f6e63ad289; Policy A 1fb5e1600fd2300d7509ec998ff3b1fa1fff5078; original IAM test fb6e12203c3ca8e589419467369bf908e645c7cb; revised experimental code 871089fe032c45dbcdc40259a7ad244edc6be866 and test e636a54e5100359ee772bdebb47ffc9bd0a16515. Migration 0059/0060 hashes unchanged.
 
-**Sources:** canonical PR #198 b5cfc0687076c86a7450a8a785a072f6e63ad289; Policy A PR #203 1fb5e1600fd2300d7509ec998ff3b1fa1fff5078; IAM reproduction PR #206 fb6e12203c3ca8e589419467369bf908e645c7cb; experimental code+test checkpoint 2e4a75cc4c45672ceb1cf5c42c077f147d11ad28. Operator blob 9c587afca423320307a3f62f57f27e92a0dd4587; migration 0060 blob d8b1e50a0a4dd347fde235ae7cb1a12468249719. No migration or ACL changes.
+## 1. Empirical privilege blocker and revised lock protocol
 
-## Actual transaction lock dependency graph
+The initial experimental SELECT FOR SHARE actor-row strategy FAILED CI [#44234590759](https://github.com/AbdullahZaher/vibress/actions/runs/44234590759). PostgreSQL 16 requires UPDATE privilege on an actor roster column even for FOR SHARE; dedicated operator has SELECT only. Do not grant it UPDATE. [Official privileges](https://www.postgresql.org/docs/16/ddl-priv.html).
 
-| Transaction | Ordered lock/resource steps |
+**Revised disposable-only prototype:**
+
+| Actor/flow | Actual lock order |
 |---|---|
-| Operator | BEGIN READ COMMITTED → installation xact advisory → registry row FOR UPDATE → approval-key xact advisory → initial plan/approval/actor reads → target table ACCESS EXCLUSIVE → catalog/row checks → **experimental AUTHOR and APPROVER FOR SHARE rows, sorted by login** → Policy A clock_timestamp final check → ADD_FIELD → manifest CAS → journal → COMMIT |
-| Approval INSERT via 0060 | Registry FOR SHARE → approval-key advisory → actor read → plan FOR SHARE |
-| Approval UPDATE/DELETE via 0060 | PostgreSQL approval-row update lock → approval-key xact advisory → actor read |
-| Privileged actor deactivation | Actor-row UPDATE lock → 0060 owner/role guard → COMMIT |
+| Operator | installation advisory → registry FOR UPDATE → approval advisory → initial actor SELECT → target ACCESS EXCLUSIVE → catalog/row count → **AUTHOR & APPROVER advisory xact locks sorted login** → fresh actor SELECT/revalidate each → Policy A clock_timestamp final authorization → one DDL → manifest CAS/journal → COMMIT |
+| Privileged actor writer in disposable lab | Actor row UPDATE/INSERT/DELETE lock (as issued by PostgreSQL) → **test-only BEFORE trigger acquires per-actor advisory xact key** → COMMIT |
+| Approval INSERT trigger 0060 | registry FOR SHARE → approval-key advisory → actor SELECT → plan FOR SHARE |
+| Approval UPDATE trigger 0060 | approval-row DML lock → approval-key advisory → actor SELECT |
 
-Actor-row sorting prevents opposing orders **between the two new actor locks**, but does not impose a complete cross-resource order over privileged admin transactions.
+The actor trigger uses SECURITY INVOKER, fixed search_path and no new role grants; only fixture admin can modify actors under preexisting 0060 owner check. It is not present in migrations 0059/0060 and NOT approved for shared/prod databases.
 
-## Why the narrow R1 fix works in the stated races
+## 2. R1 linearization argument and conditions
 
-**Deactivation COMMIT before final actor lock:** after waiting for target-table ACCESS EXCLUSIVE, operator's final SELECT FOR SHARE sees the new committed inactive row in READ COMMITTED and denies. No DDL should have happened.
+- If writer deactivation COMMITs while the operator waits for target-table lock, it released the actor advisory key; final operator lock/read sees committed inactive under READ COMMITTED and denies DDL.
+- If writer has actor advisory key and an uncommitted update, operator waits. After writer COMMIT/ROLLBACK, actor read sees authoritative outcome; only committed inactive invalidates.
+- If operator acquires actor advisory keys first, writer's trigger waits before its own COMMIT. The subsequent COMMIT is later than final authorization and R1 treats it as nonretroactive. This is NOT an excuse to ignore a committed earlier deactivation.
+- Both actor keys must be acquired in a stable global order; the test-only trigger orders old/new login keys on a rename. Any privileged path bypassing writer trigger breaks this proof. No JavaScript time compares transaction authority.
 
-**Deactivation UPDATE in progress:** SELECT FOR SHARE waits for conflicting updater; if admin commits inactive, updated row is returned and denies; if admin rolls back, old active value remains authoritative. No JavaScript timestamp establishes order.
+## 3. Existing and new lock-order counterexamples
 
-**Operator acquires FOR SHARE before admin UPDATE:** the latter waits for operator transaction completion before COMMIT. If its COMMIT occurs after the final decision, P05/R1 explicitly makes it nonretroactive. Experimental R1-06 and R1-09 test these cases using actual pg_stat_activity wait-event barriers.
+**Operator–privileged-admin cycle:** OP holds approval advisory A, needs actor advisory X. Admin holds actor update/advisory X, tries approval revocation needing A. The cycle OP→X, ADMIN→A is a possible PostgreSQL deadlock (40P01). Sorting AUTHOR/APPROVER keys inside operator doesn't eliminate this mixed-resource inversion. A future trusted admin lifecycle protocol must take locks in a globally reviewed order, including approval row and existing 0060 trigger interactions. Owner/superuser direct DML may bypass any cooperative protocol, so access governance and compensating detection are required.
 
-**Approval revocation:** existing 0060 approval advisory fence is still held by operator to COMMIT/ROLLBACK. Additional actor locks do not change approval timestamp semantics. Physical ADD_FIELD + registry CAS + journal remain in one transaction.
+**Two actor update orders:** Admin updates APPROVER then AUTHOR while operator acquires AUTHOR then APPROVER; a second transaction could wait in opposite order. Deterministic mixed-owner negative tests needed before stating deadlock freedom.
 
-## Candidate comparison
+**Replay counterexample:** actor deactivation COMMIT then reactivation COMMIT before operator final actor locks; active=true revives original approval. Epoch- or permanent-reapproval design remains a separately unapproved contract.
 
-| Candidate | Property | Limitation | Status |
-|---|---|---|---|
-| A: actor row FOR SHARE + final revalidation | Observes committed change, blocks subsequent update while valid | Reactivation can restore old approval; possible mixed admin deadlock | Narrow test-only implementation |
-| B: actor-specific advisory xact key | Works when every update/reader obeys same key | Existing owner direct DML bypasses unless new trusted trigger/migration enforces protocol | NOT IMPLEMENTED |
-| C: epoch only | Historical invalidation can be detected when epoch is bound | Concurrent update between check and DDL remains possible without lock | INSUFFICIENT ALONE |
-| D: hybrid A + immutable instance/generation | Serializes update, denies prior-generation approval reuse | Requires separate E2 owner/human IAM/DBA decision and additive migration | RECOMMENDED FOR DESIGN REVIEW ONLY |
+## 4. PostgreSQL and D1 regression requirements
 
-## Critical new lock-order counterexample — do not certify deadlock freedom
+**Required:** R1-01/02 committed deactivation during real target wait, R1-06 nonretroactive post-final writer wait, R1-09 in-flight writer COMMIT/ROLLBACK, real 40P01/55P03/57014, actor+approval admin interleavings, scope/role negative tests, no physical DDL/registry/journal on denial, clean disposable fixture teardown.
 
-- OPERATOR holds approval advisory key A and needs actor-row lock X at final revalidation.
-- PRIVILEGED ADMIN holds actor-row X by deactivation UPDATE and in the SAME transaction attempts approval revocation, which needs advisory A.
-- This produces the wait-for cycle OPERATOR→X (ADMIN), ADMIN→A (OPERATOR).
-- PostgreSQL can abort either transaction with SQLSTATE 40P01. If admin aborts, its deactivation was never committed; a later operator success can still respect R1. If operator aborts, no physical DDL/journal should commit.
-- An owner/admin who mixes these mutations outside a reviewed lock order can also create other cycles. A deterministic test and explicit admin protocol/trigger design are mandatory before technical DBA approval. Do not assert that sorted actor locking solves global ordering.
+Old operator still misclassifies SQLSTATE 55P03 as UNAUTHORIZED; this experiment does not fix AG06-S03-10. Existing per-statement 2000ms lock timeout is NOT the cumulative D1 2517ms budget. Pre-COMMIT M NOT DETERMINABLE; COMMIT unknown remains INDETERMINATE with no blind retry. Actor advisory waits add latency which must be measured in future exact-SHA D1 supervisor.
 
-## Other required negative and recovery tests
+## 5. Status and decision
 
-- Target-table wait followed by AUTHOR/APPROVER committed deactivation; post-final waiting update; uncommitted update then COMMIT/ROLLBACK.
-- Actor deactivation concurrent with approval advisory wait, registry wait, simultaneous deactivation, R1 revocation and actor restoration.
-- 40P01 deadlock victim, 55P03 lock timeout, 57014 query cancellation; verify rollback rather than infer it.
-- Definite COMMIT versus lost ACK, backend termination/fencing and INDETERMINATE/no blind DDL retry.
-- Proven same-order plan/actor/approval provenance, zero catalog/registry/journal drift and no changed effective privileges.
+**Agent02 technical lens: REQUEST CHANGES.** The no-new-ACL advisory protocol has a plausible R1 ordering proof **only when the writer trigger is universally applied**, but owner-controlled DML bypass, admin deadlocks, epoch reuse, D1 and T15 recovery are unresolved. First-row-lock CI FAILED; revised exact-source CI is pending new verification. No independent human DBA or IAM signature. No canonical integration.
 
-**Test status:** the old-source negative race has prior real PG evidence; experiment workflow is not certified as PASS until its exact last code/docs SHA completes. Distinct test definitions and repetitions must be recorded separately.
+**Rollback:** revert experimental branch/teardown disposable test databases. Never rewrite 0059/0060 or grant actor UPDATE. For an unknown COMMIT result require fresh fenced reconciliation.
 
-## D1, privileges, rollback and reviewer decision
-
-Existing 2000ms PG lock_timeout, 10000ms statement timeout and 4000ms CLI connect timeout are not a 2517ms cumulative D1 supervisor. Extra actor row locks and two round trips are inside the future required T0 budget; no whole-operation supervisor or independently approved pre-COMMIT M is present. **D1 compliance NOT INTEGRATED.**
-
-No changes to 0059/0060, PUBLIC/role grants, privileged watchdog, runtime DDL or production DB. Roll back only by reverting/closing this experimental branch; disposable fixture teardown is mandatory. A remote COMMIT of uncertain outcome cannot be reversed by marking timeout and requires fenced reconciliation.
-
-**Agent02 PostgreSQL technical verdict: REQUEST CHANGES.** Narrow row-lock proof is plausible; deadlock-global-order and epoch reactivation safety remain unverified. Human DBA review PENDING; no release authorization.
-
-**Primary sources reviewed 2026-11-18:** https://www.postgresql.org/docs/16/explicit-locking.html ; https://www.postgresql.org/docs/16/transaction-iso.html ; https://www.postgresql.org/docs/16/functions-admin.html ; https://www.postgresql.org/docs/16/errcodes-appendix.html ; https://www.postgresql.org/docs/release/16.16/ .
+**Sources (2026-11-18):** https://www.postgresql.org/docs/16/ddl-priv.html ; https://www.postgresql.org/docs/16/functions-admin.html ; https://www.postgresql.org/docs/16/transaction-iso.html ; https://www.postgresql.org/docs/16/explicit-locking.html ; https://www.postgresql.org/docs/16/errcodes-appendix.html .

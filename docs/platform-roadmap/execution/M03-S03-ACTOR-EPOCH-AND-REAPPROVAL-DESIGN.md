@@ -11,14 +11,14 @@ P05/R1: privileged actor deactivation committed **before final pre-DDL authoriza
 
 | Option | Safety for deactivation→reactivation | Schema needed | Operational impact | Verdict |
 |---|---|---|---|---|
-| E1: permanent approval invalidation | All approvals/plans associated with an ever-deactivated actor remain unusable until individually reissued | Durable immutable lifecycle-invalidation marker or event register + final actor row lock | Simple revoke semantics, high reapproval volume; owner mistaken disable requires manual workflow | Secure if event history irrevocable; **PROPOSED** |
+| E1: permanent approval invalidation | All approvals/plans associated with an ever-deactivated actor remain unusable until individually reissued | Durable immutable lifecycle-invalidation marker or event register + final actor-specific advisory fence | Simple revoke semantics, high reapproval volume; owner mistaken disable requires manual workflow | Secure if event history irrevocable; **PROPOSED** |
 | E2: immutable actor instance + monotonic generation | Plan/approval bound to exact actor instance and generations; new generation never validates old provenance | New additive actor instance/epoch columns, provenance bindings, lifecycle trigger, constraints and explicit grants | Strong audit/reuse guarantees, more migration and backfill work | **RECOMMENDED for review; NOT APPROVED** |
 | E3: active-state-only final read | Old approval can revive after actor reactivation | None; row locks still needed for R1 order | Lowest cost, weakest lifecycle semantics | **REJECT as complete R1 lifecycle solution** |
 
 **Recommended E2 contract for subsequent owner/IAM/DBA decision:**
 
 1. A stable **actor_instance_id** is generated and authenticated by the database/provisioner when a trusted LOGIN is registered. Never derive identity from mutable LOGIN name or a reusable integer epoch alone. Deletion/reinsertion creates a new unrepeatable instance; previously used instance identities remain auditable.
-2. A nondecreasing, never-reset `actor_generation` is incremented on all approved deactivate, reactivate, principal replacement and sensitive lifecycle transitions. Concurrency serialization must be enforced using the same actor-row update lock as the final operator FOR SHARE.
+2. A nondecreasing, never-reset `actor_generation` is incremented on all approved deactivate, reactivate, principal replacement and sensitive lifecycle transitions. Concurrency serialization must be enforced using the same writer-side actor advisory fence + PostgreSQL UPDATE row lock as the final operator FOR SHARE.
 3. **Plan provenance** is bound to the immutable AUTHOR instance and generation at authorization capture; **approval provenance** binds to the same AUTHOR instance/generation AND an independent APPROVER instance/generation.
 4. The final operator must lock both actor rows in a documented global order and compare current active, kind, authenticated identity, instance and generation to immutable provenance. Any mismatch -> UNAUTHORIZED before DDL; require new plan and/or new approval according to separately approved business rule.
 5. Reactivation never silently restores an earlier plan/approval; a newly registered AUTHOR must resubmit the plan and a currently distinct APPROVER must sign the exact operation. **This strict new-provenance policy is proposed, NOT selected by the Project Owner.**
@@ -34,7 +34,7 @@ P05/R1: privileged actor deactivation committed **before final pre-DDL authoriza
 | Actor deleted and re-created with same LOGIN and principal string | New actor_instance_id blocks reuse |
 | Actor principal rebound, role changed, SET ROLE attempted | Immutable provenance mismatch; privileged identity capture remains session_user |
 | Two concurrent lifecycle transactions | Row locking serializes their COMMIT effects; aborted generation update not authoritative |
-| Admin revokes approval while actor deactivation pending | Existing 0060 approval advisory fence and actor row locks must be jointly reviewed for deadlock |
+| Admin revokes approval while actor deactivation pending | Existing 0060 approval advisory fence and actor-specific advisory fences must be jointly reviewed for deadlock |
 | Legacy plans/approvals with NULL generation | Fail closed; reissue after accountable human review; do not fabricate history |
 | Runtime with accidental direct UPDATE grant | Owner-only 0060 guard still denies; future generation trigger must also reject escalation |
 | Previously archived actor restored after an error | New generation and fresh sign-off unless owner adopts a distinct, reviewed recovery policy |
@@ -64,3 +64,7 @@ P05/R1: privileged actor deactivation committed **before final pre-DDL authoriza
 - [OWASP Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html), including deny-by-default and verified authorizations.
 
 **Next permitted action:** deliver E2 vs E1 decision options to accountable human IAM/DBA for written risk and migration review; obtain any further owner reapproval policy decision before executable implementation.
+
+## 6. New experimentally verified design constraint (2026-11-18)
+
+PostgreSQL 16 SELECT FOR SHARE requires UPDATE privilege on the trusted-actor roster, which violates the dedicated operator's least-privilege contract. The first row-lock prototype failed CI #44234590759; no UPDATE privilege expansion is acceptable. The revised experiment uses operator transaction advisory keys and a **disposable-fixture-only SECURITY INVOKER writer trigger**, not an approved migration. E2 generation binding is still recommended to prevent deactivate→reactivate replay, and an authenticated privileged lifecycle function plus durable identity/event provenance would need separate human IAM/DBA and owner decisions. The trigger is installed only after 0060 in disposable test databases. [Official PG16 privileges](https://www.postgresql.org/docs/16/ddl-priv.html).
