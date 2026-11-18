@@ -174,7 +174,7 @@ describe("platform dependency boundaries", () => {
 
 describe("M03-S03 experimental execution architecture", () => {
   it("keeps operator and session supervisor out of public database exports and serving source imports", () => {
-    const forbidden=/platform-schema-migration-operator|schema-operator-experimental-(?:supervisor|session|recovery-epoch|durable-authority|anchor)/;
+    const forbidden=/platform-schema-migration-operator|schema-operator-experimental-(?:supervisor|session|recovery-epoch|durable-authority|anchor|lifecycle)/;
     const index=fs.readFileSync(path.join(ROOT,"packages/database/src/index.ts"),"utf8");
     expect(index).not.toMatch(forbidden);
     const cli=fs.readFileSync(path.join(ROOT,"packages/database/src/schema-operator-cli.ts"),"utf8");

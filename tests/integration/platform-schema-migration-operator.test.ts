@@ -20,6 +20,7 @@ import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operat
 import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
+import { retireDisposableIdentity, completeDisposableIdentity } from "../../packages/database/src/schema-operator-experimental-lifecycle";
 import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
 import { DisposableDurableRecoveryAuthority, recoveryAdministrationMessage } from "../../packages/database/src/schema-operator-experimental-durable-authority";
 
@@ -30,7 +31,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4095,8 +4096,7 @@ describe("P06 durable transaction facts",()=>{
       expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["ROLLED_BACK","COMMITTED"]);
     }finally{a.close();rmSync(dir,{recursive:true,force:true});}
   },30000);
-  it.each([["P06-E2E-43","ci","ROLLBACK"],["P06-E2E-44","cj","COMMIT"]] as const)
-    ("%s: durable lost acknowledgment (%s, %s) stays uncertain",async(_name,key,command)=>{
+  it.each([["P06-E2E-43","ci","ROLLBACK"],["P06-E2E-44","cj","COMMIT"]] as const)("%s: durable lost acknowledgment (%s, %s) stays uncertain",async(_name,key,command)=>{
     const lab=await createLab(key);labs.push(lab);await p06Install(lab);
     const request=await freshP06(lab),checksum=await contentChecksum(lab);
     if(command==="ROLLBACK"){
@@ -4234,3 +4234,29 @@ it("P06-E2E-47: actual post-COMMIT restore, fenced catalog and journal observati
     a.close();rmSync(dir,{recursive:true,force:true});
   }
 },90000);
+
+
+it("P06-E2E-48: disposable trusted lifecycle waits for real actor-session exit and invalidates restored role state",async()=>{
+  const lab=await createLab("cr");labs.push(lab);await p06Install(lab);
+  const stale=await freshP06(lab),checksum=await contentChecksum(lab);
+  const actor=await connect(lab.name,lab.author),esc=(v:string)=>cluster.escapeIdentifier(v);
+  try{
+    const ticket=await retireDisposableIdentity(lab.dbAdmin,cluster,lab.installationId,lab.author);
+    expect((await cluster.query("SELECT rolcanlogin FROM pg_roles WHERE rolname=$1",[lab.author])).rows).toEqual([{rolcanlogin:false}]);
+    await expect(actor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();
+    // No runtime session signal or broad grant. The fixture owns this client.
+    await actor.end();
+    // Native temporary membership drift while retired is reversed; historical
+    // authorization still cannot reappear when LOGIN is restored.
+    await cluster.query("GRANT "+esc(lab.runtimeRole)+" TO "+esc(lab.author));
+    try{await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();}
+    finally{await cluster.query("REVOKE "+esc(lab.runtimeRole)+" FROM "+esc(lab.author));}
+    const instance=await completeDisposableIdentity(lab.dbAdmin,cluster,ticket,"individual:replacement_"+lab.author);
+    expect(instance).not.toBe(ticket.oldInstance);
+    await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }finally{await actor.end().catch(()=>undefined);}
+},30000);
