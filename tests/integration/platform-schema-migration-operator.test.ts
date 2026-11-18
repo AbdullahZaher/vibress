@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
   compileResourceSchema,
@@ -264,6 +264,29 @@ beforeAll(async () => {
   labs.push(await createLab("g")); // Execution-before-revocation fixture.
   labs.push(await createLab("h")); // Forced rollback and replay fixture.
 }, 120000);
+
+// The eight baseline labs stay available for regression cases; every
+// additional disposable lab is dismantled immediately after its owning test.
+// Previously retaining each extra lab's 3 sessions until afterAll exhausted
+// PostgreSQL max_connections and hid later security regressions.
+afterEach(async () => {
+  if (!cluster) return;
+  const extra=labs.splice(8);
+  for (const lab of extra) {
+    if (!lab.name.startsWith("vibress_s03_") || !lab.name.endsWith("_"+id)) {
+      throw new Error("REFUSE_NONOWNED_DISPOSABLE_FIXTURE_CLEANUP");
+    }
+    await Promise.allSettled([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    await cluster.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+      "WHERE datname=$1 AND pid<>pg_backend_pid()",[lab.name],
+    );
+    await cluster.query("DROP DATABASE IF EXISTS "+cluster.escapeIdentifier(lab.name));
+    for (const role of [lab.runtimeRole,lab.operatorRole,lab.approver,lab.author]) {
+      await cluster.query("DROP ROLE IF EXISTS "+cluster.escapeIdentifier(role));
+    }
+  }
+});
 
 afterAll(async () => {
   for (const lab of labs) {
@@ -1373,7 +1396,11 @@ describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG1
         .toBe(true);
       release();
       expect((await execution).status).toBe("APPLIED");
-      await expect(inserted).rejects.toMatchObject({code:"23505"});
+      // E2's additional SECURITY INVOKER provenance trigger now denies
+      // a direct, mistakenly granted INSERT rather than fetching privileged
+      // roster data. Existing registry-before-approval lock ordering above
+      // is still verified; E2 fails closed with 42501, not duplicate 23505.
+      await expect(inserted).rejects.toMatchObject({code:"42501"});
       expect(await hasWebsite(lab)).toBe(true);
       expect((await lab.dbAdmin.query(
         "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
