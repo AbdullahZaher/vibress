@@ -17,7 +17,7 @@ export class SchemaMigrationOperatorError extends Error {
     | "UNAUTHORIZED" | "STALE_PLAN" | "CATALOG_DRIFT" | "UNSUPPORTED"
     | "JOURNAL_CONFLICT" | "INDETERMINATE" | "LOCK_NOT_AVAILABLE"
     | "DEADLOCK" | "QUERY_CANCELED" | "DATABASE_PRIVILEGE_FAILURE"
-    | "DEADLINE_EXCEEDED", reason: string) {
+    | "DEADLINE_EXCEEDED" | "VERIFIED_ROLLBACK", reason: string) {
     super(reason);
     this.name = "SchemaMigrationOperatorError";
   }
@@ -468,8 +468,13 @@ export async function executeApprovedAdditiveColumn(
       const afterRows = await rowCount(db, ddl.tableName);
       budget?.checkpoint();
       commitAttempted = true;
-      await rawDb.query("COMMIT");
+      const commitResult = await rawDb.query("COMMIT");
       began = false;
+      if (commitResult.command === "ROLLBACK") {
+        commitAttempted = false;
+        deny("VERIFIED_ROLLBACK", "server acknowledged rollback instead of commit");
+      }
+      if (commitResult.command !== "COMMIT") deny("INDETERMINATE", "unexpected commit response; reconcile before retry");
       return {
         status: budget?.expired() ? "ALREADY_APPLIED_LATE" : "ALREADY_APPLIED", installationId: request.installationId,
         operationId: ddl.operationId, planDigest: request.planDigest,
@@ -581,8 +586,13 @@ export async function executeApprovedAdditiveColumn(
     // prevents dispatch after observed deadline and distinguishes late ACK.
     budget?.checkpoint();
     commitAttempted = true;
-    await rawDb.query("COMMIT");
+    const commitResult = await rawDb.query("COMMIT");
     began = false;
+    if (commitResult.command === "ROLLBACK") {
+      commitAttempted = false;
+      deny("VERIFIED_ROLLBACK", "server acknowledged rollback instead of commit");
+    }
+    if (commitResult.command !== "COMMIT") deny("INDETERMINATE", "unexpected commit response; reconcile before retry");
     return {
       status: budget?.expired() ? "COMMITTED_LATE" : "APPLIED", installationId: request.installationId,
       operationId: ddl.operationId, planDigest: request.planDigest,

@@ -20,7 +20,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -256,7 +256,7 @@ afterEach(async () => {
       "WHERE datname=$1 AND pid<>pg_backend_pid()",[lab.name],
     );
     await cluster.query("DROP DATABASE IF EXISTS "+cluster.escapeIdentifier(lab.name));
-    for (const role of [lab.runtimeRole,lab.operatorRole,lab.approver,lab.author]) {
+    for (const role of [lab.runtimeRole,lab.operatorRole,lab.approver,lab.author, "s03_delegate_" + lab.key + "_" + id, "s03_gateway_" + lab.key + "_" + id]) {
       await cluster.query("DROP ROLE IF EXISTS "+cluster.escapeIdentifier(role));
     }
   }
@@ -275,7 +275,7 @@ afterAll(async () => {
     for (const lab of labs) {
       await cluster.query("DROP DATABASE IF EXISTS " +
         cluster.escapeIdentifier(lab.name)).catch(() => undefined);
-      for (const role of [lab.runtimeRole, lab.operatorRole, lab.approver, lab.author]) {
+      for (const role of [lab.runtimeRole, lab.operatorRole, lab.approver, lab.author, "s03_delegate_" + lab.key + "_" + id, "s03_gateway_" + lab.key + "_" + id]) {
         await cluster.query("DROP ROLE IF EXISTS " + cluster.escapeIdentifier(role))
           .catch(() => undefined);
       }
@@ -2707,6 +2707,81 @@ describe("P06 additive authorization identity (disposable prototype)", () => {
     } finally {
       await author.end();
       await approver.end();
+    }
+  }, 30000);
+});
+
+describe("L1 delegated actor-only lifecycle gateway (disposable, narrow path)", () => {
+  it("L1-P06-01: denies direct DML, permits scoped gateway, and blocks in-flight stale authorization", async () => {
+    const lab = await createLab("an");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const delegate = "s03_delegate_" + lab.key + "_" + id;
+    const gateway = "s03_gateway_" + lab.key + "_" + id;
+    const esc = (name: string) => lab.dbAdmin.escapeIdentifier(name);
+    await cluster.query("CREATE ROLE " + esc(delegate) +
+      " LOGIN PASSWORD " + cluster.escapeLiteral(password) +
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE " + esc(gateway) +
+      " NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE " + esc(lab.name) + " TO " + esc(delegate));
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-p06-l1-actor-gateway-experimental.sql"), "utf8"));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO " + esc(delegate) + "," + esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry, public.s03_p06_admin_capability, " +
+      "public.platform_schema_trusted_actors TO " + esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO " + esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO " + esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO " + esc(delegate));
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability VALUES ($1,$2)",
+      [lab.installationId, delegate]);
+    const admin = await connect(lab.name, delegate);
+    const blocker = await connect(lab.name);
+    let pending: ReturnType<typeof run> | undefined;
+    try {
+      for (const query of [
+        "UPDATE public.platform_schema_trusted_actors SET active=false",
+        "DELETE FROM public.platform_schema_trusted_actors",
+        "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES ('x','x','AUTHOR')",
+      ]) await expect(admin.query(query)).rejects.toMatchObject({ code: "42501" });
+      await expect(admin.query("SET ROLE " + esc(gateway))).rejects.toMatchObject({ code: "42501" });
+      await expect(lab.runtime.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        [lab.installationId, lab.author])).rejects.toMatchObject({ code: "42501" });
+      await expect(admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        ["wrong-installation", lab.author])).rejects.toMatchObject({ code: "42501" });
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".' + esc(lab.table) + " IN ACCESS EXCLUSIVE MODE");
+      pending = run(lab);
+      // Attach rejection handler immediately while observing backend lock wait.
+      void pending.catch(() => undefined);
+      let blocked = false;
+      for (let i = 0; i < 100; i++) {
+        const row = (await lab.dbAdmin.query<{ waiting: boolean }>(
+          "SELECT cardinality(pg_blocking_pids($1)) > 0 AS waiting", [lab.operator.processID ?? -1])).rows[0];
+        if (row?.waiting) { blocked = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked).toBe(true);
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        [lab.installationId, lab.author]);
+      await blocker.query("ROLLBACK");
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.platform_schema_migration_journal")).rowCount).toBe(0);
+      const row = (await lab.dbAdmin.query<{ active: boolean; actor_generation: string }>(
+        "SELECT active,actor_generation FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.author])).rows[0];
+      expect(row).toEqual({ active: false, actor_generation: "2" });
+      const audit = await lab.dbAdmin.query<{ changed_by: string; new_generation: string }>(
+        "SELECT changed_by,new_generation FROM public.s03_p06_lifecycle_audit");
+      expect(audit.rows).toEqual([{ changed_by: delegate, new_generation: "2" }]);
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await pending?.catch(() => undefined);
+      await blocker.end();
+      await admin.end();
     }
   }, 30000);
 });
