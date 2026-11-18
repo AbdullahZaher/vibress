@@ -91,7 +91,10 @@ describe("M04 independent OpenAPI 3.1 / JSON Schema conformance", () => {
       const op = f.contracts.operations.find(x => x.operationId === id)!;
       const external = ajv.compile(direction === "input" ? op.input : op.output);
       let internal = true;
-      try { direction === "input" ? f.contracts.validateInput(id,value) : f.contracts.validateOutput(id,value); }
+      try {
+        if (direction === "input") f.contracts.validateInput(id,value);
+        else f.contracts.validateOutput(id,value);
+      }
       catch { internal = false; }
       expect(internal, id + " internal case " + executed).toBe(expected);
       expect(external(value), id + " external case " + executed).toBe(expected);
