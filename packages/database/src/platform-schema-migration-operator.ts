@@ -1,4 +1,5 @@
 import type { ClientBase } from "pg";
+import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -14,7 +15,9 @@ import {
 export class SchemaMigrationOperatorError extends Error {
   constructor(readonly code:
     | "UNAUTHORIZED" | "STALE_PLAN" | "CATALOG_DRIFT" | "UNSUPPORTED"
-    | "JOURNAL_CONFLICT" | "INDETERMINATE", reason: string) {
+    | "JOURNAL_CONFLICT" | "INDETERMINATE" | "LOCK_NOT_AVAILABLE"
+    | "DEADLOCK" | "QUERY_CANCELED" | "DATABASE_PRIVILEGE_FAILURE"
+    | "DEADLINE_EXCEEDED", reason: string) {
     super(reason);
     this.name = "SchemaMigrationOperatorError";
   }
@@ -126,7 +129,7 @@ export interface SchemaOperatorRequest {
   readonly planDigest: string;
 }
 export interface SchemaOperatorResult {
-  readonly status: "APPLIED" | "ALREADY_APPLIED";
+  readonly status: "APPLIED" | "ALREADY_APPLIED" | "COMMITTED_LATE" | "ALREADY_APPLIED_LATE";
   readonly installationId: string;
   readonly operationId: string;
   readonly planDigest: string;
@@ -273,7 +276,24 @@ async function rowCount(db: ClientBase, tableName: string): Promise<string> {
 export async function executeApprovedAdditiveColumn(
   db: ClientBase,
   request: SchemaOperatorRequest,
+  // Explicit opt-in only for the disposable experiment; old tests retain their historic contract.
+  budget?: ExperimentalD1Budget,
 ): Promise<SchemaOperatorResult> {
+  const rawDb = db;
+  if (budget) {
+    db = new Proxy(rawDb, {
+      get(target, property) {
+        const value: unknown = Reflect.get(target, property, target);
+        if (property === "query" && typeof value === "function") {
+          return (...args: unknown[]) => {
+            budget.checkpoint();
+            return Reflect.apply(value, target, args);
+          };
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
   if (!INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest)) {
     return deny("UNAUTHORIZED", "invalid operator invocation");
   }
@@ -446,10 +466,12 @@ export async function executeApprovedAdditiveColumn(
       }
       await verifyCatalog(db, oid, next);
       const afterRows = await rowCount(db, ddl.tableName);
-      await db.query("COMMIT");
+      budget?.checkpoint();
+      commitAttempted = true;
+      await rawDb.query("COMMIT");
       began = false;
       return {
-        status: "ALREADY_APPLIED", installationId: request.installationId,
+        status: budget?.expired() ? "ALREADY_APPLIED_LATE" : "ALREADY_APPLIED", installationId: request.installationId,
         operationId: ddl.operationId, planDigest: request.planDigest,
         previousDigest: current.digest, newDigest: plan.proposedManifest.digest,
         beforeRows: afterRows, afterRows,
@@ -555,11 +577,14 @@ export async function executeApprovedAdditiveColumn(
           authorizationPolicy: "FINAL_PRE_DDL" }),
       ],
     );
+    // No numeric admission margin has been approved. This experiment only
+    // prevents dispatch after observed deadline and distinguishes late ACK.
+    budget?.checkpoint();
     commitAttempted = true;
-    await db.query("COMMIT");
+    await rawDb.query("COMMIT");
     began = false;
     return {
-      status: "APPLIED", installationId: request.installationId,
+      status: budget?.expired() ? "COMMITTED_LATE" : "APPLIED", installationId: request.installationId,
       operationId: ddl.operationId, planDigest: request.planDigest,
       previousDigest: current.digest, newDigest: plan.proposedManifest.digest,
       beforeRows, afterRows,
@@ -567,7 +592,7 @@ export async function executeApprovedAdditiveColumn(
   } catch (error) {
     if (began && !commitAttempted) {
       try {
-        await db.query("ROLLBACK");
+        await rawDb.query("ROLLBACK");
       } catch {
         deny("INDETERMINATE", "rollback failed; discard the operator connection and reconcile journal");
       }
@@ -576,7 +601,18 @@ export async function executeApprovedAdditiveColumn(
       deny("INDETERMINATE", "commit outcome unknown; reconcile registry and journal on a fresh connection");
     }
     if (error instanceof SchemaMigrationOperatorError) throw error;
-    // No SQL, credentials, tenant data, driver details or stack in external errors.
-    deny("UNAUTHORIZED", "operator verification or execution failed; inspect sanitized audit");
+    if (error instanceof D1DeadlineExceeded) {
+      deny("DEADLINE_EXCEEDED", "operation budget expired before dispatch; no further operation SQL sent");
+    }
+    // Never expose driver messages, SQL, credentials, or stack traces.
+    const sqlstate = typeof error === "object" && error !== null && "code" in error
+      ? error.code : undefined;
+    switch (sqlstate) {
+      case "55P03": deny("LOCK_NOT_AVAILABLE", "database lock not available; transaction rolled back");
+      case "40P01": deny("DEADLOCK", "database deadlock; transaction rolled back");
+      case "57014": deny("QUERY_CANCELED", "database query canceled; transaction rolled back");
+      case "42501": deny("DATABASE_PRIVILEGE_FAILURE", "database privilege or configuration failure; inspect sanitized audit");
+      default: deny("UNAUTHORIZED", "operator verification or execution failed; inspect sanitized audit");
+    }
   }
 }

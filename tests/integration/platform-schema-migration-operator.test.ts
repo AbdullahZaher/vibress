@@ -11,6 +11,7 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../../packages/database/src/platform-schema-migration-operator";
+import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
 const BASE_URL = process.env.DATABASE_URL ??
@@ -19,7 +20,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -1967,7 +1968,7 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
     }
   },30000);
 
-  it("AG06-S03-10: real SQLSTATE 55P03 lock timeout is incorrectly classified UNAUTHORIZED", async () => {
+  it("AG06-S03-10: real SQLSTATE 55P03 lock timeout is classified LOCK_NOT_AVAILABLE", async () => {
     const lab=await createLab("x");
     labs.push(lab);
     await approve(lab);
@@ -1988,8 +1989,8 @@ describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures"
       )).rejects.toMatchObject({code:"55P03"});
       await waiter.query("ROLLBACK");
       // The same held real table lock triggers operator's 2000ms cap.
-      // Current catch wrongly turns this operational PG error into IAM denial.
-      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // Operational SQLSTATE must not be represented as IAM denial.
+      await expect(run(lab)).rejects.toMatchObject({code:"LOCK_NOT_AVAILABLE"});
       // The external ACCESS EXCLUSIVE lock also blocks checksum SELECT.
       // Release it before postconditions; its waiter already timed out safely.
       await blocker.query("ROLLBACK");
@@ -2591,4 +2592,121 @@ describe("E2 negative privilege, UUID tombstone and rollback tests (EXPERIMENT O
     expect(await hasWebsite(lab)).toBe(false);
     expect(await contentChecksum(lab)).toBe(before);
   },30000);
+});
+
+describe("P06/D1 experimental dispatch and known committed outcome", () => {
+  it("D1-01: expired budget refuses even BEGIN and preserves database state", async () => {
+    const lab = await createLab("aj");
+    labs.push(lab);
+    await approve(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    tick = 2518;
+    await expect(executeApprovedAdditiveColumn(lab.operator,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget))
+      .rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+  }, 30000);
+
+  it("D1-02: exhaustion after real journal INSERT prevents COMMIT and rolls back DDL", async () => {
+    const lab = await createLab("ak");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    const issued: string[] = [];
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        issued.push(sql);
+        const result = params ? await lab.operator.query(sql, params) : await lab.operator.query(sql);
+        if (sql.startsWith("INSERT INTO public.platform_schema_migration_journal")) tick = 2518;
+        return result;
+      },
+    } as unknown as ClientBase;
+    await expect(executeApprovedAdditiveColumn(hooked,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget))
+      .rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(issued).not.toContain("COMMIT");
+    expect(issued).toContain("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+  }, 30000);
+
+  it("D1-03: acknowledged real COMMIT after simulated deadline is COMMITTED_LATE, never APPLIED", async () => {
+    const lab = await createLab("al");
+    labs.push(lab);
+    await approve(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = params ? await lab.operator.query(sql, params) : await lab.operator.query(sql);
+        if (sql === "COMMIT") tick = 2518;
+        return result;
+      },
+    } as unknown as ClientBase;
+    const result = await executeApprovedAdditiveColumn(hooked,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget);
+    expect(result.status).toBe("COMMITTED_LATE");
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal WHERE status='COMPLETED'")).rowCount).toBe(1);
+  }, 30000);
+});
+
+describe("P06 additive authorization identity (disposable prototype)", () => {
+  it("P06-01: same canonical digest, fresh UUIDs, stale approval cannot authorize new operation", async () => {
+    const lab = await createLab("am");
+    labs.push(lab);
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-p06-authorization-identity-experimental.sql"), "utf8"));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid) TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const author = await connect(lab.name, lab.author);
+    const approver = await connect(lab.name, lab.approver);
+    try {
+      const submit = async () => (await author.query<{ id: string }>(
+        "SELECT public.s03_p06_submit($1,$2) AS id", [lab.installationId, lab.plan.digest])).rows[0]!.id;
+      const sign = async (submission: string) => (await approver.query<{ id: string }>(
+        "SELECT public.s03_p06_approve($1::uuid) AS id", [submission])).rows[0]!.id;
+      const first = await submit();
+      const oldApproval = await sign(first);
+      await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.approver]);
+      await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+        [lab.approver]);
+      await expect(sign(first)).rejects.toMatchObject({ code: "42501" });
+      const second = await submit();
+      const freshApproval = await sign(second);
+      const read = await lab.dbAdmin.query<{ submission_id: string; operation_id: string; canonical_plan_digest: string }>(
+        "SELECT submission_id,operation_id,canonical_plan_digest FROM public.s03_p06_submissions WHERE submission_id=ANY($1::uuid[])",
+        [[first, second]]);
+      const old = read.rows.find(row => row.submission_id === first)!;
+      const fresh = read.rows.find(row => row.submission_id === second)!;
+      expect(old.canonical_plan_digest).toBe(lab.plan.digest);
+      expect(fresh.canonical_plan_digest).toBe(lab.plan.digest);
+      expect(first).not.toBe(second);
+      expect(old.operation_id).not.toBe(fresh.operation_id);
+      expect(oldApproval).not.toBe(freshApproval);
+      const current = async (op: string, approval: string) => (await lab.dbAdmin.query<{ valid: boolean }>(
+        "SELECT public.s03_p06_is_current($1::uuid,$2::uuid) AS valid", [op, approval])).rows[0]?.valid;
+      expect(await current(old.operation_id, oldApproval)).toBe(false);
+      expect(await current(fresh.operation_id, oldApproval)).toBe(false);
+      expect(await current(fresh.operation_id, freshApproval)).toBe(true);
+      await expect(lab.runtime.query("SELECT public.s03_p06_submit($1,$2)",
+        [lab.installationId, lab.plan.digest])).rejects.toMatchObject({ code: "42501" });
+      await expect(approver.query("UPDATE public.s03_p06_approvals SET approver_generation=1"))
+        .rejects.toMatchObject({ code: "42501" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await author.end();
+      await approver.end();
+    }
+  }, 30000);
 });

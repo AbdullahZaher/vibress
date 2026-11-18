@@ -5,7 +5,8 @@
  * No default DATABASE_URL fallback, no privilege provisioning.
  */
 import { Client } from "pg";
-import { executeApprovedAdditiveColumn } from "./platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn, SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
+import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 function testOnlyConnection(): string {
   if (process.env.NODE_ENV === "production" ||
@@ -29,21 +30,25 @@ function testOnlyConnection(): string {
 }
 
 async function main(): Promise<void> {
+  const budget = new ExperimentalD1Budget();
   const [installationId, planDigest, unexpected] = process.argv.slice(2);
   if (!installationId || !planDigest || unexpected) {
     throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest>");
   }
   const connectionString = testOnlyConnection();
+  budget.checkpoint();
   const db = new Client({
     connectionString,
-    connectionTimeoutMillis: 4000,
+    connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
     statement_timeout: 10000,
     query_timeout: 12000,
   });
-  await db.connect();
   try {
-    const result = await executeApprovedAdditiveColumn(db, { installationId, planDigest });
+    await db.connect();
+    budget.checkpoint();
+    const result = await executeApprovedAdditiveColumn(db, { installationId, planDigest }, budget);
     console.log(JSON.stringify(result));
+    if (result.status === "COMMITTED_LATE" || result.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
   } finally {
     await db.end().catch(() => undefined);
   }
@@ -51,6 +56,6 @@ async function main(): Promise<void> {
 
 main().catch(error => {
   // Never print connection strings, SQL, credentials, schema data or stack traces.
-  console.error("[M03-S03] refused:", error instanceof Error ? error.name : "Error");
+  console.error("[M03-S03] refused:", error instanceof SchemaMigrationOperatorError ? error.code : error instanceof Error ? error.name : "Error");
   process.exitCode = 1;
 });
