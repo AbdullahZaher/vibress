@@ -107,6 +107,7 @@ describe("M03-S03 terminal session dispatch fence", () => {
     session.fence("DEADLINE_EXCEEDED");
     session.retire();
     session.acknowledge("COMMIT", "COMMIT");
+    expect(session.snapshot()).toMatchObject({beginDispatched: true, commitDispatched: true, commitAcknowledged: true});
     expect(session.fence("NORMAL_COMPLETION")).toBe(false);
     expect(session.snapshot()).toMatchObject({ phase: "COMMIT_ACKNOWLEDGED",
       terminalCause: "DEADLINE_EXCEEDED", retired: true, closed: false });
@@ -139,7 +140,15 @@ describe("M03-S03 terminal session dispatch fence", () => {
     expect(() => session.beforeDispatch("BEGIN")).toThrow();
     session.beforeDispatch("COMMIT");
     session.acknowledge("COMMIT", "ROLLBACK");
-    expect(session.snapshot().phase).toBe("ROLLED_BACK");
+    expect(session.snapshot()).toMatchObject({phase: "ROLLED_BACK", beginDispatched: true,
+      commitDispatched: true, commitAcknowledged: false});
     expect(() => session.beforeDispatch("COMMIT")).toThrow();
   });
+});
+
+it("binds a lifecycle to the exact whole-operation budget instance", () => {
+  const budget = new ExperimentalD1Budget(() => 0);
+  const session = new ExperimentalSessionLifecycle(budget);
+  expect(session.usesBudget(budget)).toBe(true);
+  expect(session.usesBudget(new ExperimentalD1Budget(() => 0))).toBe(false);
 });

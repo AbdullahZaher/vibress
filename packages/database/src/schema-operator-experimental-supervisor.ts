@@ -2,7 +2,7 @@
 // CancelRequest or broad signal privilege. Timeout closes the client and
 // conservatively reports uncertainty; disconnect alone is NOT rollback proof.
 import { Client } from "pg";
-import { ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
+import { D1DeadlineExceeded, ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
 import { ExperimentalSessionLifecycle, type SessionTerminalCause } from "./schema-operator-experimental-session";
 import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
@@ -28,7 +28,13 @@ export async function superviseDisposableSchemaOperation(
   let closing: Promise<void> | undefined;
   const close = () => {
     session.retire();
-    return closing ??= db.end().then(() => session.markClosed(), () => undefined);
+    try {
+      return closing ??= db.end().then(() => session.markClosed(), () => undefined);
+    } catch {
+      // Still retired and permanently fenced; a failed close is not proof of
+      // disconnection or rollback and must not prevent terminal settlement.
+      return closing ??= Promise.resolve();
+    }
   };
   let rejectTerminal: (error: SchemaMigrationOperatorError) => void = () => undefined;
   const terminal = new Promise<never>((_, reject) => { rejectTerminal = reject; });
@@ -67,7 +73,9 @@ export async function superviseDisposableSchemaOperation(
     }
     return result;
   } catch (error) {
-    session.fence("OPERATION_FAILED");
+    session.fence(error instanceof D1DeadlineExceeded ||
+      (error instanceof SchemaMigrationOperatorError && error.code === "DEADLINE_EXCEEDED")
+      ? "DEADLINE_EXCEEDED" : "OPERATION_FAILED");
     throw error;
   } finally {
     cancelDeadline();

@@ -19,6 +19,7 @@ import {
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
 import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
+import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
 const BASE_URL = process.env.DATABASE_URL ??
@@ -27,7 +28,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3707,3 +3708,56 @@ describe("P06 supervised terminal session regression", () => {
       labRecoveryAuthority, "RECONCILE")).status).toBe("ALREADY_APPLIED");
   }, 30000);
 });
+
+it("P06-E2E-28: actual operator refuses all dispatch after fence while proof is suspended", async () => {
+  const lab = await createLab("bt"); labs.push(lab); await p06Install(lab);
+  const request = await freshP06(lab), checksum = await contentChecksum(lab);
+  const client = await connect(lab.name, lab.operatorRole);
+  // Freeze this test clock to isolate the terminal-state mechanism from D1.
+  // Real elapsed-time/transport behavior is covered separately by E2E-22/26/27.
+  const budget = new ExperimentalD1Budget(() => 0);
+  const session = new ExperimentalSessionLifecycle(budget);
+  let entered: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const providerEntered = new Promise<void>(resolve => { entered = resolve; });
+  const providerRelease = new Promise<void>(resolve => { release = resolve; });
+  const authority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+    entered();
+    await providerRelease;
+    return proofFor(challenge, labEpochs.get(challenge.installationId + ":" + challenge.databaseName)!);
+  });
+  // Observe calls at the driver boundary, including timeout refresh, DDL,
+  // COMMIT and ROLLBACK. Socket termination alone would not prove this.
+  let dispatches = 0;
+  const wrapped = {
+    getTransactionStatus: () => (client as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
+    escapeIdentifier: client.escapeIdentifier.bind(client),
+    query: (sql: string, params?: unknown[]) => {
+      dispatches++;
+      return params ? client.query(sql, params) : client.query(sql);
+    },
+  } as unknown as ClientBase;
+  const operation = executeP06Raw(wrapped, request, budget, authority, session);
+  void operation.catch(() => undefined);
+  try {
+    await Promise.race([providerEntered, operation.then(() => { throw Error("unexpected completion"); })]);
+    const beforeFence = dispatches;
+    expect(beforeFence).toBeGreaterThan(0);
+    expect(session.fence("TRANSPORT_FAILED")).toBe(true);
+    session.retire();
+    release();
+    await expect(operation).rejects.toMatchObject({code: "INDETERMINATE"});
+    expect(dispatches).toBe(beforeFence);
+    expect(session.snapshot()).toMatchObject({beginDispatched: true, commitDispatched: false,
+      terminalCause: "TRANSPORT_FAILED", cleanupPermitted: false});
+  } finally {
+    release();
+    await operation.catch(() => undefined);
+    await client.end();
+  }
+  await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget()))
+    .rejects.toMatchObject({code: "INDETERMINATE"});
+  expect(await hasWebsite(lab)).toBe(false);
+  expect(await contentChecksum(lab)).toBe(checksum);
+  expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+}, 30000);

@@ -12,6 +12,9 @@ type Control = Exclude<Dispatch, "SQL">;
 export class ExperimentalSessionLifecycle {
   private phase: Phase;
   private cause: SessionTerminalCause | undefined;
+  private began = false;
+  private commitSent = false;
+  private commitAcknowledged = false;
   private retired = false;
   private closed = false;
 
@@ -21,9 +24,13 @@ export class ExperimentalSessionLifecycle {
 
   snapshot() {
     return { phase: this.phase, terminalCause: this.cause,
+      beginDispatched: this.began, commitDispatched: this.commitSent,
+      commitAcknowledged: this.commitAcknowledged,
       retired: this.retired, closed: this.closed,
       cleanupPermitted: this.cleanupPermitted() };
   }
+
+  usesBudget(budget: ExperimentalD1Budget): boolean { return this.budget === budget; }
 
   // First terminal cause wins. A later receipt may still establish a fact
   // about the already-dispatched transaction but cannot reopen dispatch.
@@ -63,21 +70,27 @@ export class ExperimentalSessionLifecycle {
     }
     this.assertOperational();
     if (kind === "BEGIN" && this.phase === "READY") {
+      this.began = true;
       this.phase = "BEGIN_DISPATCHED";
       return;
     }
     if (this.phase !== "TRANSACTION_ACTIVE" || kind === "BEGIN") {
       throw Error("invalid transaction dispatch phase");
     }
-    if (kind === "COMMIT") this.phase = "COMMIT_DISPATCHED";
+    if (kind === "COMMIT") {
+      this.commitSent = true;
+      this.phase = "COMMIT_DISPATCHED";
+    }
   }
 
   acknowledge(kind: Control, command: string): void {
     if (kind === "BEGIN" && this.phase === "BEGIN_DISPATCHED" && command === "BEGIN") {
       this.phase = "TRANSACTION_ACTIVE";
     } else if (kind === "COMMIT" && this.phase === "COMMIT_DISPATCHED") {
-      if (command === "COMMIT") this.phase = "COMMIT_ACKNOWLEDGED";
-      else if (command === "ROLLBACK") this.phase = "ROLLED_BACK";
+      if (command === "COMMIT") {
+        this.commitAcknowledged = true;
+        this.phase = "COMMIT_ACKNOWLEDGED";
+      } else if (command === "ROLLBACK") this.phase = "ROLLED_BACK";
     } else if (kind === "ROLLBACK" && this.phase === "ROLLBACK_DISPATCHED" && command === "ROLLBACK") {
       this.phase = "ROLLED_BACK";
     }

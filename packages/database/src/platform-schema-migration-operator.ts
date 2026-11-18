@@ -255,6 +255,7 @@ async function withSession(
   mode: "EXECUTE" | "RECONCILE", authority?: RecoveryEpochAuthority,
   session = new ExperimentalSessionLifecycle(budget),
 ): Promise<SchemaOperatorResult> {
+  if (!session.usesBudget(budget)) deny("OPERATION_FAILED", "session budget mismatch");
   if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
   if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");
   // pg >=8.22 exposes ReadyForQuery transaction status. Refuse borrowed
