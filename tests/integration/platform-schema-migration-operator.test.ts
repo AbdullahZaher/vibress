@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
 import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
@@ -22,7 +24,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3189,5 +3191,63 @@ describe("P06 integrated residual concurrency and transport safety", () => {
     expect(await hasWebsite(lab)).toBe(false);
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
     expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+});
+
+describe("P06 actual Drizzle migration-framework rehearsal", () => {
+  it("P06-E2E-16: seeded 0059/0060 upgrade uses Drizzle journal, rolls back failed replay, then resumes", async () => {
+    const lab = await createLab("bd", false);
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const directory = mkdtempSync(path.join(tmpdir(), "vibress-s03-migrations-"));
+    const candidate = readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8");
+    const aclSql = "SELECT c.relname, c.relacl::text AS acl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "+
+      "WHERE n.nspname='public' AND c.relname IN ('platform_schema_trusted_actors','platform_schema_plans','platform_schema_approvals') "+
+      "ORDER BY c.relname";
+    const beforeAcl = (await lab.dbAdmin.query(aclSql)).rows;
+    const writeJournal = (includeFault: boolean) => {
+      const entries = [{ idx: 0, version: "7", when: 1, tag: "experimental_e2", breakpoints: true }];
+      if (includeFault) entries.push({ idx: 1, version: "7", when: 2, tag: "experimental_interruption", breakpoints: true });
+      writeFileSync(path.join(directory, "meta", "_journal.json"), JSON.stringify({
+        version: "7", dialect: "postgresql", entries,
+      }));
+    };
+    try {
+      mkdirSync(path.join(directory, "meta"));
+      writeFileSync(path.join(directory, "experimental_e2.sql"), candidate);
+      writeFileSync(path.join(directory, "experimental_interruption.sql"), "SELECT 1/0;");
+      writeJournal(true);
+      await expect(migrateDisposableSchemaCandidate(lab.dbAdmin, directory)).rejects.toThrow();
+      expect((await lab.dbAdmin.query("SELECT to_regclass('public.s03_e2_actor_instance_history') AS history")).rows[0]?.history)
+        .toBeNull();
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(0);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(aclSql)).rows).toEqual(beforeAcl);
+      writeJournal(false);
+      await migrateDisposableSchemaCandidate(lab.dbAdmin, directory);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(1);
+      const roster = (await lab.dbAdmin.query("SELECT actor_instance_id,actor_generation FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+      expect(roster).toHaveLength(2);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_e2_actor_instance_history")).rowCount).toBe(2);
+      expect((await lab.dbAdmin.query("SELECT author_actor_instance_id,approver_actor_instance_id FROM public.platform_schema_approvals")).rows)
+        .toEqual([{ author_actor_instance_id: null, approver_actor_instance_id: null }]);
+      const restarted = await connect(lab.name);
+      try {
+        await migrateDisposableSchemaCandidate(restarted, directory);
+        expect((await restarted.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(1);
+        expect((await restarted.query("SELECT actor_instance_id,actor_generation FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows)
+          .toEqual(roster);
+      } finally { await restarted.end(); }
+      expect((await lab.dbAdmin.query(aclSql)).rows).toEqual(beforeAcl);
+      await p06Install(lab);
+      await expect(executeP06(lab.operator, {installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,
+        new ExperimentalD1Budget())).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const request = await freshP06(lab);
+      expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   }, 30000);
 });
