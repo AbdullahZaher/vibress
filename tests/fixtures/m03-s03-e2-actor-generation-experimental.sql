@@ -137,13 +137,22 @@ BEGIN
   IF session_user IS DISTINCT FROM owner_name OR current_user IS DISTINCT FROM session_user THEN
     RAISE EXCEPTION 'governed lifecycle test owner required' USING ERRCODE='42501';
   END IF;
-  -- Lock hierarchy: installation I -> registry R -> approval A -> actor X
-  -- -> implicit actor row UPDATE -> implicit approval row UPDATE.
+  -- Lock hierarchy: installation I -> registry R -> approval tuple R_approval
+  -- -> approval advisory A -> actor X -> implicit actor UPDATE. The explicit
+  -- R_approval lock mirrors the 0060 revocation trigger's implicit order.
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('vibress_m03s03'),pg_catalog.hashtext(p_installation));
   PERFORM 1 FROM public.platform_schema_registry
     WHERE installation_id=p_installation FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'missing installation' USING ERRCODE='42501'; END IF;
+  -- Existing migration 0060 approval UPDATE acquires its tuple lock BEFORE
+  -- its BEFORE trigger requests approval advisory A. Pre-lock this same tuple
+  -- before A so mixed governed/direct revokers cannot invert R_approval/A.
+  -- The dedicated operator never locks approval rows FOR UPDATE.
+  PERFORM 1 FROM public.platform_schema_approvals
+    WHERE installation_id=p_installation AND plan_digest=p_digest
+      AND operation_id=p_operation FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'missing approval row' USING ERRCODE='42501'; END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('vibress_m03s03_approval'),
     pg_catalog.hashtext(p_installation || ':' || p_digest || ':' || p_operation));
