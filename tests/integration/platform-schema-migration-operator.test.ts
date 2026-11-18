@@ -19,7 +19,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2143,5 +2143,105 @@ describe("P05/R1 advisory-lock serialization (EXPERIMENT ONLY)", () => {
       await Promise.allSettled([migrating ?? Promise.resolve()]);
       await admin.end().catch(() => undefined);
     }
+  }, 30000);
+});
+
+
+/**
+ * R1-10: Real PG16 mixed admin lock inversion proof.
+ * This NEGATIVE test deliberately creates a deadlock between the existing
+ * approval advisory key and the proposed actor-specific advisory key.
+ * It is diagnostic evidence that the prototype is NOT production-ready.
+ * Both sessions always roll back, so no real actor lifecycle mutation,
+ * approval revocation or DDL can be committed by this test.
+ */
+describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () => {
+  it("R1-10: actor-first admin plus approval-first operator exposes 40P01 safely", async () => {
+    const lab = await createLab("aa");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const operator = lab.operator;
+    const admin = lab.dbAdmin;
+    type Outcome = { ok: boolean; code: string | null };
+    const settle = (p: Promise<unknown>): Promise<Outcome> =>
+      p.then(() => ({ ok: true, code: null }),
+        (err: unknown) => ({
+          ok: false,
+          code: typeof err === "object" && err !== null && "code" in err &&
+            typeof err.code === "string" ? err.code : null,
+        }));
+    let operatorWait: Promise<Outcome> | undefined;
+    let adminWait: Promise<Outcome> | undefined;
+    try {
+      await admin.query("BEGIN");
+      await operator.query("BEGIN");
+      // New fixture trigger holds actor advisory key for admin transaction.
+      await admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      // Operator has already obtained its existing approval advisory key A.
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      // Operator now needs actor X, which is owned by the admin.
+      operatorWait = settle(operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), " +
+        "hashtext($1::text))", [lab.author],
+      ));
+      let operatorWaiting = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const probe = await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [operator.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          operatorWaiting = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(operatorWaiting, "must observe real PostgreSQL advisory wait").toBe(true);
+      // Admin already holds actor X; approval UPDATE trigger needs key A.
+      // PostgreSQL detects the resulting two-backend cycle and aborts one.
+      adminWait = settle(admin.query(
+        "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp() " +
+        "WHERE installation_id=$1 AND plan_digest=$2 AND operation_id=$3",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      ));
+      const [opOutcome, adminOutcome] = await Promise.all([operatorWait, adminWait]);
+      expect(
+        [opOutcome, adminOutcome].some(x => x.code === "40P01"),
+        "PG16 must detect and abort one deadlock victim with SQLSTATE 40P01",
+      ).toBe(true);
+    } finally {
+      await admin.query("ROLLBACK").catch(() => undefined);
+      await operator.query("ROLLBACK").catch(() => undefined);
+      await Promise.allSettled([
+        operatorWait ?? Promise.resolve(),
+        adminWait ?? Promise.resolve(),
+      ]);
+    }
+    // The entire simulated admin and operator interaction was rolled back.
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    const journal = await admin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(0);
+    const registry = await admin.query<{manifest_digest:string}>(
+      "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    const actor = await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    );
+    expect(actor.rows[0]?.active).toBe(true);
   }, 30000);
 });
