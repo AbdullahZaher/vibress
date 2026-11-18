@@ -121,3 +121,48 @@ Existing CMS, plugin, theme, worker, tenancy and migration contracts are unchang
 - **Compatibility:** M03-S01 Canonical IR v1, M03-S02 Manifest v1, installation/application binding, ordering and SHA-256 digest algorithms are unchanged for existing admissible IDs. Previously accidentally accepted PostgreSQL reserved IDs now fail validation deliberately; a historical document using one of these names needs an explicit owner-reviewed upgrade path, never silent renaming.
 - No SQL rendering or quoting API was introduced. Future M03-S03 executor must authorize and validate fresh input and independently check **live PostgreSQL catalog/namespace** (tables, indexes, constraints, other installations, privileges), consistent 63-byte identifier limits and RLS/ACL; these are **not certified** by the current pure compiler.
 - References: [PostgreSQL 16 keyword classification](https://www.postgresql.org/docs/16/sql-keywords-appendix.html), [PostgreSQL 16 lexical structure](https://www.postgresql.org/docs/16/sql-syntax-lexical.html), and PostgreSQL upstream `src/include/parser/kwlist.h` (`REL_16_STABLE`, `RESERVED_KEYWORD`).
+
+
+## M04-S01 — offline CRUD contract compilation (restricted draft)
+
+From trusted merged CanonicalSchemaIR v1 and SchemaManifest v1 only:
+
+~~~ts
+import { compileCrudContracts } from "@vibress/schema-engine";
+
+const contracts = compileCrudContracts(manifest, {
+  applicationId: manifest.applicationId,
+  installationId: manifest.installationId,
+  expectedManifestDigest: manifest.digest,
+  exposure: [{ resourceId: "customers", fields: ["name", "active"] }],
+});
+// Configuration MUST actually be selected from reviewed trusted installation
+// configuration, not reconstructed from a caller's request. This example is offline.
+contracts.validateInput("customers.create", { data: { name: "Example" } });
+contracts.openapi; // OpenAPI 3.1 proposed paths, NOT registered routes.
+contracts.typescript; // standalone interface declarations, no HTTP implementation.
+contracts.admin; // metadata, NOT rendered Admin UI.
+contracts.assertRuntimeAvailable(); // always throws RUNTIME_UNAVAILABLE.
+~~~
+
+Explicit resource/field projection, deterministic descriptors and SHA-256 contract digest;
+no physical names, defaults or unselected fields in public-shaped artifacts. Private
+offline artifacts are not authorized for public exposure. Required-but-unexposed fields
+and exposed relationships fail compilation, even if a default exists. Scalar/enum
+logical validation, required fields, nullable optional fields, exact projected output,
+version token on update/delete; actual concurrency enforcement remains future work.
+List limit 1–25, optional opaque cursor (encoding/scope/default page behavior not
+implemented); filters, search, count, sort, export, aggregation, bulk, custom actions
+and relationship expansion are excluded. Max 16 resources, 16 exposed fields/resource,
+4096 Unicode code points/text, 64 KiB normalized input, 1 MiB normalized output.
+Transport preparse byte limits, cursor integrity, limits relative to actual request,
+rate limits, timeout, idempotency, atomic version compare, field/row/RLS enforcement,
+installation/principal/tenant context and SSR/cache isolation remain runtime gates.
+Input/output validation is shape validation, not authentication or authorization.
+The bearer scheme and X-Resource-Version header in OpenAPI are proposed wire shapes,
+not approved authentication, HTTP middleware or an active protocol. No credentials,
+network access, DB imports, SQL generation, new package dependencies or migrations.
+S01 groups pure projections in existing schema-engine to avoid workspace duplication;
+separate api-generator/admin/SDK publication packages deferred until approved interfaces.
+Issue #156 M04-E01–04/05/06/08/09 partial pure evidence only; E07/E10 and runtime/clean
+consumer execution gates remain open. No milestone checkbox is closed by this slice.

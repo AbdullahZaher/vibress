@@ -1,0 +1,43 @@
+name: M04-S01 Pure Contract Evidence
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "packages/schema-engine/**"
+      - "tests/architecture/platform-boundaries.test.ts"
+      - ".github/workflows/m04-s01-pure-contracts.yml"
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Verify exact source and frozen dependencies
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git rev-parse HEAD HEAD^{tree}
+          node --version
+          pnpm install --frozen-lockfile
+      - name: Check pure compiler types and lint
+        run: |
+          pnpm --filter @vibress/schema-engine typecheck
+          pnpm --filter @vibress/schema-engine lint
+      - name: Execute pure contract and historical schema-engine tests
+        run: pnpm --filter @vibress/schema-engine test -- --reporter=verbose
+      - name: Execute architecture isolation without database setup
+        run: pnpm exec vitest run --config packages/schema-engine/vitest.config.ts --passWithNoTests=false tests/architecture/platform-boundaries.test.ts
+      - name: Verify clean source
+        run: git diff --exit-code

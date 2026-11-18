@@ -101,6 +101,15 @@ describe("platform dependency boundaries", () => {
     expect(violations).toEqual([]);
   });
 
+  it("keeps M04 pure compilation inside the merged schema-engine boundary", () => {
+    const sources = readSources(path.join(ROOT, "packages/schema-engine/src"));
+    expect(scan(sources, {packageDir: "packages/schema-engine", label: "schema-engine",
+      allowedBareSpecifiers: ["@vibress/platform-kernel"]})).toEqual([]);
+    const crud = sources.find(file => file.path.endsWith("/crud-contracts.ts"));
+    expect(crud).toBeDefined();
+    expect(specifiers(crud!.content).sort()).toEqual(["./planning", "./schema", "node:crypto", "node:util"]);
+  });
+
   it("keeps tenancy dependent only on the kernel", () => {
     const violations = scan(
       readSources(path.join(ROOT, "packages/tenancy/src")),
