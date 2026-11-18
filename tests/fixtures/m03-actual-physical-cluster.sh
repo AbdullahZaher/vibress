@@ -7,7 +7,7 @@ case "$1" in
 start)
  docker pull "$image"
  docker image inspect --format '{{json .RepoDigests}}' "$image"
- docker run -d --name "$name" --label vibress.m03.physical=ci -p 127.0.0.1:5433:5432 --entrypoint sleep "$image" infinity >/dev/null
+ docker run -d --name "$name" --label vibress.m03.physical=ci --network host --entrypoint sleep "$image" infinity >/dev/null
  docker exec -u postgres -i "$name" bash -s <<'PG'
 set -euo pipefail
 umask 077
@@ -16,7 +16,8 @@ printf '%s\n' vibress > /tmp/m03-physical/pw
 initdb -D /tmp/m03-physical/primary --username=vibress --pwfile=/tmp/m03-physical/pw --auth-local=trust --auth-host=scram-sha-256 >/dev/null
 rm /tmp/m03-physical/pw
 cat >> /tmp/m03-physical/primary/postgresql.conf <<'CONF'
-listen_addresses = '*'
+listen_addresses = '127.0.0.1'
+port = 5433
 unix_socket_directories = '/tmp/m03-physical'
 wal_level = replica
 archive_mode = on
@@ -27,15 +28,15 @@ synchronous_commit = on
 track_commit_timestamp = on
 CONF
 pg_ctl -D /tmp/m03-physical/primary -l /tmp/m03-physical/primary.log -w start
-createdb -h /tmp/m03-physical -U vibress vibress
-[[ "$(psql -h /tmp/m03-physical -U vibress -d vibress -Atqc 'SHOW server_version_num')" == 160016 ]]
+createdb -p 5433 -h /tmp/m03-physical -U vibress vibress
+[[ "$(psql -p 5433 -h /tmp/m03-physical -U vibress -d vibress -Atqc 'SHOW server_version_num')" == 160016 ]]
 PG
  ;;
 backup)
  docker exec -u postgres "$name" bash -euc '
  r=/tmp/m03-physical
  start=$(cut -d " " -f1 /proc/uptime)
- pg_basebackup -h "$r" -U vibress -D "$r/backup" -X stream -c fast --manifest-checksums=SHA256
+ pg_basebackup -p 5433 -h "$r" -U vibress -D "$r/backup" -X stream -c fast --manifest-checksums=SHA256
  pg_verifybackup "$r/backup"
  end=$(cut -d " " -f1 /proc/uptime)
  echo "BACKUP_KIB=$(du -sk "$r/backup" | cut -f1)"; awk -v s="$start" -v e="$end" "BEGIN{print \"BACKUP_SECONDS=\" e-s}"
@@ -66,10 +67,10 @@ CONF
  touch "$r/restored/recovery.signal"
  pg_ctl -D "$r/restored" -l "$r/restored.log" -w start || { tail -80 "$r/restored.log"; exit 1; }
  for ((i=0;i<120;i++)); do
-   [[ "$(psql -h "$r" -U vibress -d vibress -Atqc "SELECT pg_is_in_recovery()" 2>/dev/null || true)" == f ]] && break
+   [[ "$(psql -p 5433 -h "$r" -U vibress -d vibress -Atqc "SELECT pg_is_in_recovery()" 2>/dev/null || true)" == f ]] && break
    sleep 1
  done
- [[ "$(psql -h "$r" -U vibress -d vibress -Atqc "SELECT pg_is_in_recovery()")" == f ]]
+ [[ "$(psql -p 5433 -h "$r" -U vibress -d vibress -Atqc "SELECT pg_is_in_recovery()")" == f ]]
  end=$(cut -d " " -f1 /proc/uptime); awk -v s="$start" -v e="$end" "BEGIN{print \"RESTORE_DATABASE_AVAILABLE_SECONDS=\" e-s}"
  pg_controldata "$r/restored" | grep -E "Database system identifier|TimeLineID"
  grep -E "recovery stopping|redo done|selected new timeline|archive recovery complete" "$r/restored.log"

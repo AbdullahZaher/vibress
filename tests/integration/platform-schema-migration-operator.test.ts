@@ -4647,7 +4647,7 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
         a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
         const nextObservation={...observation,epoch:nextEpoch};
-        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"CATALOG_DRIFT"});
         await dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
         await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
         const actors=(await dbAdmin.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string}>("SELECT login_name,principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
