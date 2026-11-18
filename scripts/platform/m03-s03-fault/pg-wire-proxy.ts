@@ -14,6 +14,11 @@ export interface CommitAckDrop {
   close(): Promise<void>;
 }
 export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
+  return startTransactionAckFaultProxy("COMMIT", "DROP");
+}
+
+/** Test-only real PostgreSQL wire fault for transaction-control acknowledgments. */
+export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT", fault: "DROP" | "STALL"): Promise<CommitAckDrop> {
   const clients = new Set<Socket>();
   const upstreams = new Set<Socket>();
   let resolveCommit: (() => void) | undefined;
@@ -29,12 +34,14 @@ export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
     let armed = false;
     let held = Buffer.alloc(0);
     let seenCommit = false;
+    let stalled = false;
     downstream.on("data", (bytes: Buffer) => {
       // node-postgres uses the simple Query message for bare COMMIT.
-      if (bytes.includes(Buffer.from("COMMIT\u0000", "utf8"))) armed = true;
+      if (bytes.includes(Buffer.from(command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" : "COMMIT\u0000", "utf8"))) armed = true;
       if (!upstream.destroyed) upstream.write(bytes);
     });
     upstream.on("data", (bytes: Buffer) => {
+      if (stalled) return;
       if (!armed) {
         if (!downstream.destroyed) downstream.write(bytes);
         return;
@@ -56,11 +63,12 @@ export async function startCommitAckDropProxy(): Promise<CommitAckDrop> {
         if (held.length < size + 1) return;
         const frame = held.subarray(0, size + 1);
         held = held.subarray(size + 1);
-        if (frame[0] === 0x43 && frame.subarray(5).toString("utf8").startsWith("COMMIT")) {
+        if (frame[0] === 0x43 && frame.subarray(5).toString("utf8").startsWith(command)) {
           // Received PostgreSQL CommandComplete for COMMIT. Never deliver
           // this acknowledgment to the application client.
           seenCommit = true;
           resolveCommit?.();
+          if (fault === "STALL") { stalled = true; return; }
           downstream.destroy();
           upstream.destroy();
           return;

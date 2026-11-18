@@ -4,10 +4,10 @@
  * Not imported by API, worker, plugin SDK, routes or deployment startup.
  * No default DATABASE_URL fallback, no privilege provisioning.
  */
-import { Client } from "pg";
 import { createPublicKey } from "node:crypto";
 import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
-import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn, SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
+import { SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
+import { superviseDisposableSchemaOperation } from "./schema-operator-experimental-supervisor";
 import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 function testOnlyConnection(): string {
@@ -73,24 +73,14 @@ async function main(): Promise<void> {
   const connectionString = testOnlyConnection();
   const authority = testOnlyRecoveryAuthority();
   budget.checkpoint();
-  const db = new Client({
-    connectionString,
-    connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
-    statement_timeout:Math.max(1,Math.floor(budget.remainingMs())),
-  });
-  try {
-    await db.connect();
-    budget.checkpoint();
-    const run=reconcile?reconcileApprovedAdditiveColumn:executeApprovedAdditiveColumn;
-    const result = await run(db, {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},budget,authority);
-    // Recheck at the CLI outcome boundary, not just inside the database method.
-    const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
-      budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
-    console.log(JSON.stringify(classified));
-    if (classified.status === "COMMITTED_LATE" || classified.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
-  } finally {
-    await db.end().catch(() => undefined);
-  }
+  const result = await superviseDisposableSchemaOperation(connectionString,
+    {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},authority,
+    reconcile?"RECONCILE":"EXECUTE",budget);
+  // Recheck at the CLI outcome boundary, not just inside the database method.
+  const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
+    budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
+  console.log(JSON.stringify(classified));
+  if (classified.status === "COMMITTED_LATE" || classified.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
 }
 
 main().catch(error => {

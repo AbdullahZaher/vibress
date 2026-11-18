@@ -5,7 +5,8 @@ import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallen
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
-import { startCommitAckDropProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
+import { superviseDisposableSchemaOperation } from "../../packages/database/src/schema-operator-experimental-supervisor";
+import { startCommitAckDropProxy, startTransactionAckFaultProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import path from "node:path";
 import { Client, type ClientBase } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -26,7 +27,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3493,6 +3494,87 @@ describe("P06 root lifecycle and LOGIN identity boundaries", () => {
       if(replacement){await lab.dbAdmin.query("DROP OWNED BY "+esc(lab.author));await cluster.query("DROP ROLE "+esc(lab.author));}
       await cluster.query("ALTER ROLE "+esc(previous)+" RENAME TO "+esc(lab.author));
     }
-    expect((await executeP06(lab.operator,stale,new ExperimentalD1Budget())).status).toBe("APPLIED");
+    // Trusted cluster administration must reenroll after identity transitions;
+    // an OID check alone cannot detect a role rename that was later reversed.
+    const principal=(await lab.dbAdmin.query<{principal_id:string}>("SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_replace($1,$2,$3,'AUTHOR')",[lab.installationId,lab.author,principal.principal_id]);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+});
+
+describe("P06 owned physical session supervisor and capability ordering", () => {
+  it("P06-E2E-21: committed capability removal fences a waiting delegated transition before DML", async () => {
+    const lab=await createLab("bi");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const delegate="s03_delegate_"+lab.key+"_"+id,gateway="s03_gateway_"+lab.key+"_"+id;
+    const esc=(v:string)=>cluster.escapeIdentifier(v);
+    await cluster.query("CREATE ROLE "+esc(delegate)+" LOGIN PASSWORD "+cluster.escapeLiteral(password)+
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE "+esc(gateway)+" NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(delegate));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO "+esc(delegate)+","+esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry,public.s03_p06_admin_capability,public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_enter() TO "+esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO "+esc(delegate));
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_set_capability($1,$2,true)",[lab.installationId,delegate]);
+    const admin=await connect(lab.name,delegate);
+    let pending:Promise<unknown>|undefined;
+    try {
+      await expect(admin.query("SELECT public.s03_p06_root_set_capability($1,$2,true)",[lab.installationId,delegate])).rejects.toMatchObject({code:"42501"});
+      await lab.dbAdmin.query("BEGIN");
+      await lab.dbAdmin.query("SELECT public.s03_p06_root_set_capability($1,$2,false)",[lab.installationId,delegate]);
+      pending=admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.author]);
+      void pending.catch(()=>undefined);
+      const observer=await connect(lab.name);
+      try {
+        let waiting=false;
+        for(let i=0;i<100;i++){
+          const row=(await observer.query<{waiting:boolean}>("SELECT $1::int=ANY(pg_blocking_pids($2)) AS waiting",[lab.dbAdmin.processID,admin.processID])).rows[0];
+          if(row?.waiting){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        expect(waiting).toBe(true);
+        // The delegated writer is still upstream of the actor tuple.
+        await observer.query("BEGIN");
+        await observer.query("SELECT 1 FROM public.platform_schema_trusted_actors WHERE login_name=$1 FOR UPDATE NOWAIT",[lab.author]);
+        await observer.query("ROLLBACK");
+      }finally{await observer.end();}
+      await lab.dbAdmin.query("COMMIT");
+      await expect(pending).rejects.toMatchObject({code:"42501"});
+    }finally{await lab.dbAdmin.query("ROLLBACK").catch(()=>undefined);await pending?.catch(()=>undefined);await admin.end();}
+    expect((await lab.dbAdmin.query("SELECT active,actor_generation FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows)
+      .toEqual([{active:true,actor_generation:"1"}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_admin_capability")).rowCount).toBe(0);
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+
+  it("P06-E2E-22: real stalled BEGIN acknowledgment hits D1, burns owned connection and leaves no committed effect", async () => {
+    const lab=await createLab("bj");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const proxy=await startTransactionAckFaultProxy("BEGIN","STALL");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const connection=new URL(urlFor(lab.name,lab.operatorRole));
+    connection.port=String(proxy.port);
+    const budget=new ExperimentalD1Budget();
+    try {
+      await expect(superviseDisposableSchemaOperation(connection.toString(),request,labRecoveryAuthority,"EXECUTE",budget))
+        .rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+      expect(budget.expired()).toBe(true);
+      let sessions=0;
+      for(let i=0;i<100;i++){
+        sessions=Number((await lab.dbAdmin.query<{n:string}>(
+          "SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=$1 AND usename=$2",[lab.name,lab.operatorRole])).rows[0]!.n);
+        if(sessions===1)break;await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(sessions).toBe(1); // only original unused lab.operator remains
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+      await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    }finally{await proxy.close();}
   },30000);
 });
