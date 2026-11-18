@@ -30,10 +30,11 @@ type Event =
   | { kind:"ROLLBACK_WITNESS"; operationId:string; witness:RollbackWitness }
   | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
   | { kind: "INTENT"; intent: string }
-  | { kind: "ADVANCE"; epoch: string; evidenceDigest: string; scopedTarget?:ScopedRecoveryTarget }
-  | { kind: "READY"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
+  | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
+  | { kind: "ADVANCE_V2"; epoch:string; evidenceDigest:string; scopedTarget:ScopedRecoveryTarget }
+  | { kind: "READY"|"READY_V2"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; intent?: string; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
+  pending: boolean; advanced: boolean; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -101,13 +102,17 @@ function reduce(s: State|undefined,e: Event): State {
       if(s.pending || !UUID.test(e.intent)) return refuse();
       next.pending=true;next.advanced=false;next.intent=e.intent;break;
     case "ADVANCE":
+    case "ADVANCE_V2":
       if(!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")) return refuse();
-      if(e.scopedTarget&&!validScopedTarget(e.scopedTarget,s))return refuse();
+      if(e.kind==="ADVANCE"&&s.readyProtocol===2)return refuse();
+      if(e.kind==="ADVANCE_V2"&&!validScopedTarget(e.scopedTarget,s))return refuse();
       next.epoch=e.epoch; next.epochs.push(e.epoch);next.advanced=true;
-      if(e.scopedTarget)next.scopedTarget=JSON.parse(JSON.stringify(e.scopedTarget)) as ScopedRecoveryTarget;
+      if(e.kind==="ADVANCE_V2"){next.readyProtocol=2;next.scopedTarget=JSON.parse(JSON.stringify(e.scopedTarget)) as ScopedRecoveryTarget;}
       break;
     case "READY":
+    case "READY_V2":
+      if(e.kind==="READY_V2"?s.readyProtocol!==2||!s.scopedTarget:s.readyProtocol===2)return refuse();
       if(!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
       next.pending=false;next.advanced=false;delete next.intent;delete next.scopedTarget;break;
     default:return refuse();
@@ -371,9 +376,10 @@ export class DisposableDurableRecoveryAuthority {
   snapshot(){
     const s=this.current();
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
-      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
+      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
+  authenticatedSnapshot(){this.assertAnchor();return this.snapshot();}
   proofAuthority(publicKey:KeyObject):RecoveryEpochAuthority {
     const state=this.current();
     if(keyIdentity(publicKey)!==state.signingIdentity) refuse();
@@ -446,7 +452,7 @@ export class DisposableDurableRecoveryAuthority {
     const s=this.current();
     if(this.fences.size!==0||!validScopedTarget(target,s))return refuse();
     this.requireAdministration("ADVANCE_V2",{epoch,quiescenceEvidenceDigest,target},signature);
-    this.append({kind:"ADVANCE",epoch,evidenceDigest:quiescenceEvidenceDigest,scopedTarget:target});
+    this.append({kind:"ADVANCE_V2",epoch,evidenceDigest:quiescenceEvidenceDigest,scopedTarget:target});
   }
   async scopedReadiness(db:ClientBase){
     this.assertAnchor();
@@ -467,7 +473,7 @@ export class DisposableDurableRecoveryAuthority {
   }
   activate(evidence:{epoch:string;catalogManifestDigest:string;readinessEvidenceDigest:string;
     journal:readonly JournalEvidence[]},signature?:string):void{
-    if(this.current().scopedTarget)return refuse();
+    if(this.current().readyProtocol===2)return refuse();
     this.requireAdministration("READY",evidence,signature);
     this.commitReady(evidence);
   }
@@ -482,7 +488,7 @@ export class DisposableDurableRecoveryAuthority {
     const last=committed.at(-1);
     if(last&&last.newDigest!==evidence.catalogManifestDigest) refuse();
     const journalDigest=createHash("sha256").update(JSON.stringify([...evidence.journal].sort((a,b)=>a.operationId.localeCompare(b.operationId)))).digest("hex");
-    this.append({kind:"READY",evidenceDigest:boundDigest??evidence.readinessEvidenceDigest,
+    this.append({kind:boundDigest===undefined?"READY":"READY_V2",evidenceDigest:boundDigest??evidence.readinessEvidenceDigest,
       catalogManifestDigest:evidence.catalogManifestDigest,journalDigest});
   }
   /** Test-only, authority-local lease. Not distributed fencing or a runtime

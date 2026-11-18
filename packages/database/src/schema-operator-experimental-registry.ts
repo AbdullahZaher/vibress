@@ -6,6 +6,7 @@ import { asApplicationId,asInstallationId } from "@vibress/platform-kernel";
 import { parseSchemaManifest,renderTrustedAdditiveColumn } from "@vibress/schema-engine";
 import { compileExperimentalPhysicalContract } from "@vibress/schema-engine";
 import { collectDisposableRecoveryReadiness } from "./platform-schema-migration-operator";
+import type { DisposableDurableRecoveryAuthority } from "./schema-operator-experimental-durable-authority";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 const deny=():never=>{throw Error("EXPERIMENTAL_REGISTRY_OR_AUTHORITY_DRIFT");};
 const sha=/^[a-f0-9]{64}$/;
@@ -16,6 +17,9 @@ export interface AcceptedRegistryEvidence {
   readonly installationId:string;
   readonly databaseName:string;
   readonly epoch:string;
+  readonly ledgerId:string;
+  readonly authorityHead:string;
+  readonly authoritySequence:number;
   readonly operationId:string;
   readonly submissionId:string;
   readonly approvalId:string;
@@ -25,13 +29,18 @@ export interface AcceptedRegistryEvidence {
   readonly dataDigests:Readonly<Record<string,string>>;
 }
 export function registryAcceptanceMessage(e:AcceptedRegistryEvidence):Buffer{
-  return Buffer.from(JSON.stringify(["VIBRESS-M03-REGISTRY-ACCEPTANCE-V1",e.version,e.applicationId,e.installationId,e.databaseName,e.epoch,e.operationId,e.submissionId,e.approvalId,e.planDigest,e.previousDigest,e.manifestDigest,Object.entries(e.dataDigests).sort(([a],[b])=>a.localeCompare(b))]));
+  return Buffer.from(JSON.stringify(["VIBRESS-M03-REGISTRY-ACCEPTANCE-V1",e.version,e.applicationId,e.installationId,e.databaseName,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.operationId,e.submissionId,e.approvalId,e.planDigest,e.previousDigest,e.manifestDigest,Object.entries(e.dataDigests).sort(([a],[b])=>a.localeCompare(b))]));
 }
-export async function verifyExperimentalRegistry(db:ClientBase,e:AcceptedRegistryEvidence,signature:string,pinnedApprovalKey:KeyObject){
+export async function verifyExperimentalRegistry(db:ClientBase,e:AcceptedRegistryEvidence,signature:string,pinnedApprovalKey:KeyObject,authority:DisposableDurableRecoveryAuthority){
   if(process.env.NODE_ENV==="production"||e.version!==1||!/^vibress_s03_[a-z0-9_]+$/.test(e.databaseName)||
-    ![e.epoch,e.operationId,e.submissionId,e.approvalId].every(x=>uuid.test(x))||![e.planDigest,e.previousDigest,e.manifestDigest].every(x=>sha.test(x))||
+    ![e.epoch,e.ledgerId,e.operationId,e.submissionId,e.approvalId].every(x=>uuid.test(x))||![e.planDigest,e.previousDigest,e.manifestDigest,e.authorityHead].every(x=>sha.test(x))||!Number.isSafeInteger(e.authoritySequence)||e.authoritySequence<1||
     pinnedApprovalKey.type!=="public"||pinnedApprovalKey.asymmetricKeyType!=="ed25519"||!/^[A-Za-z0-9_-]{86}$/.test(signature)||
     !verify(null,registryAcceptanceMessage(e),pinnedApprovalKey,Buffer.from(signature,"base64url")))return deny();
+  const external=authority.authenticatedSnapshot();
+  const committed=external.operations.find(o=>o.operationId===e.operationId);
+  if(external.pending||external.installationId!==e.installationId||external.databaseName!==e.databaseName||external.epoch!==e.epoch||
+    external.ledgerId!==e.ledgerId||external.head!==e.authorityHead||external.sequence!==e.authoritySequence||!committed||committed.outcome!=="COMMITTED"||
+    committed.epoch!==e.epoch||committed.submissionId!==e.submissionId||committed.approvalId!==e.approvalId||committed.planDigest!==e.planDigest||committed.newDigest!==e.manifestDigest)return deny();
   // Existing collector requires sole fenced root observer, canonical manifest
   // revalidation, actual resource data and current actor enrollment.
   const ready=await collectDisposableRecoveryReadiness(db,{installationId:e.installationId,databaseName:e.databaseName,epoch:e.epoch,manifestDigest:e.manifestDigest,dataDigests:e.dataDigests});
@@ -63,7 +72,7 @@ export async function verifyExperimentalRegistry(db:ClientBase,e:AcceptedRegistr
   // Reobserve after separate inspections. Sole maintenance observer is a
   // required trust assumption; this is not an online concurrency fence.
   const final=await collectDisposableRecoveryReadiness(db,{installationId:e.installationId,databaseName:e.databaseName,epoch:e.epoch,manifestDigest:e.manifestDigest,dataDigests:e.dataDigests});
-  if(JSON.stringify(final)!==JSON.stringify(ready))return deny();
+  if(JSON.stringify(final)!==JSON.stringify(ready)||JSON.stringify(authority.authenticatedSnapshot())!==JSON.stringify(external))return deny();
   return {version:1 as const,lifecycle:"VERIFIED_COMMITTED" as const,revisionDigest:manifest.digest,previousDigest:e.previousDigest,operationId:e.operationId,physical,
     evidenceDigest:createHash("sha256").update(registryAcceptanceMessage(e)).update(ready.readinessEvidenceDigest).update(physical.digest).digest("hex")};
 }

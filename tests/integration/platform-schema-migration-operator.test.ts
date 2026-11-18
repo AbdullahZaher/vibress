@@ -4784,6 +4784,14 @@ describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual comp
         const fresh=await freshP06({...online,plan});
         expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
         expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+        expect(a.snapshot().readyProtocol).toBe(2);
+        const ledgerText=readFileSync(path.join(dir,"authority.jsonl"),"utf8");
+        expect(ledgerText).toContain('"kind":"ADVANCE_V2"');
+        expect(ledgerText).toContain('"kind":"READY_V2"');
+        a.beginRecovery();
+        const downgradeEpoch=randomUUID(),quiescenceEvidenceDigest="c".repeat(64);
+        expect(()=>a.advance(downgradeEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:downgradeEpoch,quiescenceEvidenceDigest}))).toThrow();
+        expect(a.snapshot().pending).toBe(true);
       }
       mark("fresh_operation_or_pending");
       console.info(scenario+" ACTUAL_COMPONENT_STAGES_MS="+JSON.stringify(elapsed));
@@ -4860,7 +4868,8 @@ it("M03-ADMISSION-01: authority-local transaction fence through actual TenantUni
   const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
   const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
     membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
-  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const databaseOid=(await lab.dbAdmin.query<{oid:string}>("SELECT oid::text AS oid FROM pg_database WHERE datname=current_database()")).rows[0]!.oid;
+  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
   const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(auth,uow,expected,scope,work);
   const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
   try{
@@ -4896,29 +4905,35 @@ it("M03-REGISTRY-01: signed committed registry provenance, pure physical plannin
   expect(prepared.ddl?.columnName).toBe("website");
   expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
   expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
-  expect((await executeP06(lab.operator,req,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-registry-authority-")),authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+  expect((await authority.execute(urlFor(lab.name,lab.operatorRole),req,epochKeys.publicKey)).status).toBe("APPLIED");
+  const external=authority.authenticatedSnapshot();
   const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
   const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
-    operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    ledgerId:external.ledgerId,authorityHead:external.head,authoritySequence:external.sequence,operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
     dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
   const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
   await Promise.all([lab.operator.end(),lab.runtime.end()]);
   await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
   try{
-    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey);
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
     expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
-    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const stale={...evidence,authorityHead:"f".repeat(64)};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,stale,attest(stale),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
     const wrong={...evidence,operationId:randomUUID()};
-    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
     const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
     await lab.dbAdmin.query("GRANT SELECT ON "+q+" TO PUBLIC");
-    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();}
     finally{await lab.dbAdmin.query("REVOKE SELECT ON "+q+" FROM PUBLIC");}
     await lab.dbAdmin.query("ALTER TABLE "+q+" ADD COLUMN surprise text");
-    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();}
     finally{await lab.dbAdmin.query("ALTER TABLE "+q+" DROP COLUMN surprise");}
-    expect(await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).toEqual(good);
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
   }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
 },30000);
 
 it("M03-WRITER-02: expected effective authority, grant and ownership drift refusal",async()=>{
@@ -4932,6 +4947,8 @@ it("M03-WRITER-02: expected effective authority, grant and ownership drift refus
     ["GRANT SELECT ON public.platform_schema_registry TO PUBLIC","REVOKE SELECT ON public.platform_schema_registry FROM PUBLIC"],
     ["GRANT "+lab.dbAdmin.escapeIdentifier(lab.author)+" TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"REVOKE "+lab.dbAdmin.escapeIdentifier(lab.author)+" FROM "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole)],
     ["ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO public","ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO pg_catalog,pg_temp"],
+    ["ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO PUBLIC","ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM PUBLIC"],
+    ["CREATE FUNCTION public.s03_unreviewed() RETURNS int LANGUAGE sql SET search_path=pg_catalog,pg_temp AS 'SELECT 1'","DROP FUNCTION public.s03_unreviewed()"],
     ["ALTER TABLE public.s03_p06_revocations OWNER TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"ALTER TABLE public.s03_p06_revocations OWNER TO vibress"]
   ];
   for(const [change,undo] of checks){
