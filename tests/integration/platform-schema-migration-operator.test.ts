@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { verifyExperimentalRegistry,registryAcceptanceMessage } from "../../packages/database/src/schema-operator-experimental-registry";
+import { verifyExperimentalWriterTopology } from "../../packages/database/src/schema-operator-experimental-writer-contract";
+import { compileExperimentalPhysicalContract,prepareExperimentalPhysicalTransition } from "../../packages/schema-engine/src";
 import { randomBytes, randomUUID, generateKeyPairSync, sign, createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof, type RecoveryEpochState } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
@@ -4606,4 +4609,61 @@ it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL ma
   expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
   expect(await hasWebsite(other)).toBe(false);
   console.info("M03_WRITER_MATRIX "+JSON.stringify({roleEdges:matrix.length,relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,routineOwners:routines.length,columnRoleRows:columnMatrix.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length}));
+},30000);
+
+
+it("M03-REGISTRY-01: signed committed registry provenance, pure physical planning and live catalog drift refusal",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const req=await freshP06(lab),scope={applicationId,installationId:lab.installationId};
+  const target=lab.plan.proposedManifest;
+  const prepared=prepareExperimentalPhysicalTransition(lab.current,target,scope);
+  expect(prepared.disposition).toBe("EXISTING_OPERATOR_AUTHORIZATION_REQUIRED");
+  expect(prepared.ddl?.columnName).toBe("website");
+  expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
+  expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
+  expect((await executeP06(lab.operator,req,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+  const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
+    operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
+  const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
+  await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+  try{
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey);
+    expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    const wrong={...evidence,operationId:randomUUID()};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey)).rejects.toThrow();
+    const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("GRANT SELECT ON "+q+" TO PUBLIC");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("REVOKE SELECT ON "+q+" FROM PUBLIC");}
+    await lab.dbAdmin.query("ALTER TABLE "+q+" ADD COLUMN surprise text");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("ALTER TABLE "+q+" DROP COLUMN surprise");}
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey)).toEqual(good);
+  }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+},30000);
+
+it("M03-WRITER-02: expected effective authority, grant and ownership drift refusal",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"};
+  const verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify();
+  expect(expected.relationChecks).toBeGreaterThan(0);
+  const checks=[
+    ["GRANT UPDATE(installation_id) ON public.platform_schema_registry TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole),"REVOKE UPDATE(installation_id) ON public.platform_schema_registry FROM "+lab.dbAdmin.escapeIdentifier(lab.operatorRole)],
+    ["GRANT SELECT ON public.platform_schema_registry TO PUBLIC","REVOKE SELECT ON public.platform_schema_registry FROM PUBLIC"],
+    ["GRANT "+lab.dbAdmin.escapeIdentifier(lab.author)+" TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"REVOKE "+lab.dbAdmin.escapeIdentifier(lab.author)+" FROM "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole)],
+    ["ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO public","ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO pg_catalog,pg_temp"],
+    ["ALTER TABLE public.s03_p06_revocations OWNER TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"ALTER TABLE public.s03_p06_revocations OWNER TO vibress"]
+  ];
+  for(const [change,undo] of checks){
+    await lab.dbAdmin.query(change!);
+    try{await expect(verify()).rejects.toThrow();}
+    finally{await lab.dbAdmin.query(undo!);}
+    expect(await verify()).toEqual(expected);
+  }
+  console.info("EXPECTED_WRITER_CONTRACT "+JSON.stringify(expected));
 },30000);
