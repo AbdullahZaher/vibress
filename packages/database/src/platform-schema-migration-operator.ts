@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ClientBase } from "pg";
 import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
@@ -5,7 +6,7 @@ import { ExperimentalSessionLifecycle, isExperimentalOwnedSession } from "./sche
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
-  renderTrustedAdditiveColumn,
+  renderTrustedAdditiveColumn, parseSchemaManifest,
   type ManifestResource,
 } from "@vibress/schema-engine";
 
@@ -613,4 +614,79 @@ async function runP06(
       default: return deny("OPERATION_FAILED", "operator execution failed; inspect sanitized audit");
     }
   }
+}
+
+
+// Trusted disposable DBA observer: not a public/runtime API. The caller owns
+// an independently fenced database and the administrative signing key. The
+// observer is the only remaining session and executes only read-only SQL.
+// A malicious cluster superuser remains outside this trust boundary.
+export async function collectDisposableRecoveryReadiness(
+  db:ClientBase, scope:{installationId:string;databaseName:string;epoch:string;manifestDigest:string;
+    dataDigests:Readonly<Record<string,string>>},
+){
+  if(process.env.NODE_ENV==="production"||!/^vibress_s03_[a-z0-9_]+$/.test(scope.databaseName)||
+    !UUID.test(scope.epoch)||!SHA.test(scope.manifestDigest)) return deny("UNAUTHORIZED","disposable recovery evidence required");
+  const identity=(await db.query<IdentityRow & {superuser:boolean;pid:number}>(
+    "SELECT current_user,session_user,current_database() AS database_name,current_setting('server_version_num')::int AS postgres_version,"+
+    "pg_backend_pid() AS pid,(SELECT rolsuper FROM pg_roles WHERE rolname=current_user) AS superuser")).rows[0];
+  if(!identity||identity.current_user!==identity.session_user||!identity.superuser||
+    identity.database_name!==scope.databaseName||identity.postgres_version<160000||identity.postgres_version>=170000)
+    return deny("UNAUTHORIZED","trusted disposable DBA observation required");
+  const fence=async()=>{
+    const f=(await db.query<{oid:number;datallowconn:boolean;others:number;prepared:number}>(
+      "SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid=d.oid AND a.pid<>pg_backend_pid()) AS others,"+
+      "(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=current_database()")).rows[0];
+    if(!f||f.datallowconn||f.others!==0||f.prepared!==0)return deny("UNAUTHORIZED","recovery database not fenced and quiescent");
+    return f;
+  };
+  await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  try{
+    await db.query("SET LOCAL search_path=pg_catalog");
+    const before=await fence();
+    const registry=(await db.query<RegistryRow>("SELECT * FROM public.platform_schema_registry WHERE installation_id=$1",[scope.installationId])).rows[0];
+    const installation=(await db.query<InstallationRow>("SELECT i.id,i.application_id,i.environment,(SELECT count(*)::int FROM public.platform_installations) AS total FROM public.platform_installations i WHERE i.id=$1",[scope.installationId])).rows[0];
+    const epoch=(await db.query<{epoch_id:string}>("SELECT epoch_id FROM public.s03_p06_recovery_epochs WHERE installation_id=$1",[scope.installationId])).rows[0];
+    if(!registry||!installation||installation.total!==1||registry.application_id!==installation.application_id||
+       registry.environment!==installation.environment||!["test","development"].includes(registry.environment)||
+       registry.database_name!==scope.databaseName||registry.manifest_digest!==scope.manifestDigest||epoch?.epoch_id!==scope.epoch)
+      return deny("CATALOG_DRIFT","recovery registry/installation/epoch mismatch");
+    const manifest=parseSchemaManifest(JSON.parse(registry.manifest));
+    if(manifest.digest!==scope.manifestDigest||manifest.installationId!==scope.installationId||manifest.applicationId!==registry.application_id||
+       JSON.stringify(manifest)!==registry.manifest||manifest.resources.length!==Object.keys(scope.dataDigests).length)
+      return deny("CATALOG_DRIFT","recovery manifest mismatch");
+    const resources:{table:string;digest:string;rows:number}[]=[];
+    for(const resource of manifest.resources){
+      if(resource.ownership!=="application")return deny("UNSUPPORTED","tenant-owned recovery not certified");
+      // Assert authority of the actual registry role, as an observed subject,
+      // not as the administrator's session identity.
+      const oid=await assertAuthority(db,{...identity,current_user:registry.operator_role},registry,resource);
+      await verifyCatalog(db,oid,resource);
+      const data=await db.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+db.escapeIdentifier(resource.tableName)+' t ORDER BY value LIMIT 1001');
+      if(data.rows.length>1000)return deny("UNSUPPORTED","recovery fixture row bound exceeded");
+      const digest=createHash("sha256").update(JSON.stringify(data.rows.map(row=>row.value))).digest("hex");
+      if(scope.dataDigests[resource.tableName]!==digest)return deny("CATALOG_DRIFT","recovery seeded data mismatch");
+      resources.push({table:resource.tableName,digest,rows:data.rows.length});
+    }
+    const actors=(await db.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string;actor_generation:number;enrolled:boolean}>(
+      "SELECT a.login_name,a.principal_id,a.actor_kind,a.actor_instance_id,a.actor_generation,"+
+      "EXISTS(SELECT 1 FROM public.s03_p06_actor_enrollments e JOIN pg_roles r ON r.oid=e.role_oid "+
+      "WHERE e.actor_instance_id=a.actor_instance_id AND e.epoch_id=$1::uuid AND r.rolname=a.login_name "+
+      "AND r.rolcanlogin AND NOT(r.rolsuper OR r.rolbypassrls OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication) "+
+      "AND NOT EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid)) AS enrolled "+
+      "FROM public.platform_schema_trusted_actors a WHERE a.active ORDER BY a.login_name",[scope.epoch])).rows;
+    if(actors.some(a=>!a.enrolled||[registry.operator_role,registry.runtime_role].includes(a.login_name))||
+      !actors.some(a=>a.actor_kind==="AUTHOR")||!actors.some(a=>a.actor_kind==="APPROVER")||
+      new Set(actors.map(a=>a.principal_id)).size!==actors.length)
+      return deny("UNAUTHORIZED","recovery actor enrollment incomplete");
+    const journal=(await db.query<{operationId:string;submissionId:string;approvalId:string;planDigest:string;newDigest:string}>(
+      'SELECT operation_id AS "operationId",submission_id AS "submissionId",approval_id AS "approvalId",canonical_plan_digest AS "planDigest",new_digest AS "newDigest" FROM public.s03_p06_completed_operations WHERE installation_id=$1 ORDER BY operation_id',[scope.installationId])).rows;
+    // Clear the statistics snapshot before a second quiescence observation.
+    await db.query("SELECT pg_stat_clear_snapshot()");
+    const after=await fence();
+    if(before.oid!==after.oid)return deny("CATALOG_DRIFT","recovery database identity changed");
+    await db.query("COMMIT");
+    const readinessEvidenceDigest=createHash("sha256").update(JSON.stringify({scope,before,after,resources,actors,journal})).digest("hex");
+    return {epoch:scope.epoch,catalogManifestDigest:manifest.digest,readinessEvidenceDigest,journal};
+  }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
 }

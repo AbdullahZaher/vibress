@@ -17,7 +17,7 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
-import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
 import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
@@ -30,7 +30,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -4157,3 +4157,80 @@ describe("P06 durable transaction facts",()=>{
     console.info("D1_DURABLE_REPEATED "+JSON.stringify({n:samples.length,margin:"NOT_DETERMINABLE",samples}));
   },60000);
 });
+
+
+it("P06-E2E-47: actual post-COMMIT restore, fenced catalog and journal observations, fresh enrollment and forward activation",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),stale=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-forward-recovery-")),anchor=testAnchor(dir);
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+  const esc=(v:string)=>cluster.escapeIdentifier(v),retained=lab.name+"_retained";
+  let retainedExists=false,restored:Lab|undefined;
+  try{
+    const result=await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+    expect(result.status).toBe("APPLIED");
+    const rows=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+esc(lab.table)+' t ORDER BY value')).rows;
+    const dataDigests={[lab.table]:createHash("sha256").update(JSON.stringify(rows.map(row=>row.value))).digest("hex")};
+    const archive=spawnSync("docker",["compose","-f","compose.dev.yml","exec","-T","postgres","pg_dump","-U","vibress","--format=custom","--dbname",lab.name],{timeout:20000,maxBuffer:16*1024*1024});
+    expect(archive.status).toBe(0);expect(archive.stdout.length).toBeGreaterThan(0);
+    a.beginRecovery();
+    await Promise.all([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    await cluster.query("ALTER DATABASE "+esc(lab.name)+" RENAME TO "+esc(retained));retainedExists=true;
+    await cluster.query("ALTER DATABASE "+esc(retained)+" ALLOW_CONNECTIONS false");
+    const q=(await cluster.query<{oid:number;datallowconn:boolean;sessions:number;prepared:number}>(
+      "SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid=d.oid) AS sessions,(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[retained])).rows[0]!;
+    expect(q).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+    const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,q})).digest("hex");
+    a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
+    await cluster.query("CREATE DATABASE "+esc(lab.name));
+    await cluster.query("REVOKE CONNECT ON DATABASE "+esc(lab.name)+" FROM PUBLIC");
+    for(const role of [lab.author,lab.approver,lab.operatorRole,lab.runtimeRole])
+      await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(role));
+    const recover=spawnSync("docker",["compose","-f","compose.dev.yml","exec","-T","postgres","pg_restore","-U","vibress","--exit-on-error","--single-transaction","--dbname",lab.name],{input:archive.stdout,timeout:20000,maxBuffer:16*1024*1024});
+    expect(recover.status).toBe(0);
+    restored={...lab,current:lab.plan.proposedManifest,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+    labs[labs.indexOf(lab)]=restored;
+    expect(await hasWebsite(restored)).toBe(true);
+    const observation={installationId:lab.installationId,databaseName:lab.name,epoch:nextEpoch,manifestDigest:result.newDigest,dataDigests};
+    await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,observation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await restored.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+    const oldActors=(await restored.dbAdmin.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string}>("SELECT login_name,principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+    await Promise.all([restored.operator.end(),restored.runtime.end()]);
+    await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+    try{
+      await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,observation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // Existing trusted DBA session only. Historical actor UUIDs stay recorded.
+      for(const actor of oldActors){
+        const replacement=(await restored.dbAdmin.query<{id:string}>("SELECT public.s03_p06_root_replace($1,$2,$3,$4) AS id",[lab.installationId,actor.login_name,actor.principal_id,actor.actor_kind])).rows[0]!;
+        expect(replacement.id).not.toBe(actor.actor_instance_id);
+      }
+      await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,{...observation,dataDigests:{[lab.table]:"f".repeat(64)}})).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+      const ready=await collectDisposableRecoveryReadiness(restored.dbAdmin,observation);
+      expect(ready.journal).toMatchObject([{operationId:request.operationId,newDigest:result.newDigest}]);
+      expect(()=>a.activate(ready,"A".repeat(86))).toThrow();
+      const signature=attestRecovery(a,"READY",ready);
+      expect(()=>a.activate({...ready,journal:[]},signature)).toThrow();
+      a.activate(ready,signature);
+      expect(a.snapshot().pending).toBe(false);
+      expect(()=>a.activate(ready,signature)).toThrow();
+    }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+    restored={...restored,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+    const i=labs.findIndex(l=>l.name===lab.name);labs[i]=restored;
+    await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),a.proofAuthority(epochKeys.publicKey))).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    // New content and independent approval after fresh enrollment.
+    const scope={applicationId,installationId:lab.installationId};
+    const next=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+      {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+    const plan=planSchemaChanges(restored.current,next,{scope,expectedCurrentDigest:restored.current.digest});
+    const author=await connect(lab.name,lab.author);
+    try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(restored.current),JSON.stringify(plan)]);}finally{await author.end();}
+    const fresh=await freshP06({...restored,plan});
+    expect(fresh.approvalId).not.toBe(stale.approvalId);
+    expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
+    expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+  }finally{
+    if(retainedExists)await cluster.query("DROP DATABASE "+esc(retained));
+    a.close();rmSync(dir,{recursive:true,force:true});
+  }
+},90000);

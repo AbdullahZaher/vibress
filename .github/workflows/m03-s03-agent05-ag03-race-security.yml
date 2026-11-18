@@ -85,6 +85,21 @@ jobs:
           leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
           echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
           test "$leaked" = "0"
+      - name: Restart owned PostgreSQL and verify persisted migration journal and seeded data
+        if: steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          sql() { docker compose -f compose.dev.yml exec -T postgres psql -v ON_ERROR_STOP=1 -At -U vibress -d vibress -c "$1"; }
+          before_started="$(sql "SELECT pg_postmaster_start_time()")"
+          before_journal="$(sql "SELECT count(*)||':'||md5(string_agg(hash||':'||created_at::text, ',' ORDER BY id)) FROM drizzle.__drizzle_migrations")"
+          before_seed="$(sql "SELECT count(*)||':'||md5(string_agg(id, ',' ORDER BY id)) FROM publications WHERE id IN ('pub_alpha','pub_beta')")"
+          test -n "$before_journal" && test -n "$before_seed"
+          docker compose -f compose.dev.yml restart postgres
+          docker compose -f compose.dev.yml up -d --wait postgres
+          after_started="$(sql "SELECT pg_postmaster_start_time()")"
+          test -n "$after_started" && test "$before_started" != "$after_started"
+          test "$(sql "SELECT count(*)||':'||md5(string_agg(hash||':'||created_at::text, ',' ORDER BY id)) FROM drizzle.__drizzle_migrations")" = "$before_journal"
+          test "$(sql "SELECT count(*)||':'||md5(string_agg(id, ',' ORDER BY id)) FROM publications WHERE id IN ('pub_alpha','pub_beta')")" = "$before_seed"
+          echo "POSTGRES_RESTART_PERSISTENCE=PASS"
       - name: Teardown ONLY the owned disposable PostgreSQL service
         if: always()
         run: docker compose -f compose.dev.yml down --volumes --remove-orphans
