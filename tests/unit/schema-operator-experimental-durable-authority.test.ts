@@ -73,7 +73,8 @@ describe("disposable durable recovery authority",()=>{
 });
 
 describe("offline authority crash diagnostics",()=>{
-  it.each(["BEFORE_CAS","AFTER_CAS"] as const)("actual child SIGKILL %s preserves lock and classifies chain",window=>{
+  it.each(["BEFORE_CAS","AFTER_CAS","BEFORE_INTENT_WRITE","AFTER_INTENT_WRITE","AFTER_INTENT_FSYNC",
+    "AFTER_ANCHOR_TEMP_FSYNC","AFTER_ANCHOR_RENAME","AFTER_ANCHOR_DIR_FSYNC"] as const)("actual child SIGKILL %s preserves lock and classifies chain",window=>{
     const f=fixture();const a=f.initialize();a.close();
     try{
       writeFileSync(join(f.dir,"ledger-key.pem"),f.keys.privateKey.export({type:"pkcs8",format:"pem"}),{mode:0o600});
@@ -83,9 +84,27 @@ describe("offline authority crash diagnostics",()=>{
         {env:{...process.env,NODE_ENV:"test"},timeout:15000});
       expect(child.signal).toBe("SIGKILL");
       const result=DisposableDurableRecoveryAuthority.inspectOffline(f.ledger,f.anchor);
-      expect(result).toMatchObject({disposition:window==="BEFORE_CAS"?"LEDGER_AHEAD":"MATCHED",pending:true,sequence:2});
-      // Even exact matching durable state does not authorize lock takeover.
+      const beforeWrite=window==="BEFORE_INTENT_WRITE";
+      const matched=beforeWrite||["AFTER_CAS","AFTER_ANCHOR_RENAME","AFTER_ANCHOR_DIR_FSYNC"].includes(window);
+      expect(result).toMatchObject({disposition:matched?"MATCHED":"LEDGER_AHEAD",pending:!beforeWrite,sequence:beforeWrite?1:2});
       expect(()=>f.open()).toThrow();
+      if(process.platform==="linux"&&window==="AFTER_CAS"){
+        const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey);
+        const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
+        const take=(signature:string)=>DisposableDurableRecoveryAuthority.takeoverMatchedPending(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey,{...payload,signature});
+        expect(()=>take("A".repeat(86))).toThrow();
+        const signature=sign(null,recoveryAdministrationMessage(view,"OFFLINE_TAKEOVER",payload),f.admin.privateKey).toString("base64url");
+        const recovered=take(signature);
+        try{
+          expect(recovered.snapshot()).toMatchObject({pending:true,sequence:3});
+          expect(readFileSync(join(f.ledger,"writer-retired-"+payload.nonce+".json"),"utf8")).toContain('"pid":'+child.pid);
+          expect(()=>DisposableDurableRecoveryAuthority.inspectOfflineTakeover(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey)).toThrow();
+          expect(()=>take(signature)).toThrow();
+        }finally{recovered.close();}
+        const reopened=f.open();try{expect(reopened.snapshot().pending).toBe(true);}finally{reopened.close();}
+      }else if(process.platform==="linux"&&!matched){
+        expect(()=>DisposableDurableRecoveryAuthority.inspectOfflineTakeover(f.ledger,f.keys.privateKey,f.anchor,f.admin.publicKey)).toThrow();
+      }
     }finally{rmSync(f.dir,{recursive:true,force:true});}
   },20000);
   it("independently retained monotonic anchor rejects coordinated rollback of ledger and local anchor copy",()=>{
@@ -104,4 +123,28 @@ describe("offline authority crash diagnostics",()=>{
       // independent hardware/service rollback-resistant boundary.
     }finally{a.close();rmSync(f.dir,{recursive:true,force:true});}
   });
+});
+
+
+it("file anchor CAS conformance: stale sequence, wrong identity, forged data and wrong key refuse",()=>{
+  const f=fixture();const a=f.initialize();
+  try{
+    const h=f.anchor.read();if(!h)throw Error("missing head");
+    const next={...h,sequence:h.sequence+1,head:"a".repeat(64)};
+    expect(()=>f.anchor.compareAndSet(null,next)).toThrow();
+    expect(()=>f.anchor.compareAndSet(h,{...next,sequence:h.sequence+2})).toThrow();
+    expect(()=>f.anchor.compareAndSet(h,{...next,ledgerId:randomUUID()})).toThrow();
+    expect(()=>f.anchor.compareAndSet(h,{...next,installationId:"other-installation"})).toThrow();
+    expect(()=>f.anchor.compareAndSet(h,{...next,signingIdentity:"b".repeat(64)})).toThrow();
+    expect(f.anchor.read()).toEqual(h);
+    const wrong=new FileExperimentalRecoveryAnchor(f.anchorDir,generateKeyPairSync("ed25519").privateKey);
+    expect(()=>wrong.read()).toThrow();
+    const headFile=join(f.anchorDir,"head.json"),raw=readFileSync(headFile,"utf8");
+    writeFileSync(headFile,raw.replace(h.head,"f".repeat(64)));
+    expect(()=>f.anchor.read()).toThrow();
+    writeFileSync(headFile,raw);
+    f.anchor.compareAndSet(h,next);
+    expect(()=>f.anchor.compareAndSet(h,next)).toThrow();
+    expect(f.anchor.read()).toEqual(next);
+  }finally{a.close();rmSync(f.dir,{recursive:true,force:true});}
 });

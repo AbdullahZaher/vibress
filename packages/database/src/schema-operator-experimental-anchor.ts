@@ -28,7 +28,8 @@ function valid(h:RecoveryHead):boolean {
 export class FileExperimentalRecoveryAnchor implements ExperimentalRecoveryAnchor {
   private readonly path:string;
   private readonly publicKey:KeyObject;
-  constructor(private readonly directory:string,private readonly key:KeyObject){
+  constructor(private readonly directory:string,private readonly key:KeyObject,private readonly testProbe?:(window:string)=>void){
+    if(testProbe&&process.env.NODE_ENV!=="test")throw Error("test probe unavailable");
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519")throw Error("invalid anchor key");
     this.path=join(directory,"head.json");this.publicKey=createPublicKey(key);
   }
@@ -55,8 +56,11 @@ export class FileExperimentalRecoveryAnchor implements ExperimentalRecoveryAncho
       const fd=openSync(temp,"wx",0o600);
       try{writeFileSync(fd,JSON.stringify({value:next,signature:sign(null,message(next),this.key).toString("base64url")}),"utf8");fsyncSync(fd);}
       finally{closeSync(fd);}
+      this.testProbe?.("AFTER_ANCHOR_TEMP_FSYNC");
       renameSync(temp,this.path);
+      this.testProbe?.("AFTER_ANCHOR_RENAME");
       const dir=openSync(this.directory,"r");try{fsyncSync(dir);}finally{closeSync(dir);}
+      this.testProbe?.("AFTER_ANCHOR_DIR_FSYNC");
     }finally{
       try{unlinkSync(temp);}catch{/* temp may have been renamed */}
       closeSync(lock);unlinkSync(lockPath);

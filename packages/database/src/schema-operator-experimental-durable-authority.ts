@@ -9,6 +9,7 @@ import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 import { RecoveryEpochAuthority, recoveryEpochMessage } from "./schema-operator-experimental-recovery-epoch";
 import { superviseDisposableSchemaOperation, registerExperimentalAdmission, type OwnedOperationFacts } from "./schema-operator-experimental-supervisor";
 import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } from "./schema-operator-experimental-anchor";
+import { persistWriterIdentity,inspectDeadWriter,archiveDeadWriter,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
 import { SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -24,6 +25,7 @@ type Event =
   | { kind: "GENESIS"; installationId: string; databaseName: string; epoch: string; ledgerId:string; signingIdentity:string; administrationIdentity:string }
   | { kind: "ADMIT"; operation: Operation }
   | ({ kind: "OUTCOME"; operationId: string; evidenceDigest?: string } & ({outcome:"COMMITTED";newDigest:string}|{outcome:"UNCERTAIN"|"ROLLED_BACK";newDigest?:never}))
+  | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string }
   | { kind: "INTENT"; intent: string }
   | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
   | { kind: "READY"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
@@ -67,6 +69,9 @@ function reduce(s: State|undefined,e: Event): State {
       const identity:OperationIdentity={operationId:o.operationId,submissionId:o.submissionId,approvalId:o.approvalId,planDigest:o.planDigest,epoch:o.epoch};
       next.operations.set(o.operationId,e.outcome==="COMMITTED"?{...identity,outcome:"COMMITTED",newDigest:e.newDigest}:{...identity,outcome:e.outcome});break;
     }
+    case "TAKEOVER":
+      if(!s.pending||!UUID.test(e.nonce)||!SHA.test(e.writerDigest)||!/^[A-Za-z0-9_-]{86}$/.test(e.signature))return refuse();
+      break;
     case "INTENT":
       if(s.pending || !UUID.test(e.intent)) return refuse();
       next.pending=true;next.advanced=false;next.intent=e.intent;break;
@@ -81,6 +86,19 @@ function reduce(s: State|undefined,e: Event): State {
   }
   return next;
 }
+function readLedger(directory:string){
+  const raw=readFileSync(join(directory,"authority.jsonl"),"utf8");
+  if(!raw.endsWith("\n")||raw.length>16*1024*1024)return refuse();
+  let state:State|undefined,head=ZERO,sequence=0;
+  for(const line of raw.trimEnd().split("\n")){
+    const record=JSON.parse(line) as RecordLine;
+    if(record.previous!==head||record.hash!==hash(head,record.event))return refuse();
+    state=reduce(state,record.event);head=record.hash;sequence++;
+  }
+  if(!state)return refuse();
+  return {state,head,sequence};
+}
+type PersistenceProbe=(window:string)=>void;
 export class DurableOutcomePersistenceError extends SchemaMigrationOperatorError {
   readonly persistenceStatus="UNCONFIRMED" as const;
   constructor(readonly transactionFacts:OwnedOperationFacts|undefined){
@@ -98,13 +116,19 @@ export class DisposableDurableRecoveryAuthority {
   private readonly fences=new Map<string,()=>void>();
 
   private constructor(directory:string, private readonly key:KeyObject, private readonly anchor:ExperimentalRecoveryAnchor,
-    private readonly administrationKey:KeyObject) {
+    private readonly administrationKey:KeyObject, maintenanceHeld=false,private readonly testProbe?:PersistenceProbe) {
     if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519"||administrationKey.type!=="public"||administrationKey.asymmetricKeyType!=="ed25519"||
       keyIdentity(createPublicKey(key))===keyIdentity(administrationKey)) refuse();
+    if(testProbe&&process.env.NODE_ENV!=="test")return refuse();
     this.path=join(directory,"authority.jsonl");this.lockPath=join(directory,"writer.lock");
-    // No stale-lock auto-break. Crash takeover requires verified old-process
-    // death and trust-root intervention; clean restart is exercised separately.
-    this.lock=openSync(this.lockPath,"wx",0o600);
+    const maintenancePath=join(directory,"maintenance.lock");
+    // Serialize every supported writer acquisition against offline maintenance.
+    const gate=maintenanceHeld?undefined:openSync(maintenancePath,"wx",0o600);
+    try{
+      this.lock=openSync(this.lockPath,"wx",0o600);
+      try{persistWriterIdentity(this.lock,directory,key);}
+      catch(error){closeSync(this.lock);this.lock=undefined;throw error;}
+    }finally{if(gate!==undefined){closeSync(gate);unlinkSync(maintenancePath);}}
   }
   static initialize(directory:string,key:KeyObject,installationId:string,databaseName:string,epoch:string,
     anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
@@ -139,16 +163,50 @@ export class DisposableDurableRecoveryAuthority {
       head,sequence,anchorSequence:trusted?.sequence,pending:state.pending,
       unresolved:[...state.operations.values()].filter(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN").length});
   }
-  static open(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
-    const a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey);
+  static inspectOfflineTakeover(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject){
+    if(process.env.NODE_ENV==="production"||key.type!=="private"||key.asymmetricKeyType!=="ed25519"||
+      administrationKey.type!=="public"||administrationKey.asymmetricKeyType!=="ed25519")return refuse();
+    const {state,head,sequence}=readLedger(directory),publicKey=createPublicKey(key);
+    if(!state.pending||state.signingIdentity!==keyIdentity(publicKey)||state.administrationIdentity!==keyIdentity(administrationKey)||
+      !sameRecoveryHead(anchor.read(),{ledgerId:state.ledgerId,installationId:state.installationId,signingIdentity:state.signingIdentity,head,sequence}))return refuse();
+    const writerDigest=inspectDeadWriter(directory,publicKey);
+    return Object.freeze({ledgerId:state.ledgerId,installationId:state.installationId,head,epoch:state.epoch,sequence,writerDigest});
+  }
+  // Explicit signed action only. No automatic lock deletion, no anchor repair,
+  // no activation. Other boots/hosts and mismatched histories are refused.
+  static takeoverMatchedPending(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,
+    decision:{nonce:string;writerDigest:string;signature:string}){
+    if(process.env.NODE_ENV==="production")return refuse();
+    const gatePath=join(directory,"maintenance.lock"),gate=openSync(gatePath,"wx",0o600);
+    let changed=false,completed=false;
+    let a:DisposableDurableRecoveryAuthority|undefined;
     try{
-      const raw=readFileSync(a.path,"utf8");
-      if(!raw.endsWith("\n")||raw.length>16*1024*1024) refuse();
-      for(const line of raw.trimEnd().split("\n")){
-        const record=JSON.parse(line) as RecordLine;
-        if(record.previous!==a.head||record.hash!==hash(a.head,record.event)) refuse();
-        a.state=reduce(a.state,record.event);a.head=record.hash;a.sequence++;
-      }
+      const observed=this.inspectOfflineTakeover(directory,key,anchor,administrationKey);
+      const payload={nonce:decision.nonce,writerDigest:decision.writerDigest};
+      if(!UUID.test(decision.nonce)||decision.writerDigest!==observed.writerDigest||
+        !/^[A-Za-z0-9_-]{86}$/.test(decision.signature)||
+        !verify(null,recoveryAdministrationMessage(observed,"OFFLINE_TAKEOVER",payload),administrationKey,Buffer.from(decision.signature,"base64url")))return refuse();
+      // On any failure after preservation of the old lock begins, leave
+      // maintenance fenced; a later operator cannot blindly retry.
+      changed=true;archiveDeadWriter(directory,decision.nonce,createPublicKey(key),decision.writerDigest);
+      a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey,true);
+      const loaded=readLedger(directory);a.state=loaded.state;a.head=loaded.head;a.sequence=loaded.sequence;
+      a.assertAnchor();
+      a.append({kind:"TAKEOVER",nonce:decision.nonce,writerDigest:decision.writerDigest,signature:decision.signature});
+      for(const operation of a.current().operations.values())if(operation.outcome==="ADMITTED")
+        a.append({kind:"OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
+      syncRecoveryDirectory(directory);
+      completed=true;return a;
+    }finally{
+      closeSync(gate);
+      if(!changed||completed){unlinkSync(gatePath);syncRecoveryDirectory(directory);}
+      else if(a?.lock!==undefined){closeSync(a.lock);a.lock=undefined;}
+    }
+  }
+  static open(directory:string,key:KeyObject,anchor:ExperimentalRecoveryAnchor,administrationKey:KeyObject,testProbe?:PersistenceProbe){
+    const a=new DisposableDurableRecoveryAuthority(directory,key,anchor,administrationKey,false,testProbe);
+    try{
+      const loaded=readLedger(directory);a.state=loaded.state;a.head=loaded.head;a.sequence=loaded.sequence;
       const state=a.current();
       if(state.signingIdentity!==keyIdentity(createPublicKey(key))||state.administrationIdentity!==keyIdentity(administrationKey)) refuse();
       a.assertAnchor();
@@ -180,7 +238,11 @@ export class DisposableDurableRecoveryAuthority {
       if(!sameRecoveryHead(this.anchor.read(),previous)) refuse();
       budget?.mark(event.kind+"_LEDGER_START");
       const fd=openSync(this.path,"a");try{
-        writeFileSync(fd,JSON.stringify(record)+"\n","utf8");fsyncSync(fd);
+        this.testProbe?.("BEFORE_"+event.kind+"_WRITE");
+        writeFileSync(fd,JSON.stringify(record)+"\n","utf8");
+        this.testProbe?.("AFTER_"+event.kind+"_WRITE");
+        fsyncSync(fd);
+        this.testProbe?.("AFTER_"+event.kind+"_FSYNC");
       }finally{closeSync(fd);}
       // Never return success or publish state until both writes are confirmed.
       // A crash between them leaves a mismatch requiring offline investigation.
