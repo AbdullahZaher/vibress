@@ -77,8 +77,9 @@ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_tem
 DECLARE s record; a record; k text; result uuid;
 BEGIN
   PERFORM public.s03_p06_enter();
-  -- Serialize competing approval identities for the same immutable submission.
-  SELECT * INTO s FROM public.s03_p06_submissions WHERE submission_id=p_submission FOR UPDATE;
+  -- Serialize creation without holding an UPDATE tuple lock needed by journal FKs.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_p06_submission'),pg_catalog.hashtext(p_submission::text));
+  SELECT * INTO s FROM public.s03_p06_submissions WHERE submission_id=p_submission;
   IF NOT FOUND THEN RAISE EXCEPTION 'submission unavailable' USING ERRCODE='42501'; END IF;
   FOR k IN SELECT v FROM pg_catalog.unnest(ARRAY[s.author_login, session_user::text]) AS x(v)
     ORDER BY pg_catalog.hashtext(v),v COLLATE "C"
@@ -101,5 +102,40 @@ BEGIN
   VALUES(p_submission,session_user,a.principal_id,a.actor_instance_id,a.actor_generation,
     pg_catalog.clock_timestamp()+interval '20 minutes') RETURNING approval_id INTO result;
   RETURN result;
+END $body$;
+
+
+-- Existing content-registration entrypoint is governed too; it does not grant
+-- executable authorization. No old approval/revoke EXECUTE in integrated provisioning.
+CREATE OR REPLACE FUNCTION public.platform_schema_submit_plan(
+  p_installation_id text,p_plan_digest text,p_expected_manifest text,p_plan text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
+BEGIN
+  PERFORM public.s03_p06_enter();
+  INSERT INTO public.platform_schema_plans(installation_id,plan_digest,expected_manifest,plan,author)
+  VALUES(p_installation_id,p_plan_digest,p_expected_manifest,p_plan,session_user);
+END $body$;
+
+-- Integrated installer must apply the original actor gateway fixture first.
+CREATE OR REPLACE FUNCTION public.s03_p06_set_actor_active(p_installation text,p_actor text,p_active boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $body$
+DECLARE affected bigint;
+BEGIN
+  PERFORM public.s03_p06_enter();
+  IF p_active IS NULL OR NOT EXISTS (
+    SELECT 1 FROM public.s03_p06_admin_capability c
+      JOIN public.platform_schema_registry r USING (installation_id)
+    WHERE c.installation_id=p_installation AND c.delegate_login=session_user
+      AND r.database_name=current_database() AND r.environment IN ('test','development')
+      AND (SELECT count(*) FROM public.platform_schema_registry)=1)
+    THEN RAISE EXCEPTION 'actor mutation capability denied' USING ERRCODE='42501'; END IF;
+  -- Actor-only writers take X BEFORE tuple lock. They never take A, R or I
+  -- afterward, preserving P05 deactivation during a target-table wait.
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('vibress_m03s03_actor'),
+    pg_catalog.hashtext(p_actor));
+  UPDATE public.platform_schema_trusted_actors SET active=p_active
+    WHERE login_name=p_actor AND active IS DISTINCT FROM p_active;
+  GET DIAGNOSTICS affected=ROW_COUNT;
+  IF affected<>1 THEN RAISE EXCEPTION 'actor transition unavailable' USING ERRCODE='42501'; END IF;
 END $body$;
 

@@ -21,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2790,7 +2790,7 @@ describe("L1 delegated actor-only lifecycle gateway (disposable, narrow path)", 
 async function p06Install(lab:Lab):Promise<void> {
   await lab.dbAdmin.query("BEGIN");
   try {
-    for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
+    for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-l1-actor-gateway-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
       await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+lab.dbAdmin.escapeIdentifier(lab.author));
     await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid),public.s03_p06_revoke(uuid) TO "+lab.dbAdmin.escapeIdentifier(lab.approver));
@@ -2855,5 +2855,78 @@ describe("P06-E2E integrated actual operator and atomic journal",()=>{
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
     await lab.dbAdmin.query("ALTER TABLE public.s03_p06_completed_operations DROP CONSTRAINT p06_test_fail");
     expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+});
+
+describe("Integrated P06 D1 and R1 safety",()=>{
+  it("P06-E2E-04: governed actor mutation during target lock wait invalidates actual fresh approval",async()=>{
+    const lab=await createLab("ar");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);
+    const delegate="s03_delegate_"+lab.key+"_"+id,gateway="s03_gateway_"+lab.key+"_"+id;
+    const esc=(name:string)=>lab.dbAdmin.escapeIdentifier(name);
+    await cluster.query("CREATE ROLE "+esc(delegate)+" LOGIN PASSWORD "+cluster.escapeLiteral(password)+
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE "+esc(gateway)+" NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(delegate));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO "+esc(delegate)+","+esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry,public.s03_p06_admin_capability,public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_enter() TO "+esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO "+esc(delegate));
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability VALUES($1,$2)",[lab.installationId,delegate]);
+    const admin=await connect(lab.name,delegate),blocker=await connect(lab.name);
+    let pending:ReturnType<typeof executeP06>|undefined;
+    try{
+      await expect(admin.query("UPDATE public.platform_schema_trusted_actors SET active=false")).rejects.toMatchObject({code:"42501"});
+      await admin.query("BEGIN");
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.author]);
+      await expect(admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.approver])).rejects.toMatchObject({code:"42501"});
+      await admin.query("ROLLBACK");
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+esc(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      pending=executeP06(lab.operator,request,new ExperimentalD1Budget());
+      void pending.catch(()=>undefined);
+      let blocked=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{waiting:boolean}>("SELECT cardinality(pg_blocking_pids($1))>0 AS waiting",[lab.operator.processID??-1])).rows[0];
+        if(row?.waiting){blocked=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(blocked).toBe(true);
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.approver]);
+      await blocker.query("ROLLBACK");
+      await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await pending?.catch(()=>undefined);await blocker.end();await admin.end();}
+  },30000);
+  it("P06-E2E-05: deadline exhaustion after new journal insertion prevents COMMIT and rolls back",async()=>{
+    const lab=await createLab("as");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);let tick=0;
+    const budget=new ExperimentalD1Budget(()=>tick);
+    const issued:string[]=[];
+    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      issued.push(sql);const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql.startsWith("INSERT INTO public.s03_p06_completed_operations"))tick=2518;
+      return result;
+    }} as unknown as ClientBase;
+    await expect(executeP06(wrapped,request,budget)).rejects.toMatchObject({code:"DEADLINE_EXCEEDED"});
+    expect(issued).not.toContain("COMMIT");expect(issued).toContain("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-06: lost ACK is indeterminate; fresh session reconciles exact UUID without second DDL",async()=>{
+    const lab=await createLab("at");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql==="COMMIT")throw new Error("simulated lost commit acknowledgment after actual server commit");
+      return result;
+    }} as unknown as ClientBase;
+    await expect(executeP06(wrapped,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    const other=await connect(lab.name,lab.operatorRole);
+    try{expect((await executeP06(other,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");}
+    finally{await other.end();}
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
   },30000);
 });

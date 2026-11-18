@@ -46,8 +46,11 @@ async function main(): Promise<void> {
     await db.connect();
     budget.checkpoint();
     const result = await executeApprovedAdditiveColumn(db, {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},budget);
-    console.log(JSON.stringify(result));
-    if (result.status === "COMMITTED_LATE" || result.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
+    // Recheck at the CLI outcome boundary, not just inside the database method.
+    const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
+      budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
+    console.log(JSON.stringify(classified));
+    if (classified.status === "COMMITTED_LATE" || classified.status === "ALREADY_APPLIED_LATE") process.exitCode = 2;
   } finally {
     await db.end().catch(() => undefined);
   }
