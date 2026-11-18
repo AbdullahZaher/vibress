@@ -1,6 +1,7 @@
 import type { ClientBase } from "pg";
 import { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
 import { ExperimentalD1Budget, D1DeadlineExceeded } from "./schema-operator-experimental-deadline";
+import { ExperimentalSessionLifecycle } from "./schema-operator-experimental-session";
 import { inspectSchemaOperatorEffectivePrivileges } from "./platform-schema-effective-privileges";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import {
@@ -252,6 +253,7 @@ const quarantinedSessions = new WeakSet<ClientBase>();
 async function withSession(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
   mode: "EXECUTE" | "RECONCILE", authority?: RecoveryEpochAuthority,
+  session = new ExperimentalSessionLifecycle(budget),
 ): Promise<SchemaOperatorResult> {
   if (quarantinedSessions.has(db)) deny("INDETERMINATE", "session quarantined; use a fresh dedicated connection");
   if (activeSessions.has(db)) deny("OPERATION_FAILED", "dedicated session already in use");
@@ -269,7 +271,7 @@ async function withSession(
   }
   activeSessions.add(db);
   try {
-    return await runP06(db, request, budget, mode, authority);
+    return await runP06(db, request, budget, mode, authority, session);
   } finally {
     activeSessions.delete(db);
   }
@@ -277,15 +279,17 @@ async function withSession(
 
 export function executeApprovedAdditiveColumn(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget, authority?: RecoveryEpochAuthority,
+  session?: ExperimentalSessionLifecycle,
 ): Promise<SchemaOperatorResult> {
-  return withSession(db,request,budget,"EXECUTE",authority);
+  return withSession(db,request,budget,"EXECUTE",authority,session);
 }
 
 /** Reconcile only, on a fresh dedicated session. Absence of evidence never dispatches DDL. */
 export function reconcileApprovedAdditiveColumn(
   db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget, authority?: RecoveryEpochAuthority,
+  session?: ExperimentalSessionLifecycle,
 ): Promise<SchemaOperatorResult> {
-  return withSession(db,request,budget,"RECONCILE",authority);
+  return withSession(db,request,budget,"RECONCILE",authority,session);
 }
 
 async function runP06(
@@ -293,7 +297,8 @@ async function runP06(
   request: SchemaOperatorRequest,
   budget: ExperimentalD1Budget,
   mode: "EXECUTE" | "RECONCILE",
-  authority?: RecoveryEpochAuthority,
+  authority: RecoveryEpochAuthority | undefined,
+  session: ExperimentalSessionLifecycle,
 ): Promise<SchemaOperatorResult> {
   if (!request || request.envelopeVersion !== 1 ||
       !INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest) ||
@@ -309,6 +314,7 @@ async function runP06(
   async function refreshTimeout(): Promise<void> {
     budget.checkpoint();
     const remaining = Math.max(1,Math.floor(budget.remainingMs()));
+    session.beforeDispatch("SQL");
     await rawDb.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)",
       [String(Math.min(2000,remaining))+"ms",String(remaining)+"ms"]);
     budget.checkpoint();
@@ -318,12 +324,12 @@ async function runP06(
       const value: unknown = Reflect.get(target, property, target);
       if (property === "query" && typeof value === "function") {
         return async (...args: unknown[]) => {
-          budget.checkpoint();
+          session.beforeDispatch("SQL");
           // Refresh before blocking stages, but never issue SQL between final Policy A
           // authorization and DDL dispatch. This is not a hard cancellation guarantee.
           if (transactionActive && !finalCheckCompleted) await refreshTimeout();
           finalCheckCompleted=false;
-          budget.checkpoint();
+          session.beforeDispatch("SQL");
           return Reflect.apply(value,target,args);
         };
       }
@@ -336,9 +342,10 @@ async function runP06(
   try {
     // The server may have opened a transaction even if the BEGIN reply is lost.
     // Mark possible transaction ownership at dispatch, not at acknowledgment.
-    budget.checkpoint();
+    session.beforeDispatch("BEGIN");
     began = true;
     const beginResult = await rawDb.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+    session.acknowledge("BEGIN", beginResult.command);
     if (beginResult.command !== "BEGIN") throw new Error("unexpected begin response");
     beginAcknowledged = true;
     transactionActive=true;
@@ -456,9 +463,10 @@ async function runP06(
       }
       await verifyCatalog(db,oid,next);
       const afterRows=await rowCount(db,ddl.tableName);
-      budget.checkpoint();
+      session.beforeDispatch("COMMIT");
       commitAttempted=true;
       const commitResult=await rawDb.query("COMMIT");
+      session.acknowledge("COMMIT", commitResult.command);
       began=false;
       if (commitResult.command==="ROLLBACK") {commitAttempted=false;deny("VERIFIED_ROLLBACK","server acknowledged rollback");}
       if (commitResult.command!=="COMMIT") deny("INDETERMINATE","unexpected commit response");
@@ -533,9 +541,10 @@ async function runP06(
     );
     // Refresh before COMMIT, without selecting an unapproved numeric margin.
     await refreshTimeout();
-    budget.checkpoint();
+    session.beforeDispatch("COMMIT");
     commitAttempted = true;
     const commitResult = await rawDb.query("COMMIT");
+    session.acknowledge("COMMIT", commitResult.command);
     began = false;
     if (commitResult.command === "ROLLBACK") {
       commitAttempted = false;
@@ -550,7 +559,9 @@ async function runP06(
   } catch (error) {
     if (began && !commitAttempted) {
       try {
+        session.beforeDispatch("ROLLBACK");
         const rolled=await rawDb.query("ROLLBACK");
+        session.acknowledge("ROLLBACK", rolled.command);
         if (rolled.command!=="ROLLBACK") deny("INDETERMINATE","rollback response unexpected");
       } catch {
         quarantinedSessions.add(rawDb);

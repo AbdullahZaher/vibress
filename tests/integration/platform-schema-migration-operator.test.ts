@@ -27,7 +27,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -3649,4 +3649,61 @@ describe("P06 administrative metadata, cancellation diagnostic and D1 measuremen
     // one runner; no inferential percentile, no approved admission margin.
     console.info("D1_INTEGRATED_EXPLORATORY "+JSON.stringify({samplesMs:samples,n:samples.length,rows:2,margin:"NOT_DETERMINABLE"}));
   },60000);
+});
+
+describe("P06 supervised terminal session regression", () => {
+  it("P06-E2E-26: transport failure during external proof fences the suspended operation", async () => {
+    const lab = await createLab("br"); labs.push(lab); await p06Install(lab);
+    const request = await freshP06(lab), checksum = await contentChecksum(lab);
+    let entered: () => void = () => undefined;
+    let release: () => void = () => undefined;
+    const providerEntered = new Promise<void>(resolve => { entered = resolve; });
+    const providerRelease = new Promise<void>(resolve => { release = resolve; });
+    const authority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+      entered();
+      await providerRelease;
+      return proofFor(challenge, labEpochs.get(challenge.installationId + ":" + challenge.databaseName)!);
+    });
+    const operation = superviseDisposableSchemaOperation(urlFor(lab.name, lab.operatorRole), request, authority);
+    void operation.catch(() => undefined);
+    try {
+      await Promise.race([providerEntered, operation.then(() => { throw Error("unexpected completion"); })]);
+      const killed = await lab.dbAdmin.query<{ killed: boolean }>(
+        "SELECT pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND pid<>$3",
+        [lab.name, lab.operatorRole, lab.operator.processID]);
+      expect(killed.rows).toEqual([{ killed: true }]);
+      await expect(operation).rejects.toMatchObject({ code: "INDETERMINATE",
+        message: "supervisor transport failed; reconcile on fresh connection" });
+    } finally {
+      release();
+      await operation.catch(() => undefined);
+    }
+    await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "INDETERMINATE" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  }, 30000);
+
+  it("P06-E2E-27: supervised lost COMMIT acknowledgment remains indeterminate and reconciles exactly once", async () => {
+    const lab = await createLab("bs"); labs.push(lab); await p06Install(lab);
+    const request = await freshP06(lab), checksum = await contentChecksum(lab);
+    const proxy = await startCommitAckDropProxy();
+    void proxy.serverCommitObserved.catch(() => undefined);
+    const connection = new URL(urlFor(lab.name, lab.operatorRole));
+    connection.port = String(proxy.port);
+    try {
+      await expect(superviseDisposableSchemaOperation(connection.toString(), request, labRecoveryAuthority))
+        .rejects.toMatchObject({ code: "INDETERMINATE" });
+      await proxy.serverCommitObserved;
+    } finally {
+      await proxy.close();
+    }
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows)
+      .toEqual([{ operation_id: request.operationId }]);
+    expect((await superviseDisposableSchemaOperation(urlFor(lab.name, lab.operatorRole), request,
+      labRecoveryAuthority, "RECONCILE")).status).toBe("ALREADY_APPLIED");
+  }, 30000);
 });

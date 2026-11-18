@@ -3,6 +3,7 @@
 // conservatively reports uncertainty; disconnect alone is NOT rollback proof.
 import { Client } from "pg";
 import { ExperimentalD1Budget, scheduleExperimentalD1Deadline } from "./schema-operator-experimental-deadline";
+import { ExperimentalSessionLifecycle, type SessionTerminalCause } from "./schema-operator-experimental-session";
 import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn,
   SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 import type { RecoveryEpochAuthority } from "./schema-operator-experimental-recovery-epoch";
@@ -23,34 +24,53 @@ export async function superviseDisposableSchemaOperation(
   const db = new Client({connectionString,
     connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
     statement_timeout: Math.max(1, Math.floor(budget.remainingMs()))});
-  // A connection failure can emit an asynchronous error while no SQL is active.
-  // Never expose its payload or let an unhandled event terminate the process.
-  db.on("error", () => undefined);
+  const session = new ExperimentalSessionLifecycle(budget, true);
   let closing: Promise<void> | undefined;
-  const close = () => closing ??= db.end().then(() => undefined, () => undefined);
-  let cancelDeadline: (() => void) | undefined;
-  const deadline = new Promise<never>((_, reject) => {
-    cancelDeadline = scheduleExperimentalD1Deadline(budget, () => {
-      void close();
-      reject(new SchemaMigrationOperatorError("INDETERMINATE", "D1 supervisor closed session; reconcile on fresh connection"));
-    });
+  const close = () => {
+    session.retire();
+    return closing ??= db.end().then(() => session.markClosed(), () => undefined);
+  };
+  let rejectTerminal: (error: SchemaMigrationOperatorError) => void = () => undefined;
+  const terminal = new Promise<never>((_, reject) => { rejectTerminal = reject; });
+  const stop = (cause: SessionTerminalCause) => {
+    // Publish the fence before starting asynchronous close or settling the race.
+    if (!session.fence(cause)) return;
+    void close();
+    rejectTerminal(new SchemaMigrationOperatorError("INDETERMINATE",
+      cause === "DEADLINE_EXCEEDED" ? "D1 supervisor closed session; reconcile on fresh connection" :
+        "supervisor transport failed; reconcile on fresh connection"));
+  };
+  db.on("error", () => stop("TRANSPORT_FAILED"));
+  db.on("end", () => {
+    session.markClosed();
+    stop("TRANSPORT_FAILED");
   });
+  const cancelDeadline = scheduleExperimentalD1Deadline(budget, () => stop("DEADLINE_EXCEEDED"));
   const operation = (async () => {
     budget.checkpoint();
-    await db.connect();
-    budget.checkpoint();
+    try {
+      await db.connect();
+    } catch {
+      session.fence("CONNECTION_FAILED");
+      throw new SchemaMigrationOperatorError("INDETERMINATE", "supervisor connection failed; use fresh connection");
+    }
+    session.connected();
     const run = mode === "EXECUTE" ? executeApprovedAdditiveColumn : reconcileApprovedAdditiveColumn;
-    return run(db, request, budget, authority);
+    return run(db, request, budget, authority, session);
   })();
   try {
-    const result = await Promise.race([operation, deadline]);
+    const result = await Promise.race([operation, terminal]);
+    session.fence("NORMAL_COMPLETION");
     if (budget.expired()) {
       return {...result, status: result.status === "APPLIED" ? "COMMITTED_LATE" :
         result.status === "ALREADY_APPLIED" ? "ALREADY_APPLIED_LATE" : result.status};
     }
     return result;
+  } catch (error) {
+    session.fence("OPERATION_FAILED");
+    throw error;
   } finally {
-    cancelDeadline?.();
+    cancelDeadline();
     // No waiting past the outcome deadline for a socket close that might stall.
     // The physical client is never handed out or reused.
     void close();
