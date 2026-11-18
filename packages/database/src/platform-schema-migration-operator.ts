@@ -242,10 +242,24 @@ async function rowCount(db: ClientBase, tableName: string): Promise<string> {
  *
  * Only disposable test/development databases are enabled in M03-S03.
  */
-export async function executeApprovedAdditiveColumn(
+export function executeApprovedAdditiveColumn(
+  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
+): Promise<SchemaOperatorResult> {
+  return runP06(db,request,budget,"EXECUTE");
+}
+
+/** Reconcile only, on a fresh dedicated session. Absence of evidence never dispatches DDL. */
+export function reconcileApprovedAdditiveColumn(
+  db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget,
+): Promise<SchemaOperatorResult> {
+  return runP06(db,request,budget,"RECONCILE");
+}
+
+async function runP06(
   db: ClientBase,
   request: SchemaOperatorRequest,
   budget: ExperimentalD1Budget,
+  mode: "EXECUTE" | "RECONCILE",
 ): Promise<SchemaOperatorResult> {
   if (!request || request.envelopeVersion !== 1 ||
       !INSTALLATION.test(request.installationId) || !SHA.test(request.planDigest) ||
@@ -254,13 +268,27 @@ export async function executeApprovedAdditiveColumn(
     return deny("UNAUTHORIZED", "complete P06 identity and D1 budget required");
   }
   const rawDb = db;
+  let transactionActive = false;
+  let finalCheckCompleted = false;
+  async function refreshTimeout(): Promise<void> {
+    budget.checkpoint();
+    const remaining = Math.max(1,Math.floor(budget.remainingMs()));
+    await rawDb.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)",
+      [String(Math.min(2000,remaining))+"ms",String(remaining)+"ms"]);
+    budget.checkpoint();
+  }
   db = new Proxy(rawDb, {
     get(target, property) {
       const value: unknown = Reflect.get(target, property, target);
       if (property === "query" && typeof value === "function") {
-        return (...args: unknown[]) => {
+        return async (...args: unknown[]) => {
           budget.checkpoint();
-          return Reflect.apply(value, target, args);
+          // Refresh before blocking stages, but never issue SQL between final Policy A
+          // authorization and DDL dispatch. This is not a hard cancellation guarantee.
+          if (transactionActive && !finalCheckCompleted) await refreshTimeout();
+          finalCheckCompleted=false;
+          budget.checkpoint();
+          return Reflect.apply(value,target,args);
         };
       }
       return typeof value === "function" ? value.bind(target) : value;
@@ -271,9 +299,8 @@ export async function executeApprovedAdditiveColumn(
   try {
     await db.query("BEGIN ISOLATION LEVEL READ COMMITTED");
     began = true;
-    const remaining = Math.max(1,Math.floor(budget.remainingMs()));
-    await db.query("SELECT set_config('lock_timeout',$1,true),set_config('statement_timeout',$2,true)",
-      [String(Math.min(2000,remaining))+"ms",String(remaining)+"ms"]);
+    transactionActive=true;
+    await refreshTimeout();
     await db.query("SET LOCAL idle_in_transaction_session_timeout = '15000ms'");
     await db.query("SET LOCAL search_path = pg_catalog");
     // Advisory transaction lock is crash-safe. Hash collisions may over-serialize,
@@ -379,6 +406,9 @@ export async function executeApprovedAdditiveColumn(
         previousDigest:current.digest,newDigest:plan.proposedManifest.digest,beforeRows:afterRows,afterRows,
         status:budget.expired()?"ALREADY_APPLIED_LATE":"ALREADY_APPLIED"};
     }
+    if (mode === "RECONCILE") {
+      deny("INDETERMINATE", "no matching completed operation; preserve fence and investigate before retry");
+    }
     if (registry.manifest_digest !== current.digest ||
       registry.manifest !== JSON.stringify(current)) {
       deny("STALE_PLAN", "accepted manifest differs from trusted plan precondition");
@@ -411,6 +441,7 @@ export async function executeApprovedAdditiveColumn(
       [request.installationId,request.planDigest,request.operationId,request.submissionId,request.approvalId],
     )).rows[0];
     if (!final) deny("UNAUTHORIZED","final P06 authorization stale, revoked, expired or invalid");
+    finalCheckCompleted=true;
     await db.query(ddl.sql);
     await verifyCatalog(db, oid, next);
     const afterRows = await rowCount(db, ddl.tableName);
@@ -432,8 +463,8 @@ export async function executeApprovedAdditiveColumn(
        JSON.stringify({operation:"ADD_FIELD",table:ddl.tableName,column:ddl.columnName,beforeRows,afterRows,
          postgres:16,authorizationPolicy:"FINAL_PRE_DDL",envelopeVersion:1})],
     );
-    // No numeric admission margin has been approved. This experiment only
-    // prevents dispatch after observed deadline and distinguishes late ACK.
+    // Refresh before COMMIT, without selecting an unapproved numeric margin.
+    await refreshTimeout();
     budget.checkpoint();
     commitAttempted = true;
     const commitResult = await rawDb.query("COMMIT");

@@ -11,7 +11,7 @@ import {
   planSchemaChanges,
 } from "../../packages/schema-engine/src";
 import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
-import { executeApprovedAdditiveColumn as executeP06,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn as executeP06,reconcileApprovedAdditiveColumn as reconcileP06,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 
 /** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
@@ -21,7 +21,7 @@ const id = randomBytes(4).toString("hex");
 const applicationId = asApplicationId("s03-crm");
 const password = "disposable_" + id;
 
-type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at";
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av";
 interface Lab {
   readonly key: Key;
   readonly name: string;
@@ -2814,6 +2814,8 @@ describe("P06-E2E integrated actual operator and atomic journal",()=>{
     const lab=await createLab("ao");labs.push(lab);await approve(lab);await p06Install(lab);
     await expect(executeP06(lab.operator,{installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
     const first=await freshP06(lab),second=await freshP06(lab);
+    await expect(reconcileP06(lab.operator,first,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(await hasWebsite(lab)).toBe(false);
     expect(first.planDigest).toBe(second.planDigest);expect(first.operationId).not.toBe(second.operationId);
     await expect(executeP06(lab.operator,{...first,approvalId:second.approvalId},new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
     const other=await connect(lab.name,lab.operatorRole);
@@ -2924,8 +2926,32 @@ describe("Integrated P06 D1 and R1 safety",()=>{
     }} as unknown as ClientBase;
     await expect(executeP06(wrapped,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
     const other=await connect(lab.name,lab.operatorRole);
-    try{expect((await executeP06(other,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");}
+    try{expect((await reconcileP06(other,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");}
     finally{await other.end();}
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
+  },30000);
+});
+
+describe("P06 integrated canonical and late-outcome regressions",()=>{
+  it("P06-E2E-07: tampered persisted plan and unsupported envelope cannot authorize DDL",async()=>{
+    const lab=await createLab("au");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    await expect(executeP06(lab.operator,{...request,envelopeVersion:2} as unknown as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(executeP06(lab.operator,{...request,planDigest:"d".repeat(64)},new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await lab.dbAdmin.query("UPDATE public.platform_schema_plans SET plan=$1 WHERE installation_id=$2 AND plan_digest=$3",
+      [JSON.stringify({...lab.plan,digest:"d".repeat(64)}),lab.installationId,lab.plan.digest]);
+    await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-08: actual COMMIT with simulated late clock must not return APPLIED",async()=>{
+    const lab=await createLab("av");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    let tick=0;const budget=new ExperimentalD1Budget(()=>tick);
+    const wrapped={escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql==="COMMIT")tick=2518;return result;
+    }} as unknown as ClientBase;
+    expect((await executeP06(wrapped,request,budget)).status).toBe("COMMITTED_LATE");
     expect(await hasWebsite(lab)).toBe(true);
     expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
   },30000);

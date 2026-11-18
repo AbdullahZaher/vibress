@@ -5,7 +5,7 @@
  * No default DATABASE_URL fallback, no privilege provisioning.
  */
 import { Client } from "pg";
-import { executeApprovedAdditiveColumn, SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
+import { executeApprovedAdditiveColumn, reconcileApprovedAdditiveColumn, SchemaMigrationOperatorError } from "./platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "./schema-operator-experimental-deadline";
 
 function testOnlyConnection(): string {
@@ -31,7 +31,10 @@ function testOnlyConnection(): string {
 
 async function main(): Promise<void> {
   const budget = new ExperimentalD1Budget();
-  const [installationId,planDigest,operationId,submissionId,approvalId,version,unexpected]=process.argv.slice(2);
+  const args=process.argv.slice(2);
+  const reconcile=args[0]==="--reconcile";
+  if(reconcile) args.shift();
+  const [installationId,planDigest,operationId,submissionId,approvalId,version,unexpected]=args;
   if (!installationId||!planDigest||!operationId||!submissionId||!approvalId||version!=="1"||unexpected) {
     throw new Error("usage: tsx schema-operator-cli.ts <installationId> <planDigest> <operationId> <submissionId> <approvalId> 1");
   }
@@ -45,7 +48,8 @@ async function main(): Promise<void> {
   try {
     await db.connect();
     budget.checkpoint();
-    const result = await executeApprovedAdditiveColumn(db, {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},budget);
+    const run=reconcile?reconcileApprovedAdditiveColumn:executeApprovedAdditiveColumn;
+    const result = await run(db, {installationId,planDigest,operationId,submissionId,approvalId,envelopeVersion:1},budget);
     // Recheck at the CLI outcome boundary, not just inside the database method.
     const classified = budget.expired() && result.status === "APPLIED" ? {...result,status:"COMMITTED_LATE"} :
       budget.expired() && result.status === "ALREADY_APPLIED" ? {...result,status:"ALREADY_APPLIED_LATE"} : result;
