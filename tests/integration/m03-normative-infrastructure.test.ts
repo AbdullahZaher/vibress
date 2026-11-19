@@ -14,7 +14,7 @@ import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy"
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
 import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
-import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
+import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,provisioningNamespace,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
@@ -22,6 +22,8 @@ import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
 import {recordExperimentalLifecycleTransition,reattestExperimentalLifecycleAfterRecovery,type LifecycleState} from "../../packages/database/src/schema-operator-experimental-registry-lifecycle";
 import {settleExperimentalDomains} from "../../packages/database/src/schema-operator-experimental-settlement";
+import {moduleNamespaceName,reserveExperimentalModuleNamespace,verifyExperimentalModuleNamespace} from "../../packages/database/src/schema-operator-experimental-module-namespace";
+import {continueExperimentalOperation,inspectExperimentalOperations} from "../../packages/database/src/schema-operator-experimental-continuation";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex");
 const rolePasswords=new Map<string,string>();
@@ -469,6 +471,97 @@ describe("M03 actual isolated normative infrastructure",()=>{
     }
     expect(outcome).toMatch(/^M03_PROVISIONING_REFUSED:/);
   }
+  it("B06: deterministic module namespace reservation is atomic, scoped and immutable",async()=>{
+    const f=await lab("modules","reference-modules");
+    const namespace=moduleNamespaceName({...f.scope,moduleId:"analytics"});
+    expect(namespace).toBe(moduleNamespaceName({...f.scope,moduleId:"analytics"}));
+    expect(namespace).toMatch(/^v3_mod_[a-f0-9]{24}$/);
+    expect(namespace).not.toBe(provisioningNamespace(f.scope));
+    expect(moduleNamespaceName({...f.scope,moduleId:"reporting"})).not.toBe(namespace);
+    for(const moduleId of ["public","pg_catalog","information_schema","pg_temp","v3_core","platform_core","vibress_auth","Bad-Name","a"]){
+      expect(()=>moduleNamespaceName({...f.scope,moduleId})).toThrow("M03_MODULE_NAMESPACE_REFUSED");
+    }
+    await expect(reserveExperimentalModuleNamespace(f.admin,{scope:{...f.scope,applicationId:asApplicationId("other-app")},moduleId:"analytics"})).rejects.toThrow("M03_MODULE_NAMESPACE_REFUSED");
+    const first=await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"});
+    expect(first).toEqual({status:"RESERVED",profile:"M03_MODULE_NAMESPACE_V1",moduleId:"analytics",namespace});
+    const rows=(await f.admin.query<{installation_id:string;application_id:string;module_id:string;namespace:string;installer_role:string;runtime_role:string}>("SELECT installation_id,application_id,module_id,namespace,installer_role,runtime_role FROM public.platform_module_namespaces_v1")).rows;
+    expect(rows).toEqual([{installation_id:f.scope.installationId,application_id:f.scope.applicationId,module_id:"analytics",namespace,installer_role:f.installer,runtime_role:f.runtime}]);
+    // The schema is installer-owned; the runtime receives USAGE only, and the
+    // reservation replay verifies the catalog instead of duplicating the row.
+    const schema=(await f.admin.query<{owner:string;acl:string[]}>("SELECT pg_get_userbyid(nspowner) AS owner,ARRAY(SELECT (CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END)||':'||pg_get_userbyid(a.grantor)||':'||a.privilege_type FROM aclexplode(coalesce(nspacl,acldefault('n',nspowner))) a ORDER BY 1) AS acl FROM pg_namespace WHERE nspname=$1",[namespace])).rows[0];
+    expect(schema?.owner).toBe(f.installer);
+    expect(schema?.acl.slice().sort()).toEqual([f.installer+":"+f.installer+":CREATE",f.installer+":"+f.installer+":USAGE",f.runtime+":"+f.installer+":USAGE"].sort());
+    expect(await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"})).toEqual({status:"ALREADY_RESERVED",profile:"M03_MODULE_NAMESPACE_V1",moduleId:"analytics",namespace});
+    expect(await verifyExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"})).toBe(namespace);
+    await expect(f.admin.query("UPDATE public.platform_module_namespaces_v1 SET namespace=namespace")).rejects.toThrow("M03_MODULE_NAMESPACE_IMMUTABLE");
+    await expect(f.pool.query("SELECT * FROM public.platform_module_namespaces_v1")).rejects.toMatchObject({code:"42501"});
+    await expect(f.pool.query("CREATE TABLE "+qi(namespace)+".intruder(id int)")).rejects.toMatchObject({code:"42501"});
+    // A different module cannot claim an already-derived namespace.
+    const reports=moduleNamespaceName({...f.scope,moduleId:"reports"});
+    await f.admin.query("INSERT INTO public.platform_module_namespaces_v1(installation_id,application_id,module_id,namespace,installer_role,runtime_role,binding_digest) VALUES($1,$2,'rogue',$3,$4,$5,$6)",[f.scope.installationId,f.scope.applicationId,reports,f.installer,f.runtime,"1".repeat(64)]);
+    await expect(reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"reports"})).rejects.toThrow("M03_MODULE_NAMESPACE_REFUSED:COLLISION");
+    expect((await f.admin.query("SELECT count(*)::int AS n FROM public.platform_module_namespaces_v1 WHERE module_id='reports'")).rows[0]).toEqual({n:0});
+    // A forged row for the requested module is refused, never silently adopted.
+    const orders=moduleNamespaceName({...f.scope,moduleId:"orders"});
+    await f.admin.query("INSERT INTO public.platform_module_namespaces_v1(installation_id,application_id,module_id,namespace,installer_role,runtime_role,binding_digest) VALUES($1,'other-app','orders',$2,$3,$4,$5)",[f.scope.installationId,orders,f.installer,f.runtime,"2".repeat(64)]);
+    await expect(reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"orders"})).rejects.toThrow("M03_MODULE_NAMESPACE_REFUSED:MISMATCH");
+    // A pre-existing foreign schema makes the atomic reservation fail: no row
+    // survives the rolled-back transaction.
+    const holdings=moduleNamespaceName({...f.scope,moduleId:"holdings"});
+    await f.admin.query("CREATE SCHEMA "+qi(holdings));
+    await expect(reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"holdings"})).rejects.toThrow();
+    expect((await f.admin.query("SELECT count(*)::int AS n FROM public.platform_module_namespaces_v1 WHERE module_id='holdings'")).rows[0]).toEqual({n:0});
+    await f.admin.query("DROP SCHEMA "+qi(holdings));
+    expect((await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"holdings"})).status).toBe("RESERVED");
+    console.info("M03_B06_MODULE_NAMESPACE=PASS");
+  },60000);
+  it("B03: authenticated continuation settles an interrupted operation idempotently across restart",async()=>{
+    const f=await lab("continuation","reference-continuation"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true}]}],f.scope)),a=approval(f,null,m);
+    const proxy=await startTransactionAckFaultProxy("COMMIT","DROP");void proxy.serverCommitObserved.catch(()=>undefined);
+    await prepareLifecycle(f,m,a);
+    try{
+      const target=new URL(dbUrl(f.name,f.installer));target.port=String(proxy.port);
+      const pending=installExperimentalRevision(target.toString(),wire(m),a.message,a.signature,f.authority,proxy.port);
+      const failed=pending.then(()=>false,()=>true);
+      await Promise.race([proxy.serverCommitObserved,pending.then(()=>{throw Error("fault target unexpectedly succeeded");},error=>{if(!(error instanceof Error)||error.message!=="M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY")throw error;return proxy.serverCommitObserved;})]);
+      expect(await failed).toBe(true);
+    }finally{await proxy.close();}
+    // Inspection is read-only and reports the interrupted operation with its
+    // durable provenance; the install committed but activation never ran.
+    const interrupted=inspectExperimentalOperations(f.authority);
+    expect(interrupted.pending).toBe(true);
+    expect(interrupted.operations).toContainEqual({kind:"PROVISIONING",operationId:a.e.operationId,outcome:"UNCERTAIN",provenance:{installationId:f.scope.installationId,databaseName:f.name,epoch:a.e.epoch,revision:m.digest}});
+    expect((await f.admin.query("SELECT state FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,m.digest])).rows).toEqual([{state:"DB_COMMITTED"}]);
+    // Definitive commit evidence requires a quiescent database, exactly as the
+    // physical reconciliation contract demands; it is not inferred from absence.
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    try{
+      const evidence=await collectExperimentalProvisioningCommit(f.admin,f.authority.authenticatedSnapshot().provisioningOperations!,a.e.operationId);
+      const wireEvidence=JSON.stringify(evidence);
+      const authorize=(value:string)=>sign(null,recoveryAdministrationMessage(f.authority.snapshot(),"PROVISIONING_OBSERVED_COMMIT_V1",value),adminKeys.privateKey).toString("base64url");
+      // Unknown, in-flight-only, forged and unsigned requests are refused.
+      await expect(continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:randomUUID()},wireEvidence,authorize(wireEvidence))).rejects.toThrow("M03_CONTINUATION_REFUSED");
+      await expect(continueExperimentalOperation(f.admin,f.authority,{kind:"BUSINESS",operationId:a.e.operationId},wireEvidence,authorize(wireEvidence))).rejects.toThrow("M03_CONTINUATION_REFUSED");
+      await expect(continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:a.e.operationId},wireEvidence,"A".repeat(86))).rejects.toThrow();
+      const tampered=JSON.stringify({...evidence,operationId:randomUUID()});
+      await expect(continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:a.e.operationId},tampered,authorize(tampered))).rejects.toThrow();
+      const settled=await continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:a.e.operationId},wireEvidence,authorize(wireEvidence));
+      expect(settled).toMatchObject({status:"SETTLED",kind:"PROVISIONING",operationId:a.e.operationId,outcome:"COMMITTED"});
+      expect(f.authority.authenticatedSnapshot().provisioningOperations?.filter(o=>o.operationId===a.e.operationId)).toHaveLength(1);
+      // Repeating the continuation is a read-only no-op, not a second settlement.
+      expect(await continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:a.e.operationId},wireEvidence,"A".repeat(86))).toMatchObject({status:"ALREADY_SETTLED",outcome:"COMMITTED"});
+      // Restart continuity: the reopened durable authority still classifies the
+      // operation as settled and never re-observes or reappends it.
+      f.authority.close();
+      f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);
+      expect(inspectExperimentalOperations(f.authority).operations.find(o=>o.operationId===a.e.operationId)).toMatchObject({kind:"PROVISIONING",outcome:"COMMITTED",provenance:{installationId:f.scope.installationId,databaseName:f.name,epoch:a.e.epoch,revision:m.digest}});
+      expect(await continueExperimentalOperation(f.admin,f.authority,{kind:"PROVISIONING",operationId:a.e.operationId},wireEvidence,"A".repeat(86))).toMatchObject({status:"ALREADY_SETTLED",outcome:"COMMITTED"});
+    }finally{await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");}
+    // Continuation resolves durable evidence only; activation remains an
+    // explicit operator step and is not performed as an administrative bypass.
+    expect((await f.admin.query("SELECT state FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,m.digest])).rows).toEqual([{state:"DB_COMMITTED"}]);
+    console.info("M03_B03_CONTINUATION=PASS");
+  },60000);
   it("FUNC-01: protected revision manifest column UPDATE drift must be refused",async()=>{
     const f=await lab("funcacl","reference-func-acl"),m=crm(f);
     await apply(f,m,approval(f,null,m));

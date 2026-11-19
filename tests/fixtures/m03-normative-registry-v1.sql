@@ -129,3 +129,24 @@ CREATE FUNCTION public.platform_schema_state_transitions_immutable_v1() RETURNS 
 BEGIN RAISE EXCEPTION 'M03_LIFECYCLE_HISTORY_IMMUTABLE'; END $immutable$;
 CREATE TRIGGER platform_schema_state_transitions_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_state_transitions_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_state_transitions_immutable_v1();
 REVOKE ALL ON FUNCTION public.platform_schema_state_transitions_immutable_v1() FROM PUBLIC;
+
+-- Module namespace reservation v1: one immutable row per verified
+-- (installation, module), a deterministic namespace and an explicit binding
+-- digest. Reservations are created atomically with the schema itself.
+CREATE TABLE public.platform_module_namespaces_v1 (
+ installation_id text NOT NULL REFERENCES public.platform_schema_installation_trust_v1(installation_id),
+ application_id text NOT NULL,
+ module_id text NOT NULL CHECK(module_id ~ '^[a-z][a-z0-9_]{1,62}$'),
+ namespace text NOT NULL UNIQUE CHECK(namespace ~ '^v3_mod_[a-f0-9]{24}$'),
+ installer_role text NOT NULL,
+ runtime_role text NOT NULL,
+ binding_digest text NOT NULL CHECK(binding_digest ~ '^[a-f0-9]{64}$'),
+ reserved_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,module_id),
+ CHECK(installer_role<>runtime_role)
+);
+REVOKE ALL ON public.platform_module_namespaces_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_module_namespaces_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $module_namespaces$
+BEGIN RAISE EXCEPTION 'M03_MODULE_NAMESPACE_IMMUTABLE'; END $module_namespaces$;
+CREATE TRIGGER platform_module_namespaces_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_module_namespaces_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_module_namespaces_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_module_namespaces_immutable_v1() FROM PUBLIC;
