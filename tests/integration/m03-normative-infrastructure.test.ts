@@ -141,6 +141,97 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(await check(f,m)).toBe(plan.physical.digest);
     console.info("M03_J01_J02_CRM_RLS_RELATIONS=PASS");
   },60000);
+  // These are contract regression tests, not asserted reproduction results.
+  // Each installs a clean isolated CRM, applies actual drift, records the
+  // verifier outcome, restores the catalog/ACL and rechecks the positive control.
+  async function expectDriftRefused(f:Lab,m:SchemaManifest,label:string,drift:()=>Promise<void>,restore:()=>Promise<void>){
+    const digest=compileProvisioningContract(m,f.scope).digest;
+    expect(await check(f,m)).toBe(digest);
+    let outcome="NOT_OBSERVED";
+    try{
+      await drift();
+      try{await check(f,m);outcome="ACCEPTED";}
+      catch(error){outcome=error instanceof Error?error.message:"UNKNOWN_ERROR";}
+      console.info("M03_DRIFT_OBSERVATION "+label+" "+outcome);
+    }finally{
+      await restore();
+      expect(await check(f,m)).toBe(digest);
+      console.info("M03_DRIFT_RESTORED "+label);
+    }
+    expect(outcome).toMatch(/^M03_PROVISIONING_REFUSED:/);
+  }
+  it("FUNC-01: protected revision manifest column UPDATE drift must be refused",async()=>{
+    const f=await lab("funcacl","reference-func-acl"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const target="public.platform_schema_revisions_v1",role=qi(f.runtime);
+    const privilege=async()=>(await f.admin.query<{allowed:boolean}>("SELECT has_column_privilege($1,$2,'manifest','UPDATE') AS allowed",[f.runtime,target])).rows[0]!.allowed;
+    const revisions=async()=>(await f.admin.query("SELECT revision_digest,manifest FROM "+target+" ORDER BY revision_digest")).rows;
+    const original=await revisions();
+    expect(await privilege()).toBe(false);
+    await expectDriftRefused(f,m,"FUNC-01-column-update",async()=>{
+      await f.admin.query("GRANT UPDATE(manifest) ON "+target+" TO "+role);
+      expect(await privilege()).toBe(true);
+      expect(await revisions()).toEqual(original);
+    },async()=>{
+      await f.admin.query("REVOKE UPDATE(manifest) ON "+target+" FROM "+role);
+      expect(await privilege()).toBe(false);
+      expect(await revisions()).toEqual(original);
+    });
+  },60000);
+  async function relationIndex(f:Lab,m:SchemaManifest){
+    const relation=table(f,m,"deals");
+    const indexes=(await f.admin.query<{name:string;opclass:string;collation:string}>("SELECT i.relname AS name,o.opcname AS opclass,co.collname AS collation FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_opclass o ON o.oid=x.indclass[0] JOIN pg_collation co ON co.oid=x.indcollation[0] WHERE x.indrelid=$1::regclass AND NOT x.indisunique",[relation])).rows;
+    expect(indexes).toHaveLength(1);
+    return indexes[0]!;
+  }
+  it("FUNC-02: same-name relation index with text_pattern_ops must be refused",async()=>{
+    const f=await lab("funcix","reference-func-ix"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const original=await relationIndex(f,m);
+    expect(original.opclass).toBe("text_ops");
+    const target=table(f,m,"deals"),index=qi(f.namespace)+"."+qi(original.name);
+    const replace=async(opclass:string)=>{
+      await f.admin.query("DROP INDEX "+index+"; CREATE INDEX "+qi(original.name)+" ON "+target+" (tenant_id "+opclass+", customer)");
+    };
+    await expectDriftRefused(f,m,"FUNC-02-index-opclass",async()=>{
+      await replace("pg_catalog.text_pattern_ops");
+      expect(await relationIndex(f,m)).toEqual({...original,opclass:"text_pattern_ops"});
+    },async()=>{
+      await replace("pg_catalog.text_ops");
+      expect(await relationIndex(f,m)).toEqual(original);
+    });
+  },60000);
+  it("FUNC-02: same-name relation index with changed collation must be refused",async()=>{
+    const f=await lab("funccol","reference-func-col"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const original=await relationIndex(f,m);
+    expect(original.collation).toBe("default");
+    const target=table(f,m,"deals"),index=qi(f.namespace)+"."+qi(original.name);
+    const replace=async(collation:string)=>{
+      await f.admin.query("DROP INDEX "+index+"; CREATE INDEX "+qi(original.name)+" ON "+target+" (tenant_id COLLATE "+collation+", customer)");
+    };
+    await expectDriftRefused(f,m,"FUNC-02-index-collation",async()=>{
+      await replace('pg_catalog."C"');
+      expect(await relationIndex(f,m)).toEqual({...original,collation:"C"});
+    },async()=>{
+      await replace('pg_catalog."default"');
+      expect(await relationIndex(f,m)).toEqual(original);
+    });
+  },60000);
+  it("FUNC-02: external inherited child of generated table must be refused",async()=>{
+    const f=await lab("funcinh","reference-func-inh"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const target=table(f,m,"customers"),child="public.m03_func_inherited_child";
+    const children=async()=>(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM pg_inherits WHERE inhparent=$1::regclass",[target])).rows[0]!.n;
+    expect(await children()).toBe(0);
+    await expectDriftRefused(f,m,"FUNC-02-inheritance",async()=>{
+      await f.admin.query("CREATE TABLE "+child+" () INHERITS ("+target+")");
+      expect(await children()).toBe(1);
+    },async()=>{
+      await f.admin.query("DROP TABLE IF EXISTS "+child);
+      expect(await children()).toBe(0);
+    });
+  },60000);
   it("J03: independent non-CMS installation and mutual credential isolation",async()=>{
     const f=await lab("inventory","reference-inventory"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true},{id:"label",type:"text",required:true}]}],f.scope));
     await apply(f,m,approval(f,null,m));await check(f,m);
