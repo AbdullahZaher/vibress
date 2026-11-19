@@ -4,7 +4,7 @@ on:
   push:
     # Temporarily suspended for docs/native-admin-ui-plan-20261025 during local-only validation session.
     # RESTORATION PROCEDURE: Re-add 'docs/native-admin-ui-plan-20261025' to the push.branches list below before final release approval.
-    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116, integration/wave1-final-remediation-20261116, experiment/m03-s03-p06-e2a-l1-d1-final-engineering-20261118, experiment/m03-scoped-recovery-lifecycle-20261118, experiment/m03-final-engineering-closure-20261118]
+    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116, integration/wave1-final-remediation-20261116, experiment/m03-s03-p06-e2a-l1-d1-final-engineering-20261118, experiment/m03-scoped-recovery-lifecycle-20261118, experiment/m03-final-engineering-closure-20261118, experiment/m03-normative-schema-infrastructure-20261119]
   pull_request:
     branches: [main]
   workflow_dispatch:
