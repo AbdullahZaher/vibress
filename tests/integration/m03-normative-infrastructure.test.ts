@@ -549,6 +549,14 @@ it("J07: bounded signed business outcome, real commit/rollback and lost acknowle
       "DELETE FROM public.platform_schema_business_witnesses_v1",
       "INSERT INTO public.platform_schema_business_witnesses_v1(operation_id,xid,evidence,signature) VALUES(gen_random_uuid(),'1'::xid8,'forged','forged')",
     ])await expect(f.pool.query(statement)).rejects.toMatchObject({code:"42501"});
+    const beforeDrift=f.authority.authenticatedSnapshot();
+    await f.admin.query("GRANT UPDATE(manifest) ON public.platform_schema_revisions_v1 TO "+qi(f.runtime));
+    try{
+      await expect(run(signed("acl-drift"))).rejects.toThrow("PROTECTED_ACL_V1");
+      expect(f.authority.authenticatedSnapshot()).toEqual(beforeDrift);
+    }finally{await f.admin.query("REVOKE UPDATE(manifest) ON public.platform_schema_revisions_v1 FROM "+qi(f.runtime));}
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    console.info("M03_BUSINESS_PROTECTED_ACL_ADMISSION=PASS");
     const normal=signed("known");
     await expect(run({...normal,signature:"A".repeat(86)})).rejects.toThrow();
     expect(await run(normal)).toMatchObject({status:"COMMITTED"});

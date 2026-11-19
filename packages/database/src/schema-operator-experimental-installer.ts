@@ -347,8 +347,12 @@ export async function persistExperimentalProvisioningReattestation(db:ClientBase
     await db.query("SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='10s'");
     const fence=(await db.query<{allow:boolean;others:number;prepared:number;system:string;timeline:number}>("SELECT d.datallowconn AS allow,(SELECT count(*)::int FROM pg_stat_activity WHERE datid=d.oid AND pid<>pg_backend_pid()) AS others,(SELECT count(*)::int FROM pg_prepared_xacts WHERE database=current_database()) AS prepared,(pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database d WHERE d.datname=current_database()")).rows[0];
     if(!fence||fence.allow||fence.others||fence.prepared||fence.system!==restored.systemIdentifier||fence.timeline!==restored.timeline)return fail("REATTESTATION_FENCE");
+    const trust=(await db.query<Trust>("SELECT * FROM public.platform_schema_installation_trust_v1 WHERE installation_id=$1",[restored.installationId])).rows;
+    if(trust.length!==1||!trust[0])return fail("REATTESTATION_TRUST");
+    await roleContract(db,trust[0].installer_role,trust[0].runtime_role,trust[0].namespace);
     if((await db.query("UPDATE public.platform_schema_installation_trust_v1 SET epoch=$1,timeline=$2 WHERE installation_id=$3 AND epoch=$4 AND timeline=$5 AND database_oid=$6 AND system_identifier=$7 AND NOT revoked",[newEpoch,restored.timeline,restored.installationId,old.epoch,old.timeline,restored.databaseOid,restored.systemIdentifier])).rowCount!==1)return fail("REATTES_STALE_TRUST");
     await db.query("INSERT INTO public.platform_schema_recovery_reattestations_v1(installation_id,revision_digest,original_operation_id,original_epoch,new_epoch,recovery_intent,approval_id,authority_head,evidence,signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[restored.installationId,restored.revision,restored.operationId,old.epoch,newEpoch,intent,approvalId,authorityHead,evidenceWire,signature]);
+    await roleContract(db,trust[0].installer_role,trust[0].runtime_role,trust[0].namespace);
     if((await db.query("COMMIT")).command!=="COMMIT")throw new ExperimentalProvisioningUnknown();
   }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
 }

@@ -1,6 +1,7 @@
 // Experimental: exactly one signed generated CRM insert, no arbitrary callback,
 // no serving registration and no generic administrative unlock.
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
+import {verifyProtectedMetadataAuthority,verifyRuntimeProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import type {ClientBase} from "pg";
 import type {ScopedTransaction,VerifiedScope} from "@vibress/tenancy";
 import {compileProvisioningContract,parseSchemaManifest,provisioningIdentifier as qi,PROVISIONING_PROFILE} from "@vibress/schema-engine";
@@ -68,6 +69,7 @@ export async function prepareExperimentalBusiness(tx:ScopedTransaction,scope:Ver
   if(contract.digest!==e.physicalDigest||!resource||!resource.columns.some(c=>c.name==="code"&&c.type==="text")||!resource.columns.some(c=>c.name==="name"&&c.type==="text"))return fail();
   const x=await getIdentity(tx),keyBytes=Buffer.from(x.approval_key,"base64"),key=createPublicKey({key:keyBytes,format:"der",type:"spki"});
   if(hash(keyBytes)!==x.approval_key_digest||key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(approvalWire),key,Buffer.from(signature,"base64url"))||x.application_id!==e.applicationId||x.installation_id!==e.installationId||x.database_oid!==e.databaseOid||x.database_name!==e.databaseName||x.epoch!==e.epoch||x.ledger_id!==e.ledgerId||x.manifest_digest!==e.revision)return fail();
+  await verifyRuntimeProtectedMetadataAuthority((sql,values)=>tx.query(sql,values),x.runtime_role,contract.namespace);
   const a:BusinessAdmission={operationId:e.operationId,applicationId:e.applicationId,installationId:e.installationId,databaseName:e.databaseName,databaseOid:e.databaseOid,epoch:e.epoch,ledgerId:e.ledgerId,authorityHead:e.authorityHead,authoritySequence:e.authoritySequence,revision:e.revision,physicalDigest:e.physicalDigest,tenantId:e.tenantId,principalId:e.principalId,rowId:e.rowId,workDigest:hash(JSON.stringify([approvalWire,signature])),effectDigest:effect(e.tenantId,e.rowId,e.code,e.name),runtimeRole:x.runtime_role,namespace:contract.namespace,table:resource.table,systemIdentifier:x.actualSystem,timeline:x.actualTimeline,postmasterStart:x.postmasterStart,xid:x.xid};
   return {admission:a,code:e.code,name:e.name};
 }
@@ -76,6 +78,7 @@ export async function performExperimentalBusiness(tx:ScopedTransaction,prepared:
   if((await tx.query("INSERT INTO "+qualified(a.namespace,a.table)+"(tenant_id,id,code,name) VALUES($1,$2,$3,$4)",[a.tenantId,a.rowId,prepared.code,prepared.name])).rowCount!==1)return fail();
   if((await tx.query("INSERT INTO public.platform_schema_business_witnesses_v1(operation_id,evidence,signature) VALUES($1,$2,$3)",[a.operationId,experimentalBusinessWitnessMessage(a),signature])).rowCount!==1)return fail();
   const x=await getIdentity(tx);
+  await verifyRuntimeProtectedMetadataAuthority((sql,values)=>tx.query(sql,values),a.runtimeRole,a.namespace);
   if(x.xid!==a.xid||x.actualOid!==a.databaseOid||x.actualSystem!==a.systemIdentifier||x.actualTimeline!==a.timeline||x.actualRole!==a.runtimeRole||x.epoch!==a.epoch||x.manifest_digest!==a.revision)return fail();
 }
 export async function collectExperimentalBusinessOutcome(db:ClientBase,record:BusinessRecord,key:KeyObject):Promise<BusinessObservation>{
@@ -88,8 +91,10 @@ export async function collectExperimentalBusinessOutcome(db:ClientBase,record:Bu
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   try{
     const before=await fence();
-    const scope=(await db.query<{epoch:string;ledger_id:string;manifest_digest:string;application_id:string;runtime_role:string}>("SELECT t.epoch,t.ledger_id,r.manifest_digest,t.application_id,t.runtime_role FROM public.platform_schema_installation_trust_v1 t JOIN public.platform_schema_registry r USING(installation_id) WHERE t.installation_id=$1 AND NOT t.revoked",[a.installationId])).rows;
+    const scope=(await db.query<{epoch:string;ledger_id:string;manifest_digest:string;application_id:string;runtime_role:string;installer_role:string;namespace:string}>("SELECT t.epoch,t.ledger_id,r.manifest_digest,t.application_id,t.runtime_role,t.installer_role,t.namespace FROM public.platform_schema_installation_trust_v1 t JOIN public.platform_schema_registry r USING(installation_id) WHERE t.installation_id=$1 AND NOT t.revoked",[a.installationId])).rows;
     if(scope.length!==1||scope[0]?.epoch!==a.epoch||scope[0].ledger_id!==a.ledgerId||scope[0].manifest_digest!==a.revision||scope[0].application_id!==a.applicationId||scope[0].runtime_role!==a.runtimeRole)return fail();
+    if(scope[0]?.namespace!==a.namespace)return fail();
+    await verifyProtectedMetadataAuthority((sql,values)=>db.query(sql,values),scope[0].installer_role,a.runtimeRole,a.namespace);
     const witness=(await db.query<{xid:string;evidence:string;signature:string}>("SELECT xid::text,evidence,signature FROM public.platform_schema_business_witnesses_v1 WHERE operation_id=$1",[a.operationId])).rows;
     const original=before.timeline===a.timeline&&before.postmasterStart===a.postmasterStart;
     const status=original?(await db.query<{status:string|null}>("SELECT pg_xact_status($1::xid8) AS status",[a.xid])).rows[0]?.status??null:null;
@@ -105,6 +110,7 @@ export async function collectExperimentalBusinessOutcome(db:ClientBase,record:Bu
       if(witness.length!==0||!original||status!=="aborted")return fail();
       outcome="ROLLED_BACK";
     }
+    await verifyProtectedMetadataAuthority((sql,values)=>db.query(sql,values),scope[0].installer_role,a.runtimeRole,a.namespace);
     await db.query("SELECT pg_stat_clear_snapshot()");
     if(JSON.stringify(before)!==JSON.stringify(await fence()))return fail();
     await db.query("COMMIT");

@@ -39,6 +39,10 @@ export async function verifyProtectedMetadataAuthority(query:Query,installer:str
     OR EXISTS(SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace CROSS JOIN unnest($1::text[]) r WHERE (n.nspname NOT IN ('pg_catalog','information_schema') OR p.prosecdef) AND n.nspname !~ '^pg_(toast|temp)' AND has_schema_privilege(r,n.oid,'USAGE') AND has_function_privilege(r,p.oid,'EXECUTE'))
     AS bad`,[roles,[...roles,root],namespace,names])).rows[0];
   if(!unsafe||unsafe.bad)return fail();
+  const schema=(await query<{owner:string;edges:string[];allowed:boolean}>(`SELECT pg_get_userbyid(n.nspowner) AS owner, ARRAY(SELECT jsonb_build_array(CASE WHEN e.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(e.grantee) END,pg_get_userbyid(e.grantor),e.privilege_type,e.is_grantable)::text FROM aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) e) AS edges,
+    (has_schema_privilege($1,n.oid,'CREATE') AND has_schema_privilege($1,n.oid,'USAGE') AND has_schema_privilege($2,n.oid,'USAGE') AND NOT has_schema_privilege($2,n.oid,'CREATE') AND NOT has_schema_privilege($2,n.oid,'USAGE WITH GRANT OPTION')) AS allowed
+    FROM pg_catalog.pg_namespace n WHERE n.nspname=$3`,[installer,runtime,namespace])).rows[0];
+  if(!schema||schema.owner!==installer||!schema.allowed||!equal(schema.edges.map(e=>JSON.stringify(JSON.parse(e))),[edge(installer,installer,"CREATE"),edge(installer,installer,"USAGE"),edge(runtime,installer,"USAGE")]))return fail();
   const tables=(await query<{name:string;owner:string;kind:string;edges:string[]}>(`SELECT c.relname::text AS name,pg_get_userbyid(c.relowner) AS owner,c.relkind AS kind,
     ARRAY(SELECT jsonb_build_array(CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END,pg_get_userbyid(a.grantor),a.privilege_type,a.is_grantable)::text FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a) AS edges
     FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::name[])`,[names])).rows;
@@ -74,4 +78,14 @@ export async function verifyProtectedMetadataAuthority(query:Query,installer:str
     (SELECT bool_and(has_function_privilege(r,p.oid,'EXECUTE') AND NOT has_function_privilege(r,p.oid,'EXECUTE WITH GRANT OPTION')) FROM unnest($1::text[]) r) AS allowed
     FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='pg_catalog' AND p.proname IN ('pg_control_system','pg_control_checkpoint') AND p.pronargs=0`,[roles])).rows;
   if(routine.length!==2||routine.some(x=>x.owner!==root||!x.allowed||!equal(canonical(x.edges),[edge(root,root,"EXECUTE"),edge(installer,root,"EXECUTE"),edge(runtime,root,"EXECUTE")])))return fail();
+}
+
+// Runtime can read catalog ownership without adding SELECT on protected trust
+// columns. In this disposable profile the namespace owner must match every
+// independently defined installer delegation; root is the trusted maintainer.
+// Installer/recovery paths additionally compare the persisted installer identity.
+export async function verifyRuntimeProtectedMetadataAuthority(query:Query,runtime:string,namespace:string){
+  const rows=(await query<{owner:string}>("SELECT pg_get_userbyid(nspowner) AS owner FROM pg_catalog.pg_namespace WHERE nspname=$1",[namespace])).rows;
+  if(rows.length!==1||!rows[0]?.owner)return fail();
+  await verifyProtectedMetadataAuthority(query,rows[0].owner,runtime,namespace);
 }
