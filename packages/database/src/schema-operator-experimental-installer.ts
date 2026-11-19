@@ -225,6 +225,8 @@ export async function installExperimentalRevision(connectionString:string,manife
       e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence||e.manifestDigest!==manifest.digest||
       e.profile!==provisioningProfileFor(manifest))return fail();
     const heads=(await db.query<{manifest:string;manifest_digest:string;application_id:string;installation_id:string;database_name:string;operator_role:string;runtime_role:string;environment:string}>("SELECT * FROM public.platform_schema_registry")).rows,head=heads[0];
+    const activeRows=(await db.query<{revision_digest:string}>("SELECT revision_digest FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND state='ACTIVE'",[t.installation_id])).rows;
+    if(head?activeRows.length!==1||activeRows[0]?.revision_digest!==head.manifest_digest:activeRows.length!==0)return fail("LIFECYCLE");
     if(heads.length>1||head&&(head.application_id!==scope.applicationId||head.installation_id!==scope.installationId||head.database_name!==t.database_name||head.operator_role!==t.installer_role||head.runtime_role!==t.runtime_role||head.environment!=="test"))return fail();
     if((head?.manifest_digest??null)!==e.parent)return fail();
     if((await db.query("SELECT 1 FROM public.platform_schema_revisions_v1 WHERE operation_id=$1 OR approval_id=$2",[e.operationId,e.approvalId])).rowCount!==0)return fail();
@@ -232,10 +234,7 @@ export async function installExperimentalRevision(connectionString:string,manife
     if(previous&&previous.digest!==head?.manifest_digest)return fail();
     if(previous&&(await db.query("SELECT 1 FROM public.platform_schema_revisions_v1 WHERE installation_id=$1 AND revision_digest=$2 AND manifest=$3",[t.installation_id,previous.digest,head?.manifest])).rowCount!==1)return fail();
     await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);
-    if(state.readyProtocol===2){
-      const active=(await db.query<{revision_digest:string}>("SELECT revision_digest FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND state='ACTIVE'",[t.installation_id])).rows;
-      if(active.length!==1||readyV2AdmissionRefusal(state,e,active[0]!.revision_digest)!==null)return fail("READY_V2_BIND");
-    }
+    if(state.readyProtocol===2&&readyV2AdmissionRefusal(state,e,activeRows[0]?.revision_digest??null)!==null)return fail("READY_V2_BIND");
     const plan=compileProvisioningTransition(previous,manifest,scope);
     if(plan.digest!==e.planDigest||plan.physical.digest!==e.physicalDigest)return fail();
     await verifyCatalog(db,t,previous?compileProvisioningContract(previous,scope):null);

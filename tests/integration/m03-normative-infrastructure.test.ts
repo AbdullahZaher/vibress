@@ -248,8 +248,12 @@ describe("M03 actual isolated normative infrastructure",()=>{
       expect(results.filter(x=>x.status==="fulfilled").length,JSON.stringify(results.map(x=>x.status==="fulfilled"?"ok":String((x as PromiseRejectedResult).reason?.message)))).toBe(1);
       expect(results.find(x=>x.status==="rejected")).toMatchObject({reason:{message:"M03_LIFECYCLE_REFUSED:STALE"}});
     }finally{await other.end();}
-    // Real upgrade: new ACTIVE, parent superseded, history retained.
+    // A forged or orphan ACTIVE row breaks revision/lifecycle reconciliation.
     const next=crm(f,"website"),n=approval(f,m,next);
+    await f.admin.query("UPDATE public.platform_schema_revision_states_v1 SET state='ACTIVE' WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,race.digest]);
+    await expect(apply(f,next,n)).rejects.toThrow("M03_PROVISIONING_REFUSED:LIFECYCLE");
+    await f.admin.query("UPDATE public.platform_schema_revision_states_v1 SET state='PROVISIONING' WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,race.digest]);
+    // Real upgrade: new ACTIVE, parent superseded, history retained.
     await apply(f,next,n);
     expect(await life(m.digest)).toEqual({state:"SUPERSEDED",state_version:7});
     expect(await life(next.digest)).toEqual({state:"ACTIVE",state_version:6});
