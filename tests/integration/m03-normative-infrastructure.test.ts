@@ -17,18 +17,21 @@ import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../s
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
-const suffix=randomBytes(5).toString("hex"),password=randomBytes(24).toString("hex");
+const suffix=randomBytes(5).toString("hex");
+const rolePasswords=new Map<string,string>();
+const rolePassword=(role:string)=>{const password=rolePasswords.get(role);if(!password)throw Error("unknown fixture role");return password;};
+async function createFixtureRole(role:string){const password=randomBytes(24).toString("hex");await root.query("CREATE ROLE "+qi(role)+" LOGIN PASSWORD "+root.escapeLiteral(password)+" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");rolePasswords.set(role,password);}
 let root:Client;
 const labs:Lab[]=[];
 const credentials=generateKeyPairSync("ed25519"),adminKeys=generateKeyPairSync("ed25519"),epochKeys=generateKeyPairSync("ed25519");
-function dbUrl(db:string,role?:string){const u=new URL(url);u.pathname="/"+db;if(role){u.username=role;u.password=password;}return u.toString();}
+function dbUrl(db:string,role?:string){const u=new URL(url);u.pathname="/"+db;if(role){u.username=role;u.password=rolePassword(role);}return u.toString();}
 function wire(m:SchemaManifest){return JSON.stringify(m);}
 async function connect(db:string,role?:string){const c=new Client({connectionString:dbUrl(db,role),connectionTimeoutMillis:4000});await c.connect();return c;}
 type Lab={name:string;reader?:string;scope:SchemaCompilationScope;installer:string;runtime:string;namespace:string;oid:string;authority:DisposableDurableRecoveryAuthority;anchor:FileExperimentalRecoveryAnchor;admin:Client;pool:Pool;dir:string};
 async function lab(tag:string,app:string):Promise<Lab>{
   const name="vibress_s03_norm_"+tag+"_"+suffix,installer="v3_inst_"+tag+"_"+suffix,runtime="v3_run_"+tag+"_"+suffix;
   const scope={applicationId:asApplicationId(app),installationId:asInstallationId("installation-"+tag)};
-  for(const role of [installer,runtime])await root.query("CREATE ROLE "+qi(role)+" LOGIN PASSWORD "+root.escapeLiteral(password)+" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+  for(const role of [installer,runtime])await createFixtureRole(role);
   await root.query("CREATE DATABASE "+qi(name));
   await root.query("REVOKE ALL ON DATABASE "+qi(name)+" FROM PUBLIC");
   for(const role of [installer,runtime])await root.query("GRANT CONNECT ON DATABASE "+qi(name)+" TO "+qi(role));
@@ -145,6 +148,12 @@ describe("M03 actual isolated normative infrastructure",()=>{
     for(const [target,role] of [[f.name,other.runtime],[other.name,f.runtime],[other.name,f.installer],[f.name,other.installer]]){
       const c=new Client({connectionString:dbUrl(target!,role),connectionTimeoutMillis:4000});try{await expect(c.connect()).rejects.toThrow();}finally{await c.end().catch(()=>undefined);}
     }
+    for(const [target,role,wrong] of [[f.name,f.runtime,other.runtime],[other.name,other.runtime,f.runtime],[f.name,f.installer,other.installer],[other.name,other.installer,f.installer]]){
+      expect(rolePassword(role!)).not.toBe(rolePassword(wrong!));
+      const u=new URL(dbUrl(target!,role));u.password=rolePassword(wrong!);
+      const c=new Client({connectionString:u.toString(),connectionTimeoutMillis:4000});
+      try{await expect(c.connect()).rejects.toMatchObject({code:"28P01"});}finally{await c.end().catch(()=>undefined);}
+    }
     const a=table(f,m,"assets");await f.pool.query("INSERT INTO "+a+"(id,code,label) VALUES($1,'asset','Independent')",[randomUUID()]);
     expect((await f.pool.query("SELECT label FROM "+a)).rows).toEqual([{label:"Independent"}]);
     expect(f.namespace).not.toBe(other.namespace);
@@ -228,7 +237,7 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
   const customer=table(f,old,"customers"),activity=table(f,old,"activities"),uow=new TenantUnitOfWork(f.pool),ta=scope(f,"tenant-a"),customerId=randomUUID();
   await uow.run(ta,tx=>tx.query("INSERT INTO "+customer+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'existing','Existing')",[customerId]));
   f.reader="v3_read_"+suffix;
-  await root.query("CREATE ROLE "+qi(f.reader)+" LOGIN PASSWORD "+root.escapeLiteral(password)+" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+  await createFixtureRole(f.reader);
   await root.query("GRANT CONNECT ON DATABASE "+qi(f.name)+" TO "+qi(f.reader));
   await f.admin.query("CREATE TABLE public.platform_memberships(application_id text NOT NULL,tenant_id text NOT NULL,principal_id text NOT NULL,active boolean NOT NULL,roles text[] NOT NULL,permissions text[] NOT NULL,PRIMARY KEY(application_id,tenant_id,principal_id))");
   const perms=["crm.customers.read","crm.customers.create"];
