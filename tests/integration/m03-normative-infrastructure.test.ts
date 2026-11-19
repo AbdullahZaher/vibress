@@ -202,6 +202,15 @@ describe("M03 actual isolated normative infrastructure",()=>{
     const second=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(2,first.nextCursor));
     expect([...first.records,...second.records].map(row=>row.id)).toEqual([a.id,b.id,c.id].sort());
     expect(second.nextCursor).toBeNull();
+    expect(first.nextCursor).toMatch(/^v1\./);
+    // Cursors are bound to the manifest revision and the ordering they were issued for.
+    const ordered=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(1,null,null,"code"));
+    expect(ordered.records.map(row=>row.code)).toEqual(["stock-1"]);
+    expect((await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(1,ordered.nextCursor,null,"code"))).records.map(row=>row.code)).toEqual(["stock-2"]);
+    const forged="v1."+Buffer.from(JSON.stringify(["f".repeat(64),"code",["stock-1",a.id]])).toString("base64url");
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(1,forged,null,"code"))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(1,ordered.nextCursor,null,"id"))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(1,a.id))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
     expect((await uow.run(tb,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(100))).records.map(row=>row.id)).toEqual([other.id]);
     expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).remove(a.id,winner.version_token))).toBe(true);
     expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).update(a.id,winner.version_token,"Deleted"))).toBeNull();
