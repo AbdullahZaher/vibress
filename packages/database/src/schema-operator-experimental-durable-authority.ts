@@ -142,7 +142,7 @@ function reduce(s: State|undefined,e: Event): State {
     }
     case "PROVISIONING_CHECKPOINT": {
       const p=[...(s.provisioning?.values()??[])].filter(o=>o.outcome==="COMMITTED").at(-1),v=e.evidence;
-      if(!s.pending||!s.intent||s.businessLease||s.provisioningCheckpoint||s.provisioningReattestation||!p||
+      if(!s.pending||!s.intent||s.businessLease||s.provisionedBusiness?.size||s.provisioningCheckpoint||s.provisioningReattestation||!p||
         [...s.provisioning!.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")||v.operationId!==p.operationId||v.revision!==p.manifestDigest||v.physicalDigest!==p.physicalDigest||
         v.epoch!==s.epoch||v.installationId!==s.installationId||v.databaseName!==s.databaseName||v.databaseOid!==p.databaseOid||!SHA.test(v.historyDigest)||!Object.values(v.dataDigests).every(d=>SHA.test(d)))return refuse();
       next.provisioningCheckpoint=JSON.parse(JSON.stringify(v)) as ProvisioningCommitEvidence;break;
@@ -704,7 +704,7 @@ export class DisposableDurableRecoveryAuthority {
   }
   async recordExperimentalProvisioningCheckpoint(db:ClientBase,input:string,signature:string):Promise<void>{
     const s=this.current();
-    if(process.env.NODE_ENV!=="test"||!s.pending||!s.intent||s.provisioningCheckpoint||s.provisioningReattestation||this.fences.size||typeof input!=="string"||input.length>1024*1024)return refuse();
+    if(process.env.NODE_ENV!=="test"||!s.pending||!s.intent||s.businessLease||s.provisionedBusiness?.size||s.provisioningCheckpoint||s.provisioningReattestation||this.fences.size||typeof input!=="string"||input.length>1024*1024)return refuse();
     const snapshot=this.authenticatedSnapshot(),operations=snapshot.provisioningOperations??[],last=operations.filter(o=>o.outcome==="COMMITTED").at(-1);
     if(!last)return refuse();
     this.requireAdministration("PROVISIONING_CHECKPOINT_V1",input,signature);

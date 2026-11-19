@@ -361,6 +361,13 @@ it("J07: bounded signed business outcome, real commit/rollback and lost acknowle
       const message=experimentalBusinessMessage(e);return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
     };
     const run=(a:ReturnType<typeof signed>,runner=uow)=>f.authority.runExperimentalProvisionedBusiness(runner,sc,wire(m),a.message,a.signature);
+    // The runtime can insert a signed witness but cannot read, change or choose its xid.
+    for(const statement of [
+      "SELECT * FROM public.platform_schema_business_witnesses_v1",
+      "UPDATE public.platform_schema_business_witnesses_v1 SET evidence='forged'",
+      "DELETE FROM public.platform_schema_business_witnesses_v1",
+      "INSERT INTO public.platform_schema_business_witnesses_v1(operation_id,xid,evidence,signature) VALUES(gen_random_uuid(),'1'::xid8,'forged','forged')",
+    ])await expect(f.pool.query(statement)).rejects.toMatchObject({code:"42501"});
     const normal=signed("known");
     await expect(run({...normal,signature:"A".repeat(86)})).rejects.toThrow();
     expect(await run(normal)).toMatchObject({status:"COMMITTED"});
@@ -410,3 +417,69 @@ it("J07: bounded signed business outcome, real commit/rollback and lost acknowle
     console.info("M03_J07_BUSINESS_"+lost+"_ACK_RECONCILIATION=PASS");
   }
 },120000);
+
+
+// Physical recovery must never convert a missing business witness into rollback.
+describe.skipIf(process.env.M03_NORMATIVE_BUSINESS_PHYSICAL!=="1")("M03 normative business physical outcomes",()=>{
+  it("NORM-PHY: lost business COMMIT is observed only with retained signed witness after PITR",async()=>{
+    if(process.env.GITHUB_ACTIONS!=="true"||process.env.M03_PHYSICAL_CONTAINER!=="vibress-m03-physical-ci"||process.env.M03_PHYSICAL_COMPONENT!=="1")throw Error("owned CI physical cluster required");
+    const rewind=process.env.M03_NORMATIVE_REWIND==="1";
+    const physical=(...args:string[])=>{const x=spawnSync("bash",["tests/fixtures/m03-actual-physical-cluster.sh",...args],{encoding:"utf8",timeout:120000});if(x.status!==0)throw Error("physical helper failed: "+args[0]);console.info(x.stdout.trim());};
+    const f=await lab("business_physical","reference-crm"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    physical("backup");
+    await root.query("SELECT pg_create_restore_point('vibress_component_padding')");await root.query("SELECT pg_switch_wal()");
+    const target=async()=>(await root.query<{segment:string}>("SELECT pg_walfile_name(pg_create_restore_point('vibress_component_target')) AS segment")).rows[0]!.segment;
+    let segment=rewind?await target():"";
+    const sc=scope(f,"tenant-a"),state=f.authority.authenticatedSnapshot();
+    const e:BusinessApproval={version:1,operationId:randomUUID(),applicationId:f.scope.applicationId,installationId:f.scope.installationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,revision:m.digest,physicalDigest:compileProvisioningContract(m,f.scope).digest,tenantId:"tenant-a",principalId:"fixture-principal",rowId:randomUUID(),code:"physical",name:"Physical witness"};
+    const message=experimentalBusinessMessage(e),signature=sign(null,Buffer.from(message),credentials.privateKey).toString("base64url");
+    const proxy=await startStatementAckFaultProxy("COMMIT","DROP");void proxy.serverCommitObserved.catch(()=>undefined);
+    const u=new URL(dbUrl(f.name,f.runtime));u.port=String(proxy.port);
+    const pool=new Pool({connectionString:u.toString(),max:1,connectionTimeoutMillis:4000,query_timeout:15000});
+    const transportErrors:string[]=[];
+    let signalTransport!:()=>void;
+    const transportObserved=new Promise<void>(resolve=>{signalTransport=resolve;});
+    const observeTransport=(error:Error)=>{transportErrors.push(error.message);signalTransport();};
+    pool.on("connect",client=>client.on("error",observeTransport));pool.on("error",observeTransport);
+    try{
+      const task=f.authority.runExperimentalProvisionedBusiness(new TenantUnitOfWork(pool),sc,wire(m),message,signature);
+      await Promise.all([expect(task).rejects.toThrow(),proxy.serverCommitObserved]);
+      await transportObserved;
+      expect(transportErrors.length).toBeGreaterThan(0);
+      expect(transportErrors.every(x=>/connection terminated|socket|ECONNRESET/i.test(x))).toBe(true);
+    }finally{await pool.end();await proxy.close();}
+    const prior=f.authority.authenticatedSnapshot(),record=prior.provisionedBusinessOperations!.at(-1)!;
+    expect(record).toMatchObject({operationId:e.operationId,outcome:"UNCERTAIN"});
+    expect(prior).toMatchObject({pending:true,businessLease:e.operationId});
+    expect((await f.admin.query("SELECT operation_id FROM public.platform_schema_business_witnesses_v1")).rows).toEqual([{operation_id:e.operationId}]);
+    await f.pool.end();await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    if(!rewind)segment=await target();
+    await root.query("SELECT pg_switch_wal()");physical("archive",segment);
+    f.authority.close();await f.admin.end();await root.end();
+    physical("restore","");
+    root=await connect("vibress");await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");
+    f.admin=await connect(f.name);f.pool=new Pool({connectionString:dbUrl(f.name,f.runtime),max:1});
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);
+    expect(f.authority.authenticatedSnapshot()).toEqual(prior);
+    const count=(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM "+table(f,m,"customers")+" WHERE id=$1",[e.rowId])).rows[0]!.n;
+    expect(count).toBe(rewind?0:1);
+    if(rewind){
+      expect((await f.admin.query("SELECT operation_id FROM public.platform_schema_business_witnesses_v1")).rows).toEqual([]);
+      await expect(collectExperimentalBusinessOutcome(f.admin,record,epochKeys.publicKey)).rejects.toThrow();
+      expect(f.authority.authenticatedSnapshot()).toEqual(prior);
+      console.info("M03_J07_PHYSICAL_REWIND_UNCERTAIN_REFUSED=PASS");return;
+    }
+    const observed=await collectExperimentalBusinessOutcome(f.admin,record,epochKeys.publicKey);
+    expect(observed.outcome).toBe("COMMITTED");expect(observed.timeline).toBeGreaterThan(record.timeline);
+    expect(observed.xidStatus).toBeNull();expect(observed.witnessDigest).toMatch(/^[a-f0-9]{64}$/);
+    const observation=JSON.stringify(observed),authorize=()=>sign(null,recoveryAdministrationMessage(f.authority.snapshot(),"PROVISIONED_BUSINESS_OBSERVED_V1",observation),adminKeys.privateKey).toString("base64url");
+    await f.authority.resolveExperimentalProvisionedBusiness(f.admin,observation,authorize());
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+    expect(f.authority.authenticatedSnapshot().pending).toBe(true);
+    expect(f.authority.authenticatedSnapshot().provisionedBusinessOperations!.at(-1)!.outcome).toBe("COMMITTED");
+    await expect(f.authority.resolveExperimentalProvisionedBusiness(f.admin,observation,authorize())).rejects.toThrow();
+    console.info("M03_J07_PHYSICAL_COMMIT_RECONCILIATION=PASS");
+  },300000);
+});

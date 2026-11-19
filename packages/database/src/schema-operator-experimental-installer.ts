@@ -275,6 +275,10 @@ async function collectProvisioningEvidence(db:ClientBase,operations:readonly His
       if(values.length>1000)return fail();
       dataDigests[resource.table]=hash(JSON.stringify(values.map(v=>v.value)));
     }
+    // Backfill checkpoints are part of the authenticated recovery inventory.
+    const chunks=(await db.query<{value:string}>("SELECT to_jsonb(t)::text AS value FROM public.platform_schema_backfill_chunks_v1 t ORDER BY value LIMIT 1001")).rows;
+    if(chunks.length>1000)return fail();
+    dataDigests["@backfill-checkpoints"]=hash(JSON.stringify(chunks.map(v=>v.value)));
     await db.query("SELECT pg_stat_clear_snapshot()");
     if(!equal(before,await quiescent()))return fail();
     await db.query("COMMIT");

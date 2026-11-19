@@ -98,11 +98,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        scenario: ["preserved", "rewound"]
+        scenario: ["preserved", "rewound", "business-preserved", "business-rewound"]
     env:
       M03_PHYSICAL_COMPONENT: "1"
-      M03_NORMATIVE_PHYSICAL: "1"
-      M03_NORMATIVE_REWIND: ${{ matrix.scenario == 'rewound' && '1' || '0' }}
+      M03_NORMATIVE_PHYSICAL: ${{ startsWith(matrix.scenario, 'business-') && '0' || '1' }}
+      M03_NORMATIVE_BUSINESS_PHYSICAL: ${{ startsWith(matrix.scenario, 'business-') && '1' || '0' }}
+      M03_NORMATIVE_REWIND: ${{ endsWith(matrix.scenario, 'rewound') && '1' || '0' }}
       M03_PHYSICAL_CONTAINER: vibress-m03-physical-ci
       DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
     steps:
