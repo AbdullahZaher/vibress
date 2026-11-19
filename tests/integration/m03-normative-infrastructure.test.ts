@@ -304,6 +304,51 @@ describe("M03 actual isolated normative infrastructure",()=>{
     try{await expect(reattestExperimentalLifecycleAfterRecovery(runtime,rev(randomUUID(),head2,1_000_003))).rejects.toMatchObject({code:"42501"});}finally{await runtime.end();}
     console.info("M03_B02_RECOVERY_EPOCH_REATTESTATION=PASS");
   },60000);
+  it("B04: durable backfill target admission, chunk progress, conflict refusal, completion and replay",async()=>{
+    const f=await lab("backfill","reference-backfill"),old=crm(f),m=crm(f,"website");
+    await apply(f,old,approval(f,null,old));await apply(f,m,approval(f,old,m));
+    const customers=table(f,m,"customers"),id=()=>randomUUID();
+    const rows=[{tenant:"tenant-a",ids:[id(),id()]},{tenant:"tenant-b",ids:[id()]},{tenant:"tenant-c",ids:[id(),id()]}];
+    for(const r of rows)for(const x of r.ids)await f.admin.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES($1,$2,$3,'N')",[r.tenant,x,x]);
+    const physicalDigest=compileProvisioningContract(m,f.scope).digest;
+    const mk=(tenantId:string,value:string,limit=1,operationId=randomUUID())=>{
+      const s=f.authority.authenticatedSnapshot();
+      const e:ExperimentalBackfillApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:s.epoch,ledgerId:s.ledgerId,authorityHead:s.head,authoritySequence:s.sequence,revision:m.digest,physicalDigest,operationId,tenantId,resourceId:"customers",column:"website",value,limit};
+      const message=experimentalBackfillMessage(e);
+      return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
+    };
+    const chunk=(x:ReturnType<typeof mk>)=>runExperimentalBackfillChunk(dbUrl(f.name,f.installer),x.message,x.signature,f.authority);
+    const target=(tenant:string)=>f.admin.query<{value:string;chunks:number;affected_total:string;complete:boolean}>("SELECT value,chunks,affected_total::text AS affected_total,complete FROM public.platform_schema_backfill_targets_v1 WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id=$3 AND resource_id='customers' AND column_name='website'",[f.scope.installationId,m.digest,tenant]).then(r=>r.rows[0]);
+    const a1=mk("tenant-a","first");
+    expect(await chunk(a1)).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await target("tenant-a")).toMatchObject({value:"first",chunks:1,affected_total:"1",complete:false});
+    // Replaying a committed chunk must not double progress.
+    expect(await chunk(a1)).toMatchObject({status:"ALREADY_COMMITTED",affected:1});
+    expect(await target("tenant-a")).toMatchObject({chunks:1,affected_total:"1"});
+    expect(await chunk(mk("tenant-a","first"))).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await chunk(mk("tenant-a","first"))).toMatchObject({status:"COMMITTED",affected:0,complete:true});
+    expect(await target("tenant-a")).toMatchObject({chunks:3,affected_total:"2",complete:true});
+    // A completed target cannot be reopened, even with the identical value.
+    await expect(chunk(mk("tenant-a","first"))).rejects.toThrow("M03_BACKFILL_REFUSED:COMPLETE");
+    await expect(chunk(mk("tenant-a","other"))).rejects.toThrow("M03_BACKFILL_REFUSED:COMPLETE");
+    // One target admits exactly one value; a conflicting concurrent value refuses.
+    const results=await Promise.allSettled([chunk(mk("tenant-c","left")),chunk(mk("tenant-c","right"))]);
+    expect(results.filter(x=>x.status==="fulfilled")).toHaveLength(1);
+    const winner=results[0]?.status==="fulfilled"?"left":"right";
+    expect(results.find(x=>x.status==="rejected")).toMatchObject({reason:{message:"M03_BACKFILL_REFUSED:CONFLICT"}});
+    expect(await target("tenant-c")).toMatchObject({value:winner,chunks:1});
+    const values=(await f.admin.query<{value:string|null}>(`SELECT DISTINCT website AS value FROM ${customers} WHERE tenant_id='tenant-c'`)).rows.map(x=>x.value).filter(x=>x!==null);
+    expect(values).toEqual([winner]);
+    // Target rows are durable evidence, never clearable or rewritable in place.
+    await expect(f.admin.query("UPDATE public.platform_schema_backfill_targets_v1 SET value='rewritten'")).rejects.toThrow("M03_BACKFILL_TARGET_IMMUTABLE");
+    await expect(f.admin.query("DELETE FROM public.platform_schema_backfill_targets_v1")).rejects.toThrow("M03_BACKFILL_TARGET_IMMUTABLE");
+    await expect(f.admin.query("UPDATE public.platform_schema_backfill_targets_v1 SET complete=false WHERE complete")).rejects.toThrow("M03_BACKFILL_TARGET_IMMUTABLE");
+    const runtime=await connect(f.name,f.runtime);
+    try{await expect(runtime.query("INSERT INTO public.platform_schema_backfill_targets_v1 SELECT * FROM public.platform_schema_backfill_targets_v1")).rejects.toMatchObject({code:"42501"});}finally{await runtime.end();}
+    const chunks=(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM public.platform_schema_backfill_chunks_v1")).rows[0]!.n;
+    expect(chunks).toBe(4);
+    console.info("M03_B04_DURABLE_BACKFILL_ADMISSION_PROGRESS=PASS");
+  },60000);
   it("C05/J03: portable content and migration identity across actual dedicated installs and additive upgrades",async()=>{
     const a=await lab("portablea","reference-portable-a"),b=await lab("portableb","reference-portable-b");
     const a1=crm(a),b1=crm(b),a2=crm(a,"website"),b2=crm(b,"website");

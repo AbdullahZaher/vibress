@@ -37,6 +37,40 @@ CREATE TABLE public.platform_schema_backfill_chunks_v1 (
 );
 REVOKE ALL ON public.platform_schema_backfill_chunks_v1 FROM PUBLIC;
 
+-- Durable per-target backfill admission and progress. One target admits exactly
+-- one value; progress only moves forward and a completed target is terminal.
+CREATE TABLE public.platform_schema_backfill_targets_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ tenant_id text NOT NULL, resource_id text NOT NULL, column_name text NOT NULL,
+ value text NOT NULL,
+ admitted_evidence text NOT NULL, admitted_signature text NOT NULL,
+ chunks integer NOT NULL DEFAULT 0 CHECK(chunks>=0),
+ affected_total bigint NOT NULL DEFAULT 0 CHECK(affected_total>=0),
+ complete boolean NOT NULL DEFAULT false,
+ completed_at timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,tenant_id,resource_id,column_name),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_backfill_targets_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_backfill_targets_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $backfill_targets$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF OLD.complete THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NEW.installation_id<>OLD.installation_id OR NEW.revision_digest<>OLD.revision_digest OR NEW.tenant_id<>OLD.tenant_id OR
+    NEW.resource_id<>OLD.resource_id OR NEW.column_name<>OLD.column_name OR NEW.value<>OLD.value OR
+    NEW.admitted_evidence<>OLD.admitted_evidence OR NEW.admitted_signature<>OLD.admitted_signature THEN
+   RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE';
+ END IF;
+ IF NEW.chunks<OLD.chunks OR NEW.affected_total<OLD.affected_total THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NEW.complete AND NEW.completed_at IS NULL THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NOT NEW.complete AND NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ RETURN NEW;
+END $backfill_targets$;
+CREATE TRIGGER platform_schema_backfill_targets_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_backfill_targets_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_backfill_targets_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_backfill_targets_immutable_v1() FROM PUBLIC;
+
 CREATE TABLE public.platform_schema_recovery_reattestations_v1 (
  installation_id text NOT NULL,
  revision_digest text NOT NULL,

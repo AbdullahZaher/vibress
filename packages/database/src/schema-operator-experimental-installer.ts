@@ -9,6 +9,7 @@ import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-p
 import {recordExperimentalLifecycleTransition} from "./schema-operator-experimental-registry-lifecycle";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
 const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
+const backfillRefusal=(reason:string):never=>{throw Error("M03_BACKFILL_REFUSED:"+reason);};
 const hash=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
 const sha=/^[a-f0-9]{64}$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -66,8 +67,9 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT USAGE ON SCHEMA "+qi(namespace)+" TO "+qi(runtime));
     const physical=(await db.query<{system:string;timeline:number}>("SELECT (pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline")).rows[0]!;
     await db.query("INSERT INTO public.platform_schema_installation_trust_v1(installation_id,application_id,database_name,database_oid,system_identifier,timeline,namespace,installer_role,runtime_role,approval_key,approval_key_digest,epoch,ledger_id,profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[target.installationId,target.applicationId,id.name,id.oid,physical.system,physical.timeline,namespace,installer,runtime,keyBytes.toString("base64"),keyDigest,state.epoch,state.ledgerId,PROVISIONING_PROFILE]);
-    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_revision_states_v1 TO "+qi(installer));
-    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 TO "+qi(installer));
+    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_revision_states_v1 TO "+qi(installer));
+    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 TO "+qi(installer));
+    await db.query("GRANT UPDATE(chunks,affected_total,complete,completed_at,updated_at) ON public.platform_schema_backfill_targets_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(state,state_version,operation_id,approval_id,authority_epoch,authority_head,authority_sequence,actor,updated_at) ON public.platform_schema_revision_states_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(manifest,manifest_digest,updated_at) ON public.platform_schema_registry TO "+qi(installer));
     await db.query("GRANT SELECT(installation_id,application_id,database_name,database_oid,system_identifier,timeline,epoch,ledger_id,profile,revoked,runtime_role,approval_key,approval_key_digest) ON public.platform_schema_installation_trust_v1 TO "+qi(runtime));
@@ -451,17 +453,26 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     const prior=(await db.query<{evidence:string;signature:string;affected:number;ids:string[]}>("SELECT evidence,signature,affected,ids FROM public.platform_schema_backfill_chunks_v1 WHERE operation_id=$1",[e.operationId])).rows[0];
     if(prior){
       if(prior.evidence!==approvalWire||prior.signature!==signature)return fail();
-      await db.query("ROLLBACK");return {status:"ALREADY_COMMITTED" as const,affected:prior.affected,ids:prior.ids};
+      const complete=(await db.query<{complete:boolean}>("SELECT complete FROM public.platform_schema_backfill_targets_v1 WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id=$3 AND resource_id=$4 AND column_name=$5",[t.installation_id,e.revision,e.tenantId,e.resourceId,e.column])).rows[0]?.complete??false;
+      await db.query("ROLLBACK");return {status:"ALREADY_COMMITTED" as const,affected:prior.affected,ids:prior.ids,complete};
     }
+    // One target admits exactly one value; progress only moves forward and a
+    // completed target can never be reopened or cleared.
+    await db.query("INSERT INTO public.platform_schema_backfill_targets_v1(installation_id,revision_digest,tenant_id,resource_id,column_name,value,admitted_evidence,admitted_signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING",[t.installation_id,e.revision,e.tenantId,e.resourceId,e.column,e.value,approvalWire,signature]);
+    const target=(await db.query<{value:string;complete:boolean}>("SELECT value,complete FROM public.platform_schema_backfill_targets_v1 WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id=$3 AND resource_id=$4 AND column_name=$5 FOR UPDATE",[t.installation_id,e.revision,e.tenantId,e.resourceId,e.column])).rows[0];
+    if(!target)return backfillRefusal("CONFLICT");
+    if(target.complete)return backfillRefusal("COMPLETE");
+    if(target.value!==e.value)return backfillRefusal("CONFLICT");
     await db.query("SELECT set_config('vibress.application_id',$1,true),set_config('vibress.tenant_id',$2,true)",[e.applicationId,e.tenantId]);
     const q=qualified(t.namespace,resource.table),field=qi(column.name);
     const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+field+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+field+"=$3 FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+field+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit,e.value])).rows;
     const ids=updated.map(x=>x.id).sort();
     await db.query("INSERT INTO public.platform_schema_backfill_chunks_v1(installation_id,revision_digest,operation_id,tenant_id,resource_id,column_name,evidence,signature,affected,ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[t.installation_id,e.revision,e.operationId,e.tenantId,e.resourceId,e.column,approvalWire,signature,ids.length,ids]);
+    await db.query("UPDATE public.platform_schema_backfill_targets_v1 SET chunks=chunks+1,affected_total=affected_total+$6,complete=$7,completed_at=CASE WHEN $7 THEN clock_timestamp() ELSE completed_at END,updated_at=clock_timestamp() WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id=$3 AND resource_id=$4 AND column_name=$5",[t.installation_id,e.revision,e.tenantId,e.resourceId,e.column,ids.length,ids.length===0]);
     await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
     if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
     dispatched=true;if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
-    return {status:"COMMITTED" as const,affected:ids.length,ids};
+    return {status:"COMMITTED" as const,affected:ids.length,ids,complete:ids.length===0};
   }catch(error){
     if(dispatched){if(!authority.authenticatedSnapshot().pending)authority.beginRecovery();throw new ExperimentalProvisioningUnknown();}
     await db.query("ROLLBACK").catch(()=>undefined);throw error;
