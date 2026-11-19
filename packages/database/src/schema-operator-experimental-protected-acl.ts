@@ -50,7 +50,7 @@ export async function verifyProtectedMetadataAuthority(query:Query,installer:str
     if(!policy||t.owner!==root||t.kind!=="r"||!equal(canonical(t.edges),[...tablePrivileges.map(p=>edge(root,root,p)),...(policy.installer??[]).map(p=>edge(installer,root,p))]))return fail();
   }
   const columns=(await query<{name:string;column:string;edges:string[]}>(`SELECT c.relname::text AS name,a.attname::text AS "column",
-    ARRAY(SELECT jsonb_build_array(CASE WHEN e.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(e.grantee) END,pg_get_userbyid(e.grantor),e.privilege_type,e.is_grantable)::text FROM aclexplode(coalesce(a.attacl,'{}'::aclitem[])) e) AS edges
+    ARRAY(SELECT jsonb_build_array(CASE WHEN e.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(e.grantee) END,pg_get_userbyid(e.grantor),e.privilege_type,e.is_grantable)::text FROM aclexplode(CASE WHEN cardinality(a.attacl)>0 THEN a.attacl ELSE NULL END) e) AS edges
     FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace JOIN pg_catalog.pg_attribute a ON a.attrelid=c.oid WHERE n.nspname='public' AND c.relname=ANY($1::name[]) AND a.attnum>0 AND NOT a.attisdropped`,[names])).rows;
   for(const c of columns){
     const p=metadata[c.name];
