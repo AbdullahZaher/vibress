@@ -25,3 +25,14 @@ CREATE TABLE public.platform_schema_revisions_v1 (
  FOREIGN KEY(installation_id,parent_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
 );
 REVOKE ALL ON public.platform_schema_installation_trust_v1,public.platform_schema_revisions_v1 FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_backfill_chunks_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ operation_id uuid PRIMARY KEY,
+ tenant_id text NOT NULL, resource_id text NOT NULL, column_name text NOT NULL,
+ evidence text NOT NULL, signature text NOT NULL, affected integer NOT NULL CHECK(affected BETWEEN 0 AND 100),
+ ids text[] NOT NULL, committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_backfill_chunks_v1 FROM PUBLIC;

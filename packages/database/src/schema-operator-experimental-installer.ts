@@ -60,8 +60,8 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT USAGE ON SCHEMA "+qi(namespace)+" TO "+qi(runtime));
     const physical=(await db.query<{system:string;timeline:number}>("SELECT (pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline")).rows[0]!;
     await db.query("INSERT INTO public.platform_schema_installation_trust_v1(installation_id,application_id,database_name,database_oid,system_identifier,timeline,namespace,installer_role,runtime_role,approval_key,approval_key_digest,epoch,ledger_id,profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[target.installationId,target.applicationId,id.name,id.oid,physical.system,physical.timeline,namespace,installer,runtime,keyBytes.toString("base64"),keyDigest,state.epoch,state.ledgerId,PROVISIONING_PROFILE]);
-    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1 TO "+qi(installer));
-    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1 TO "+qi(installer));
+    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
+    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(manifest,manifest_digest,updated_at) ON public.platform_schema_registry TO "+qi(installer));
     await roleContract(db,installer,runtime,namespace);
     if(!equal(state,authority.authenticatedSnapshot()))return fail();
@@ -127,7 +127,7 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     for(const e of expectedIx)if(!e.unique)expectedIndexes.push(e.name);
     if(ix.length!==expectedIx.length||expectedIx.some(e=>{const a=ix.find(x=>x.name===e.name);return !a||!a.valid||!a.plain||a.method!=="btree"||a.unique!==e.unique||a.primary!==e.primary||!equal(a.columns,e.columns)||a.options.some(x=>x!==0);}))return fail();
     const policies=(await db.query<{name:string;permissive:boolean;command:string;roles:string;using:string;check:string}>("SELECT p.polname AS name,p.polpermissive AS permissive,p.polcmd AS command,p.polroles::text AS roles,pg_get_expr(p.polqual,p.polrelid) AS \"using\",pg_get_expr(p.polwithcheck,p.polrelid) AS \"check\" FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY p.polname",[namespace,resource.table])).rows;
-    const expr="("+provisioningTenantExpression+")";
+    const expr="("+provisioningTenantExpression(t.application_id)+")";
     if(!equal(policies,tenant?[{name:"v3_tenant_access",permissive:true,command:"*",roles:"{0}",using:"true",check:"true"},{name:"v3_tenant_boundary",permissive:false,command:"*",roles:"{0}",using:expr,check:expr}]:[]))return fail();
     const acl=(await db.query<{edges:string[];allowed:boolean;triggers:number;badTriggers:number}>("SELECT ARRAY(SELECT (CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END)||':'||pg_get_userbyid(a.grantor)||':'||a.privilege_type||':'||a.is_grantable::text FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a ORDER BY 1) AS edges,(SELECT bool_and(has_table_privilege($3,c.oid,p)= (p IN ('SELECT','INSERT','UPDATE','DELETE')) AND NOT has_table_privilege($3,c.oid,p||' WITH GRANT OPTION')) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p) AS allowed,(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=c.oid) AS triggers,(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=c.oid AND (NOT tgisinternal OR tgenabled<>'O')) AS \"badTriggers\" FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2",[namespace,resource.table,t.runtime_role])).rows[0];
     const edges=sorted([...["SELECT","INSERT","UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"].map(p=>t.installer_role+":"+t.installer_role+":"+p+":false"),...["SELECT","INSERT","UPDATE","DELETE"].map(p=>t.runtime_role+":"+t.installer_role+":"+p+":false")]);
@@ -199,14 +199,19 @@ export async function installExperimentalRevision(connectionString:string,manife
     throw error;
   }finally{if(!ended)await db.end().catch(()=>undefined);}
 }
-export async function verifyExperimentalProvisionedCatalog(connectionString:string,manifestWire:string){
+export async function verifyExperimentalProvisionedCatalog(connectionString:string,manifestWire:string,authority:DisposableDurableRecoveryAuthority){
   assertLocalUrl(connectionString);
   const manifest=parseSchemaManifest(JSON.parse(manifestWire)),db=new Client({connectionString,connectionTimeoutMillis:4000,query_timeout:15000});
   try{
     await db.connect();await db.query("BEGIN READ ONLY");await db.query("SET LOCAL search_path=pg_catalog");
     const t=await loadTrust(db),physical=compileProvisioningContract(manifest,scopeOf(t));
     if((await db.query("SELECT 1 FROM public.platform_schema_registry r JOIN public.platform_schema_revisions_v1 v ON v.installation_id=r.installation_id AND v.revision_digest=r.manifest_digest WHERE r.installation_id=$1 AND r.manifest_digest=$2 AND v.manifest=$3 AND v.physical_digest=$4",[t.installation_id,manifest.digest,manifestWire,physical.digest])).rowCount!==1)return fail();
-    await verifyCatalog(db,t,physical);await db.query("COMMIT");return physical.digest;
+    const state=authority.authenticatedSnapshot();
+    if(state.pending||state.installationId!==t.installation_id||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.databaseName!==t.database_name)return fail();
+    await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);
+    await verifyCatalog(db,t,physical);
+    if(!equal(state,authority.authenticatedSnapshot()))return fail();
+    await db.query("COMMIT");return physical.digest;
   }finally{await db.end().catch(()=>undefined);}
 }
 
@@ -270,4 +275,74 @@ export async function collectExperimentalProvisioningCommit(db:ClientBase,operat
     await db.query("COMMIT");
     return {version:1,operationId,databaseName:id.name,databaseOid:id.oid,systemIdentifier:before.system,timeline:before.timeline,installationId:t.installation_id,epoch:t.epoch,revision:manifest.digest,physicalDigest:physical.digest,historyDigest:hash(JSON.stringify(rows.map(r=>[r.revision_digest,r.operation_id,r.signature,r.parent_digest]))),dataDigests};
   }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
+}
+
+
+export interface ExperimentalBackfillApproval{
+ version:1;installationId:string;applicationId:string;databaseName:string;databaseOid:string;epoch:string;ledgerId:string;authorityHead:string;authoritySequence:number;
+ revision:string;physicalDigest:string;operationId:string;tenantId:string;resourceId:string;column:string;value:string;limit:number;
+}
+export function experimentalBackfillMessage(e:ExperimentalBackfillApproval){
+  return JSON.stringify(["VIBRESS-M03-BACKFILL-V1",e.version,e.installationId,e.applicationId,e.databaseName,e.databaseOid,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.revision,e.physicalDigest,e.operationId,e.tenantId,e.resourceId,e.column,e.value,e.limit]);
+}
+function parseBackfill(wire:string):ExperimentalBackfillApproval{
+  if(typeof wire!=="string"||wire.length>8192)return fail();
+  const raw:unknown=JSON.parse(wire);
+  if(!Array.isArray(raw)||raw.length!==18||raw[0]!=="VIBRESS-M03-BACKFILL-V1")return fail();
+  const [_,version,installationId,applicationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,revision,physicalDigest,operationId,tenantId,resourceId,column,value,limit]=raw as unknown[];
+  const is=(v:unknown,re:RegExp):v is string=>typeof v==="string"&&re.test(v);
+  if(version!==1||!is(installationId,/^[a-z][a-z0-9_-]{1,62}$/)||!is(applicationId,/^[a-z][a-z0-9_-]{1,62}$/)||!is(databaseName,/^vibress_s03_norm_[a-z0-9_]+$/)||!is(databaseOid,/^\d{1,10}$/)||
+    !is(epoch,uuid)||!is(ledgerId,uuid)||!is(authorityHead,sha)||typeof authoritySequence!=="number"||!Number.isSafeInteger(authoritySequence)||authoritySequence<1||
+    !is(revision,sha)||!is(physicalDigest,sha)||!is(operationId,uuid)||!is(tenantId,/^[a-z][a-z0-9_-]{1,62}$/)||tenantId==="pub_default"||
+    !is(resourceId,/^[a-z][a-z0-9_]{0,62}$/)||!is(column,/^[a-z][a-z0-9_]{0,62}$/)||typeof value!=="string"||value.length>4096||value.includes("\u0000")||
+    typeof limit!=="number"||!Number.isInteger(limit)||limit<1||limit>100)return fail();
+  const e={version,installationId,applicationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,revision,physicalDigest,operationId,tenantId,resourceId,column,value,limit} as const;
+  if(experimentalBackfillMessage(e)!==wire)return fail();
+  return e;
+}
+/** A bounded reviewed idempotent text fill, never a generic UPDATE or arbitrary
+ * expression. This prototype provides atomic DB checkpoints, not independent
+ * crash/PITR durability of backfill outcomes. A lost ACK fences the authority.
+ */
+export async function runExperimentalBackfillChunk(connectionString:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority){
+  assertLocalUrl(connectionString);
+  const e=parseBackfill(approvalWire);
+  if(typeof signature!=="string"||!/^[A-Za-z0-9_-]{86}$/.test(signature))return fail();
+  const db=new Client({connectionString,connectionTimeoutMillis:4000,query_timeout:15000});
+  let transportFailed=false,dispatched=false;db.on("error",()=>{transportFailed=true;});
+  try{
+    await db.connect();await db.query("BEGIN");
+    await db.query("SET LOCAL search_path=pg_catalog; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='10s'");
+    await db.query("SELECT pg_advisory_xact_lock(118033,301)");
+    const t=await loadTrust(db),state=authority.authenticatedSnapshot();
+    const keyBytes=Buffer.from(t.approval_key,"base64"),key=createPublicKey({key:keyBytes,format:"der",type:"spki"});
+    if(hash(keyBytes)!==t.approval_key_digest||key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(approvalWire),key,Buffer.from(signature,"base64url"))||
+      state.pending||state.businessLease||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.installationId!==t.installation_id||state.databaseName!==t.database_name||
+      e.applicationId!==t.application_id||e.installationId!==t.installation_id||e.databaseName!==t.database_name||e.databaseOid!==t.database_oid||
+      e.epoch!==t.epoch||e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence)return fail();
+    const history=await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);
+    const active=(await db.query<{manifest:string;manifest_digest:string}>("SELECT manifest,manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",[t.installation_id])).rows[0];
+    if(!active||active.manifest_digest!==e.revision||history.at(-1)?.revision_digest!==e.revision)return fail();
+    const manifest=parseSchemaManifest(JSON.parse(active.manifest)),physical=compileProvisioningContract(manifest,scopeOf(t));
+    if(physical.digest!==e.physicalDigest||manifest.digest!==e.revision)return fail();
+    const resource=physical.resources.find(x=>x.id===e.resourceId),column=resource?.columns.find(x=>x.name===e.column);
+    if(!resource||resource.ownership!=="tenant"||!column||column.type!=="text"||column.required||column.enumValues||column.target)return fail();
+    await verifyCatalog(db,t,physical);
+    const prior=(await db.query<{evidence:string;signature:string;affected:number;ids:string[]}>("SELECT evidence,signature,affected,ids FROM public.platform_schema_backfill_chunks_v1 WHERE operation_id=$1",[e.operationId])).rows[0];
+    if(prior){
+      if(prior.evidence!==approvalWire||prior.signature!==signature)return fail();
+      await db.query("ROLLBACK");return {status:"ALREADY_COMMITTED" as const,affected:prior.affected,ids:prior.ids};
+    }
+    await db.query("SELECT set_config('vibress.application_id',$1,true),set_config('vibress.tenant_id',$2,true)",[e.applicationId,e.tenantId]);
+    const q=qualified(t.namespace,resource.table),field=qi(column.name);
+    const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+field+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+field+"=$3 FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+field+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit,e.value])).rows;
+    const ids=updated.map(x=>x.id).sort();
+    await db.query("INSERT INTO public.platform_schema_backfill_chunks_v1(installation_id,revision_digest,operation_id,tenant_id,resource_id,column_name,evidence,signature,affected,ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[t.installation_id,e.revision,e.operationId,e.tenantId,e.resourceId,e.column,approvalWire,signature,ids.length,ids]);
+    if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
+    dispatched=true;if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
+    return {status:"COMMITTED" as const,affected:ids.length,ids};
+  }catch(error){
+    if(dispatched){if(!authority.authenticatedSnapshot().pending)authority.beginRecovery();throw new ExperimentalProvisioningUnknown();}
+    await db.query("ROLLBACK").catch(()=>undefined);throw error;
+  }finally{await db.end().catch(()=>undefined);}
 }

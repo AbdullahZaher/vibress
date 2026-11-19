@@ -11,7 +11,7 @@ import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
 import {TenantUnitOfWork,verifyTenantScope} from "@vibress/tenancy";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
-import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,type ProvisioningApproval} from "../../packages/database/src/schema-operator-experimental-installer";
+import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
@@ -59,7 +59,7 @@ function approval(f:Lab,before:SchemaManifest|null,next:SchemaManifest,overrides
   return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
 }
 const apply=(f:Lab,m:SchemaManifest,a:ReturnType<typeof approval>)=>installExperimentalRevision(dbUrl(f.name,f.installer),wire(m),a.message,a.signature,f.authority);
-const check=(f:Lab,m:SchemaManifest)=>verifyExperimentalProvisionedCatalog(dbUrl(f.name,f.installer),wire(m));
+const check=(f:Lab,m:SchemaManifest)=>verifyExperimentalProvisionedCatalog(dbUrl(f.name,f.installer),wire(m),f.authority);
 const table=(f:Lab,m:SchemaManifest,id:string)=>qi(f.namespace)+"."+qi(m.resources.find(x=>x.id===id)!.tableName);
 function scope(f:Lab,tenant:string){
   const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
@@ -164,8 +164,15 @@ describe("M03 actual isolated normative infrastructure",()=>{
     const winner=results[0]?.status==="fulfilled"?next:alternate,field=winner===next?"website":"phone";
     expect((await uow.run(ta,tx=>tx.query("SELECT name FROM "+c))).rows).toEqual([{name:"Alice"}]);
     expect((await uow.run(ta,tx=>tx.query("SELECT "+qi(field)+" AS value FROM "+c))).rows).toEqual([{value:null}]);
-    await uow.run(ta,tx=>tx.query("UPDATE "+c+" SET "+qi(field)+"='backfilled' WHERE "+qi(field)+" IS NULL"));
+    const state=f.authority.authenticatedSnapshot();
+    const backfill:ExperimentalBackfillApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,revision:winner.digest,physicalDigest:compileProvisioningContract(winner,f.scope).digest,operationId:randomUUID(),tenantId:"tenant-a",resourceId:"customers",column:field,value:"backfilled",limit:1};
+    const chunk=(e:ExperimentalBackfillApproval)=>{const message=experimentalBackfillMessage(e);return runExperimentalBackfillChunk(dbUrl(f.name,f.installer),message,sign(null,Buffer.from(message),credentials.privateKey).toString("base64url"),f.authority);};
+    await expect(chunk({...backfill,column:"name"})).rejects.toThrow();
+    expect(await chunk(backfill)).toMatchObject({status:"COMMITTED",affected:1});
+    expect(await chunk(backfill)).toMatchObject({status:"ALREADY_COMMITTED",affected:1});
+    expect(await chunk({...backfill,operationId:randomUUID()})).toMatchObject({status:"COMMITTED",affected:0});
     expect((await uow.run(ta,tx=>tx.query("SELECT "+qi(field)+" AS value FROM "+c))).rows).toEqual([{value:"backfilled"}]);
+    expect((await uow.run(scope(f,"tenant-b"),tx=>tx.query("SELECT "+qi(field)+" AS value FROM "+c))).rows).toEqual([{value:null}]);
     await check(f,winner);
     const history=(await f.admin.query("SELECT revision_digest,parent_digest,authority_epoch FROM public.platform_schema_revisions_v1 ORDER BY applied_at")).rows;
     expect(history).toEqual([{revision_digest:old.digest,parent_digest:null,authority_epoch:f.authority.authenticatedSnapshot().epoch},{revision_digest:winner.digest,parent_digest:old.digest,authority_epoch:f.authority.authenticatedSnapshot().epoch}]);

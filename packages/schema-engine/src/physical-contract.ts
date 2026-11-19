@@ -116,7 +116,10 @@ export function provisioningConstraints(resource:ProvisionedResource,namespace:s
   for(const relation of resource.relations)constraints.push({name:provisioningConstraintName(resource.table,"fk",relation.column),kind:"f",columns:[...relation.columns],target:relation.table,targetColumns:[...relation.targetColumns],expression:"FOREIGN KEY ("+namesSql(relation.columns)+") REFERENCES "+tbl(namespace,relation.table)+" ("+namesSql(relation.targetColumns)+") ON UPDATE RESTRICT ON DELETE RESTRICT"});
   return constraints;
 }
-export const provisioningTenantExpression="tenant_id = current_setting('vibress.tenant_id'::text, true)";
+export function provisioningTenantExpression(applicationId:string){
+  if(!/^[a-z][a-z0-9_-]{1,62}$/.test(applicationId)||applicationId==="pub_default")throw Error("PROVISIONING_APPLICATION_ID");
+  return "(tenant_id = current_setting('vibress.tenant_id'::text, true)) AND (current_setting('vibress.application_id'::text, true) = '"+applicationId+"'::text) AND (tenant_id ~ '^[a-z][a-z0-9_-]{1,62}$'::text) AND (tenant_id <> 'pub_default'::text)";
+}
 function columnSql(c:ProvisionedColumn){
   return qi(c.name)+" "+c.type+(c.required?" NOT NULL":"");
 }
@@ -132,7 +135,7 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
       statements.push("CREATE TABLE "+q+" ("+[...resource.columns.map(columnSql),...constraints.map(c=>"CONSTRAINT "+qi(c.name)+" "+c.expression)].join(", ")+")");
       if(resource.ownership==="tenant"){
         statements.push("ALTER TABLE "+q+" ENABLE ROW LEVEL SECURITY","ALTER TABLE "+q+" FORCE ROW LEVEL SECURITY",
-          "CREATE POLICY v3_tenant_boundary ON "+q+" AS RESTRICTIVE FOR ALL TO PUBLIC USING ("+provisioningTenantExpression+") WITH CHECK ("+provisioningTenantExpression+")",
+          "CREATE POLICY v3_tenant_boundary ON "+q+" AS RESTRICTIVE FOR ALL TO PUBLIC USING ("+provisioningTenantExpression(physical.applicationId)+") WITH CHECK ("+provisioningTenantExpression(physical.applicationId)+")",
           "CREATE POLICY v3_tenant_access ON "+q+" AS PERMISSIVE FOR ALL TO PUBLIC USING (true) WITH CHECK (true)");
       }
       for(const c of resource.columns){
