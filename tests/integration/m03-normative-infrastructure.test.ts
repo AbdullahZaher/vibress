@@ -147,7 +147,7 @@ describe("M03 actual isolated normative infrastructure",()=>{
   async function expectDriftRefused(f:Lab,m:SchemaManifest,label:string,drift:()=>Promise<void>,restore:()=>Promise<void>){
     const digest=compileProvisioningContract(m,f.scope).digest;
     expect(await check(f,m)).toBe(digest);
-    let outcome="NOT_OBSERVED";
+    let outcome:string;
     try{
       await drift();
       try{await check(f,m);outcome="ACCEPTED";}
