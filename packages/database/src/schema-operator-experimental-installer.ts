@@ -6,7 +6,7 @@ import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
 import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,type ProvisioningContract} from "@vibress/schema-engine";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
-const fail=():never=>{throw Error("M03_PROVISIONING_REFUSED");};
+const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
 const hash=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
 const sha=/^[a-f0-9]{64}$/;
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -99,44 +99,44 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
   const resources=expected?.resources??[],namespace=t.namespace;
   const objects=(await db.query<{name:string;kind:string;owner:string;permanent:string;rls:boolean;forced:boolean}>("SELECT c.relname AS name,c.relkind AS kind,pg_get_userbyid(c.relowner) AS owner,c.relpersistence AS permanent,c.relrowsecurity AS rls,c.relforcerowsecurity AS forced FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 ORDER BY c.relname",[namespace])).rows;
   const tables=objects.filter(x=>x.kind==="r"),indexes=objects.filter(x=>x.kind==="i");
-  if(objects.length!==tables.length+indexes.length||!equal(tables.map(x=>x.name),sorted(resources.map(x=>x.table)))||objects.some(x=>x.owner!==t.installer_role||x.permanent!=="p"))return fail();
+  if(objects.length!==tables.length+indexes.length||!equal(tables.map(x=>x.name),sorted(resources.map(x=>x.table)))||objects.some(x=>x.owner!==t.installer_role||x.permanent!=="p"))return fail("CATALOG_1");
   const expectedIndexes:string[]=[];
   for(const resource of resources){
     const table=tables.find(x=>x.name===resource.table),tenant=resource.ownership==="tenant";
-    if(!table||table.rls!==tenant||table.forced!==tenant)return fail();
+    if(!table||table.rls!==tenant||table.forced!==tenant)return fail("CATALOG_2");
     const cols=(await db.query<{name:string;type:string;required:boolean;hasdefault:boolean;identity:string;generated:string;acl:boolean}>("SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull AS required,a.atthasdef AS hasdefault,a.attidentity AS identity,a.attgenerated AS generated,a.attacl IS NOT NULL AS acl FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attname",[namespace,resource.table])).rows;
     const desired=resource.columns.map(c=>({name:c.name,type:c.type,required:c.required,hasdefault:false,identity:"",generated:"",acl:false})).sort((a,b)=>a.name.localeCompare(b.name,"en"));
-    if(!equal(cols,desired))return fail();
-    const cons=(await db.query<{name:string;kind:string;columns:string[];target:string|null;targetNamespace:string|null;targetColumns:string[];valid:boolean;defer:boolean;update:string;del:string;match:string;expression:string}>("SELECT co.conname AS name,co.contype AS kind,ARRAY(SELECT a.attname FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,f.relname AS target,fn.nspname AS \"targetNamespace\",ARRAY(SELECT a.attname FROM unnest(co.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=f.oid AND a.attnum=k.attnum ORDER BY k.ord) AS \"targetColumns\",co.convalidated AS valid,co.condeferrable OR co.condeferred AS defer,co.confupdtype AS update,co.confdeltype AS del,co.confmatchtype AS match,coalesce(pg_get_expr(co.conbin,co.conrelid),'') AS expression FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class f ON f.oid=co.confrelid LEFT JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY co.conname",[namespace,resource.table])).rows;
+    if(!equal(cols,desired))return fail("CATALOG_3");
+    const cons=(await db.query<{name:string;kind:string;columns:string[];target:string|null;targetNamespace:string|null;targetColumns:string[];valid:boolean;defer:boolean;update:string;del:string;match:string;expression:string}>("SELECT co.conname AS name,co.contype AS kind,ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,f.relname AS target,fn.nspname AS \"targetNamespace\",ARRAY(SELECT a.attname::text FROM unnest(co.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=f.oid AND a.attnum=k.attnum ORDER BY k.ord) AS \"targetColumns\",co.convalidated AS valid,co.condeferrable OR co.condeferred AS defer,co.confupdtype AS update,co.confdeltype AS del,co.confmatchtype AS match,coalesce(pg_get_expr(co.conbin,co.conrelid),'') AS expression FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class f ON f.oid=co.confrelid LEFT JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY co.conname",[namespace,resource.table])).rows;
     const constraints=provisioningConstraints(resource,namespace);
     const enums=resource.columns.filter(c=>c.enumValues);
-    if(cons.length!==constraints.length+enums.length)return fail();
+    if(cons.length!==constraints.length+enums.length)return fail("CATALOG_4");
     for(const c of constraints){
       const actual=cons.find(x=>x.name===c.name);
-      if(!actual||!actual.valid||actual.defer||actual.kind!==c.kind||!equal(actual.columns,c.columns)||actual.target!==c.target||!equal(actual.targetColumns,c.targetColumns))return fail();
-      if(c.kind==="f"&&(actual.targetNamespace!==namespace||actual.update!=="r"||actual.del!=="r"||actual.match!=="s"))return fail();
+      if(!actual||!actual.valid||actual.defer||actual.kind!==c.kind||!equal(actual.columns,c.columns)||actual.target!==c.target||!equal(actual.targetColumns,c.targetColumns))return fail("CATALOG_5");
+      if(c.kind==="f"&&(actual.targetNamespace!==namespace||actual.update!=="r"||actual.del!=="r"||actual.match!=="s"))return fail("CATALOG_6");
       if(c.kind!=="f")expectedIndexes.push(c.name);
     }
     for(const e of enums){
       const actual=cons.find(x=>x.name===provisioningConstraintName(resource.table,"enum",e.name));
       const expression="("+e.name+" = ANY (ARRAY["+e.enumValues!.map(v=>"'"+v+"'::text").join(", ")+"]))";
-      if(!actual||actual.kind!=="c"||!actual.valid||!equal(actual.columns,[e.name])||actual.expression!==expression)return fail();
+      if(!actual||actual.kind!=="c"||!actual.valid||!equal(actual.columns,[e.name])||actual.expression!==expression)return fail("CATALOG_7");
     }
-    const ix=(await db.query<{name:string;columns:string[];unique:boolean;primary:boolean;valid:boolean;method:string;plain:boolean;options:number[]}>("SELECT i.relname AS name,ARRAY(SELECT a.attname FROM unnest(x.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,x.indisunique AS \"unique\",x.indisprimary AS \"primary\",x.indisvalid AND x.indisready AND x.indislive AS valid,am.amname AS method,x.indexprs IS NULL AND x.indpred IS NULL AND x.indnatts=x.indnkeyatts AS plain,ARRAY(SELECT unnest(x.indoption)::int) AS options FROM pg_index x JOIN pg_class c ON c.oid=x.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_am am ON am.oid=i.relam WHERE n.nspname=$1 AND c.relname=$2",[namespace,resource.table])).rows;
+    const ix=(await db.query<{name:string;columns:string[];unique:boolean;primary:boolean;valid:boolean;method:string;plain:boolean;options:number[]}>("SELECT i.relname AS name,ARRAY(SELECT a.attname::text FROM unnest(x.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,x.indisunique AS \"unique\",x.indisprimary AS \"primary\",x.indisvalid AND x.indisready AND x.indislive AS valid,am.amname AS method,x.indexprs IS NULL AND x.indpred IS NULL AND x.indnatts=x.indnkeyatts AS plain,ARRAY(SELECT unnest(x.indoption)::int) AS options FROM pg_index x JOIN pg_class c ON c.oid=x.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_am am ON am.oid=i.relam WHERE n.nspname=$1 AND c.relname=$2",[namespace,resource.table])).rows;
     const expectedIx=[...constraints.filter(c=>c.kind!=="f").map(c=>({name:c.name,columns:c.columns,unique:true,primary:c.kind==="p"})),...resource.relations.map(e=>({name:provisioningConstraintName(resource.table,"ix",e.column),columns:e.columns,unique:false,primary:false}))];
     for(const e of expectedIx)if(!e.unique)expectedIndexes.push(e.name);
-    if(ix.length!==expectedIx.length||expectedIx.some(e=>{const a=ix.find(x=>x.name===e.name);return !a||!a.valid||!a.plain||a.method!=="btree"||a.unique!==e.unique||a.primary!==e.primary||!equal(a.columns,e.columns)||a.options.some(x=>x!==0);}))return fail();
+    if(ix.length!==expectedIx.length||expectedIx.some(e=>{const a=ix.find(x=>x.name===e.name);return !a||!a.valid||!a.plain||a.method!=="btree"||a.unique!==e.unique||a.primary!==e.primary||!equal(a.columns,e.columns)||a.options.some(x=>x!==0);}))return fail("CATALOG_8");
     const policies=(await db.query<{name:string;permissive:boolean;command:string;roles:string;using:string;check:string}>("SELECT p.polname AS name,p.polpermissive AS permissive,p.polcmd AS command,p.polroles::text AS roles,pg_get_expr(p.polqual,p.polrelid) AS \"using\",pg_get_expr(p.polwithcheck,p.polrelid) AS \"check\" FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY p.polname",[namespace,resource.table])).rows;
     const expr="("+provisioningTenantExpression(t.application_id)+")";
-    if(!equal(policies,tenant?[{name:"v3_tenant_access",permissive:true,command:"*",roles:"{0}",using:"true",check:"true"},{name:"v3_tenant_boundary",permissive:false,command:"*",roles:"{0}",using:expr,check:expr}]:[]))return fail();
+    if(!equal(policies,tenant?[{name:"v3_tenant_access",permissive:true,command:"*",roles:"{0}",using:"true",check:"true"},{name:"v3_tenant_boundary",permissive:false,command:"*",roles:"{0}",using:expr,check:expr}]:[]))return fail("CATALOG_9");
     const acl=(await db.query<{edges:string[];allowed:boolean;triggers:number;badTriggers:number}>("SELECT ARRAY(SELECT (CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END)||':'||pg_get_userbyid(a.grantor)||':'||a.privilege_type||':'||a.is_grantable::text FROM aclexplode(coalesce(c.relacl,acldefault('r',c.relowner))) a ORDER BY 1) AS edges,(SELECT bool_and(has_table_privilege($3,c.oid,p)= (p IN ('SELECT','INSERT','UPDATE','DELETE')) AND NOT has_table_privilege($3,c.oid,p||' WITH GRANT OPTION')) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p) AS allowed,(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=c.oid) AS triggers,(SELECT count(*)::int FROM pg_trigger WHERE tgrelid=c.oid AND (NOT tgisinternal OR tgenabled<>'O')) AS \"badTriggers\" FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2",[namespace,resource.table,t.runtime_role])).rows[0];
     const edges=sorted([...["SELECT","INSERT","UPDATE","DELETE","TRUNCATE","REFERENCES","TRIGGER"].map(p=>t.installer_role+":"+t.installer_role+":"+p+":false"),...["SELECT","INSERT","UPDATE","DELETE"].map(p=>t.runtime_role+":"+t.installer_role+":"+p+":false")]);
     const fkTriggers=2*(resource.relations.length+resources.reduce((n,r)=>n+r.relations.filter(e=>e.table===resource.table).length,0));
-    if(!acl||!acl.allowed||!equal(acl.edges,edges)||acl.badTriggers!==0||acl.triggers!==fkTriggers)return fail();
+    if(!acl||!acl.allowed||!equal(acl.edges,edges)||acl.badTriggers!==0||acl.triggers!==fkTriggers)return fail("CATALOG_10");
   }
-  if(!equal(indexes.map(x=>x.name),sorted(expectedIndexes)))return fail();
+  if(!equal(indexes.map(x=>x.name),sorted(expectedIndexes)))return fail("CATALOG_11");
   const extras=(await db.query<{n:number}>("SELECT (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$1)+(SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname=$1 AND t.typrelid=0 AND t.typelem=0) AS n",[namespace])).rows[0];
-  if(Number(extras?.n)!==0)return fail();
+  if(Number(extras?.n)!==0)return fail("CATALOG_12");
 }
 export class ExperimentalProvisioningUnknown extends Error{constructor(){super("M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY");}}
 export async function installExperimentalRevision(connectionString:string,manifestWire:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority,faultProxyPort?:number){

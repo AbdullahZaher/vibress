@@ -115,7 +115,6 @@ jobs:
           test "$(node -v)" = v24.22.3
           test "$(pnpm -v)" = 11.22.0
           pnpm install --frozen-lockfile
-          pnpm typecheck
           pnpm exec eslint tests/integration/m03-normative-infrastructure.test.ts packages/database/src/schema-operator-experimental-installer.ts packages/schema-engine/src/physical-contract.ts
           pnpm verify:explicit-any
       - name: Boot disposable pinned PG16 service

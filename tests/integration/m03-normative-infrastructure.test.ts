@@ -192,7 +192,7 @@ it("J05: actual installer COMMIT acknowledgment loss, durable unknown, authentic
     const target=new URL(dbUrl(f.name,f.installer));target.port=String(proxy.port);
     const pending=installExperimentalRevision(target.toString(),wire(m),a.message,a.signature,f.authority,proxy.port);
     const failed=pending.then(()=>false,()=>true);
-    await proxy.serverCommitObserved;expect(await failed).toBe(true);
+    await Promise.race([proxy.serverCommitObserved,pending.then(()=>{throw Error('fault target unexpectedly succeeded');},error=>{if(!(error instanceof Error)||error.message!=="M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY")throw error;return proxy.serverCommitObserved;})]);expect(await failed).toBe(true);
     expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,provisioningOperations:[{operationId:a.e.operationId,outcome:"UNCERTAIN"}]});
     expect((await f.admin.query("SELECT revision_digest FROM public.platform_schema_revisions_v1")).rows).toEqual([{revision_digest:m.digest}]);
     await expect(apply(f,m,a)).rejects.toThrow();
