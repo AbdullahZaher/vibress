@@ -36,3 +36,16 @@ CREATE TABLE public.platform_schema_backfill_chunks_v1 (
  FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
 );
 REVOKE ALL ON public.platform_schema_backfill_chunks_v1 FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_recovery_reattestations_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ original_operation_id uuid NOT NULL REFERENCES public.platform_schema_revisions_v1(operation_id),
+ original_epoch uuid NOT NULL, new_epoch uuid PRIMARY KEY,
+ recovery_intent uuid NOT NULL UNIQUE, approval_id uuid NOT NULL UNIQUE,
+ authority_head text NOT NULL, evidence text NOT NULL, signature text NOT NULL,
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest),
+ CHECK(original_epoch<>new_epoch)
+);
+REVOKE ALL ON public.platform_schema_recovery_reattestations_v1 FROM PUBLIC;

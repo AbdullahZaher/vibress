@@ -3,7 +3,7 @@ import {createHash,generateKeyPairSync,randomBytes,randomUUID,sign} from "node:c
 import {mkdtempSync,mkdirSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
-import {fork,type ChildProcess} from "node:child_process";
+import {fork,spawnSync,type ChildProcess} from "node:child_process";
 import {build} from "esbuild";
 import {referenceQueue} from "../../apps/worker/test-fixtures/m03-normative-queue";
 import {Client,Pool} from "pg";
@@ -11,7 +11,7 @@ import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
 import {TenantUnitOfWork,verifyTenantScope} from "@vibress/tenancy";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
-import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
+import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
@@ -23,7 +23,7 @@ const credentials=generateKeyPairSync("ed25519"),adminKeys=generateKeyPairSync("
 function dbUrl(db:string,role?:string){const u=new URL(url);u.pathname="/"+db;if(role){u.username=role;u.password=password;}return u.toString();}
 function wire(m:SchemaManifest){return JSON.stringify(m);}
 async function connect(db:string,role?:string){const c=new Client({connectionString:dbUrl(db,role),connectionTimeoutMillis:4000});await c.connect();return c;}
-type Lab={name:string;reader?:string;scope:SchemaCompilationScope;installer:string;runtime:string;namespace:string;oid:string;authority:DisposableDurableRecoveryAuthority;admin:Client;pool:Pool;dir:string};
+type Lab={name:string;reader?:string;scope:SchemaCompilationScope;installer:string;runtime:string;namespace:string;oid:string;authority:DisposableDurableRecoveryAuthority;anchor:FileExperimentalRecoveryAnchor;admin:Client;pool:Pool;dir:string};
 async function lab(tag:string,app:string):Promise<Lab>{
   const name="vibress_s03_norm_"+tag+"_"+suffix,installer="v3_inst_"+tag+"_"+suffix,runtime="v3_run_"+tag+"_"+suffix;
   const scope={applicationId:asApplicationId(app),installationId:asInstallationId("installation-"+tag)};
@@ -33,8 +33,9 @@ async function lab(tag:string,app:string):Promise<Lab>{
   for(const role of [installer,runtime])await root.query("GRANT CONNECT ON DATABASE "+qi(name)+" TO "+qi(role));
   const admin=await connect(name),pool=new Pool({connectionString:dbUrl(name,runtime),max:4}),dir=mkdtempSync(path.join(tmpdir(),"m03-normative-"));
   const anchorDir=path.join(dir,"anchor");mkdirSync(anchorDir);
-  const authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,scope.installationId,name,randomUUID(),new FileExperimentalRecoveryAnchor(anchorDir,generateKeyPairSync("ed25519").privateKey),adminKeys.publicKey);
-  const f:Lab={name,scope,installer,runtime,namespace:"",oid:"",admin,pool,dir,authority};labs.push(f);
+  const anchor=new FileExperimentalRecoveryAnchor(anchorDir,generateKeyPairSync("ed25519").privateKey);
+  const authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,scope.installationId,name,randomUUID(),anchor,adminKeys.publicKey);
+  const f:Lab={name,scope,installer,runtime,namespace:"",oid:"",admin,pool,dir,authority,anchor};labs.push(f);
   await admin.query("REVOKE CREATE ON SCHEMA public FROM PUBLIC; CREATE TABLE public.platform_applications(id text PRIMARY KEY,name text NOT NULL); CREATE TABLE public.platform_installations(id text PRIMARY KEY,application_id text NOT NULL REFERENCES public.platform_applications(id),environment text NOT NULL)");
   await admin.query("INSERT INTO public.platform_applications VALUES($1,$2)",[scope.applicationId,app]);
   await admin.query("INSERT INTO public.platform_installations VALUES($1,$2,'test')",[scope.installationId,scope.applicationId]);
@@ -288,3 +289,61 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
     rmSync(apiDir,{recursive:true,force:true});rmSync(workerDir,{recursive:true,force:true});
   }
 },120000);
+
+// Reuses the actual PG16 basebackup/archived WAL/restore harness; never runs
+// in the ordinary disposable job or any non-owned environment.
+describe.skipIf(process.env.M03_NORMATIVE_PHYSICAL!=="1")("M03 normative physical reattestation",()=>{
+  it("NORM-PHY: historical signed revisions and data survive physical restore or rewind fails closed",async()=>{
+    if(process.env.GITHUB_ACTIONS!=="true"||process.env.M03_PHYSICAL_CONTAINER!=="vibress-m03-physical-ci"||process.env.M03_PHYSICAL_COMPONENT!=="1")throw Error("owned CI physical cluster required");
+    const rewind=process.env.M03_NORMATIVE_REWIND==="1";
+    const physical=(...args:string[])=>{const x=spawnSync("bash",["tests/fixtures/m03-actual-physical-cluster.sh",...args],{encoding:"utf8",timeout:120000});if(x.status!==0)throw Error("physical helper failed: "+args[0]);console.info(x.stdout.trim());};
+    const f=await lab("physical","reference-crm"),old=crm(f),next=crm(f,"website");
+    const first=approval(f,null,old);await apply(f,old,first);
+    const c=table(f,old,"customers"),uow=new TenantUnitOfWork(f.pool),id=randomUUID();
+    await uow.run(scope(f,"tenant-a"),tx=>tx.query("INSERT INTO "+c+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'old','Original')",[id]));
+    physical("backup");
+    await root.query("SELECT pg_create_restore_point('vibress_component_padding')");await root.query("SELECT pg_switch_wal()");
+    const target=async()=>(await root.query<{segment:string}>("SELECT pg_walfile_name(pg_create_restore_point('vibress_component_target')) AS segment")).rows[0]!.segment;
+    let segment=rewind?await target():"";
+    const second=approval(f,old,next);await apply(f,next,second);
+    await uow.run(scope(f,"tenant-a"),tx=>tx.query("UPDATE "+c+" SET website='preserved' WHERE id=$1",[id]));
+    const history=(await f.admin.query("SELECT revision_digest,operation_id,authority_epoch FROM public.platform_schema_revisions_v1 ORDER BY applied_at")).rows;
+    // Quiescent before signed observation. Root connects to the maintenance DB.
+    await f.pool.end();await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    f.authority.beginRecovery();
+    const checkpoint=await collectExperimentalProvisioningCheckpoint(f.admin,f.authority.authenticatedSnapshot().provisioningOperations!,second.e.operationId);
+    const checkpointWire=JSON.stringify(checkpoint);
+    const authorize=(action:string,message:string)=>sign(null,recoveryAdministrationMessage(f.authority.snapshot(),action,message),adminKeys.privateKey).toString("base64url");
+    await f.authority.recordExperimentalProvisioningCheckpoint(f.admin,checkpointWire,authorize("PROVISIONING_CHECKPOINT_V1",checkpointWire));
+    if(!rewind)segment=await target();
+    await root.query("SELECT pg_switch_wal()");physical("archive",segment);
+    const prior=f.authority.authenticatedSnapshot();
+    f.authority.close();await f.admin.end();await root.end();
+    physical("restore","");
+    root=await connect("vibress");
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");
+    f.admin=await connect(f.name);f.pool=new Pool({connectionString:dbUrl(f.name,f.runtime),max:1});
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);
+    expect(f.authority.authenticatedSnapshot()).toEqual(prior);
+    if(rewind){
+      expect((await f.admin.query("SELECT count(*)::int AS n FROM public.platform_schema_revisions_v1")).rows).toEqual([{n:1}]);
+      await expect(collectExperimentalProvisioningCheckpoint(f.admin,prior.provisioningOperations!,second.e.operationId,true)).rejects.toThrow();
+      expect(f.authority.authenticatedSnapshot().pending).toBe(true);
+      console.info("M03_J06_PHYSICAL_REWIND_REFUSED=PASS");return;
+    }
+    const observed=await collectExperimentalProvisioningCheckpoint(f.admin,prior.provisioningOperations!,second.e.operationId,true);
+    expect(observed.timeline).toBeGreaterThan(checkpoint.timeline);
+    const newEpoch=randomUUID(),approvalId=randomUUID(),good=JSON.stringify({version:1,newEpoch,approvalId,intent:prior.intent,previous:checkpoint,observed});
+    await expect(f.authority.reattestExperimentalProvisioningRecovery(f.admin,good,"A".repeat(86))).rejects.toThrow();
+    const wrong=JSON.stringify({version:1,newEpoch,approvalId,intent:prior.intent,previous:checkpoint,observed:{...observed,databaseOid:"1"}});
+    await expect(f.authority.reattestExperimentalProvisioningRecovery(f.admin,wrong,authorize("PROVISIONING_REATTEST_V1",wrong))).rejects.toThrow();
+    await f.authority.reattestExperimentalProvisioningRecovery(f.admin,good,authorize("PROVISIONING_REATTEST_V1",good));
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,epoch:newEpoch,provisioningOperations:prior.provisioningOperations});
+    expect((await f.admin.query("SELECT revision_digest,operation_id,authority_epoch FROM public.platform_schema_revisions_v1 ORDER BY applied_at")).rows).toEqual(history);
+    expect((await f.admin.query("SELECT original_epoch,new_epoch,original_operation_id FROM public.platform_schema_recovery_reattestations_v1")).rows).toEqual([{original_epoch:checkpoint.epoch,new_epoch:newEpoch,original_operation_id:second.e.operationId}]);
+    await expect(f.authority.reattestExperimentalProvisioningRecovery(f.admin,good,authorize("PROVISIONING_REATTEST_V1",good))).rejects.toThrow();
+    const after=f.authority.authenticatedSnapshot();f.authority.close();f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);expect(f.authority.authenticatedSnapshot()).toEqual(after);
+    console.info("M03_J06_PHYSICAL_REATTESTATION=PASS");
+  },300000);
+});

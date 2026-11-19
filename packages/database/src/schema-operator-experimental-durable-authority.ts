@@ -14,7 +14,7 @@ import type { ClientBase } from "pg";
 import { TenantUnitOfWork,type ScopedTransaction,type VerifiedScope } from "@vibress/tenancy";
 import { verifyExperimentalAdmissionConnection,type ExperimentalAdmissionTarget } from "./schema-operator-experimental-admission";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
-import { collectExperimentalProvisioningCommit,type ProvisioningCommitEvidence } from "./schema-operator-experimental-installer";
+import { collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,persistExperimentalProvisioningReattestation,type ProvisioningCommitEvidence } from "./schema-operator-experimental-installer";
 import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -46,6 +46,8 @@ type Event =
   | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
   | { kind:"PROVISIONING_ADMIT"; admission:ExperimentalProvisioningAdmission }
   | { kind:"PROVISIONING_OUTCOME"; operationId:string; outcome:"COMMITTED"|"ROLLED_BACK"|"UNCERTAIN"; evidenceDigest?:string }
+  | { kind:"PROVISIONING_CHECKPOINT"; evidence:ProvisioningCommitEvidence }
+  | { kind:"PROVISIONING_REATTEST"; newEpoch:string; approvalId:string; intent:string; observed:ProvisioningCommitEvidence; evidenceDigest:string }
   | { kind: "BUSINESS_ADMIT"; lease: string; epoch:string }
   | { kind: "BUSINESS_SETTLED"; lease:string; outcome:"COMMITTED"|"ROLLED_BACK" }
   | { kind: "INTENT"; intent: string }
@@ -53,7 +55,7 @@ type Event =
   | { kind: "ADVANCE_V2"; epoch:string; evidenceDigest:string; scopedTarget:ScopedRecoveryTarget }
   | { kind: "READY"|"READY_V2"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation>; provisioning?:Map<string,ProvisioningOperation> };
+  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation>; provisioning?:Map<string,ProvisioningOperation>; provisioningCheckpoint?:ProvisioningCommitEvidence; provisioningReattestation?:{newEpoch:string;approvalId:string;intent:string;observed:ProvisioningCommitEvidence;evidenceDigest:string} };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -134,6 +136,22 @@ function reduce(s: State|undefined,e: Event): State {
         (p.outcome==="UNCERTAIN"&&(e.outcome!=="COMMITTED"||!s.pending||!e.evidenceDigest))||
         !["COMMITTED","ROLLED_BACK","UNCERTAIN"].includes(e.outcome)||(e.evidenceDigest!==undefined&&!SHA.test(e.evidenceDigest)))return refuse();
       next.provisioning=new Map(history);next.provisioning.set(p.operationId,{...p,outcome:e.outcome});break;
+    }
+    case "PROVISIONING_CHECKPOINT": {
+      const p=[...(s.provisioning?.values()??[])].filter(o=>o.outcome==="COMMITTED").at(-1),v=e.evidence;
+      if(!s.pending||!s.intent||s.businessLease||s.provisioningCheckpoint||s.provisioningReattestation||!p||
+        [...s.provisioning!.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")||v.operationId!==p.operationId||v.revision!==p.manifestDigest||v.physicalDigest!==p.physicalDigest||
+        v.epoch!==s.epoch||v.installationId!==s.installationId||v.databaseName!==s.databaseName||v.databaseOid!==p.databaseOid||!SHA.test(v.historyDigest)||!Object.values(v.dataDigests).every(d=>SHA.test(d)))return refuse();
+      next.provisioningCheckpoint=JSON.parse(JSON.stringify(v)) as ProvisioningCommitEvidence;break;
+    }
+    case "PROVISIONING_REATTEST": {
+      const old=s.provisioningCheckpoint,v=e.observed;
+      if(!s.pending||!old||s.provisioningReattestation||e.intent!==s.intent||!UUID.test(e.approvalId)||!UUID.test(e.newEpoch)||s.epochs.includes(e.newEpoch)||!SHA.test(e.evidenceDigest)||
+        v.timeline<=old.timeline||JSON.stringify({...v,timeline:old.timeline})!==JSON.stringify(old))return refuse();
+      next.epoch=e.newEpoch;next.epochs.push(e.newEpoch);
+      next.provisioningReattestation={newEpoch:e.newEpoch,approvalId:e.approvalId,intent:e.intent,observed:JSON.parse(JSON.stringify(v)) as ProvisioningCommitEvidence,evidenceDigest:e.evidenceDigest};
+      // Deliberately not READY. No new provisioning or business admission.
+      break;
     }
     case "BUSINESS_SETTLED":
       if(!s.businessLease||s.businessLease!==e.lease||!["COMMITTED","ROLLED_BACK"].includes(e.outcome))return refuse();
@@ -421,6 +439,8 @@ export class DisposableDurableRecoveryAuthority {
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
       epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.businessLease?{businessLease:s.businessLease}:{}),...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
       ...(s.provisioning?{provisioningOperations:[...s.provisioning.values()].map(p=>({...p}))}:{}),
+      ...(s.provisioningCheckpoint?{provisioningCheckpoint:JSON.parse(JSON.stringify(s.provisioningCheckpoint)) as ProvisioningCommitEvidence}:{}),
+      ...(s.provisioningReattestation?{provisioningReattestation:JSON.parse(JSON.stringify(s.provisioningReattestation)) as NonNullable<State["provisioningReattestation"]>}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
   authenticatedSnapshot(){this.assertAnchor();return this.snapshot();}
@@ -618,6 +638,33 @@ export class DisposableDurableRecoveryAuthority {
     if(JSON.stringify(observed)!==input||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
     this.requireAdministration("PROVISIONING_OBSERVED_COMMIT_V1",input,signature);
     this.append({kind:"PROVISIONING_OUTCOME",operationId:p.operationId,outcome:"COMMITTED",evidenceDigest:createHash("sha256").update(input).digest("hex")});
+  }
+  async recordExperimentalProvisioningCheckpoint(db:ClientBase,input:string,signature:string):Promise<void>{
+    const s=this.current();
+    if(process.env.NODE_ENV!=="test"||!s.pending||!s.intent||s.provisioningCheckpoint||s.provisioningReattestation||this.fences.size||typeof input!=="string"||input.length>1024*1024)return refuse();
+    const snapshot=this.authenticatedSnapshot(),operations=snapshot.provisioningOperations??[],last=operations.filter(o=>o.outcome==="COMMITTED").at(-1);
+    if(!last)return refuse();
+    this.requireAdministration("PROVISIONING_CHECKPOINT_V1",input,signature);
+    const actual=await collectExperimentalProvisioningCheckpoint(db,operations,last.operationId);
+    if(JSON.stringify(actual)!==input||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
+    this.requireAdministration("PROVISIONING_CHECKPOINT_V1",input,signature);
+    this.append({kind:"PROVISIONING_CHECKPOINT",evidence:actual});
+  }
+  async reattestExperimentalProvisioningRecovery(db:ClientBase,input:string,signature:string):Promise<void>{
+    const s=this.current();
+    if(process.env.NODE_ENV!=="test"||!s.pending||!s.intent||!s.provisioningCheckpoint||s.provisioningReattestation||this.fences.size||typeof input!=="string"||input.length>1024*1024)return refuse();
+    const parsed:unknown=JSON.parse(input);
+    if(!parsed||typeof parsed!=="object"||!("newEpoch" in parsed)||typeof parsed.newEpoch!=="string"||!UUID.test(parsed.newEpoch)||s.epochs.includes(parsed.newEpoch)||!("approvalId" in parsed)||typeof parsed.approvalId!=="string"||!UUID.test(parsed.approvalId))return refuse();
+    const old=s.provisioningCheckpoint,snapshot=this.authenticatedSnapshot(),intent=s.intent;
+    this.requireAdministration("PROVISIONING_REATTEST_V1",input,signature);
+    const actual=await collectExperimentalProvisioningCheckpoint(db,snapshot.provisioningOperations??[],old.operationId,true);
+    const canonical=JSON.stringify({version:1,newEpoch:parsed.newEpoch,approvalId:parsed.approvalId,intent,previous:old,observed:actual});
+    if(canonical!==input||actual.timeline<=old.timeline||JSON.stringify({...actual,timeline:old.timeline})!==JSON.stringify(old)||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
+    this.requireAdministration("PROVISIONING_REATTEST_V1",input,signature);
+    await persistExperimentalProvisioningReattestation(db,old,actual,parsed.newEpoch,intent,parsed.approvalId,snapshot.head,input,signature);
+    if(JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
+    this.requireAdministration("PROVISIONING_REATTEST_V1",input,signature);
+    this.append({kind:"PROVISIONING_REATTEST",newEpoch:parsed.newEpoch,approvalId:parsed.approvalId,intent,observed:actual,evidenceDigest:createHash("sha256").update(input).digest("hex")});
   }
   async execute(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,
     budget=new ExperimentalD1Budget(),captureRollbackWitness=false):Promise<SchemaOperatorResult>{

@@ -244,7 +244,7 @@ async function verifyProvisioningHistory(db:ClientBase,t:Trust,operations:readon
 export interface ProvisioningCommitEvidence{
   version:1;operationId:string;databaseName:string;databaseOid:string;systemIdentifier:string;timeline:number;installationId:string;epoch:string;revision:string;physicalDigest:string;historyDigest:string;dataDigests:Record<string,string>;
 }
-export async function collectExperimentalProvisioningCommit(db:ClientBase,operations:readonly HistoryOperation[],operationId:string):Promise<ProvisioningCommitEvidence>{
+async function collectProvisioningEvidence(db:ClientBase,operations:readonly HistoryOperation[],operationId:string,mode:"COMMIT"|"CHECKPOINT"|"RESTORED"):Promise<ProvisioningCommitEvidence>{
   const id=await identity(db);
   if(!id.superuser)return fail();
   const quiescent=async()=>{
@@ -255,10 +255,11 @@ export async function collectExperimentalProvisioningCommit(db:ClientBase,operat
   try{
     await db.query("SET LOCAL search_path=pg_catalog");
     const before=await quiescent(),trustRows=(await db.query<Trust>("SELECT * FROM public.platform_schema_installation_trust_v1")).rows,t=trustRows[0],op=operations.find(o=>o.operationId===operationId);
-    if(trustRows.length!==1||!t||!op||op.outcome!=="UNCERTAIN"||t.database_name!==id.name||t.database_oid!==id.oid||t.system_identifier!==before.system||t.timeline!==before.timeline||
+    if(trustRows.length!==1||!t||!op||op.outcome!==(mode==="COMMIT"?"UNCERTAIN":"COMMITTED")||t.database_name!==id.name||t.database_oid!==id.oid||t.system_identifier!==before.system||(mode==="RESTORED"?before.timeline<=t.timeline:t.timeline!==before.timeline)||
       t.installation_id!==op.installationId||t.epoch!==op.epoch||t.application_id!==op.applicationId)return fail();
     await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
-    const rows=await verifyProvisioningHistory(db,t,operations,operationId),last=rows.find(r=>r.operation_id===operationId);
+    const rows=await verifyProvisioningHistory(db,t,operations,mode==="COMMIT"?operationId:undefined),last=rows.at(-1);
+    if(last?.operation_id!==operationId)return fail();
     if(!last)return fail();
     const manifest=parseSchemaManifest(JSON.parse(last.manifest)),physical=compileProvisioningContract(manifest,scopeOf(t));
     const head=(await db.query<{manifest_digest:string;manifest:string}>("SELECT manifest_digest,manifest FROM public.platform_schema_registry")).rows;
@@ -274,6 +275,31 @@ export async function collectExperimentalProvisioningCommit(db:ClientBase,operat
     if(!equal(before,await quiescent()))return fail();
     await db.query("COMMIT");
     return {version:1,operationId,databaseName:id.name,databaseOid:id.oid,systemIdentifier:before.system,timeline:before.timeline,installationId:t.installation_id,epoch:t.epoch,revision:manifest.digest,physicalDigest:physical.digest,historyDigest:hash(JSON.stringify(rows.map(r=>[r.revision_digest,r.operation_id,r.signature,r.parent_digest]))),dataDigests};
+  }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
+}
+
+export function collectExperimentalProvisioningCommit(db:ClientBase,operations:readonly HistoryOperation[],operationId:string){
+  return collectProvisioningEvidence(db,operations,operationId,"COMMIT");
+}
+export function collectExperimentalProvisioningCheckpoint(db:ClientBase,operations:readonly HistoryOperation[],operationId:string,restored=false){
+  if(operations.some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))return fail("UNSETTLED_PROVISIONING");
+  return collectProvisioningEvidence(db,operations,operationId,restored?"RESTORED":"CHECKPOINT");
+}
+/** Persist only a historical reattestation. No READY, runtime grant, legacy
+ * operator permission, or rewrite of the original signed revision. The
+ * external authority remains PENDING on any split/unknown outcome.
+ */
+export async function persistExperimentalProvisioningReattestation(db:ClientBase,old:ProvisioningCommitEvidence,restored:ProvisioningCommitEvidence,newEpoch:string,intent:string,approvalId:string,authorityHead:string,evidenceWire:string,signature:string){
+  const id=await identity(db);
+  if(!id.superuser||id.name!==restored.databaseName||id.oid!==restored.databaseOid||!uuid.test(newEpoch)||newEpoch===old.epoch)return fail();
+  await db.query("BEGIN");
+  try{
+    await db.query("SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='10s'");
+    const fence=(await db.query<{allow:boolean;others:number;prepared:number;system:string;timeline:number}>("SELECT d.datallowconn AS allow,(SELECT count(*)::int FROM pg_stat_activity WHERE datid=d.oid AND pid<>pg_backend_pid()) AS others,(SELECT count(*)::int FROM pg_prepared_xacts WHERE database=current_database()) AS prepared,(pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database d WHERE d.datname=current_database()")).rows[0];
+    if(!fence||fence.allow||fence.others||fence.prepared||fence.system!==restored.systemIdentifier||fence.timeline!==restored.timeline)return fail("REATTESTATION_FENCE");
+    if((await db.query("UPDATE public.platform_schema_installation_trust_v1 SET epoch=$1,timeline=$2 WHERE installation_id=$3 AND epoch=$4 AND timeline=$5 AND database_oid=$6 AND system_identifier=$7 AND NOT revoked",[newEpoch,restored.timeline,restored.installationId,old.epoch,old.timeline,restored.databaseOid,restored.systemIdentifier])).rowCount!==1)return fail("REATTES_STALE_TRUST");
+    await db.query("INSERT INTO public.platform_schema_recovery_reattestations_v1(installation_id,revision_digest,original_operation_id,original_epoch,new_epoch,recovery_intent,approval_id,authority_head,evidence,signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[restored.installationId,restored.revision,restored.operationId,old.epoch,newEpoch,intent,approvalId,authorityHead,evidenceWire,signature]);
+    if((await db.query("COMMIT")).command!=="COMMIT")throw new ExperimentalProvisioningUnknown();
   }catch(error){await db.query("ROLLBACK").catch(()=>undefined);throw error;}
 }
 
