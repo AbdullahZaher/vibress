@@ -18,6 +18,8 @@ const metadata:Record<string,Policy>={
   platform_schema_backfill_chunks_v1:{installer:["SELECT","INSERT"]},
   platform_schema_recovery_reattestations_v1:{},
   platform_schema_business_witnesses_v1:{runtimeColumns:{INSERT:["operation_id","evidence","signature"]}},
+  platform_schema_revision_states_v1:{installer:["SELECT","INSERT"],installerColumns:{UPDATE:["state","state_version","operation_id","approval_id","authority_epoch","authority_head","authority_sequence","actor","updated_at"]}},
+  platform_schema_state_transitions_v1:{installer:["INSERT"]},
   platform_schema_plans:{},
   platform_schema_approvals:{},
   platform_schema_migration_journal:{}

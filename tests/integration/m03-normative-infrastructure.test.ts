@@ -20,6 +20,7 @@ import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type Busi
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
+import {recordExperimentalLifecycleTransition,type LifecycleState} from "../../packages/database/src/schema-operator-experimental-registry-lifecycle";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex");
 const rolePasswords=new Map<string,string>();
@@ -67,7 +68,26 @@ function approval(f:Lab,before:SchemaManifest|null,next:SchemaManifest,overrides
   const message=provisioningApprovalMessage(e);
   return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
 }
-const apply=(f:Lab,m:SchemaManifest,a:ReturnType<typeof approval>)=>installExperimentalRevision(dbUrl(f.name,f.installer),wire(m),a.message,a.signature,f.authority);
+const transition=(f:Lab,m:SchemaManifest,a:ReturnType<typeof approval>,expectedState:LifecycleState|null,nextState:LifecycleState,actor="fixture-operator",epoch=a.e.epoch)=>recordExperimentalLifecycleTransition(f.admin,{installationId:f.scope.installationId,revisionDigest:m.digest,expectedState,nextState,operationId:a.e.operationId,approvalId:a.e.approvalId,epoch,head:a.e.authorityHead,sequence:a.e.authoritySequence,actor});
+const prepareLifecycle=async(f:Lab,m:SchemaManifest,a:ReturnType<typeof approval>)=>{
+  // Concurrent apply() calls must not interleave BEGIN/COMMIT on the shared
+  // fixture client, so preparation uses its own root session.
+  const c=await connect(f.name);
+  try{
+    const row=(await c.query<{state:LifecycleState}>("SELECT state FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,m.digest])).rows[0];
+    if(row)return;
+    await c.query("BEGIN");
+    try{
+      let current:LifecycleState|null=null;
+      for(const next of ["PROPOSED","VALIDATED","APPROVED"] as const){
+        await recordExperimentalLifecycleTransition(c,{installationId:f.scope.installationId,revisionDigest:m.digest,expectedState:current,nextState:next,operationId:a.e.operationId,approvalId:a.e.approvalId,epoch:a.e.epoch,head:a.e.authorityHead,sequence:a.e.authoritySequence,actor:"fixture-operator"});
+        current=next;
+      }
+      await c.query("COMMIT");
+    }catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}
+  }finally{await c.end();}
+};
+const apply=async(f:Lab,m:SchemaManifest,a:ReturnType<typeof approval>)=>{await prepareLifecycle(f,m,a);return installExperimentalRevision(dbUrl(f.name,f.installer),wire(m),a.message,a.signature,f.authority);};
 const check=(f:Lab,m:SchemaManifest)=>verifyExperimentalProvisionedCatalog(dbUrl(f.name,f.installer),wire(m),f.authority);
 const table=(f:Lab,m:SchemaManifest,id:string)=>qi(f.namespace)+"."+qi(m.resources.find(x=>x.id===id)!.tableName);
 function scope(f:Lab,tenant:string){
@@ -192,6 +212,60 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(tombstone).toEqual([{deleted:true}]);
     expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
     console.info("M03_A02_VERSION_CAS_SOFT_DELETE_KEYSET=PASS");
+  },60000);
+  it("B01: persistent lifecycle CAS, immutable history, installer refusal, DB_COMMITTED vs ACTIVE, concurrency and supersession",async()=>{
+    const f=await lab("lifecycle","reference-lifecycle"),m=crm(f),a=approval(f,null,m);
+    const life=(digest:string)=>f.admin.query<{state:LifecycleState;state_version:number}>("SELECT state,state_version FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,digest]).then(r=>r.rows[0]);
+    const history=(digest:string)=>f.admin.query<{from_state:LifecycleState|null;to_state:LifecycleState;state_version:number}>("SELECT from_state,to_state,state_version FROM public.platform_schema_state_transitions_v1 WHERE installation_id=$1 AND revision_digest=$2 ORDER BY id",[f.scope.installationId,digest]).then(r=>r.rows);
+    await f.admin.query("BEGIN");
+    try{
+      expect(await transition(f,m,a,null,"PROPOSED")).toEqual({state:"PROPOSED",version:1});
+      await expect(transition(f,m,a,"PROPOSED","ACTIVE")).rejects.toThrow("M03_LIFECYCLE_REFUSED:ILLEGAL_TRANSITION");
+      await expect(transition(f,m,a,null,"PROPOSED")).rejects.toThrow("M03_LIFECYCLE_REFUSED:EXISTS");
+      await expect(transition(f,m,a,"PROPOSED","VALIDATED",undefined,randomUUID())).rejects.toThrow();
+    }finally{await f.admin.query("ROLLBACK");}
+    expect(await life(m.digest)).toBeUndefined();
+    await f.admin.query("BEGIN");
+    await transition(f,m,a,null,"PROPOSED");await f.admin.query("COMMIT");
+    await f.admin.query("BEGIN");
+    await transition(f,m,a,"PROPOSED","VALIDATED");
+    await transition(f,m,a,"VALIDATED","APPROVED");await f.admin.query("COMMIT");
+    expect(await life(m.digest)).toEqual({state:"APPROVED",state_version:3});
+    await expect(apply(f,m,a)).resolves.toMatchObject({status:"ACTIVE",revision:m.digest});
+    // The installer itself refuses a revision that was never operator-approved.
+    const unapproved=crm(f,"phone"),b=approval(f,m,unapproved);
+    await expect(installExperimentalRevision(dbUrl(f.name,f.installer),wire(unapproved),b.message,b.signature,f.authority)).rejects.toThrow("M03_LIFECYCLE_REFUSED");
+    expect(await life(m.digest)).toEqual({state:"ACTIVE",state_version:6});
+    expect((await history(m.digest)).map(x=>[x.from_state,x.to_state])).toEqual([[null,"PROPOSED"],["PROPOSED","VALIDATED"],["VALIDATED","APPROVED"],["APPROVED","PROVISIONING"],["PROVISIONING","DB_COMMITTED"],["DB_COMMITTED","ACTIVE"]]);
+    await expect(transition(f,m,a,"APPROVED","PROVISIONING")).rejects.toThrow("M03_LIFECYCLE_REFUSED:STALE");
+    // One concurrent CAS winner from the same predecessor state.
+    const race=crm(f,"notes"),r=approval(f,m,race);
+    await prepareLifecycle(f,race,r);
+    const other=await connect(f.name);
+    try{
+      const run=async(c:Client)=>{await c.query("BEGIN");try{const result=await recordExperimentalLifecycleTransition(c,{installationId:f.scope.installationId,revisionDigest:race.digest,expectedState:"APPROVED",nextState:"PROVISIONING",operationId:r.e.operationId,approvalId:r.e.approvalId,epoch:r.e.epoch,head:r.e.authorityHead,sequence:r.e.authoritySequence,actor:"race"});await c.query("COMMIT");return result;}catch(error){await c.query("ROLLBACK").catch(()=>undefined);throw error;}};
+      const results=await Promise.allSettled([run(f.admin),run(other)]);
+      expect(results.filter(x=>x.status==="fulfilled").length,JSON.stringify(results.map(x=>x.status==="fulfilled"?"ok":String((x as PromiseRejectedResult).reason?.message)))).toBe(1);
+      expect(results.find(x=>x.status==="rejected")).toMatchObject({reason:{message:"M03_LIFECYCLE_REFUSED:STALE"}});
+    }finally{await other.end();}
+    // Real upgrade: new ACTIVE, parent superseded, history retained.
+    const next=crm(f,"website"),n=approval(f,m,next);
+    await apply(f,next,n);
+    expect(await life(m.digest)).toEqual({state:"SUPERSEDED",state_version:7});
+    expect(await life(next.digest)).toEqual({state:"ACTIVE",state_version:6});
+    expect((await history(m.digest)).at(-1)).toMatchObject({from_state:"ACTIVE",to_state:"SUPERSEDED",state_version:7});
+    // Operator revocation is authenticated, append-only and terminal.
+    await f.admin.query("BEGIN");
+    await transition(f,next,n,"ACTIVE","REVOKED","fixture-security");
+    await f.admin.query("COMMIT");
+    await expect(transition(f,next,n,"REVOKED","ACTIVE")).rejects.toThrow("M03_LIFECYCLE_REFUSED:ILLEGAL_TRANSITION");
+    expect(await life(next.digest)).toEqual({state:"REVOKED",state_version:7});
+    await expect(f.admin.query("UPDATE public.platform_schema_state_transitions_v1 SET to_state='ACTIVE'")).rejects.toThrow("M03_LIFECYCLE_HISTORY_IMMUTABLE");
+    await expect(f.admin.query("DELETE FROM public.platform_schema_state_transitions_v1")).rejects.toThrow("M03_LIFECYCLE_HISTORY_IMMUTABLE");
+    // Runtime role cannot read or mutate lifecycle state.
+    await expect(f.pool.query("SELECT * FROM public.platform_schema_revision_states_v1")).rejects.toMatchObject({code:"42501"});
+    await expect(f.pool.query("SELECT * FROM public.platform_schema_state_transitions_v1")).rejects.toMatchObject({code:"42501"});
+    console.info("M03_B01_LIFECYCLE_CAS_HISTORY_SUPERSESSION=PASS");
   },60000);
   it("C05/J03: portable content and migration identity across actual dedicated installs and additive upgrades",async()=>{
     const a=await lab("portablea","reference-portable-a"),b=await lab("portableb","reference-portable-b");
@@ -456,6 +530,7 @@ describe("M03 actual isolated normative infrastructure",()=>{
 it("J05: actual installer COMMIT acknowledgment loss, durable unknown, authenticated exact committed evidence",async()=>{
   const f=await lab("fault","reference-fault"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true}]}],f.scope)),a=approval(f,null,m);
   const proxy=await startTransactionAckFaultProxy("COMMIT","DROP");void proxy.serverCommitObserved.catch(()=>undefined);
+  await prepareLifecycle(f,m,a);
   // The owned lab's proxy listens on an ephemeral loopback port. The installer
   // normally requires 5433, so this is explicitly enabled only in test fixture.
   try{

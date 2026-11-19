@@ -25,7 +25,7 @@ import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operat
 import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,collectDisposableRollbackEvidence,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
 import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
 import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
-import { retireDisposableIdentity, completeDisposableIdentity } from "../../packages/database/src/schema-operator-experimental-lifecycle";
+import { retireDisposableIdentity, completeDisposableIdentity } from "../../packages/database/src/schema-operator-experimental-identity-lifecycle";
 import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
 import { DisposableDurableRecoveryAuthority, recoveryAdministrationMessage } from "../../packages/database/src/schema-operator-experimental-durable-authority";
 

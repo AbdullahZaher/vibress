@@ -6,6 +6,7 @@ import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
 import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
+import {recordExperimentalLifecycleTransition} from "./schema-operator-experimental-registry-lifecycle";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
 const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
 const hash=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
@@ -65,8 +66,9 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT USAGE ON SCHEMA "+qi(namespace)+" TO "+qi(runtime));
     const physical=(await db.query<{system:string;timeline:number}>("SELECT (pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline")).rows[0]!;
     await db.query("INSERT INTO public.platform_schema_installation_trust_v1(installation_id,application_id,database_name,database_oid,system_identifier,timeline,namespace,installer_role,runtime_role,approval_key,approval_key_digest,epoch,ledger_id,profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[target.installationId,target.applicationId,id.name,id.oid,physical.system,physical.timeline,namespace,installer,runtime,keyBytes.toString("base64"),keyDigest,state.epoch,state.ledgerId,PROVISIONING_PROFILE]);
-    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
-    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
+    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_revision_states_v1 TO "+qi(installer));
+    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 TO "+qi(installer));
+    await db.query("GRANT UPDATE(state,state_version,operation_id,approval_id,authority_epoch,authority_head,authority_sequence,actor,updated_at) ON public.platform_schema_revision_states_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(manifest,manifest_digest,updated_at) ON public.platform_schema_registry TO "+qi(installer));
     await db.query("GRANT SELECT(installation_id,application_id,database_name,database_oid,system_identifier,timeline,epoch,ledger_id,profile,revoked,runtime_role,approval_key,approval_key_digest) ON public.platform_schema_installation_trust_v1 TO "+qi(runtime));
     await db.query("GRANT SELECT(installation_id,manifest_digest) ON public.platform_schema_registry TO "+qi(runtime));
@@ -223,6 +225,7 @@ export async function installExperimentalRevision(connectionString:string,manife
     if(plan.digest!==e.planDigest||plan.physical.digest!==e.physicalDigest)return fail();
     await verifyCatalog(db,t,previous?compileProvisioningContract(previous,scope):null);
     if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
+    await recordExperimentalLifecycleTransition(db,{installationId:t.installation_id,revisionDigest:manifest.digest,expectedState:"APPROVED",nextState:"PROVISIONING",operationId:e.operationId,approvalId:e.approvalId,epoch:e.epoch,head:e.authorityHead,sequence:e.authoritySequence,actor:t.installer_role});
     const admission:ExperimentalProvisioningAdmission={operationId:e.operationId,approvalId:e.approvalId,epoch:e.epoch,applicationId:e.applicationId,installationId:e.installationId,databaseName:e.databaseName,databaseOid:e.databaseOid,approvalHead:e.authorityHead,approvalSequence:e.authoritySequence,planDigest:e.planDigest,physicalDigest:e.physicalDigest,manifestDigest:e.manifestDigest,parent:e.parent,signedDigest:hash(JSON.stringify([approvalWire,signature]))};
     authority.admitExperimentalProvisioning(admission);admitted=true;
     for(const statement of plan.statements){authority.checkExperimentalProvisioning(e.operationId);await db.query(statement);}
@@ -234,10 +237,22 @@ export async function installExperimentalRevision(connectionString:string,manife
     if(!head)await db.query("INSERT INTO public.platform_schema_registry(installation_id,application_id,environment,database_name,operator_role,runtime_role,manifest,manifest_digest) VALUES($1,$2,'test',$3,$4,$5,$6,$7)",[t.installation_id,t.application_id,t.database_name,t.installer_role,t.runtime_role,manifestWire,manifest.digest]);
     else if((await db.query("UPDATE public.platform_schema_registry SET manifest=$1,manifest_digest=$2,updated_at=clock_timestamp() WHERE installation_id=$3 AND manifest_digest=$4",[manifestWire,manifest.digest,t.installation_id,e.parent])).rowCount!==1)return fail();
     await db.query("INSERT INTO public.platform_schema_revisions_v1(installation_id,revision_digest,parent_digest,manifest,physical_digest,plan_digest,operation_id,approval_id,authority_epoch,authority_head,authority_sequence,signer_digest,signed_evidence,signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[t.installation_id,manifest.digest,e.parent,manifestWire,e.physicalDigest,e.planDigest,e.operationId,e.approvalId,e.epoch,e.authorityHead,e.authoritySequence,t.approval_key_digest,approvalWire,signature]);
+    await recordExperimentalLifecycleTransition(db,{installationId:t.installation_id,revisionDigest:manifest.digest,expectedState:"PROVISIONING",nextState:"DB_COMMITTED",operationId:e.operationId,approvalId:e.approvalId,epoch:e.epoch,head:e.authorityHead,sequence:e.authoritySequence,actor:t.installer_role});
     await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
     authority.checkExperimentalProvisioning(e.operationId);if(transportFailed)return fail();
     commitDispatched=true;
     if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
+    try{
+      await db.query("BEGIN");
+      await recordExperimentalLifecycleTransition(db,{installationId:t.installation_id,revisionDigest:manifest.digest,expectedState:"DB_COMMITTED",nextState:"ACTIVE",operationId:e.operationId,approvalId:e.approvalId,epoch:e.epoch,head:e.authorityHead,sequence:e.authoritySequence,actor:t.installer_role});
+      if(e.parent!==null)await recordExperimentalLifecycleTransition(db,{installationId:t.installation_id,revisionDigest:e.parent,expectedState:"ACTIVE",nextState:"SUPERSEDED",operationId:e.operationId,approvalId:e.approvalId,epoch:e.epoch,head:e.authorityHead,sequence:e.authoritySequence,actor:t.installer_role});
+      if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw Error("M03_LIFECYCLE_ACTIVATION_UNKNOWN");
+    }catch(error){
+      await db.query("ROLLBACK").catch(()=>undefined);
+      await db.end();ended=true;
+      authority.settleExperimentalProvisioning(e.operationId,"COMMITTED");admitted=false;
+      throw error;
+    }
     await db.end();ended=true;
     authority.settleExperimentalProvisioning(e.operationId,"COMMITTED");admitted=false;
     return {status:"ACTIVE" as const,revision:manifest.digest,operationId:e.operationId,physicalDigest:e.physicalDigest,planDigest:e.planDigest};
@@ -260,6 +275,8 @@ export async function verifyExperimentalProvisionedCatalog(connectionString:stri
     await db.connect();await db.query("BEGIN READ ONLY");await db.query("SET LOCAL search_path=pg_catalog");
     const t=await loadTrust(db),physical=compileProvisioningContract(manifest,scopeOf(t));
     if((await db.query("SELECT 1 FROM public.platform_schema_registry r JOIN public.platform_schema_revisions_v1 v ON v.installation_id=r.installation_id AND v.revision_digest=r.manifest_digest WHERE r.installation_id=$1 AND r.manifest_digest=$2 AND v.manifest=$3 AND v.physical_digest=$4",[t.installation_id,manifest.digest,manifestWire,physical.digest])).rowCount!==1)return fail();
+    // Only a revision that reached global ACTIVE admission is a valid head.
+    if((await db.query("SELECT 1 FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2 AND state='ACTIVE'",[t.installation_id,manifest.digest])).rowCount!==1)return fail("LIFECYCLE");
     const state=authority.authenticatedSnapshot();
     if(state.pending||state.installationId!==t.installation_id||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.databaseName!==t.database_name)return fail();
     await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);

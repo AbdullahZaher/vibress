@@ -59,3 +59,39 @@ CREATE TABLE public.platform_schema_business_witnesses_v1 (
  signature text NOT NULL
 );
 REVOKE ALL ON public.platform_schema_business_witnesses_v1 FROM PUBLIC;
+
+-- Persistent registry lifecycle v1: current state is CAS-updated; every
+-- transition is append-only history. DB_COMMITTED is deliberately distinct
+-- from ACTIVE so a crash between install COMMIT and global admission is visible.
+CREATE TABLE public.platform_schema_revision_states_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL CHECK(revision_digest ~ '^[a-f0-9]{64}$'),
+ state text NOT NULL CHECK(state IN ('PROPOSED','VALIDATED','APPROVED','PROVISIONING','DB_COMMITTED','ACTIVE','SUPERSEDED','REVOKED','FAILED','INDETERMINATE','RECOVERY_PENDING','REATTESTED')),
+ state_version integer NOT NULL CHECK(state_version>0),
+ operation_id uuid NOT NULL,
+ approval_id uuid NOT NULL,
+ authority_epoch uuid NOT NULL,
+ authority_head text, authority_sequence bigint,
+ actor text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest)
+);
+CREATE TABLE public.platform_schema_state_transitions_v1 (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ from_state text, to_state text NOT NULL CHECK(to_state IN ('PROPOSED','VALIDATED','APPROVED','PROVISIONING','DB_COMMITTED','ACTIVE','SUPERSEDED','REVOKED','FAILED','INDETERMINATE','RECOVERY_PENDING','REATTESTED')),
+ state_version integer NOT NULL,
+ operation_id uuid NOT NULL,
+ approval_id uuid NOT NULL,
+ authority_epoch uuid NOT NULL,
+ authority_head text, authority_sequence bigint,
+ actor text NOT NULL, evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revision_states_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_state_transitions_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $immutable$
+BEGIN RAISE EXCEPTION 'M03_LIFECYCLE_HISTORY_IMMUTABLE'; END $immutable$;
+CREATE TRIGGER platform_schema_state_transitions_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_state_transitions_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_state_transitions_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_state_transitions_immutable_v1() FROM PUBLIC;
