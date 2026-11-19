@@ -414,7 +414,7 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
           destroy = true;
         } else {
           const rolledBack = await safeRollback(client,!!onSettlement);
-        if(rolledBack&&!commitAttempted)acknowledged="ROLLED_BACK";
+          if(rolledBack&&!commitAttempted)acknowledged="ROLLED_BACK";
           // Destroy when the transaction outcome is unknown (ROLLBACK failed
           // or COMMIT already failed).
           if (!rolledBack || commitAttempted) {

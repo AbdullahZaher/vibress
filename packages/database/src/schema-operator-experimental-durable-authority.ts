@@ -11,6 +11,7 @@ import { superviseDisposableSchemaOperation, registerExperimentalAdmission, type
 import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } from "./schema-operator-experimental-anchor";
 import { acquireRecoveryLock,inspectDeadWriter,inspectDeadArchivedWriter,inspectDeadRecoveryLock,archiveDeadWriter,archiveDeadRecoveryLock,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
 import type { ClientBase } from "pg";
+import { TenantUnitOfWork,type ScopedTransaction,type VerifiedScope } from "@vibress/tenancy";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
 import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
@@ -504,7 +505,8 @@ export class DisposableDurableRecoveryAuthority {
    * grant. No new admission after durable INTENT; settlement holds the lease.
    * A process crash or a bypassing direct DB path still requires external fencing.
    */
-  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},work:(check:()=>void,settle:(outcome:"COMMITTED"|"ROLLED_BACK")=>void)=>Promise<T>):Promise<T>{
+  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},runner:TenantUnitOfWork,verifiedScope:VerifiedScope,work:(tx:ScopedTransaction,check:()=>void)=>Promise<T>):Promise<T>{
+    TenantUnitOfWork.prototype.assertOutermost.call(runner);
     if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY")return refuse();
     this.assertAnchor();
     const state=this.current();
@@ -526,7 +528,7 @@ export class DisposableDurableRecoveryAuthority {
     };
     try{
       check();
-      const result=await work(check,settle);
+      const result=await TenantUnitOfWork.prototype.runOutermost.call(runner,verifiedScope,(tx:ScopedTransaction)=>work(tx,check),settle) as T;
       if(receipt.outcome!=="COMMITTED")return refuse();
       this.append({kind:"BUSINESS_SETTLED",lease,outcome:"COMMITTED"});
       return result;

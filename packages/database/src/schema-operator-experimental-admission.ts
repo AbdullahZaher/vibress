@@ -28,6 +28,5 @@ export async function runExperimentalRecoveryUnit<T>(
     // INTENT after this check is drain, not retroactive COMMIT revocation.
     return result;
   };
-  return authority.withExperimentalBusinessAdmission(target,(check,settle)=>
-    TenantUnitOfWork.prototype.runOutermost.call(runner,scope,(tx:ScopedTransaction)=>admittedWork(tx,check),settle) as Promise<T>);
+  return authority.withExperimentalBusinessAdmission(target,runner,scope,admittedWork);
 }

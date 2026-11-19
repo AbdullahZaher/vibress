@@ -5006,21 +5006,22 @@ it("M03-WATCHDOG-01: one-shot deadline owns only its target; unrelated same-role
 },30000);
 
 
-async function intAdmissionLab(key:Key){
+async function intAdmissionLab(key:Key,installOverride?:ReturnType<typeof asInstallationId>){
   const lab=await createLab(key);labs.push(lab);await p06Install(lab);await installAdmissionObservationV1(lab);
-  const root=mkdtempSync(path.join(tmpdir(),"s03-int-admission-")),epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
-  const authority=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,lab.installationId,lab.name,epoch,testAnchor(root),recoveryAdminKeys.publicKey);
+  const root=mkdtempSync(path.join(tmpdir(),"s03-int-admission-")),epoch=labEpochs.get(lab.installationId+":"+lab.name)!,anchor=testAnchor(root),installationId=installOverride??lab.installationId;
+  const authority=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
   const pool=new Pool({connectionString:urlFor(lab.name,lab.runtimeRole),max:2});
   const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
   const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
     membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
   const databaseOid=(await lab.dbAdmin.query<{oid:string}>("SELECT oid::text AS oid FROM pg_database WHERE datname=current_database()")).rows[0]!.oid;
-  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const expected={applicationId,installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
   const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(authority,uow,expected,scope,work);
-  return {lab,authority,pool,uow,scope,expected,run,q:'"public".'+lab.dbAdmin.escapeIdentifier(lab.table),cleanup:async()=>{authority.close();await pool.end();rmSync(root,{recursive:true,force:true});}};
+  return {lab,authority,pool,uow,scope,expected,run,root,anchor,q:'"public".'+lab.dbAdmin.escapeIdentifier(lab.table),cleanup:async()=>{authority.close();await pool.end();rmSync(root,{recursive:true,force:true});}};
 }
 it("M03-INT-01: ACTIVE authority must deny stale actual persisted database epoch",async()=>{
-  const f=await intAdmissionLab("cr");let entered=false;
+  const f=await intAdmissionLab("cr");let entered=false;const acquired:number[]=[];
+  f.pool.on("acquire",client=>{acquired.push(client.processID!);});
   try{
     expect(await f.run(async tx=>(await tx.query("SELECT name FROM "+f.q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
     const stale=randomUUID();
@@ -5029,6 +5030,7 @@ it("M03-INT-01: ACTIVE authority must deny stale actual persisted database epoch
     expect(f.authority.authenticatedSnapshot()).toMatchObject({epoch:f.expected.epoch,pending:false});
     const outcome=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='stale-epoch' WHERE name='Alice'");}).then(()=> "COMMITTED",()=> "REFUSED");
     console.info("INT-01 actual stale persisted epoch outcome="+outcome+" callback="+entered);
+    expect(acquired).toHaveLength(2);expect(acquired[0]).toBe(acquired[1]);
     expect({outcome,entered,checksum:await contentChecksum(f.lab)}).toEqual({outcome:"REFUSED",entered:false,checksum:createHash("md5").update("Alice,Bob").digest("hex")});
   }finally{await f.cleanup();}
 },30000);
@@ -5159,16 +5161,17 @@ it("M03-INT-01B: actual scope observation is narrow and rechecked before settlem
   }finally{await f.cleanup();}
 },30000);
 
-it.each(["wrong-app","wrong-installation","missing-epoch","missing-capability","ambiguous","wrong-pool"] as const)("M03-INT-01C: fail closed for persisted observation %s",async(mode)=>{
-  const f=await intAdmissionLab("cr");let entered=false;
+it.each(["wrong-app","wrong-installation","missing-epoch","missing-capability","ambiguous","multiple-results","wrong-pool"] as const)("M03-INT-01C: fail closed for persisted observation %s",async(mode)=>{
+  const f=await intAdmissionLab("cr",mode==="wrong-installation"?asInstallationId("other-installation"):undefined);let entered=false;
   try{
     const admin=f.lab.dbAdmin;
     if(mode==="wrong-app"){
       await admin.query("INSERT INTO public.platform_applications VALUES('other-app','Other')");
       await admin.query("UPDATE public.platform_installations SET application_id='other-app'");
-    }else if(mode==="wrong-installation"||mode==="ambiguous"){
+    }else if(mode==="ambiguous"){
       await admin.query("INSERT INTO public.platform_installations VALUES('other-installation',$1,'test')",[applicationId]);
-      if(mode==="wrong-installation")await admin.query("UPDATE public.platform_installations SET environment='development' WHERE id=$1",[f.lab.installationId]);
+    }else if(mode==="multiple-results"){
+      await admin.query("CREATE OR REPLACE FUNCTION public.s03_p06_admission_observation_v1() RETURNS TABLE(version integer,application_id text,installation_id text,epoch_id text,database_name text,database_oid text) LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $test$ SELECT 1,r.application_id,r.installation_id,e.epoch_id::text,current_database()::text,d.oid::text FROM public.platform_schema_registry r JOIN public.s03_p06_recovery_epochs e USING(installation_id) JOIN pg_catalog.pg_database d ON d.datname=current_database() CROSS JOIN generate_series(1,2) $test$");
     }else if(mode==="missing-epoch")await admin.query("DELETE FROM public.s03_p06_recovery_epochs");
     else if(mode==="missing-capability")await admin.query("REVOKE EXECUTE ON FUNCTION public.s03_p06_admission_observation_v1() FROM "+admin.escapeIdentifier(f.lab.runtimeRole));
     const invoke=mode==="wrong-pool"?runExperimentalRecoveryUnit(f.authority,f.uow,{...f.expected,databaseOid:"99999"},f.scope,async()=>{entered=true;}):f.run(async()=>{entered=true;});
@@ -5225,6 +5228,12 @@ it("M03-INT-02C: actual lost COMMIT acknowledgment retains durable unresolved ad
     const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
     expect(()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
     await expect(f.run(async()=>{throw Error("no retry");})).rejects.toThrow();
+    const before=f.authority.authenticatedSnapshot();f.authority.close();
+    const reopened=DisposableDurableRecoveryAuthority.open(f.root,epochKeys.privateKey,f.anchor,recoveryAdminKeys.publicKey);
+    try{
+      expect(reopened.authenticatedSnapshot()).toEqual(before);
+      expect(()=>reopened.advance(epoch,quiescenceEvidenceDigest,attestRecovery(reopened,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
+    }finally{reopened.close();}
   }finally{await pool.end();await proxy.close();await f.cleanup();}
 },30000);
 
@@ -5258,4 +5267,55 @@ it("M03-INT-03B: reject routine grant edges and incoming/transitive memberships"
     await expect(verify()).rejects.toThrow();
   }finally{await lab.dbAdmin.query("REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION "+fn+" FROM "+a+" CASCADE");}
   expect(await verify()).toEqual(expected);
+},30000);
+
+
+it("M03-INT-02D: recovery intent after final check drains actual COMMIT and retains lease until release",async()=>{
+  const f=await intAdmissionLab("cr");
+  let dispatch!:()=>void,allowDispatch!:()=>void,receipt!:()=>void,allowReceipt!:()=>void;
+  const atDispatch=new Promise<void>(r=>{dispatch=r;}),dispatchGate=new Promise<void>(r=>{allowDispatch=r;});
+  const atReceipt=new Promise<void>(r=>{receipt=r;}),receiptGate=new Promise<void>(r=>{allowReceipt=r;});
+  const runner=new TenantUnitOfWork({connect:async()=>{
+    const c=await f.pool.connect(),original=c.query,release=c.release.bind(c);
+    c.query=(async(...args:unknown[])=>{
+      if(args[0]==="COMMIT"){dispatch();await dispatchGate;const result=await Reflect.apply(original,c,args);receipt();await receiptGate;return result;}
+      return Reflect.apply(original,c,args);
+    }) as typeof original;
+    c.release=(destroy?:boolean)=>{c.query=original;c.release=release;release(destroy);};
+    return c;
+  }});
+  const active=runExperimentalRecoveryUnit(f.authority,runner,f.expected,f.scope,async tx=>{
+    await tx.query("UPDATE "+f.q+" SET name='drained' WHERE name='Alice'");
+  });
+  const done=active.then(()=>true,()=>false);
+  try{
+    await Promise.race([atDispatch,done.then(()=>{throw Error("settled before COMMIT");})]);
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeDefined();
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+    f.authority.beginRecovery();
+    const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    const advance=()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}));
+    expect(advance).toThrow();
+    allowDispatch();
+    await Promise.race([atReceipt,done.then(()=>{throw Error("settled before receipt");})]);
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Bob,drained").digest("hex"));
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeDefined();expect(advance).toThrow();
+    allowReceipt();expect(await done).toBe(true);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true});
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+    await expect(f.run(async()=>{throw Error("must not admit during drain");})).rejects.toThrow();
+  }finally{allowDispatch();allowReceipt();await done;await f.cleanup();}
+},30000);
+
+it("M03-INT-02E: connection acquisition failure leaves durable fail-closed recovery marker",async()=>{
+  const f=await intAdmissionLab("cr"),closed=new Pool({connectionString:urlFor(f.lab.name,f.lab.runtimeRole)});
+  await closed.end();
+  let entered=false;
+  try{
+    await expect(runExperimentalRecoveryUnit(f.authority,new TenantUnitOfWork(closed),f.expected,f.scope,async()=>{entered=true;})).rejects.toThrow();
+    expect(entered).toBe(false);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:expect.any(String)});
+    const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    expect(()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
+  }finally{await f.cleanup();}
 },30000);
