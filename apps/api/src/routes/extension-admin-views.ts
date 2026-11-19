@@ -12,6 +12,7 @@ import { pluginsService } from "../services";
 import { admitAdminViews, type AdmittedAdminView } from "../plugins/admin-view-registry";
 import { canAccessExtensionAdminRoute } from "../plugins/admin-view-permissions";
 import { appLogger } from "../observability";
+import { rateLimitConfig } from "../constants/rate-limits";
 import { admitNativeAdminPage } from "../plugins/native-admin-registry";
 import { admitNativeDomainWorkflow } from "../plugins/native-domain-workflow";
 import { admitNativeDataModel } from "../plugins/native-data-registry";
@@ -207,7 +208,9 @@ export async function adminExtensionNavigationRoutes(fastify: FastifyInstance) {
   });
   fastify.get("/extensions/navigation", {
     preHandler: [requireStaffSession],
-    config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+    // Polled by every Admin shell mount; the non-production budget follows the
+    // shared staff-endpoint convention so E2E runs are not throttled.
+    config: rateLimitConfig(60),
     handler: async (req, reply) => {
       reply.header("Cache-Control", "no-store");
       const publicationId = req.publicationContext?.publicationId;
