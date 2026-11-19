@@ -116,8 +116,24 @@ test("mixed-direction article retains structured content across three host edit 
   for (let cycle = 1; cycle <= 3; cycle++) {
     const paragraph = editor.getByText(checkpoint, { exact: true });
     await expect(paragraph).toBeVisible();
-    await paragraph.click();
-    await page.keyboard.press("End");
+    // Place the caret with the click itself at the end of the LTR text. An End
+    // keypress only moves the DOM caret, and Lexical keeps inserting at its
+    // own click-derived selection ("Beta ch · Cycle 1eckpoint").
+    const textBox = await paragraph.boundingBox();
+    if (!textBox) throw new Error("Checkpoint paragraph is not measurable");
+    await paragraph.click({
+      position: { x: textBox.width - 1, y: textBox.height / 2 },
+    });
+    await expect.poll(
+      () => paragraph.evaluate((node) => {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return -1;
+        const anchor = selection.anchorNode;
+        if (!anchor || !node.contains(anchor)) return -1;
+        return anchor.textContent?.length ?? -1;
+      }),
+      { message: "caret collapsed at the end of the checkpoint paragraph" },
+    ).toBe(checkpoint.length);
     const edit = ` · Cycle ${cycle}`;
     const autosave = page.waitForResponse((res) =>
       new URL(res.url()).pathname === `/api/admin/v1/posts/${id}` &&

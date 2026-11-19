@@ -27,12 +27,15 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
       "base64",
     );
+    // Media uploads are append-only, so a fixed name collides with assets left
+    // by earlier runs of this suite. Keep the display name unique per run.
+    const fileName = `dp-final-${Date.now()}.png`;
     const upRes = await request.post(
       "http://localhost:7777/api/admin/v1/media",
       {
         headers: { Origin: "http://localhost:7777" },
         multipart: {
-          file: { name: "dp-final.png", mimeType: "image/png", buffer: png },
+          file: { name: fileName, mimeType: "image/png", buffer: png },
         },
       },
     );
@@ -72,7 +75,7 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     await page.waitForTimeout(2500);
 
     // Open the asset and follow the accessible confirmation flow.
-    const thumbnail = page.getByRole("button", { name: "Open asset details: dp-final.png" });
+    const thumbnail = page.getByRole("button", { name: `Open asset details: ${fileName}` });
     await expect(thumbnail).toBeVisible();
     await thumbnail.click();
 
@@ -93,7 +96,7 @@ test.describe("Batch 4 Media E2E — Delete Protection + Gallery", () => {
     await expect(page.getByRole("dialog", { name: "Asset Preview & Details" })).toBeVisible();
     await expect(
       page.getByRole("dialog", { name: "Asset Preview & Details" })
-        .getByRole("img", { name: "dp-final.png" })
+        .getByRole("img", { name: fileName })
     ).toBeVisible();
 
     // Backend verification as ground truth

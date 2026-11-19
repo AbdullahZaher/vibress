@@ -93,7 +93,10 @@ test.describe("Admin Content & Vibress Studio E2E Flow", () => {
     await page.click('button:has-text("Create Page"), button:has-text("Save Draft")');
     await page.waitForURL((url) => url.pathname.startsWith("/admin/pages/") && !url.pathname.endsWith("/new"));
 
-    await expect(page.locator("body")).toContainText("Draft");
+    // The editor route compiles on first use in dev; wait for the mount before
+    // reading the status badge.
+    await expect(editorArea).toBeVisible({ timeout: 30000 });
+    await expect(page.locator("body")).toContainText("Draft", { timeout: 20000 });
   });
 
   test("Tags management flow", async ({ page }) => {

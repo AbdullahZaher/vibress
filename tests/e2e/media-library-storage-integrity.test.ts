@@ -118,10 +118,19 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
     request,
   }) => {
     const pool = getDbPool();
+    // Editorial seed rows point at web-public assets (/editorial/*.jpg served by
+    // the web app), not at objects under the API's /content/media root, so they
+    // are out of scope for the media streaming contract. Assert against the
+    // local assets this suite provisions on the canonical storage root.
     const { rows } = await pool.query(
-      "SELECT id, storage_key, mime_type FROM media_assets WHERE deleted_at IS NULL AND storage_provider = 'local' LIMIT 10",
+      `SELECT id, storage_key, mime_type FROM media_assets
+       WHERE deleted_at IS NULL AND storage_provider = 'local'
+         AND id IN ('fa000000-0000-4000-a000-000000000001',
+                    'fa000000-0000-4000-a000-000000000002',
+                    'fa000000-0000-4000-a000-000000000088')
+       ORDER BY storage_key`,
     );
-    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBe(3);
 
     for (const asset of rows) {
       const encodedKey = asset.storage_key
@@ -249,27 +258,92 @@ test.describe("Vibress — Media Storage & Library Integrity Suite", () => {
   }) => {
     test.setTimeout(60000);
     await loginUser(page);
-    await page.goto(`${BASE}/admin/posts/${TARGET_POST_ID}`);
-    await expect(
-      page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
-    ).toBeVisible({ timeout: 15000 });
+    // Seed a dedicated post: the shared fixture post may carry image cards left
+    // by other suites whose transient assets no longer exist.
+    const me = await page.request.get(`${BASE}/api/admin/v1/auth/me`);
+    const { user } = await me.json();
+    const stamp = Date.now();
+    const created = await page.request.post(`${BASE}/api/admin/v1/posts`, {
+      headers: { Origin: BASE },
+      data: {
+        title: `Media URL fixture ${stamp}`,
+        slug: `media-url-fixture-${stamp}`,
+        primaryAuthorId: user.id,
+        content: {
+          schema: "vibress-studio",
+          version: 1,
+          root: {
+            type: "root",
+            version: 1,
+            direction: "ltr",
+            format: "",
+            indent: 0,
+            children: [
+              {
+                type: "paragraph",
+                version: 1,
+                direction: "ltr",
+                format: "",
+                indent: 0,
+                children: [{
+                  type: "text",
+                  version: 1,
+                  text: "Card URL integrity fixture",
+                  format: 0,
+                  detail: 0,
+                  mode: "normal",
+                  style: "",
+                }],
+              },
+              {
+                type: "studio-card",
+                version: 1,
+                cardType: "image",
+                cardData: {
+                  assetId: "fa000000-0000-4000-a000-000000000088",
+                  src: "/content/media/media/test-unsplash.jpg",
+                  alt: "Fixture image",
+                  caption: "Fixture caption",
+                  width: "regular",
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(created.status()).toBe(201);
+    const postId = (await created.json()).post.id;
 
-    const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
-    await expect(editorArea).toBeVisible({ timeout: 10000 });
+    try {
+      await page.goto(`${BASE}/admin/posts/${postId}`);
+      await expect(
+        page.locator('textarea[aria-label*="title" i], textarea[aria-label*="عنوان" i], textarea[placeholder*="title" i], textarea[placeholder*="عنوان" i]').first()
+      ).toBeVisible({ timeout: 15000 });
 
-    // Find any rendered studio image card
-    const imageCards = editorArea.locator('img');
-    const imgCount = await imageCards.count();
-    if (imgCount > 0) {
+      const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]');
+      await expect(editorArea).toBeVisible({ timeout: 15000 });
+
+      // The rendered image card must reference and load a real asset.
+      const imageCards = editorArea.locator('img');
+      await expect(imageCards.first()).toBeVisible({ timeout: 10000 });
+      const imgCount = await imageCards.count();
+      expect(imgCount).toBeGreaterThan(0);
       for (let i = 0; i < Math.min(imgCount, 3); i++) {
         const img = imageCards.nth(i);
         const src = await img.getAttribute("src");
         expect(src).toBeTruthy();
         expect(src).not.toBe("");
         // Verify image loads successfully
-        const naturalWidth = await img.evaluate((el: HTMLImageElement) => el.naturalWidth);
-        expect(naturalWidth).toBeGreaterThan(0);
+        await expect.poll(
+          () => img.evaluate((el: HTMLImageElement) => el.naturalWidth),
+          { timeout: 10000, message: "The image card must decode its asset" },
+        ).toBeGreaterThan(0);
       }
+    } finally {
+      await page.request
+        .delete(`${BASE}/api/admin/v1/posts/${postId}`, { headers: { Origin: BASE } })
+        .catch(() => {});
     }
   });
 

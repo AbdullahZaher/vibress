@@ -17,11 +17,23 @@ export default defineConfig({
   },
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER
     ? undefined
-    : {
-        command: "pnpm dev",
-        url: "http://127.0.0.1:7780/health/ready",
-        reuseExistingServer: true,
-        timeout: 120 * 1000,
-      },
+    : [
+        {
+          // Static nginx entry for the suite's 7777 origin. --no-deps keeps the
+          // disposable database/redis topology owned by the caller; the
+          // platform-reference app has its own isolated stack (port 7791) and
+          // is excluded from the shared dev command.
+          command: "docker compose -f compose.dev.yml up -d --no-deps gateway",
+          url: "http://127.0.0.1:7777/nginx-health",
+          reuseExistingServer: true,
+          timeout: 120 * 1000,
+        },
+        {
+          command: "pnpm dev",
+          url: "http://127.0.0.1:7780/health/ready",
+          reuseExistingServer: true,
+          timeout: 120 * 1000,
+        },
+      ],
 });
 

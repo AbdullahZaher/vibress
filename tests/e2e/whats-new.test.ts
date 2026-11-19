@@ -4,14 +4,16 @@ async function loginAdmin(page: Page) {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("http://localhost:7777/admin/");
   const postsBtn = page.getByRole("button", { name: "Posts", exact: true });
-  const alreadyLoggedIn = await postsBtn.isVisible().catch(() => false);
-  if (!alreadyLoggedIn) {
-    await page.waitForSelector("#email", { state: "visible", timeout: 15000 });
-    await page.fill("#email", "owner@example.com");
+  const emailField = page.locator("#email");
+  // An active session redirects straight into the shell, so wait for either
+  // the sign-in form or the authenticated navigation before choosing a path.
+  await expect(postsBtn.or(emailField).first()).toBeVisible({ timeout: 30000 });
+  if (await emailField.isVisible()) {
+    await emailField.fill("owner@example.com");
     await page.fill("#password", "OwnerPass123!");
     await page.click('button[type="submit"]');
-    await expect(postsBtn).toBeVisible({ timeout: 15000 });
   }
+  await expect(postsBtn).toBeVisible({ timeout: 30000 });
 }
 
 test.describe("Remote What's New Single Notification System", () => {
