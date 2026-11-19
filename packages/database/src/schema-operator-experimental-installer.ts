@@ -5,6 +5,7 @@ import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
 import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,type ProvisioningContract} from "@vibress/schema-engine";
+import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
 const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
 const hash=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");
@@ -39,6 +40,7 @@ async function roleContract(db:ClientBase,installer:string,runtime:string,namesp
   if(!ns||ns.owner!==installer||!equal(ns.acl,sorted([installer+":"+installer+":CREATE:false",installer+":"+installer+":USAGE:false",runtime+":"+installer+":USAGE:false"])))return fail();
   const unsafe=(await db.query<{n:number}>("SELECT (SELECT count(*) FROM pg_default_acl d JOIN pg_roles r ON r.oid=d.defaclrole WHERE r.rolname=ANY($1::name[]) OR defaclnamespace=(SELECT oid FROM pg_namespace WHERE nspname=$2))+(SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef AND (has_schema_privilege($3,n.oid,'USAGE') AND has_function_privilege($3,p.oid,'EXECUTE'))) AS n",[[installer,runtime],namespace,runtime])).rows[0];
   if(Number(unsafe?.n)!==0)return fail();
+  await verifyProtectedMetadataAuthority((sql,values)=>db.query(sql,values),installer,runtime,namespace);
 }
 export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,roles:{installer:string;runtime:string},key:KeyObject,authority:DisposableDurableRecoveryAuthority){
   const keyBytes=key.export({format:"der",type:"spki"}),keyDigest=hash(keyBytes);
@@ -105,6 +107,12 @@ async function loadTrust(db:ClientBase){
 }
 async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract|null){
   const resources=expected?.resources??[],namespace=t.namespace;
+  // CORE V1 compiler emits ordinary tables and the PG16 default collation.
+  // Verify those original semantics without changing signed V1 digest.
+  const topology=(await db.query<{bad:boolean}>(`SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_inherits i JOIN pg_catalog.pg_class parent ON parent.oid=i.inhparent JOIN pg_catalog.pg_namespace pn ON pn.oid=parent.relnamespace JOIN pg_catalog.pg_class child ON child.oid=i.inhrelid JOIN pg_catalog.pg_namespace cn ON cn.oid=child.relnamespace WHERE pn.nspname=$1 OR cn.nspname=$1)
+    OR EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relispartition)
+    OR EXISTS(SELECT 1 FROM pg_catalog.pg_rewrite r JOIN pg_catalog.pg_class c ON c.oid=r.ev_class JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1) AS bad`,[namespace])).rows[0];
+  if(!topology||topology.bad)return fail("CATALOG_TOPOLOGY_V1");
   const objects=(await db.query<{name:string;kind:string;owner:string;permanent:string;rls:boolean;forced:boolean}>("SELECT c.relname AS name,c.relkind AS kind,pg_get_userbyid(c.relowner) AS owner,c.relpersistence AS permanent,c.relrowsecurity AS rls,c.relforcerowsecurity AS forced FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 ORDER BY c.relname",[namespace])).rows;
   const tables=objects.filter(x=>x.kind==="r"),indexes=objects.filter(x=>x.kind==="i");
   if(objects.length!==tables.length+indexes.length||!equal(tables.map(x=>x.name),sorted(resources.map(x=>x.table)))||objects.some(x=>x.owner!==t.installer_role||x.permanent!=="p"))return fail("CATALOG_1");
@@ -115,6 +123,8 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     const cols=(await db.query<{name:string;type:string;required:boolean;hasdefault:boolean;identity:string;generated:string;acl:boolean}>("SELECT a.attname AS name,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull AS required,a.atthasdef AS hasdefault,a.attidentity AS identity,a.attgenerated AS generated,a.attacl IS NOT NULL AS acl FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attname",[namespace,resource.table])).rows;
     const desired=resource.columns.map(c=>({name:c.name,type:c.type,required:c.required,hasdefault:false,identity:"",generated:"",acl:false})).sort((a,b)=>a.name.localeCompare(b.name,"en"));
     if(!equal(cols,desired))return fail("CATALOG_3");
+    const columnCollations=(await db.query<{name:string;collation:string|null}>(`SELECT a.attname::text AS name,CASE WHEN co.oid IS NULL THEN NULL ELSE cn.nspname||'.'||co.collname END AS collation FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_catalog.pg_collation co ON co.oid=a.attcollation LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=co.collnamespace WHERE n.nspname=$1 AND c.relname=$2 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attname`,[namespace,resource.table])).rows;
+    if(!equal(columnCollations,desired.map(c=>({name:c.name,collation:c.type==="text"?"pg_catalog.default":null}))))return fail("CATALOG_COLUMN_COLLATION_V1");
     const cons=(await db.query<{name:string;kind:string;columns:string[];target:string|null;targetNamespace:string|null;targetColumns:string[];valid:boolean;defer:boolean;update:string;del:string;match:string;expression:string}>("SELECT co.conname AS name,co.contype AS kind,ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,f.relname AS target,fn.nspname AS \"targetNamespace\",ARRAY(SELECT a.attname::text FROM unnest(co.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=f.oid AND a.attnum=k.attnum ORDER BY k.ord) AS \"targetColumns\",co.convalidated AS valid,co.condeferrable OR co.condeferred AS defer,co.confupdtype AS update,co.confdeltype AS del,co.confmatchtype AS match,coalesce(pg_get_expr(co.conbin,co.conrelid),'') AS expression FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class f ON f.oid=co.confrelid LEFT JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY co.conname",[namespace,resource.table])).rows;
     const constraints=provisioningConstraints(resource,namespace);
     const enums=resource.columns.filter(c=>c.enumValues);
@@ -134,6 +144,30 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     const expectedIx=[...constraints.filter(c=>c.kind!=="f").map(c=>({name:c.name,columns:c.columns,unique:true,primary:c.kind==="p"})),...resource.relations.map(e=>({name:provisioningConstraintName(resource.table,"ix",e.column),columns:e.columns,unique:false,primary:false}))];
     for(const e of expectedIx)if(!e.unique)expectedIndexes.push(e.name);
     if(ix.length!==expectedIx.length||expectedIx.some(e=>{const a=ix.find(x=>x.name===e.name);return !a||!a.valid||!a.plain||a.method!=="btree"||a.unique!==e.unique||a.primary!==e.primary||!equal(a.columns,e.columns)||a.options.some(x=>x!==0);}))return fail("CATALOG_8");
+    const indexSemantics=(await db.query<{name:string;opclasses:string[];families:string[];collations:string[];safe:boolean}>(`SELECT i.relname::text AS name,
+      ARRAY(SELECT onsp.nspname||'.'||o.opcname FROM unnest(x.indclass) WITH ORDINALITY k(id,ord) JOIN pg_catalog.pg_opclass o ON o.oid=k.id JOIN pg_catalog.pg_namespace onsp ON onsp.oid=o.opcnamespace ORDER BY k.ord) AS opclasses,
+      ARRAY(SELECT fn.nspname||'.'||f.opfname FROM unnest(x.indclass) WITH ORDINALITY k(id,ord) JOIN pg_catalog.pg_opclass o ON o.oid=k.id JOIN pg_catalog.pg_opfamily f ON f.oid=o.opcfamily JOIN pg_catalog.pg_namespace fn ON fn.oid=f.opfnamespace ORDER BY k.ord) AS families,
+      ARRAY(SELECT CASE WHEN k.id=0 THEN '-' ELSE cn.nspname||'.'||co.collname END FROM unnest(x.indcollation) WITH ORDINALITY k(id,ord) LEFT JOIN pg_catalog.pg_collation co ON co.oid=k.id LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=co.collnamespace ORDER BY k.ord) AS collations,
+      (NOT x.indnullsnotdistinct AND x.indimmediate AND NOT x.indisexclusion AND NOT x.indisclustered AND NOT x.indisreplident) AS safe
+      FROM pg_catalog.pg_index x JOIN pg_catalog.pg_class c ON c.oid=x.indrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace JOIN pg_catalog.pg_class i ON i.oid=x.indexrelid WHERE n.nspname=$1 AND c.relname=$2`,[namespace,resource.table])).rows;
+    for(const e of expectedIx){
+      const a=indexSemantics.find(x=>x.name===e.name),types=e.columns.map(name=>resource.columns.find(c=>c.name===name)?.type);
+      if(types.some(type=>type!=="text"&&type!=="uuid"))return fail("CATALOG_INDEX_TYPE_V1");
+      const ops=types.map(type=>type==="text"?"pg_catalog.text_ops":"pg_catalog.uuid_ops");
+      if(!a||!a.safe||!equal(a.opclasses,ops)||!equal(a.families,ops)||!equal(a.collations,types.map(type=>type==="text"?"pg_catalog.default":"-")))return fail("CATALOG_INDEX_SEMANTICS_V1");
+    }
+    const links=(await db.query<{name:string;index:string|null;indexNamespace:string|null;safe:boolean}>(`SELECT co.conname::text AS name,i.relname::text AS index,ins.nspname::text AS "indexNamespace",(co.conparentid=0 AND co.coninhcount=0 AND co.conislocal) AS safe FROM pg_catalog.pg_constraint co JOIN pg_catalog.pg_class c ON c.oid=co.conrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_catalog.pg_class i ON i.oid=co.conindid LEFT JOIN pg_catalog.pg_namespace ins ON ins.oid=i.relnamespace WHERE n.nspname=$1 AND c.relname=$2`,[namespace,resource.table])).rows;
+    for(const co of links){
+      const expectedConstraint=constraints.find(c=>c.name===co.name);
+      const expectedIndex=expectedConstraint?(expectedConstraint.kind==="f"?provisioningConstraintName(expectedConstraint.target!,"pk"):expectedConstraint.name):null;
+      if(!co.safe||co.index!==expectedIndex||co.indexNamespace!==(expectedIndex?namespace:null))return fail("CATALOG_CONSTRAINT_INDEX_V1");
+    }
+    const triggerRows=(await db.query<{constraint:string;other:string;function:string;event:number;safe:boolean}>(`SELECT co.conname::text AS constraint,other.relname::text AS other,p.proname::text AS function,tg.tgtype::int AS event,
+      (tg.tgisinternal AND tg.tgenabled='O' AND NOT tg.tgdeferrable AND NOT tg.tginitdeferred AND tg.tgparentid=0 AND tg.tgconstrindid=co.conindid AND tg.tgqual IS NULL AND tg.tgnargs=0 AND tg.tgattr::text='' AND tg.tgoldtable IS NULL AND tg.tgnewtable IS NULL AND pn.nspname='pg_catalog' AND onsp.nspname=$1 AND co.contype='f') AS safe
+      FROM pg_catalog.pg_trigger tg JOIN pg_catalog.pg_class c ON c.oid=tg.tgrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_catalog.pg_constraint co ON co.oid=tg.tgconstraint LEFT JOIN pg_catalog.pg_class other ON other.oid=tg.tgconstrrelid LEFT JOIN pg_catalog.pg_namespace onsp ON onsp.oid=other.relnamespace JOIN pg_catalog.pg_proc p ON p.oid=tg.tgfoid JOIN pg_catalog.pg_namespace pn ON pn.oid=p.pronamespace WHERE n.nspname=$1 AND c.relname=$2`,[namespace,resource.table])).rows;
+    const triggerExpected=resource.relations.flatMap(e=>[{constraint:provisioningConstraintName(resource.table,"fk",e.column),other:e.table,function:"RI_FKey_check_ins",event:5,safe:true},{constraint:provisioningConstraintName(resource.table,"fk",e.column),other:e.table,function:"RI_FKey_check_upd",event:17,safe:true}]);
+    for(const origin of resources)for(const e of origin.relations.filter(e=>e.table===resource.table))triggerExpected.push({constraint:provisioningConstraintName(origin.table,"fk",e.column),other:origin.table,function:"RI_FKey_restrict_del",event:9,safe:true},{constraint:provisioningConstraintName(origin.table,"fk",e.column),other:origin.table,function:"RI_FKey_restrict_upd",event:17,safe:true});
+    if(!equal(sorted(triggerRows.map(x=>JSON.stringify(x))),sorted(triggerExpected.map(x=>JSON.stringify(x)))))return fail("CATALOG_TRIGGER_IDENTITY_V1");
     const policies=(await db.query<{name:string;permissive:boolean;command:string;roles:string;using:string;check:string}>("SELECT p.polname AS name,p.polpermissive AS permissive,p.polcmd AS command,p.polroles::text AS roles,pg_get_expr(p.polqual,p.polrelid) AS \"using\",pg_get_expr(p.polwithcheck,p.polrelid) AS \"check\" FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY p.polname",[namespace,resource.table])).rows;
     const expr="("+provisioningTenantExpression(t.application_id)+")";
     if(!equal(policies,tenant?[{name:"v3_tenant_access",permissive:true,command:"*",roles:"{0}",using:"true",check:"true"},{name:"v3_tenant_boundary",permissive:false,command:"*",roles:"{0}",using:expr,check:expr}]:[]))return fail("CATALOG_9");
@@ -186,9 +220,11 @@ export async function installExperimentalRevision(connectionString:string,manife
       if(!previous)await db.query("GRANT SELECT,INSERT,UPDATE,DELETE ON "+qualified(t.namespace,table.table)+" TO "+qi(t.runtime_role));
     }
     await verifyCatalog(db,t,plan.physical);
+    await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
     if(!head)await db.query("INSERT INTO public.platform_schema_registry(installation_id,application_id,environment,database_name,operator_role,runtime_role,manifest,manifest_digest) VALUES($1,$2,'test',$3,$4,$5,$6,$7)",[t.installation_id,t.application_id,t.database_name,t.installer_role,t.runtime_role,manifestWire,manifest.digest]);
     else if((await db.query("UPDATE public.platform_schema_registry SET manifest=$1,manifest_digest=$2,updated_at=clock_timestamp() WHERE installation_id=$3 AND manifest_digest=$4",[manifestWire,manifest.digest,t.installation_id,e.parent])).rowCount!==1)return fail();
     await db.query("INSERT INTO public.platform_schema_revisions_v1(installation_id,revision_digest,parent_digest,manifest,physical_digest,plan_digest,operation_id,approval_id,authority_epoch,authority_head,authority_sequence,signer_digest,signed_evidence,signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[t.installation_id,manifest.digest,e.parent,manifestWire,e.physicalDigest,e.planDigest,e.operationId,e.approvalId,e.epoch,e.authorityHead,e.authoritySequence,t.approval_key_digest,approvalWire,signature]);
+    await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
     authority.checkExperimentalProvisioning(e.operationId);if(transportFailed)return fail();
     commitDispatched=true;
     if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
@@ -376,6 +412,7 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+field+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+field+"=$3 FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+field+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit,e.value])).rows;
     const ids=updated.map(x=>x.id).sort();
     await db.query("INSERT INTO public.platform_schema_backfill_chunks_v1(installation_id,revision_digest,operation_id,tenant_id,resource_id,column_name,evidence,signature,affected,ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[t.installation_id,e.revision,e.operationId,e.tenantId,e.resourceId,e.column,approvalWire,signature,ids.length,ids]);
+    await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
     if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
     dispatched=true;if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
     return {status:"COMMITTED" as const,affected:ids.length,ids};
