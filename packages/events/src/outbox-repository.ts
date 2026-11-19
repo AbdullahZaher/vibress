@@ -41,7 +41,12 @@ export interface OutboxRepository {
 export class DrizzleOutboxRepository implements OutboxRepository {
   async insert(row: NewOutboxEventRow): Promise<void> {
     const db = getDb();
-    await db.insert(outboxEvents).values(row);
+    // The event id is the producer's dedupe key: replaying the same logical
+    // mutation inside a retried transaction inserts the row at most once.
+    // This is insert-idempotency, not exactly-once delivery.
+    await db.insert(outboxEvents).values(row).onConflictDoNothing({
+      target: outboxEvents.id,
+    });
   }
 
   async claimReady(

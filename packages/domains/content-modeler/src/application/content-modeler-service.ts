@@ -1,17 +1,18 @@
 import {
   getDb,
+  runInTransaction,
   contentModels,
   contentEntries,
   auditEvents,
-  outboxEvents,
   ContentModelRow,
   ContentEntryRow,
   ContentFieldDefinition,
   publications,
   publicationLocales,
 } from "@vibress/database";
+import { defaultOutboxRepository } from "@vibress/events";
 import { eq, desc, asc, and, or, isNull, sql, inArray } from "drizzle-orm";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import {
   ContentModel,
   ContentEntry,
@@ -169,16 +170,23 @@ export class ContentModelerService {
       );
     }
 
-    await db.insert(contentModels).values({
-      id,
-      publicationId,
-      name: input.name,
-      slug,
-      description: input.description ?? null,
-      fields: input.fields || [],
-      settings: input.settings || {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    await runInTransaction(async () => {
+      await getDb().insert(contentModels).values({
+        id,
+        publicationId,
+        name: input.name,
+        slug,
+        description: input.description ?? null,
+        fields: input.fields || [],
+        settings: input.settings || {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await this.recordOutboxEvent(
+        "content_model.created",
+        { modelId: id, publicationId, slug, name: input.name },
+        `model:${id}:created`,
+      );
     });
 
     const created = await this.getModelByIdOrSlug(id, publicationId);
@@ -188,12 +196,6 @@ export class ContentModelerService {
         targetType: "content_model",
         targetId: id,
         metadata: { name: input.name, slug, publicationId },
-      });
-      await this.recordOutboxEvent("content_model.created", {
-        modelId: id,
-        publicationId,
-        slug,
-        name: input.name,
       });
     }
     return created!;
@@ -244,7 +246,8 @@ export class ContentModelerService {
     // Serialize schema changes against entry inserts and other schema edits.
     // The FK on entries locks the same parent row, avoiding a race between
     // checking for existing content and writing a breaking schema change.
-    await db.transaction(async (tx) => {
+    await runInTransaction(async () => {
+      const tx = getDb();
       const [locked] = await tx
         .select({ id: contentModels.id, fields: contentModels.fields })
         .from(contentModels)
@@ -282,6 +285,11 @@ export class ContentModelerService {
           eq(contentModels.id, existing.id),
           eq(contentModels.publicationId, publicationId),
         ));
+      await this.recordOutboxEvent(
+        "content_model.updated",
+        { modelId: existing.id, publicationId, slug: updates.slug ?? existing.slug },
+        `model:${existing.id}:${updates.updatedAt!.toISOString()}`,
+      );
     });
 
     const updated = await this.getModelByIdOrSlug(existing.id, publicationId);
@@ -291,11 +299,6 @@ export class ContentModelerService {
         targetType: "content_model",
         targetId: existing.id,
         metadata: { publicationId, updates },
-      });
-      await this.recordOutboxEvent("content_model.updated", {
-        modelId: existing.id,
-        publicationId,
-        slug: updated.slug,
       });
     }
     return updated!;
@@ -312,7 +315,8 @@ export class ContentModelerService {
     const db = getDb();
     // Lock the parent row before checking children. Concurrent FK inserts must
     // wait, so they cannot race with the destructive cascade decision.
-    await db.transaction(async (tx) => {
+    await runInTransaction(async () => {
+      const tx = getDb();
       const locked = await tx
         .select({ id: contentModels.id })
         .from(contentModels)
@@ -375,6 +379,11 @@ export class ContentModelerService {
           eq(contentModels.id, existing.id),
           eq(contentModels.publicationId, publicationId),
         ));
+      await this.recordOutboxEvent(
+        "content_model.deleted",
+        { modelId: existing.id, publicationId, slug: existing.slug },
+        `model:${existing.id}:deleted`,
+      );
     });
 
     await this.recordAudit({
@@ -382,11 +391,6 @@ export class ContentModelerService {
       targetType: "content_model",
       targetId: existing.id,
       metadata: { publicationId, slug: existing.slug },
-    });
-    await this.recordOutboxEvent("content_model.deleted", {
-      modelId: existing.id,
-      publicationId,
-      slug: existing.slug,
     });
   }
 
@@ -576,20 +580,34 @@ export class ContentModelerService {
       );
     }
 
-    await db.insert(contentEntries).values({
-      id,
-      publicationId,
-      modelId: model.id,
-      title: input.title,
-      slug,
-      data: entryData,
-      status,
-      version: 1,
-      createdBy: userId,
-      updatedBy: userId,
-      publishedAt: status === "published" ? new Date() : null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    await runInTransaction(async () => {
+      await getDb().insert(contentEntries).values({
+        id,
+        publicationId,
+        modelId: model.id,
+        title: input.title,
+        slug,
+        data: entryData,
+        status,
+        version: 1,
+        createdBy: userId,
+        updatedBy: userId,
+        publishedAt: status === "published" ? new Date() : null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      await this.recordOutboxEvent(
+        "content_entry.created",
+        {
+          entryId: id,
+          publicationId,
+          modelId: model.id,
+          modelSlug: model.slug,
+          slug,
+          status,
+        },
+        `entry:${id}:created`,
+      );
     });
 
     const created = await this.getEntryById(model.id, id, publicationId);
@@ -606,14 +624,6 @@ export class ContentModelerService {
           slug: created.slug,
           status: created.status,
         },
-      });
-      await this.recordOutboxEvent("content_entry.created", {
-        entryId: created.id,
-        publicationId,
-        modelId: model.id,
-        modelSlug: model.slug,
-        slug: created.slug,
-        status: created.status,
       });
 
       domainEvents.emit("content.entry.created", {
@@ -687,7 +697,8 @@ export class ContentModelerService {
     const db = getDb();
     let wasPublished = false;
 
-    await db.transaction(async (tx) => {
+    await runInTransaction(async () => {
+      const tx = getDb();
       // Row lock to prevent race conditions during lifecycle checks & version updates
       const [locked] = await tx
         .select()
@@ -774,6 +785,18 @@ export class ContentModelerService {
         );
 
       wasPublished = locked.status !== "published";
+      await this.recordOutboxEvent(
+        "content_entry.updated",
+        {
+          entryId: existing.id,
+          publicationId,
+          modelId: model.id,
+          modelSlug: model.slug,
+          slug: updates.slug ?? existing.slug,
+          status: updates.status ?? existing.status,
+        },
+        `entry:${existing.id}:${updates.updatedAt!.toISOString()}`,
+      );
     });
 
     const updated = await this.getEntryById(model.id, existing.id, publicationId);
@@ -791,14 +814,6 @@ export class ContentModelerService {
           status: updated.status,
           version: updated.version,
         },
-      });
-      await this.recordOutboxEvent("content_entry.updated", {
-        entryId: updated.id,
-        publicationId,
-        modelId: model.id,
-        modelSlug: model.slug,
-        slug: updated.slug,
-        status: updated.status,
       });
 
       domainEvents.emit("content.entry.updated", {
@@ -891,7 +906,8 @@ export class ContentModelerService {
     }
 
     const db = getDb();
-    await db.transaction(async (tx) => {
+    await runInTransaction(async () => {
+      const tx = getDb();
       const [locked] = await tx
         .select()
         .from(contentEntries)
@@ -919,9 +935,10 @@ export class ContentModelerService {
         );
       }
 
+      const deletedAt = new Date();
       await tx
         .update(contentEntries)
-        .set({ deletedAt: new Date() })
+        .set({ deletedAt })
         .where(
           and(
             eq(contentEntries.modelId, model.id),
@@ -929,6 +946,11 @@ export class ContentModelerService {
             eq(contentEntries.publicationId, publicationId),
           ),
         );
+      await this.recordOutboxEvent(
+        "content_entry.deleted",
+        { entryId: existing.id, publicationId, modelId: model.id, modelSlug: model.slug },
+        `entry:${existing.id}:${deletedAt.toISOString()}`,
+      );
     });
 
     await this.recordAudit({
@@ -941,12 +963,6 @@ export class ContentModelerService {
         modelSlug: model.slug,
         slug: existing.slug,
       },
-    });
-    await this.recordOutboxEvent("content_entry.deleted", {
-      entryId: existing.id,
-      publicationId,
-      modelId: model.id,
-      modelSlug: model.slug,
     });
 
     domainEvents.emit("content.entry.deleted", {
@@ -1409,19 +1425,19 @@ export class ContentModelerService {
   private async recordOutboxEvent(
     eventType: string,
     payload: Record<string, unknown>,
+    dedupeKey: string,
   ): Promise<void> {
-    try {
-      const db = getDb();
-      await db.insert(outboxEvents).values({
-        id: randomUUID(),
-        eventType,
-        payload,
-        status: "pending",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    } catch {
-      // Non-blocking outbox recording
-    }
+    // Must run inside the mutation's transaction so the event commits or
+    // rolls back with the business row. The id is deterministic for the
+    // logical occurrence, so a replayed transaction depends on the
+    // repository's insert dedupe instead of emitting a second event.
+    await defaultOutboxRepository.insert({
+      id: createHash("sha256")
+        .update(["VIBRESS-OUTBOX-EVENT-V1", eventType, dedupeKey].join("\u0000"))
+        .digest("hex"),
+      eventType,
+      payload,
+      status: "pending",
+    });
   }
 }
