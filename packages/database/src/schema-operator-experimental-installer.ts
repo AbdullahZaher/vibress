@@ -192,6 +192,17 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
   if(Number(extras?.n)!==0)return fail("CATALOG_12");
 }
 export class ExperimentalProvisioningUnknown extends Error{constructor(){super("M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY");}}
+/**
+ * A READY V2 authority admits a new revision only when the approval extends
+ * the cluster's persisted ACTIVE revision. Trust/identity, physical database,
+ * timeline, epoch and approval head are verified separately by loadTrust and
+ * the caller; this predicate owns the revision binding alone.
+ */
+export function readyV2AdmissionRefusal(state:{readyProtocol?:2},approval:{parent:string|null},activeParentDigest:string|null):string|null{
+  if(state.readyProtocol!==2)return "NOT_V2";
+  if(approval.parent===null||activeParentDigest===null||approval.parent!==activeParentDigest)return "ACTIVE_PARENT";
+  return null;
+}
 export async function installExperimentalRevision(connectionString:string,manifestWire:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority,faultProxyPort?:number){
   assertLocalUrl(connectionString,faultProxyPort);
   if(typeof manifestWire!=="string"||manifestWire.length>1024*1024||typeof signature!=="string"||!/^[A-Za-z0-9_-]{86}$/.test(signature))return fail();
@@ -209,7 +220,7 @@ export async function installExperimentalRevision(connectionString:string,manife
     const t=await loadTrust(db),state=authority.authenticatedSnapshot(),scope=scopeOf(t);
     const keyBytes=Buffer.from(t.approval_key,"base64"),key=createPublicKey({key:keyBytes,format:"der",type:"spki"});
     if(hash(keyBytes)!==t.approval_key_digest||key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(approvalWire),key,Buffer.from(signature,"base64url"))||
-      state.pending||state.businessLease||state.readyProtocol===2||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.databaseName!==t.database_name||state.installationId!==t.installation_id||
+      state.pending||state.businessLease||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.databaseName!==t.database_name||state.installationId!==t.installation_id||
       e.applicationId!==t.application_id||e.installationId!==t.installation_id||e.databaseName!==t.database_name||e.databaseOid!==t.database_oid||e.epoch!==t.epoch||
       e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence||e.manifestDigest!==manifest.digest||
       e.profile!==provisioningProfileFor(manifest))return fail();
@@ -221,6 +232,10 @@ export async function installExperimentalRevision(connectionString:string,manife
     if(previous&&previous.digest!==head?.manifest_digest)return fail();
     if(previous&&(await db.query("SELECT 1 FROM public.platform_schema_revisions_v1 WHERE installation_id=$1 AND revision_digest=$2 AND manifest=$3",[t.installation_id,previous.digest,head?.manifest])).rowCount!==1)return fail();
     await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);
+    if(state.readyProtocol===2){
+      const active=(await db.query<{revision_digest:string}>("SELECT revision_digest FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND state='ACTIVE'",[t.installation_id])).rows;
+      if(active.length!==1||readyV2AdmissionRefusal(state,e,active[0]!.revision_digest)!==null)return fail("READY_V2_BIND");
+    }
     const plan=compileProvisioningTransition(previous,manifest,scope);
     if(plan.digest!==e.planDigest||plan.physical.digest!==e.physicalDigest)return fail();
     await verifyCatalog(db,t,previous?compileProvisioningContract(previous,scope):null);

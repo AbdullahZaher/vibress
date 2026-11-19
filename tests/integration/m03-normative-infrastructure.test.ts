@@ -540,6 +540,9 @@ it("J05: actual installer COMMIT acknowledgment loss, durable unknown, authentic
     await Promise.race([proxy.serverCommitObserved,pending.then(()=>{throw Error('fault target unexpectedly succeeded');},error=>{if(!(error instanceof Error)||error.message!=="M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY")throw error;return proxy.serverCommitObserved;})]);expect(await failed).toBe(true);
     expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,provisioningOperations:[{operationId:a.e.operationId,outcome:"UNCERTAIN"}]});
     expect((await f.admin.query("SELECT revision_digest FROM public.platform_schema_revisions_v1")).rows).toEqual([{revision_digest:m.digest}]);
+    // The install transaction committed the revision and its DB_COMMITTED
+    // lifecycle state, but the activation transaction never ran.
+    expect((await f.admin.query("SELECT state,state_version FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,m.digest])).rows).toEqual([{state:"DB_COMMITTED",state_version:5}]);
     await expect(apply(f,m,a)).rejects.toThrow();
     await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
     try{
