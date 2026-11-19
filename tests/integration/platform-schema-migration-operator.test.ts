@@ -4995,3 +4995,111 @@ it("M03-WATCHDOG-01: one-shot deadline owns only its target; unrelated same-role
     console.info("M03_OWNED_WATCHDOG_SAME_ROLE=PASS");
   }finally{await execution?.catch(()=>undefined);await lab.operator.query("ROLLBACK").catch(()=>undefined);await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
 },30000);
+
+
+async function intAdmissionLab(key:Key){
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const root=mkdtempSync(path.join(tmpdir(),"s03-int-admission-")),epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+  const authority=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,lab.installationId,lab.name,epoch,testAnchor(root),recoveryAdminKeys.publicKey);
+  const pool=new Pool({connectionString:urlFor(lab.name,lab.runtimeRole),max:2});
+  const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
+  const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
+    membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
+  const databaseOid=(await lab.dbAdmin.query<{oid:string}>("SELECT oid::text AS oid FROM pg_database WHERE datname=current_database()")).rows[0]!.oid;
+  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(authority,uow,expected,scope,work);
+  return {lab,authority,pool,uow,scope,expected,run,q:'"public".'+lab.dbAdmin.escapeIdentifier(lab.table),cleanup:async()=>{authority.close();await pool.end();rmSync(root,{recursive:true,force:true});}};
+}
+it("M03-INT-01: ACTIVE authority must deny stale actual persisted database epoch",async()=>{
+  const f=await intAdmissionLab("cr");let entered=false;
+  try{
+    expect(await f.run(async tx=>(await tx.query("SELECT name FROM "+f.q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
+    const stale=randomUUID();
+    await f.lab.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[stale]);
+    expect((await f.lab.dbAdmin.query("SELECT epoch_id FROM public.s03_p06_recovery_epochs")).rows).toEqual([{epoch_id:stale}]);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({epoch:f.expected.epoch,pending:false});
+    const outcome=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='stale-epoch' WHERE name='Alice'");}).then(()=> "COMMITTED",()=> "REFUSED");
+    console.info("INT-01 actual stale persisted epoch outcome="+outcome+" callback="+entered);
+    expect({outcome,entered,checksum:await contentChecksum(f.lab)}).toEqual({outcome:"REFUSED",entered:false,checksum:createHash("md5").update("Alice,Bob").digest("hex")});
+  }finally{await f.cleanup();}
+},30000);
+
+it("M03-INT-02: unmanaged outer transaction must not acquire nested admission",async()=>{
+  const f=await intAdmissionLab("cr");let entered=false,second=false;
+  try{
+    const outcome=await f.uow.run(f.scope,async outer=>{
+      const first=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='nested-admission' WHERE name='Alice'");}).then(()=> "ADMITTED",()=> "REFUSED");
+      const backend=(await outer.query<{pid:number}>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      expect((await f.lab.dbAdmin.query("SELECT state FROM pg_stat_activity WHERE pid=$1",[backend])).rows).toEqual([{state:"idle in transaction"}]);
+      await f.run(async()=>{second=true;}).catch(()=>undefined);
+      return first;
+    });
+    console.info("INT-02 actual nested outcome="+outcome+" callback="+entered+" second="+second);
+    expect({outcome,entered,second,checksum:await contentChecksum(f.lab)}).toEqual({outcome:"REFUSED",entered:false,second:false,checksum:createHash("md5").update("Alice,Bob").digest("hex")});
+  }finally{await f.cleanup();}
+},30000);
+
+it("M03-INT-03: exact routine authority rejects nondelegable author grant option",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"},verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify(),role=lab.dbAdmin.escapeIdentifier(lab.author);
+  await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+role+" WITH GRANT OPTION");
+  try{
+    expect((await lab.dbAdmin.query("SELECT has_function_privilege($1,'public.s03_p06_submit(text,text)','EXECUTE WITH GRANT OPTION') AS granted",[lab.author])).rows).toEqual([{granted:true}]);
+    const outcome=await verify().then(()=> "ACCEPTED",()=> "REFUSED");
+    console.info("INT-03 actual grant option outcome="+outcome);
+    expect(outcome).toBe("REFUSED");
+  }finally{await lab.dbAdmin.query("REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION public.s03_p06_submit(text,text) FROM "+role);}
+  expect(await verify()).toEqual(expected);
+},30000);
+
+it("M03-INT-04: signed wrong previous digest must not become valid during real query",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const req=await freshP06(lab),scope={applicationId,installationId:lab.installationId};
+  const target=lab.plan.proposedManifest;
+  const prepared=prepareExperimentalPhysicalTransition(lab.current,target,scope);
+  expect(prepared.disposition).toBe("EXISTING_OPERATOR_AUTHORIZATION_REQUIRED");
+  expect(prepared.ddl?.columnName).toBe("website");
+  expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
+  expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-registry-authority-")),authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+  expect((await authority.execute(urlFor(lab.name,lab.operatorRole),req,epochKeys.publicKey)).status).toBe("APPLIED");
+  const external=authority.authenticatedSnapshot();
+  const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+  const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
+    ledgerId:external.ledgerId,authorityHead:external.head,authoritySequence:external.sequence,operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
+  const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
+  await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+  try{
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
+    expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const stale={...evidence,authorityHead:"f".repeat(64)};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,stale,attest(stale),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const wrong={...evidence,operationId:randomUUID()};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+
+    const changed={...evidence,previousDigest:"f".repeat(64)},signature=attest(changed);
+    const query=lab.dbAdmin.query;
+    let entered!:()=>void,release!:()=>void;
+    const started=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
+    let first=true;
+    lab.dbAdmin.query=(async (...args:unknown[])=>{
+      const result=await Reflect.apply(query,lab.dbAdmin,args);
+      if(first){first=false;entered();await hold;}
+      return result;
+    }) as typeof query;
+    try{
+      const pending=verifyExperimentalRegistry(lab.dbAdmin,changed,signature,recoveryAdminKeys.publicKey,authority).then(()=> "ACCEPTED",()=> "REFUSED");
+      await Promise.race([started,pending.then(()=>{throw Error("verification settled before actual query barrier");})]);
+      changed.previousDigest=evidence.previousDigest;release();
+      const outcome=await pending;
+      console.info("INT-04 actual unsigned mutation outcome="+outcome);
+      expect(outcome).toBe("REFUSED");
+    }finally{release();lab.dbAdmin.query=query;}
+  }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+},30000);

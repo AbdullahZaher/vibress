@@ -1,51 +1,10 @@
-name: M03 integrated recovery, registry and security closure
+name: M03 rejected baseline reproduction (test-only)
 on:
   push:
-    branches: [experiment/m03-final-engineering-closure-20261118]
+    branches: [experiment/m03-int-original-reproductions-20261119]
 permissions:
   contents: read
 jobs:
-  physical:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        scenario: [PHY-M03-01, PHY-M03-02, PHY-M03-03, PHY-M03-07]
-    env:
-      M03_PHYSICAL_COMPONENT: "1"
-      M03_PHYSICAL_CONTAINER: vibress-m03-physical-ci
-      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
-        with:
-          version: 11.22.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: "24.22.3"
-      - name: Exact source, pinned toolchain, frozen install
-        run: |
-          git rev-parse HEAD HEAD^{tree}
-          node --version
-          test "$(node -v)" = v24.22.3
-          test "$(pnpm -v)" = 11.22.0
-          pnpm install --frozen-lockfile
-          bash -n tests/fixtures/m03-actual-physical-cluster.sh
-      - name: Focused source validation
-        run: |
-          pnpm --filter @vibress/schema-engine test
-          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts packages/database/src/schema-operator-experimental-durable-authority.ts packages/database/src/platform-schema-migration-operator.ts scripts/platform/m03-s03-fault/reopen-authority.ts
-      - name: Dedicated physical PostgreSQL 16 cluster
-        run: bash tests/fixtures/m03-actual-physical-cluster.sh start
-      - name: Actual M03 component operator and physical recovery
-        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "${{ matrix.scenario }}"
-      - name: Cleanup isolated physical cluster
-        if: always()
-        run: bash tests/fixtures/m03-actual-physical-cluster.sh cleanup
-
   disposable:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -69,25 +28,14 @@ jobs:
           test "$(node -v)" = v24.22.3
           test "$(pnpm -v)" = 11.22.0
           pnpm install --frozen-lockfile
-          pnpm typecheck
-          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts packages/database/src/schema-operator-experimental-admission.ts packages/database/src/schema-operator-experimental-registry.ts packages/database/src/schema-operator-experimental-writer-contract.ts packages/schema-engine/src/physical-contract.ts
-          pnpm verify:explicit-any
       - name: Boot disposable pinned PG16 service
         run: |
           printf 'services:\n  postgres:\n    image: postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e\n' > "$RUNNER_TEMP/pg-pin.yml"
           docker compose -f compose.dev.yml -f "$RUNNER_TEMP/pg-pin.yml" up -d --wait postgres redis
           test "$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc 'SHOW server_version_num')" = 160016
           docker inspect "$(docker compose -f compose.dev.yml ps -q postgres)" --format '{{.Image}}'
-      - name: New actual role matrix and additive compatibility
-        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t 'M03-(WRITER-01|WRITER-02|COMPAT-01|ADMISSION-01|REGISTRY-01|WATCHDOG-01)'
-      - name: Historical operator, logical recovery and wire faults
-        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts tests/integration/platform-schema-migration-fault-injection.test.ts
-      - name: Historical schema, authority and architecture checks
-        run: |
-          pnpm --filter @vibress/schema-engine test
-          pnpm exec vitest run tests/unit/schema-operator-experimental-deadline.test.ts tests/unit/schema-operator-experimental-durable-authority.test.ts tests/architecture/platform-boundaries.test.ts apps/worker/tests/worker-job-scope.test.ts
-      - name: Actual existing worker scheduling and outbox regression
-        run: pnpm exec vitest run --no-file-parallelism tests/integration/worker-scheduling.test.ts tests/integration/outbox.test.ts
+      - name: Original independent counterexamples (expected red)
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t 'M03-INT-0[1-4]:'
       - name: Cleanup owned disposable services
         if: always()
         run: docker compose -f compose.dev.yml down --volumes
