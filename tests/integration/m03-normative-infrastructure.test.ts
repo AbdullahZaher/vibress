@@ -232,6 +232,60 @@ describe("M03 actual isolated normative infrastructure",()=>{
       expect(await children()).toBe(0);
     });
   },60000);
+  it("FUNC-01: protected ACL matrix and restoration",async()=>{
+    const f=await lab("funcmatrix","reference-func-matrix"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const rt=qi(f.runtime),inst=qi(f.installer),rev="public.platform_schema_revisions_v1",witness="public.platform_schema_business_witnesses_v1",history="public.platform_schema_recovery_reattestations_v1";
+    f.reader="v3_extra_"+suffix;
+    await createFixtureRole(f.reader);
+    const extra=qi(f.reader);
+    const rootRole=(await f.admin.query<{name:string}>("SELECT current_user AS name")).rows[0]!.name;
+    const cases:[string,string,string][]=[
+      ["table-update","GRANT UPDATE ON "+rev+" TO "+rt,"REVOKE UPDATE ON "+rev+" FROM "+rt],
+      ["history-select","GRANT SELECT ON "+history+" TO "+rt,"REVOKE SELECT ON "+history+" FROM "+rt],
+      ["delete","GRANT DELETE ON "+rev+" TO "+rt,"REVOKE DELETE ON "+rev+" FROM "+rt],
+      ["truncate","GRANT TRUNCATE ON "+rev+" TO "+rt,"REVOKE TRUNCATE ON "+rev+" FROM "+rt],
+      ["witness-xid","GRANT INSERT(xid) ON "+witness+" TO "+rt,"REVOKE INSERT(xid) ON "+witness+" FROM "+rt],
+      ["routine-grant-option","GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system() TO "+rt+" WITH GRANT OPTION","REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION pg_catalog.pg_control_system() FROM "+rt],
+      ["table-grant-option","GRANT SELECT ON "+rev+" TO "+inst+" WITH GRANT OPTION","REVOKE GRANT OPTION FOR SELECT ON "+rev+" FROM "+inst],
+      ["column-grant-option","GRANT INSERT(signature) ON "+witness+" TO "+rt+" WITH GRANT OPTION","REVOKE GRANT OPTION FOR INSERT(signature) ON "+witness+" FROM "+rt],
+      ["unexpected-principal","GRANT SELECT ON "+history+" TO "+extra,"REVOKE SELECT ON "+history+" FROM "+extra],
+      ["public-grant","GRANT SELECT ON "+history+" TO PUBLIC","REVOKE SELECT ON "+history+" FROM PUBLIC"],
+      ["ownership","ALTER TABLE "+history+" OWNER TO "+rt,"ALTER TABLE "+history+" OWNER TO "+qi(rootRole)],
+      ["incoming-membership","GRANT "+rt+" TO "+extra,"REVOKE "+rt+" FROM "+extra],
+      ["outgoing-membership","GRANT "+extra+" TO "+rt,"REVOKE "+extra+" FROM "+rt],
+      ["default-acl","ALTER DEFAULT PRIVILEGES FOR ROLE "+inst+" GRANT SELECT ON TABLES TO "+rt,"ALTER DEFAULT PRIVILEGES FOR ROLE "+inst+" REVOKE SELECT ON TABLES FROM "+rt],
+      ["cross-namespace","CREATE SCHEMA m03_forbidden; GRANT USAGE,CREATE ON SCHEMA m03_forbidden TO "+rt,"DROP SCHEMA m03_forbidden"],
+      ["missing-grant","REVOKE INSERT(signature) ON "+witness+" FROM "+rt,"GRANT INSERT(signature) ON "+witness+" TO "+rt],
+      ["installer-history-write","GRANT UPDATE ON "+rev+" TO "+inst,"REVOKE UPDATE ON "+rev+" FROM "+inst],
+    ];
+    for(const [label,drift,restore] of cases)await expectDriftRefused(f,m,"FUNC-01-"+label,async()=>{await f.admin.query(drift);},async()=>{await f.admin.query(restore);});
+    const indirect="v3_indirect_"+suffix;
+    await createFixtureRole(indirect);
+    try{
+      await expectDriftRefused(f,m,"FUNC-01-transitive-membership",async()=>{await root.query("GRANT "+qi(indirect)+" TO "+extra+"; GRANT "+extra+" TO "+rt);},async()=>{await root.query("REVOKE "+extra+" FROM "+rt+"; REVOKE "+qi(indirect)+" FROM "+extra);});
+    }finally{await root.query("DROP ROLE "+qi(indirect));}
+  },120000);
+  it("FUNC-02: exact additional SQL semantic drift and restoration",async()=>{
+    const f=await lab("funcsem","reference-func-sem"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const customers=table(f,m,"customers"),deals=table(f,m,"deals"),ix=await relationIndex(f,m),index=qi(f.namespace)+"."+qi(ix.name),canonical="DROP INDEX "+index+"; CREATE INDEX "+qi(ix.name)+" ON "+deals+" (tenant_id, customer)";
+    const fk=(await f.admin.query<{name:string}>("SELECT conname AS name FROM pg_constraint WHERE conrelid=$1::regclass AND contype='f'",[deals])).rows[0]!.name;
+    const restoreFk="ALTER TABLE "+deals+" DROP CONSTRAINT "+qi(fk)+"; ALTER TABLE "+deals+" ADD CONSTRAINT "+qi(fk)+" FOREIGN KEY (tenant_id,customer) REFERENCES "+customers+" (tenant_id,id) ON UPDATE RESTRICT ON DELETE RESTRICT";
+    const cases:[string,string,string][]=[
+      ["column-collation","ALTER TABLE "+customers+' ALTER COLUMN code TYPE text COLLATE pg_catalog."C"',"ALTER TABLE "+customers+' ALTER COLUMN code TYPE text COLLATE pg_catalog."default"'],
+      ["partial-index","DROP INDEX "+index+"; CREATE INDEX "+qi(ix.name)+" ON "+deals+" (tenant_id,customer) WHERE customer IS NOT NULL",canonical],
+      ["expression-index","DROP INDEX "+index+"; CREATE INDEX "+qi(ix.name)+" ON "+deals+" (lower(tenant_id),customer)",canonical],
+      ["included-column","DROP INDEX "+index+"; CREATE INDEX "+qi(ix.name)+" ON "+deals+" (tenant_id,customer) INCLUDE(code)",canonical],
+      ["null-order","DROP INDEX "+index+"; CREATE INDEX "+qi(ix.name)+" ON "+deals+" (tenant_id NULLS FIRST,customer)",canonical],
+      ["fk-action","ALTER TABLE "+deals+" DROP CONSTRAINT "+qi(fk)+"; ALTER TABLE "+deals+" ADD CONSTRAINT "+qi(fk)+" FOREIGN KEY (tenant_id,customer) REFERENCES "+customers+" (tenant_id,id) ON UPDATE CASCADE ON DELETE RESTRICT",restoreFk],
+      ["invalid-constraint","ALTER TABLE "+customers+" ADD CONSTRAINT m03_unexpected CHECK (code <> '') NOT VALID","ALTER TABLE "+customers+" DROP CONSTRAINT m03_unexpected"],
+      ["unexpected-rule","CREATE RULE m03_unexpected AS ON DELETE TO "+customers+" DO INSTEAD NOTHING","DROP RULE m03_unexpected ON "+customers],
+      ["unexpected-user-trigger","CREATE FUNCTION public.m03_unexpected_trigger() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END'; REVOKE EXECUTE ON FUNCTION public.m03_unexpected_trigger() FROM PUBLIC; CREATE TRIGGER m03_unexpected BEFORE INSERT ON "+customers+" FOR EACH ROW EXECUTE FUNCTION public.m03_unexpected_trigger()","DROP TRIGGER m03_unexpected ON "+customers+"; DROP FUNCTION public.m03_unexpected_trigger()"],
+      ["unexpected-policy","CREATE POLICY m03_unexpected ON "+customers+" USING(true)","DROP POLICY m03_unexpected ON "+customers],
+    ];
+    for(const [label,drift,restore] of cases)await expectDriftRefused(f,m,"FUNC-02-"+label,async()=>{await f.admin.query(drift);},async()=>{await f.admin.query(restore);});
+  },120000);
   it("J03: independent non-CMS installation and mutual credential isolation",async()=>{
     const f=await lab("inventory","reference-inventory"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true},{id:"label",type:"text",required:true}]}],f.scope));
     await apply(f,m,approval(f,null,m));await check(f,m);

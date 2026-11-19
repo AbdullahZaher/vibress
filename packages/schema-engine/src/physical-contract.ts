@@ -56,6 +56,20 @@ export function provisioningIdentifier(value:string):string{
 export function provisioningNamespace(scope:SchemaCompilationScope):string{
   return "v3_core_"+hashPhysical([PROVISIONING_PROFILE,scope.applicationId,scope.installationId]).slice(0,24);
 }
+// Observation semantics of the original compiler-generated PG16 V1 SQL.
+// Not part of historical signed V1 manifest/physical digest serialization.
+// Portable names describe default collation identity, not locale equivalence.
+export const PROVISIONING_CATALOG_VERIFICATION_PROFILE="PG16_CORE_CATALOG_V1" as const;
+export function provisioningColumnCollationV1(type:string):string|null{
+  if(type==="text")return "pg_catalog.default";
+  if(["uuid","boolean","double precision","timestamp with time zone"].includes(type))return null;
+  throw Error("PROVISIONING_CATALOG_TYPE_UNSUPPORTED");
+}
+export function provisioningIndexKeyV1(type:string){
+  if(type==="text")return {opclass:"pg_catalog.text_ops",family:"pg_catalog.text_ops",collation:"pg_catalog.default"};
+  if(type==="uuid")return {opclass:"pg_catalog.uuid_ops",family:"pg_catalog.uuid_ops",collation:"-"};
+  throw Error("PROVISIONING_CATALOG_INDEX_UNSUPPORTED");
+}
 export interface ProvisionedColumn {name:string;type:string;required:boolean;enumValues?:readonly string[];target?:string}
 export interface ProvisionedResource {
   id:string;table:string;ownership:"application"|"tenant";columns:readonly ProvisionedColumn[];

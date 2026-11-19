@@ -4,7 +4,7 @@
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
-import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,type ProvisioningContract} from "@vibress/schema-engine";
+import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,type ProvisioningContract} from "@vibress/schema-engine";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
 const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
@@ -126,7 +126,7 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     const desired=resource.columns.map(c=>({name:c.name,type:c.type,required:c.required,hasdefault:false,identity:"",generated:"",acl:false})).sort((a,b)=>a.name.localeCompare(b.name,"en"));
     if(!equal(cols,desired))return fail("CATALOG_3");
     const columnCollations=(await db.query<{name:string;collation:string|null}>(`SELECT a.attname::text AS name,CASE WHEN co.oid IS NULL THEN NULL ELSE cn.nspname||'.'||co.collname END AS collation FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_catalog.pg_collation co ON co.oid=a.attcollation LEFT JOIN pg_catalog.pg_namespace cn ON cn.oid=co.collnamespace WHERE n.nspname=$1 AND c.relname=$2 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attname`,[namespace,resource.table])).rows;
-    if(!equal(columnCollations,desired.map(c=>({name:c.name,collation:c.type==="text"?"pg_catalog.default":null}))))return fail("CATALOG_COLUMN_COLLATION_V1");
+    if(!equal(columnCollations,desired.map(c=>({name:c.name,collation:provisioningColumnCollationV1(c.type)}))))return fail("CATALOG_COLUMN_COLLATION_V1");
     const cons=(await db.query<{name:string;kind:string;columns:string[];target:string|null;targetNamespace:string|null;targetColumns:string[];valid:boolean;defer:boolean;update:string;del:string;match:string;expression:string}>("SELECT co.conname AS name,co.contype AS kind,ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,f.relname AS target,fn.nspname AS \"targetNamespace\",ARRAY(SELECT a.attname::text FROM unnest(co.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=f.oid AND a.attnum=k.attnum ORDER BY k.ord) AS \"targetColumns\",co.convalidated AS valid,co.condeferrable OR co.condeferred AS defer,co.confupdtype AS update,co.confdeltype AS del,co.confmatchtype AS match,coalesce(pg_get_expr(co.conbin,co.conrelid),'') AS expression FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class f ON f.oid=co.confrelid LEFT JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY co.conname",[namespace,resource.table])).rows;
     const constraints=provisioningConstraints(resource,namespace);
     const enums=resource.columns.filter(c=>c.enumValues);
@@ -155,8 +155,8 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     for(const e of expectedIx){
       const a=indexSemantics.find(x=>x.name===e.name),types=e.columns.map(name=>resource.columns.find(c=>c.name===name)?.type);
       if(types.some(type=>type!=="text"&&type!=="uuid"))return fail("CATALOG_INDEX_TYPE_V1");
-      const ops=types.map(type=>type==="text"?"pg_catalog.text_ops":"pg_catalog.uuid_ops");
-      if(!a||!a.safe||!equal(a.opclasses,ops)||!equal(a.families,ops)||!equal(a.collations,types.map(type=>type==="text"?"pg_catalog.default":"-")))return fail("CATALOG_INDEX_SEMANTICS_V1");
+      const keys=types.map(type=>provisioningIndexKeyV1(type!));
+      if(!a||!a.safe||!equal(a.opclasses,keys.map(k=>k.opclass))||!equal(a.families,keys.map(k=>k.family))||!equal(a.collations,keys.map(k=>k.collation)))return fail("CATALOG_INDEX_SEMANTICS_V1");
     }
     const links=(await db.query<{name:string;index:string|null;indexNamespace:string|null;safe:boolean}>(`SELECT co.conname::text AS name,i.relname::text AS index,ins.nspname::text AS "indexNamespace",(co.conparentid=0 AND co.coninhcount=0 AND co.conislocal) AS safe FROM pg_catalog.pg_constraint co JOIN pg_catalog.pg_class c ON c.oid=co.conrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_catalog.pg_class i ON i.oid=co.conindid LEFT JOIN pg_catalog.pg_namespace ins ON ins.oid=i.relnamespace WHERE n.nspname=$1 AND c.relname=$2`,[namespace,resource.table])).rows;
     for(const co of links){
