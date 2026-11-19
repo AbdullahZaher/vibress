@@ -171,6 +171,7 @@ This section records evidence, not normative acceptance. All original criteria a
 
 - B07 partial: the installer now accepts provisioning after a READY V2 authority only when the approval's parent is the single persisted lifecycle `ACTIVE` revision; identity, physical database, system identifier, timeline, epoch, ledger and approval head/sequence remain verified by the existing trust/approval path. Unit tests cover the binding predicate. No end-to-end READY V2 provisioning journey executed yet, and lifecycle epoch reattestation after PITR is still missing, so this is not a closed V2 admission claim.
 - Normative suite after B01/B07: 17 passed, 2 physical-only skipped; V2 predicate 4/4. The installer now also enforces exactly one ACTIVE lifecycle row, equal to the registry head, so an orphan or forged ACTIVE revision blocks further installs (negative case executed).
+- A03 historical digest preservation: a fixed CORE V1 manifest (single `invoices` resource, `text`/`boolean`/`datetime` fields) was compiled independently against baseline `96442be5a1b02d3fbe922e082344f49f4fa854b0` (extracted via `git archive`) and against current sources. Manifest, canonical IR, provisioning contract and portable identity digests were byte-identical; the four values are frozen in `packages/schema-engine/src/__tests__/historical-v1-digests.test.ts`. This is a local characterization fixture, not an independent certification.
 
 | Epic | Evidence / status | Remaining mandatory limitation |
 | --- | --- | --- |
