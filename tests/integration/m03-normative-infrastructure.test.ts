@@ -6,6 +6,7 @@ import path from "node:path";
 import {fork,spawnSync,type ChildProcess} from "node:child_process";
 import {build} from "esbuild";
 import {referenceQueue} from "../../apps/worker/test-fixtures/m03-normative-queue";
+import {referenceAction,referenceProducer,referenceOperationId,referenceJobMessage,type ReferenceWork,type ReferenceJob} from "../../apps/worker/test-fixtures/m03-normative-job-contract";
 import {Client,Pool} from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
@@ -387,6 +388,8 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
   await f.admin.query("CREATE TABLE public.platform_memberships(application_id text NOT NULL,tenant_id text NOT NULL,principal_id text NOT NULL,active boolean NOT NULL,roles text[] NOT NULL,permissions text[] NOT NULL,PRIMARY KEY(application_id,tenant_id,principal_id))");
   const perms=["crm.customers.read","crm.customers.create"];
   await f.admin.query("INSERT INTO public.platform_memberships VALUES($1,'tenant-a','api-principal',true,ARRAY['staff'],$2)",[f.scope.applicationId,perms]);
+  await f.admin.query("INSERT INTO public.platform_memberships VALUES($1,'tenant-a',$2,true,ARRAY['worker'],ARRAY[$3]::text[])",[f.scope.applicationId,referenceProducer,referenceAction]);
+  const producerKeys=generateKeyPairSync("ed25519");
   await f.admin.query("GRANT SELECT ON public.platform_memberships TO "+qi(f.reader));
   const token=randomBytes(24).toString("hex"),apiDir=mkdtempSync(path.resolve("apps/platform-reference/.m03-reference-")),workerDir=mkdtempSync(path.resolve("apps/worker/.m03-reference-"));
   const processes:ChildProcess[]=[];
@@ -394,7 +397,7 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
   const env={...process.env,NODE_ENV:"test",M03_NORMATIVE_REFERENCE:"1",M03_APP:f.scope.applicationId,M03_INSTALLATION:f.scope.installationId,
     M03_DATABASE:f.name,M03_OID:f.oid,M03_RUNTIME_ROLE:f.runtime,M03_RUNTIME_URL:dbUrl(f.name,f.runtime),M03_MEMBERSHIP_URL:dbUrl(f.name,f.reader),
     M03_NAMESPACE:f.namespace,M03_CUSTOMERS:old.resources.find(x=>x.id==="customers")!.tableName,M03_ACTIVITIES:old.resources.find(x=>x.id==="activities")!.tableName,
-    M03_QUEUE:queueName,M03_QUEUE_PREFIX:queuePrefix,M03_TOKENS:JSON.stringify({[token]:{id:"api-principal",kind:"staff",tenantIds:["tenant-a"],roles:["staff"],permissions:perms}})};
+    M03_QUEUE:queueName,M03_QUEUE_PREFIX:queuePrefix,M03_JOB_PRODUCER_KEY:producerKeys.publicKey.export({format:"der",type:"spki"}).toString("base64"),M03_TOKENS:JSON.stringify({[token]:{id:"api-principal",kind:"staff",tenantIds:["tenant-a"],roles:["staff"],permissions:perms}})};
   const artifacts:Record<string,string>={};
   const artifact=async(kind:"api"|"worker",version:1|2)=>{
     const file=path.join(kind==="api"?apiDir:workerDir,kind+"-"+version+".cjs"),entry=kind==="api"?"apps/platform-reference/test-fixtures/m03-normative-api.ts":"apps/worker/test-fixtures/m03-normative-worker.ts";
@@ -413,7 +416,11 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
   const stop=async(child:ChildProcess)=>{if(child.exitCode!==null||child.signalCode!==null)return;await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{child.kill("SIGKILL");reject(Error("reference shutdown timeout"));},10000);child.once("exit",()=>{clearTimeout(timer);resolve();});child.kill("SIGTERM");});};
   const headers={authorization:"Bearer "+token,"x-tenant-id":"tenant-a","content-type":"application/json"};
   const list=async(port:number,tenant="tenant-a")=>fetch("http://127.0.0.1:"+port+"/crm/customers",{headers:{...headers,"x-tenant-id":tenant}});
-  const jobData=(version:1|2,operationId:string)=>({version,applicationId:f.scope.applicationId,installationId:f.scope.installationId,tenantId:"tenant-a",operationId,customerId,...(version===2?{website:"https://example.invalid"}:{})});
+  const signed=(job:Omit<ReferenceJob,"signature">,key=producerKeys.privateKey):ReferenceJob=>({...job,signature:sign(null,Buffer.from(referenceJobMessage(job)),key).toString("base64url")});
+  const jobData=(version:1|2,nonce:string,overrides:Partial<ReferenceWork>={})=>{
+    const work:ReferenceWork={version,applicationId:f.scope.applicationId,installationId:f.scope.installationId,tenantId:"tenant-a",producer:referenceProducer,action:referenceAction,nonce,customerId,website:version===2?"https://example.invalid":null,...overrides};
+    return signed({...work,operationId:referenceOperationId(work),expiresAt:Date.now()+120000});
+  };
   try{
     await events.waitUntilReady();
     const a1=await artifact("api",1),a2=await artifact("api",2),w1=await artifact("worker",1),w2=await artifact("worker",2);
@@ -436,6 +443,18 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
     expect(await job.waitUntilFinished(events,15000)).toEqual({version:2,effect:"APPLIED"});
     const duplicate=await queue.add("activity",jobData(2,effect));
     expect(await duplicate.waitUntilFinished(events,15000)).toEqual({version:2,effect:"ALREADY_APPLIED"});
+    const original=jobData(2,effect),changed=signed({...original,website:"https://changed.invalid"}),forged={...original,tenantId:"tenant-b"},wrongKey=signed(original,generateKeyPairSync("ed25519").privateKey);
+    const refused=[changed,forged,wrongKey,jobData(2,randomUUID(),{tenantId:"tenant-b"}),signed({...original,expiresAt:Date.now()-1})];
+    for(const payload of refused){
+      const bad=await queue.add("activity",payload);
+      await expect(bad.waitUntilFinished(events,15000)).rejects.toThrow();
+    }
+    await f.admin.query("UPDATE public.platform_memberships SET active=false WHERE principal_id=$1",[referenceProducer]);
+    try{
+      const revoked=await queue.add("activity",jobData(2,randomUUID()));
+      await expect(revoked.waitUntilFinished(events,15000)).rejects.toThrow();
+    }finally{await f.admin.query("UPDATE public.platform_memberships SET active=true WHERE principal_id=$1",[referenceProducer]);}
+    console.info("M03_JOB_SIGNED_AUTHORIZATION_AND_PAYLOAD_BINDING=PASS");
     expect((await uow.run(ta,tx=>tx.query("SELECT count(*)::int AS n FROM "+activity))).rows).toEqual([{n:3}]);
     expect(await (await list(newApi.port!)).json()).toMatchObject({customers:[{website:"https://example.invalid"}]});
     const created=await fetch("http://127.0.0.1:"+oldApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"legacy-write",name:"Old version"})});expect(created.status).toBe(200);
