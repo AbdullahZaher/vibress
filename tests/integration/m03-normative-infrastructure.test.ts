@@ -12,6 +12,7 @@ import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
 import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy";
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
+import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
@@ -143,6 +144,50 @@ describe("M03 actual isolated normative infrastructure",()=>{
     }finally{await f.admin.query("DROP POLICY unexpected ON "+c);}
     expect(await check(f,m)).toBe(plan.physical.digest);
     console.info("M03_J01_J02_CRM_RLS_RELATIONS=PASS");
+  },60000);
+  it("A02/J02: actual scoped leaf-resource version CAS, soft deletion and stable keyset pagination",async()=>{
+    const f=await lab("versioned","reference-inventory-versioned");
+    const m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"items",ownership:"tenant",fields:[
+      {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+      {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false}
+    ]}],f.scope));
+    await apply(f,m,approval(f,null,m));
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.items.create","resource.items.update","resource.items.delete","resource.items.read"];
+    const scoped=(tenant:string,grants:string[]=permissions)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:grants},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:grants},authorization:{allowed:true,permissions:grants,policyVersion:"fixture-versioned-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    const a=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-1","First"));
+    const b=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-2","Second"));
+    const c=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-3","Third"));
+    const other=await uow.run(tb,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-1","Other tenant"));
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-1","Duplicate"))).rejects.toMatchObject({code:"23505"});
+    const updates=await Promise.all(["Concurrent A","Concurrent B"].map(name=>uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).update(a.id,a.version_token,name))));
+    expect(updates.filter(Boolean)).toHaveLength(1);
+    const winner=updates.find(row=>row!==null)!;
+    expect(winner.version_token).not.toBe(a.version_token);
+    expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).update(a.id,a.version_token,"Stale"))).toBeNull();
+    expect(await uow.run(tb,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).update(a.id,winner.version_token,"Wrong tenant"))).toBeNull();
+    expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).remove(a.id,a.version_token))).toBe(false);
+    const first=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(2));
+    expect(first.records.map(row=>row.id)).toEqual([a.id,b.id,c.id].sort().slice(0,2));
+    expect(first.nextCursor).not.toBeNull();
+    const second=await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(2,first.nextCursor));
+    expect([...first.records,...second.records].map(row=>row.id)).toEqual([a.id,b.id,c.id].sort());
+    expect(second.nextCursor).toBeNull();
+    expect((await uow.run(tb,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(100))).records.map(row=>row.id)).toEqual([other.id]);
+    expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).remove(a.id,winner.version_token))).toBe(true);
+    expect(await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).update(a.id,winner.version_token,"Deleted"))).toBeNull();
+    expect((await uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(10,null,"stock-1"))).records).toEqual([]);
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-1","Cannot reuse tombstone"))).rejects.toMatchObject({code:"23505"});
+    await expect(uow.run(ta,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).list(101))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(uow.run(scoped("tenant-a",["resource.items.read"]),async tx=>(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)).create("stock-4","Not authorized"))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    const tombstone=(await f.admin.query<{deleted:boolean}>("SELECT deleted_on IS NOT NULL AS deleted FROM "+table(f,m,"items")+" WHERE tenant_id=$1 AND id=$2",["tenant-a",a.id])).rows;
+    expect(tombstone).toEqual([{deleted:true}]);
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    console.info("M03_A02_VERSION_CAS_SOFT_DELETE_KEYSET=PASS");
   },60000);
   // These are contract regression tests, not asserted reproduction results.
   // Each installs a clean isolated CRM, applies actual drift, records the
