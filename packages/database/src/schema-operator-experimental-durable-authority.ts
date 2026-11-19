@@ -14,6 +14,7 @@ import type { ClientBase } from "pg";
 import { TenantUnitOfWork,type ScopedTransaction,type VerifiedScope } from "@vibress/tenancy";
 import { verifyExperimentalAdmissionConnection,type ExperimentalAdmissionTarget } from "./schema-operator-experimental-admission";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
+import { collectExperimentalProvisioningCommit,type ProvisioningCommitEvidence } from "./schema-operator-experimental-installer";
 import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -25,12 +26,26 @@ type Operation = OperationIdentity & OperationOutcome;
 type JournalEvidence = Pick<Operation,"operationId"|"submissionId"|"approvalId"|"planDigest"> & { newDigest: string };
 type ObservedCommitEvidence = Readonly<{installationId:string;databaseName:string;epoch:string;
   catalogManifestDigest:string;readinessEvidenceDigest:string;journal:readonly JournalEvidence[]}>;
+export interface ExperimentalProvisioningAdmission {
+  operationId:string;approvalId:string;epoch:string;applicationId:string;installationId:string;databaseName:string;databaseOid:string;
+  approvalHead:string;approvalSequence:number;planDigest:string;physicalDigest:string;manifestDigest:string;
+  parent:string|null;signedDigest:string;
+}
+type ProvisioningOperation=ExperimentalProvisioningAdmission & {outcome:"ADMITTED"|"UNCERTAIN"|"COMMITTED"|"ROLLED_BACK"};
+function validProvisioning(p:ExperimentalProvisioningAdmission,s:State):boolean{
+  return /^vibress_s03_norm_[a-z0-9_]+$/.test(s.databaseName)&&p.databaseName===s.databaseName&&p.installationId===s.installationId&&p.epoch===s.epoch&&
+    /^[a-z][a-z0-9_-]{1,62}$/.test(p.applicationId)&&/^\d{1,10}$/.test(p.databaseOid)&&UUID.test(p.operationId)&&UUID.test(p.approvalId)&&
+    [p.approvalHead,p.planDigest,p.physicalDigest,p.manifestDigest,p.signedDigest].every(v=>SHA.test(v))&&
+    (p.parent===null||SHA.test(p.parent))&&Number.isSafeInteger(p.approvalSequence)&&p.approvalSequence>0;
+}
 type Event =
   | { kind: "GENESIS"; installationId: string; databaseName: string; epoch: string; ledgerId:string; signingIdentity:string; administrationIdentity:string }
   | { kind: "ADMIT"; operation: Operation }
   | ({ kind: "OUTCOME"; operationId: string; evidenceDigest?: string } & ({outcome:"COMMITTED";newDigest:string}|{outcome:"UNCERTAIN"|"ROLLED_BACK";newDigest?:never}))
   | { kind:"ROLLBACK_WITNESS"; operationId:string; witness:RollbackWitness }
   | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
+  | { kind:"PROVISIONING_ADMIT"; admission:ExperimentalProvisioningAdmission }
+  | { kind:"PROVISIONING_OUTCOME"; operationId:string; outcome:"COMMITTED"|"ROLLED_BACK"|"UNCERTAIN"; evidenceDigest?:string }
   | { kind: "BUSINESS_ADMIT"; lease: string; epoch:string }
   | { kind: "BUSINESS_SETTLED"; lease:string; outcome:"COMMITTED"|"ROLLED_BACK" }
   | { kind: "INTENT"; intent: string }
@@ -38,7 +53,7 @@ type Event =
   | { kind: "ADVANCE_V2"; epoch:string; evidenceDigest:string; scopedTarget:ScopedRecoveryTarget }
   | { kind: "READY"|"READY_V2"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
+  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation>; provisioning?:Map<string,ProvisioningOperation> };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -79,7 +94,7 @@ function reduce(s: State|undefined,e: Event): State {
   const next:State={...s,epochs:[...s.epochs],operations:new Map(s.operations)};
   switch(e.kind){
     case "ADMIT":
-      if(s.businessLease||s.pending || [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN") || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
+      if(s.provisioning||s.businessLease||s.pending || [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN") || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
         e.operation.newDigest!==undefined || e.operation.epoch!==s.epoch || s.operations.has(e.operation.operationId)) return refuse();
       if([...s.operations.values()].some(o=>o.submissionId===e.operation.submissionId||o.approvalId===e.operation.approvalId)) return refuse();
       next.operations.set(e.operation.operationId,{...e.operation});break;
@@ -103,9 +118,23 @@ function reduce(s: State|undefined,e: Event): State {
       if(!s.pending){next.pending=true;next.advanced=false;next.intent=e.nonce;}
       break;
     case "BUSINESS_ADMIT":
-      if(s.pending||s.businessLease||s.readyProtocol===2||e.epoch!==s.epoch||!UUID.test(e.lease)||
+      if(s.provisioning||s.pending||s.businessLease||s.readyProtocol===2||e.epoch!==s.epoch||!UUID.test(e.lease)||
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))return refuse();
       next.businessLease=e.lease;break;
+    case "PROVISIONING_ADMIT": {
+      const p=e.admission,history=s.provisioning??new Map<string,ProvisioningOperation>();
+      if(s.pending||s.businessLease||s.operations.size||s.readyProtocol===2||!validProvisioning(p,s)||
+        [...history.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"||o.approvalId===p.approvalId)||history.has(p.operationId)||
+        ([...history.values()].filter(o=>o.outcome==="COMMITTED").at(-1)?.manifestDigest??null)!==p.parent)return refuse();
+      next.provisioning=new Map(history);next.provisioning.set(p.operationId,{...p,outcome:"ADMITTED"});break;
+    }
+    case "PROVISIONING_OUTCOME": {
+      const history=s.provisioning,p=history?.get(e.operationId);
+      if(!history||!p||p.outcome!=="ADMITTED"&&p.outcome!=="UNCERTAIN"||
+        (p.outcome==="UNCERTAIN"&&(e.outcome!=="COMMITTED"||!s.pending||!e.evidenceDigest))||
+        !["COMMITTED","ROLLED_BACK","UNCERTAIN"].includes(e.outcome)||(e.evidenceDigest!==undefined&&!SHA.test(e.evidenceDigest)))return refuse();
+      next.provisioning=new Map(history);next.provisioning.set(p.operationId,{...p,outcome:e.outcome});break;
+    }
     case "BUSINESS_SETTLED":
       if(!s.businessLease||s.businessLease!==e.lease||!["COMMITTED","ROLLED_BACK"].includes(e.outcome))return refuse();
       delete next.businessLease;break;
@@ -114,7 +143,7 @@ function reduce(s: State|undefined,e: Event): State {
       next.pending=true;next.advanced=false;next.intent=e.intent;break;
     case "ADVANCE":
     case "ADVANCE_V2":
-      if(s.businessLease||!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
+      if(s.provisioning||s.businessLease||!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")) return refuse();
       if(e.kind==="ADVANCE"&&s.readyProtocol===2)return refuse();
       if(e.kind==="ADVANCE_V2"&&!validScopedTarget(e.scopedTarget,s))return refuse();
@@ -124,7 +153,7 @@ function reduce(s: State|undefined,e: Event): State {
     case "READY":
     case "READY_V2":
       if(e.kind==="READY_V2"?s.readyProtocol!==2||!s.scopedTarget:s.readyProtocol===2)return refuse();
-      if(s.businessLease||!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
+      if(s.provisioning||s.businessLease||!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
       next.pending=false;next.advanced=false;delete next.intent;delete next.scopedTarget;break;
     default:return refuse();
   }
@@ -137,6 +166,7 @@ function readLedger(directory:string){
   for(const line of raw.trimEnd().split("\n")){
     const record=JSON.parse(line) as RecordLine;
     if(record.previous!==head||record.hash!==hash(head,record.event))return refuse();
+    if(record.event.kind==="PROVISIONING_ADMIT"&&(record.event.admission.approvalHead!==head||record.event.admission.approvalSequence!==sequence))return refuse();
     state=reduce(state,record.event);head=record.hash;sequence++;
   }
   if(!state)return refuse();
@@ -282,6 +312,7 @@ export class DisposableDurableRecoveryAuthority {
       probe?.("AFTER_TAKEOVER_PERSIST");
       for(const operation of a.current().operations.values())if(operation.outcome==="ADMITTED")
         a.append({kind:"OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
+      for(const operation of a.current().provisioning?.values()??[])if(operation.outcome==="ADMITTED")a.append({kind:"PROVISIONING_OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
       syncRecoveryDirectory(directory);return a;
     }catch(error){if(a?.lock!==undefined){closeSync(a.lock);a.lock=undefined;}throw error;}
   }
@@ -341,10 +372,11 @@ export class DisposableDurableRecoveryAuthority {
       if(state.signingIdentity!==keyIdentity(createPublicKey(key))||state.administrationIdentity!==keyIdentity(administrationKey)) refuse();
       a.assertAnchor();
       // A restarted authority never assumes in-flight outcomes or dead sessions.
-      if(state.businessLease||[...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")){
+      if(state.businessLease||[...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")||[...(state.provisioning?.values()??[])].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")){
         if(!state.pending) a.beginRecovery();
         for(const o of a.current().operations.values()) if(o.outcome==="ADMITTED")
           a.append({kind:"OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
+        for(const o of a.current().provisioning?.values()??[])if(o.outcome==="ADMITTED")a.append({kind:"PROVISIONING_OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
       }
       return a;
     }catch(error){a.close();throw error;}
@@ -388,6 +420,7 @@ export class DisposableDurableRecoveryAuthority {
     const s=this.current();
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
       epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.businessLease?{businessLease:s.businessLease}:{}),...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
+      ...(s.provisioning?{provisioningOperations:[...s.provisioning.values()].map(p=>({...p}))}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
   authenticatedSnapshot(){this.assertAnchor();return this.snapshot();}
@@ -514,7 +547,7 @@ export class DisposableDurableRecoveryAuthority {
     if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY"||verifiedScope.applicationId!==scope.applicationId)return refuse();
     this.assertAnchor();
     const state=this.current();
-    if(state.pending||state.businessLease||state.readyProtocol===2||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
+    if(state.provisioning||state.pending||state.businessLease||state.readyProtocol===2||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
     const lease=randomUUID();let invalid=false;
     const check=()=>{
       this.assertAnchor();
@@ -551,11 +584,46 @@ export class DisposableDurableRecoveryAuthority {
       throw error;
     }finally{this.fences.delete(lease);}
   }
+  /** Installer-only trusted in-process boundary. No externally exposed generic
+   * settlement API. The new profile cannot use legacy ADVANCE/READY.
+   */
+  admitExperimentalProvisioning(input:ExperimentalProvisioningAdmission):void{
+    this.assertAnchor();
+    const p={...input},s=this.current();
+    if(process.env.NODE_ENV!=="test"||this.fences.size||!validProvisioning(p,s)||p.approvalHead!==this.head||p.approvalSequence!==this.sequence)return refuse();
+    this.append({kind:"PROVISIONING_ADMIT",admission:p});
+    this.fences.set(p.operationId,()=>{});
+  }
+  checkExperimentalProvisioning(operationId:string):void{
+    this.assertAnchor();const s=this.current();
+    if(s.pending||!this.fences.has(operationId)||s.provisioning?.get(operationId)?.outcome!=="ADMITTED")return refuse();
+  }
+  settleExperimentalProvisioning(operationId:string,outcome:"COMMITTED"|"ROLLED_BACK"|"UNCERTAIN"):void{
+    this.assertAnchor();
+    if(process.env.NODE_ENV!=="test"||!this.fences.has(operationId)||this.current().provisioning?.get(operationId)?.outcome!=="ADMITTED")return refuse();
+    try{
+      this.append({kind:"PROVISIONING_OUTCOME",operationId,outcome});
+      if(outcome==="UNCERTAIN"&&!this.current().pending)this.beginRecovery();
+    }finally{this.fences.delete(operationId);}
+  }
+  async resolveExperimentalProvisioningCommit(db:ClientBase,input:string,signature:string):Promise<void>{
+    const s=this.current();
+    if(process.env.NODE_ENV!=="test"||!s.pending||this.fences.size||typeof input!=="string"||input.length>1024*1024)return refuse();
+    const parsed:unknown=JSON.parse(input);
+    if(!parsed||typeof parsed!=="object"||!("operationId" in parsed)||typeof parsed.operationId!=="string")return refuse();
+    const evidence=parsed as ProvisioningCommitEvidence,p=s.provisioning?.get(evidence.operationId);
+    if(!p||p.outcome!=="UNCERTAIN")return refuse();
+    this.requireAdministration("PROVISIONING_OBSERVED_COMMIT_V1",input,signature);
+    const snapshot=this.authenticatedSnapshot(),observed=await collectExperimentalProvisioningCommit(db,snapshot.provisioningOperations??[],p.operationId);
+    if(JSON.stringify(observed)!==input||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
+    this.requireAdministration("PROVISIONING_OBSERVED_COMMIT_V1",input,signature);
+    this.append({kind:"PROVISIONING_OUTCOME",operationId:p.operationId,outcome:"COMMITTED",evidenceDigest:createHash("sha256").update(input).digest("hex")});
+  }
   async execute(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,
     budget=new ExperimentalD1Budget(),captureRollbackWitness=false):Promise<SchemaOperatorResult>{
     this.assertAnchor();
     const s=this.current(),url=new URL(connectionString);
-    if(this.fences.size!==0||keyIdentity(publicKey)!==s.signingIdentity||s.pending||request.installationId!==s.installationId||url.pathname!=="/"+s.databaseName) return refuse();
+    if(s.provisioning||this.fences.size!==0||keyIdentity(publicKey)!==s.signingIdentity||s.pending||request.installationId!==s.installationId||url.pathname!=="/"+s.databaseName) return refuse();
     budget.checkpoint();
     if(request.envelopeVersion!==1) refuse();
     budget.mark("ADMISSION_START");
@@ -604,7 +672,7 @@ export class DisposableDurableRecoveryAuthority {
   async reconcile(connectionString:string,request:SchemaOperatorRequest,publicKey:KeyObject,budget=new ExperimentalD1Budget()):Promise<SchemaOperatorResult>{
     this.assertAnchor();
     const s=this.current(),o=s.operations.get(request.operationId);
-    if(s.pending||!o||o.outcome!=="COMMITTED"||o.epoch!==s.epoch||request.envelopeVersion!==1||
+    if(s.provisioning||s.pending||!o||o.outcome!=="COMMITTED"||o.epoch!==s.epoch||request.envelopeVersion!==1||
       request.installationId!==s.installationId||new URL(connectionString).pathname!=="/"+s.databaseName||
       o.submissionId!==request.submissionId||o.approvalId!==request.approvalId||o.planDigest!==request.planDigest) return refuse();
     if(this.fences.size!==0) return refuse();

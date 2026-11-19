@@ -7,7 +7,7 @@ END $scope$;
 CREATE TABLE public.platform_schema_installation_trust_v1 (
  installation_id text PRIMARY KEY REFERENCES public.platform_installations(id),
  application_id text NOT NULL REFERENCES public.platform_applications(id),
- database_name text NOT NULL UNIQUE, database_oid text NOT NULL,
+ database_name text NOT NULL UNIQUE, database_oid text NOT NULL, system_identifier text NOT NULL, timeline integer NOT NULL,
  namespace text NOT NULL UNIQUE, installer_role text NOT NULL, runtime_role text NOT NULL,
  approval_key text NOT NULL, approval_key_digest text NOT NULL CHECK (approval_key_digest ~ '^[a-f0-9]{64}$'),
  epoch uuid NOT NULL, ledger_id uuid NOT NULL, profile text NOT NULL CHECK(profile='DEDICATED_PG16_CORE_V1'),

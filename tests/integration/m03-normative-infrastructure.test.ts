@@ -8,8 +8,9 @@ import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
 import {TenantUnitOfWork,verifyTenantScope} from "@vibress/tenancy";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "@vibress/schema-engine";
-import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,type ProvisioningApproval} from "../../packages/database/src/schema-operator-experimental-installer";
-import {DisposableDurableRecoveryAuthority} from "../../packages/database/src/schema-operator-experimental-durable-authority";
+import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,type ProvisioningApproval} from "../../packages/database/src/schema-operator-experimental-installer";
+import {startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
+import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex"),password=randomBytes(24).toString("hex");
@@ -170,3 +171,32 @@ describe("M03 actual isolated normative infrastructure",()=>{
     console.info("M03_J04_CAS_EXPANSION_AND_DRIFT=PASS");
   },60000);
 });
+
+
+it("J05: actual installer COMMIT acknowledgment loss, durable unknown, authenticated exact committed evidence",async()=>{
+  const f=await lab("fault","reference-fault"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true}]}],f.scope)),a=approval(f,null,m);
+  const proxy=await startTransactionAckFaultProxy("COMMIT","DROP");void proxy.serverCommitObserved.catch(()=>undefined);
+  // The owned lab's proxy listens on an ephemeral loopback port. The installer
+  // normally requires 5433, so this is explicitly enabled only in test fixture.
+  try{
+    const target=new URL(dbUrl(f.name,f.installer));target.port=String(proxy.port);
+    const pending=installExperimentalRevision(target.toString(),wire(m),a.message,a.signature,f.authority,proxy.port);
+    const failed=pending.then(()=>false,()=>true);
+    await proxy.serverCommitObserved;expect(await failed).toBe(true);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,provisioningOperations:[{operationId:a.e.operationId,outcome:"UNCERTAIN"}]});
+    expect((await f.admin.query("SELECT revision_digest FROM public.platform_schema_revisions_v1")).rows).toEqual([{revision_digest:m.digest}]);
+    await expect(apply(f,m,a)).rejects.toThrow();
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    try{
+      const evidence=await collectExperimentalProvisioningCommit(f.admin,f.authority.authenticatedSnapshot().provisioningOperations!,a.e.operationId);
+      const wireEvidence=JSON.stringify(evidence),signature=sign(null,recoveryAdministrationMessage(f.authority.snapshot(),"PROVISIONING_OBSERVED_COMMIT_V1",wireEvidence),adminKeys.privateKey).toString("base64url");
+      await expect(f.authority.resolveExperimentalProvisioningCommit(f.admin,wireEvidence,"A".repeat(86))).rejects.toThrow();
+      const wrong=JSON.stringify({...evidence,operationId:randomUUID()});
+      await expect(f.authority.resolveExperimentalProvisioningCommit(f.admin,wrong,sign(null,recoveryAdministrationMessage(f.authority.snapshot(),"PROVISIONING_OBSERVED_COMMIT_V1",wrong),adminKeys.privateKey).toString("base64url"))).rejects.toThrow();
+      await f.authority.resolveExperimentalProvisioningCommit(f.admin,wireEvidence,signature);
+      expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,provisioningOperations:[{operationId:a.e.operationId,outcome:"COMMITTED"}]});
+      await expect(f.authority.resolveExperimentalProvisioningCommit(f.admin,wireEvidence,signature)).rejects.toThrow();
+    }finally{await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");}
+    console.info("M03_J05_AUTHENTICATED_COMMIT_RECONCILIATION=PASS");
+  }finally{await proxy.close();}
+},60000);
