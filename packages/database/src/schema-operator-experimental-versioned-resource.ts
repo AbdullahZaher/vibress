@@ -14,7 +14,7 @@ const validName=(name:unknown):name is string=>typeof name==="string"&&name.leng
 type Row={id:string;code:string;name:string;version_token:string}&Record<string,unknown>;
 type Page={records:Row[];nextCursor:string|null};
 type Order="id"|"code";
-type Scalar={name:string;type:"text"|"boolean"|"timestamp with time zone";maxLength?:number};
+type Field={name:string;kind:"text"|"boolean"|"datetime"|"relation";required:boolean;maxLength?:number};
 type Identity={application_id:string;installation_id:string;epoch:string;ledger_id:string;manifest_digest:string;profile:string;revoked:boolean;runtime_role:string;role:string;session:string;db:string;oid:string;configured_db:string;configured_oid:string;system:string;configured_system:string;timeline:number;configured_timeline:number};
 
 /**
@@ -36,31 +36,40 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
   const physical=compileProvisioningContract(manifest,{applicationId:scope.applicationId,installationId:manifest.installationId});
   if(JSON.stringify(manifest)!==manifestWire||manifest.installationId!==initial.installationId||manifest.digest!==last.manifestDigest||physical.digest!==last.physicalDigest)return refuse();
   const resource=physical.resources.find(r=>r.id===resourceId);
-  if(!resource||resource.ownership!=="tenant"||resource.columns.length<6||resource.columns.length>18||resource.relations.length||physical.resources.some(r=>r.relations.some(e=>e.table===resource.table))||JSON.stringify(resource.unique)!==JSON.stringify(["tenant_id","code"]))return refuse();
+  if(!resource||resource.ownership!=="tenant"||resource.columns.length<6||resource.columns.length>18||physical.resources.some(r=>r.relations.some(e=>e.table===resource.table))||JSON.stringify(resource.unique)!==JSON.stringify(["tenant_id","code"]))return refuse();
   const fixed=new Set(["id","tenant_id","code","name","version_token","deleted_on"]);
   for(const [name,type,required] of [["code","text",true],["name","text",true],["version_token","text",true],["deleted_on","timestamp with time zone",false]] as const){
     if(!resource.columns.some(c=>c.name===name&&c.type===type&&c.required===required&&!c.enumValues&&!c.target))return refuse();
   }
-  // Additional declared fields are optional exact scalars only: no enums,
-  // relations, defaults or required columns. The value guard below mirrors the
-  // PostgreSQL CHECKs (text length) and the physical column types.
+  // Beyond the fixed columns, declared fields are optional exact scalars
+  // (text with optional maxLength, boolean, datetime) or relations to
+  // same-ownership resources admitted by the compiled physical contract.
   const declared=manifest.resources.find(r=>r.id===resourceId);
   if(!declared)return refuse();
-  const scalars:Scalar[]=[];
+  const fields:Field[]=[];
   for(const field of declared.fields){
     if(fixed.has(field.id))continue;
     const column=resource.columns.find(c=>c.name===field.id);
-    if(field.required||!column||column.required||column.enumValues||column.target)return refuse();
-    if(field.logicalType==="text"&&column.type==="text")scalars.push({name:field.id,type:"text",...(field.maxLength!==undefined?{maxLength:field.maxLength}:{})});
-    else if(field.logicalType==="boolean"&&column.type==="boolean")scalars.push({name:field.id,type:"boolean"});
-    else if(field.logicalType==="datetime"&&column.type==="timestamp with time zone")scalars.push({name:field.id,type:"timestamp with time zone"});
+    if(!column||column.enumValues)return refuse();
+    if(field.logicalType==="relation"){
+      const target=manifest.resources.find(r=>r.id===field.targetResource);
+      if(field.required!==column.required||column.type!=="uuid"||!target||column.target!==target.tableName||target.ownership!=="tenant"||!resource.relations.some(r=>r.column===field.id&&r.table===target.tableName&&r.columns.length===2&&r.targetColumns.length===2))return refuse();
+      fields.push({name:field.id,kind:"relation",required:column.required});
+    }else if(field.required||column.required||column.target)return refuse();
+    else if(field.logicalType==="text"&&column.type==="text")fields.push({name:field.id,kind:"text",required:false,...(field.maxLength!==undefined?{maxLength:field.maxLength}:{})});
+    else if(field.logicalType==="boolean"&&column.type==="boolean")fields.push({name:field.id,kind:"boolean",required:false});
+    else if(field.logicalType==="datetime"&&column.type==="timestamp with time zone")fields.push({name:field.id,kind:"datetime",required:false});
     else return refuse();
   }
-  if(scalars.length!==resource.columns.length-6||!resource.columns.every(c=>fixed.has(c.name)||scalars.some(s=>s.name===c.name)))return refuse();
-  const normalize=(scalar:Scalar,value:unknown):unknown=>{
+  if(fields.length!==resource.columns.length-6||!resource.columns.every(c=>fixed.has(c.name)||fields.some(f=>f.name===c.name)))return refuse();
+  const normalize=(field:Field,value:unknown):unknown=>{
+    if(field.kind==="relation"){
+      if(value===null)return field.required?refuse():null;
+      return typeof value==="string"&&uuid.test(value)?value:refuse();
+    }
     if(value===null)return null;
-    if(scalar.type==="boolean")return typeof value==="boolean"?value:refuse();
-    if(scalar.type==="text")return typeof value==="string"&&!value.includes("\u0000")&&(scalar.maxLength===undefined||value.length<=scalar.maxLength)?value:refuse();
+    if(field.kind==="boolean")return typeof value==="boolean"?value:refuse();
+    if(field.kind==="text")return typeof value==="string"&&!value.includes("\u0000")&&(field.maxLength===undefined||value.length<=field.maxLength)?value:refuse();
     if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)||!Number.isFinite(Date.parse(value)))return refuse();
     return value;
   };
@@ -69,9 +78,9 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     if(!input||typeof input!=="object"||Array.isArray(input))return refuse();
     const record=input as Record<string,unknown>,out=new Map<string,unknown>();
     for(const [key,value] of Object.entries(record)){
-      const scalar=scalars.find(s=>s.name===key);
-      if(!scalar)return refuse();
-      out.set(key,normalize(scalar,value));
+      const field=fields.find(f=>f.name===key);
+      if(!field)return refuse();
+      out.set(key,normalize(field,value));
     }
     return out;
   };
@@ -89,7 +98,7 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     unchanged();
     if(!hasPermission(scope.authorization.permissions,"resource."+resourceId+"."+action))return refuse();
   };
-  const projection="id::text AS id,code,name,version_token"+scalars.map(s=>","+qi(s.name)).join("");
+  const projection="id::text AS id,code,name,version_token"+fields.map(f=>","+qi(f.name)).join("");
   const encodeCursor=(order:Order,row:Row)=>"v1."+Buffer.from(JSON.stringify([manifest.digest,order,order==="id"?row.id:[row.code,row.id]])).toString("base64url");
   const decodeCursor=(order:Order,after:string):string|[string,string]=>{
     if(!after.startsWith("v1.")||after.length>512)return refuse();
@@ -106,10 +115,11 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       allow("create");
       if(typeof code!=="string"||!codePattern.test(code)||!validName(name))return refuse();
       const values=valuesOf(input),columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null];
-      for(const scalar of scalars){columns.push(scalar.name);params.push(values.get(scalar.name)??null);}
+      for(const field of fields)if(field.required&&!values.has(field.name))return refuse();
+      for(const field of fields){columns.push(field.name);params.push(values.get(field.name)??null);}
       const placeholders=columns.map((column,index)=>{
-        const scalar=scalars.find(s=>s.name===column);
-        return "$"+(index+1)+(scalar?.type==="timestamp with time zone"?"::timestamptz":"");
+        const field=fields.find(f=>f.name===column);
+        return "$"+(index+1)+(field?.kind==="datetime"?"::timestamptz":"");
       });
       const result=await tx.query<Row>("INSERT INTO "+table+"("+columns.map(qi).join(",")+") VALUES("+placeholders.join(",")+") RETURNING "+projection,params);
       unchanged();
@@ -121,10 +131,10 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       if(typeof id!=="string"||!uuid.test(id)||typeof expectedVersion!=="string"||!uuid.test(expectedVersion)||!validName(name))return refuse();
       const values=valuesOf(input),params:unknown[]=[tenant,id,expectedVersion,name,randomUUID()];
       let set="name=$4,version_token=$5";
-      for(const scalar of scalars){
-        if(!values.has(scalar.name))continue;
-        params.push(values.get(scalar.name));
-        set+=","+qi(scalar.name)+"=$"+params.length+(scalar.type==="timestamp with time zone"?"::timestamptz":"");
+      for(const field of fields){
+        if(!values.has(field.name))continue;
+        params.push(values.get(field.name));
+        set+=","+qi(field.name)+"=$"+params.length+(field.kind==="datetime"?"::timestamptz":"");
       }
       const result=await tx.query<Row>("UPDATE "+table+" SET "+set+" WHERE tenant_id=$1 AND id=$2::uuid AND version_token=$3 AND deleted_on IS NULL RETURNING "+projection,params);
       unchanged();return result.rows[0]??null;

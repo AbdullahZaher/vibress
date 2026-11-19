@@ -265,6 +265,49 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(await open(ta,resource=>resource.update(created.id,created.version_token,"Stale",{label:"Nope"}))).toBeNull();
     console.info("M03_A02_SCALAR_FIELDS=PASS");
   },60000);
+  it("A02: required and optional relations persist with tenant-scoped foreign keys",async()=>{
+    const f=await lab("relations","reference-relations");
+    const m=createSchemaManifest(compileResourceSchema([
+      {...f.scope,id:"customers",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"name",type:"text",required:true}]},
+      {...f.scope,id:"items",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+        {id:"customer",type:"relation",required:true,targetResource:"customers"},
+        {id:"sponsor",type:"relation",required:false,targetResource:"customers"}
+      ]}
+    ],f.scope));
+    await apply(f,m,approval(f,null,m));
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.items.create","resource.items.update","resource.items.delete","resource.items.read"];
+    const scoped=(tenant:string)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-relations-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    const customerA=randomUUID(),customerB=randomUUID(),customers=table(f,m,"customers");
+    await uow.run(ta,tx=>tx.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'cust-a','A')",[customerA]));
+    await uow.run(tb,tx=>tx.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES('tenant-b',$1,'cust-b','B')",[customerB]));
+    type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
+    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)));
+    type Item={id:string;version_token:string;customer:string;sponsor:string|null};
+    const a=await open(ta,resource=>resource.create("item-1","With sponsor",{customer:customerA,sponsor:customerA})) as Item;
+    expect(a).toMatchObject({customer:customerA,sponsor:customerA});
+    const b=await open(ta,resource=>resource.create("item-2","Optional omitted",{customer:customerA})) as Item;
+    expect(b).toMatchObject({customer:customerA,sponsor:null});
+    // A missing required relation, a malformed value and a cross-tenant target
+    // are refused; the composite foreign key enforces the tenant boundary.
+    await expect(open(ta,resource=>resource.create("item-3","Missing required"))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.create("item-3","Malformed",{customer:"not-a-uuid"}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.create("item-3","Cross tenant",{customer:customerB}))).rejects.toMatchObject({code:"23503"});
+    const cleared=await open(ta,resource=>resource.update(a.id,a.version_token,"Sponsor removed",{sponsor:null})) as Item;
+    expect(cleared).toMatchObject({customer:customerA,sponsor:null});
+    const repointed=await open(ta,resource=>resource.update(b.id,b.version_token,"Repointed",{sponsor:customerA})) as Item;
+    expect(repointed).toMatchObject({customer:customerA,sponsor:customerA});
+    await expect(open(ta,resource=>resource.update(b.id,repointed.version_token,"Clear required",{customer:null}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.update(b.id,repointed.version_token,"Cross tenant",{customer:customerB}))).rejects.toMatchObject({code:"23503"});
+    expect((await open(tb,resource=>resource.list(10)) as {records:unknown[]}).records).toEqual([]);
+    expect(await open(tb,resource=>resource.update(a.id,cleared.version_token,"Wrong tenant",{sponsor:null}))).toBeNull();
+    console.info("M03_A02_RELATIONS=PASS");
+  },60000);
   it("B01: persistent lifecycle CAS, immutable history, installer refusal, DB_COMMITTED vs ACTIVE, concurrency and supersession",async()=>{
     const f=await lab("lifecycle","reference-lifecycle"),m=crm(f),a=approval(f,null,m);
     const life=(digest:string)=>f.admin.query<{state:LifecycleState;state_version:number}>("SELECT state,state_version FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,digest]).then(r=>r.rows[0]);
