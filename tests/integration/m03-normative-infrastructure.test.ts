@@ -21,6 +21,7 @@ import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../s
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
 import {recordExperimentalLifecycleTransition,reattestExperimentalLifecycleAfterRecovery,type LifecycleState} from "../../packages/database/src/schema-operator-experimental-registry-lifecycle";
+import {settleExperimentalDomains} from "../../packages/database/src/schema-operator-experimental-settlement";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex");
 const rolePasswords=new Map<string,string>();
@@ -348,6 +349,48 @@ describe("M03 actual isolated normative infrastructure",()=>{
     const chunks=(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM public.platform_schema_backfill_chunks_v1")).rows[0]!.n;
     expect(chunks).toBe(4);
     console.info("M03_B04_DURABLE_BACKFILL_ADMISSION_PROGRESS=PASS");
+  },60000);
+  it("B03: idempotent cross-domain settlement reconciles provisioning, backfill and business evidence",async()=>{
+    const f=await lab("settle","reference-settle"),m=crm(f,"website");
+    await apply(f,m,approval(f,null,m));
+    const customers=table(f,m,"customers"),rowId=randomUUID();
+    await f.admin.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'customer','Customer')",[rowId]);
+    const physicalDigest=compileProvisioningContract(m,f.scope).digest,state=f.authority.authenticatedSnapshot();
+    const backfill=(operationId=randomUUID())=>{
+      const e:ExperimentalBackfillApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,revision:m.digest,physicalDigest,operationId,tenantId:"tenant-a",resourceId:"customers",column:"website",value:"settled",limit:5};
+      const message=experimentalBackfillMessage(e);
+      return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
+    };
+    const b=backfill();
+    await runExperimentalBackfillChunk(dbUrl(f.name,f.installer),b.message,b.signature,f.authority);
+    const sc=scope(f,"tenant-a"),uow=new TenantUnitOfWork(f.pool);
+    const business=()=>{
+      const s=f.authority.authenticatedSnapshot();
+      const e:BusinessApproval={version:1,operationId:randomUUID(),applicationId:f.scope.applicationId,installationId:f.scope.installationId,databaseName:f.name,databaseOid:f.oid,epoch:s.epoch,ledgerId:s.ledgerId,authorityHead:s.head,authoritySequence:s.sequence,revision:m.digest,physicalDigest,tenantId:"tenant-a",principalId:"fixture-principal",rowId:randomUUID(),code:"settled",name:"Settled customer"};
+      const message=experimentalBusinessMessage(e);return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
+    };
+    const x=business();
+    expect(await f.authority.runExperimentalProvisionedBusiness(uow,sc,wire(m),x.message,x.signature)).toMatchObject({status:"COMMITTED"});
+    const first=await settleExperimentalDomains(f.admin,f.authority);
+    expect(first).toMatchObject({head:m.digest,active:m.digest,revisions:1,backfill:{chunks:1,targets:1,affected:1},business:{witnesses:1,settled:1}});
+    expect(first.digest).toMatch(/^[a-f0-9]{64}$/);
+    // Idempotent: settlement is read-only and returns the identical digest.
+    expect((await settleExperimentalDomains(f.admin,f.authority)).digest).toBe(first.digest);
+    // Provisioning disagreement between the registry head and the ACTIVE lifecycle revision is refused.
+    await f.admin.query("UPDATE public.platform_schema_registry SET manifest_digest=$2 WHERE installation_id=$1",[f.scope.installationId,"f".repeat(64)]);
+    await expect(settleExperimentalDomains(f.admin,f.authority)).rejects.toThrow("M03_SETTLEMENT_REFUSED:PROVISIONING");
+    await f.admin.query("UPDATE public.platform_schema_registry SET manifest_digest=$2 WHERE installation_id=$1",[f.scope.installationId,m.digest]);
+    // Extra chunk rows that the target ledger never admitted are refused.
+    const forged=backfill();
+    await f.admin.query("INSERT INTO public.platform_schema_backfill_chunks_v1(installation_id,revision_digest,operation_id,tenant_id,resource_id,column_name,evidence,signature,affected,ids) VALUES($1,$2,$3,'tenant-a','customers','website',$4,$5,0,'{}')",[f.scope.installationId,m.digest,forged.e.operationId,forged.message,forged.signature]);
+    await expect(settleExperimentalDomains(f.admin,f.authority)).rejects.toThrow("M03_SETTLEMENT_REFUSED:BACKFILL_PROGRESS");
+    await f.admin.query("DELETE FROM public.platform_schema_backfill_chunks_v1 WHERE operation_id=$1",[forged.e.operationId]);
+    // A witness that the authority never admitted is refused.
+    await f.admin.query("INSERT INTO public.platform_schema_business_witnesses_v1(operation_id,xid,evidence,signature) VALUES(gen_random_uuid(),'1'::xid8,'forged',$1)",["A".repeat(86)]);
+    await expect(settleExperimentalDomains(f.admin,f.authority)).rejects.toThrow("M03_SETTLEMENT_REFUSED:BUSINESS");
+    const runtime=await connect(f.name,f.runtime);
+    try{await expect(settleExperimentalDomains(runtime,f.authority)).rejects.toMatchObject({code:"42501"});}finally{await runtime.end();}
+    console.info("M03_B03_CROSS_DOMAIN_SETTLEMENT=PASS");
   },60000);
   it("C05/J03: portable content and migration identity across actual dedicated installs and additive upgrades",async()=>{
     const a=await lab("portablea","reference-portable-a"),b=await lab("portableb","reference-portable-b");
