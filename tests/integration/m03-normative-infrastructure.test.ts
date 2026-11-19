@@ -1,8 +1,11 @@
 // @vitest-environment node
-import {generateKeyPairSync,randomBytes,randomUUID,sign} from "node:crypto";
+import {createHash,generateKeyPairSync,randomBytes,randomUUID,sign} from "node:crypto";
 import {mkdtempSync,mkdirSync,readFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
+import {fork,type ChildProcess} from "node:child_process";
+import {build} from "esbuild";
+import {referenceQueue} from "../../apps/worker/test-fixtures/m03-normative-queue";
 import {Client,Pool} from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
@@ -20,7 +23,7 @@ const credentials=generateKeyPairSync("ed25519"),adminKeys=generateKeyPairSync("
 function dbUrl(db:string,role?:string){const u=new URL(url);u.pathname="/"+db;if(role){u.username=role;u.password=password;}return u.toString();}
 function wire(m:SchemaManifest){return JSON.stringify(m);}
 async function connect(db:string,role?:string){const c=new Client({connectionString:dbUrl(db,role),connectionTimeoutMillis:4000});await c.connect();return c;}
-type Lab={name:string;scope:SchemaCompilationScope;installer:string;runtime:string;namespace:string;oid:string;authority:DisposableDurableRecoveryAuthority;admin:Client;pool:Pool;dir:string};
+type Lab={name:string;reader?:string;scope:SchemaCompilationScope;installer:string;runtime:string;namespace:string;oid:string;authority:DisposableDurableRecoveryAuthority;admin:Client;pool:Pool;dir:string};
 async function lab(tag:string,app:string):Promise<Lab>{
   const name="vibress_s03_norm_"+tag+"_"+suffix,installer="v3_inst_"+tag+"_"+suffix,runtime="v3_run_"+tag+"_"+suffix;
   const scope={applicationId:asApplicationId(app),installationId:asInstallationId("installation-"+tag)};
@@ -75,7 +78,7 @@ afterAll(async()=>{
   for(const f of labs.reverse()){
     f.authority.close();await f.pool.end();await f.admin.end();
     await root.query("DROP DATABASE "+qi(f.name));
-    for(const role of [f.runtime,f.installer])await root.query("DROP ROLE "+qi(role));
+    for(const role of [f.runtime,f.installer,...(f.reader?[f.reader]:[])])await root.query("DROP ROLE "+qi(role));
     rmSync(f.dir,{recursive:true,force:true});
   }
   await root.end();
@@ -200,3 +203,81 @@ it("J05: actual installer COMMIT acknowledgment loss, durable unknown, authentic
     console.info("M03_J05_AUTHENTICATED_COMMIT_RECONCILIATION=PASS");
   }finally{await proxy.close();}
 },60000);
+
+
+it("J08 subset: genuinely different API/worker artifacts consume expanded CRM and old queued jobs",async()=>{
+  const f=await lab("versions","reference-crm"),old=crm(f),next=crm(f,"website");
+  await apply(f,old,approval(f,null,old));
+  const customer=table(f,old,"customers"),activity=table(f,old,"activities"),uow=new TenantUnitOfWork(f.pool),ta=scope(f,"tenant-a"),customerId=randomUUID();
+  await uow.run(ta,tx=>tx.query("INSERT INTO "+customer+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'existing','Existing')",[customerId]));
+  f.reader="v3_read_"+suffix;
+  await root.query("CREATE ROLE "+qi(f.reader)+" LOGIN PASSWORD "+root.escapeLiteral(password)+" NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+  await root.query("GRANT CONNECT ON DATABASE "+qi(f.name)+" TO "+qi(f.reader));
+  await f.admin.query("CREATE TABLE public.platform_memberships(application_id text NOT NULL,tenant_id text NOT NULL,principal_id text NOT NULL,active boolean NOT NULL,roles text[] NOT NULL,permissions text[] NOT NULL,PRIMARY KEY(application_id,tenant_id,principal_id))");
+  const perms=["crm.customers.read","crm.customers.create"];
+  await f.admin.query("INSERT INTO public.platform_memberships VALUES($1,'tenant-a','api-principal',true,ARRAY['staff'],$2)",[f.scope.applicationId,perms]);
+  await f.admin.query("GRANT SELECT ON public.platform_memberships TO "+qi(f.reader));
+  const token=randomBytes(24).toString("hex"),apiDir=mkdtempSync(path.resolve("apps/platform-reference/.m03-reference-")),workerDir=mkdtempSync(path.resolve("apps/worker/.m03-reference-"));
+  const processes:ChildProcess[]=[];
+  const queueName="m03-reference-"+suffix,queuePrefix="m03-"+suffix,{queue,events}=referenceQueue(queueName,queuePrefix);
+  const env={...process.env,NODE_ENV:"test",M03_NORMATIVE_REFERENCE:"1",M03_APP:f.scope.applicationId,M03_INSTALLATION:f.scope.installationId,
+    M03_DATABASE:f.name,M03_OID:f.oid,M03_RUNTIME_ROLE:f.runtime,M03_RUNTIME_URL:dbUrl(f.name,f.runtime),M03_MEMBERSHIP_URL:dbUrl(f.name,f.reader),
+    M03_NAMESPACE:f.namespace,M03_CUSTOMERS:old.resources.find(x=>x.id==="customers")!.tableName,M03_ACTIVITIES:old.resources.find(x=>x.id==="activities")!.tableName,
+    M03_QUEUE:queueName,M03_QUEUE_PREFIX:queuePrefix,M03_TOKENS:JSON.stringify({[token]:{id:"api-principal",kind:"staff",tenantIds:["tenant-a"],roles:["staff"],permissions:perms}})};
+  const artifacts:Record<string,string>={};
+  const artifact=async(kind:"api"|"worker",version:1|2)=>{
+    const file=path.join(kind==="api"?apiDir:workerDir,kind+"-"+version+".cjs"),entry=kind==="api"?"apps/platform-reference/test-fixtures/m03-normative-api.ts":"apps/worker/test-fixtures/m03-normative-worker.ts";
+    await build({entryPoints:[entry],outfile:file,bundle:true,platform:"node",format:"cjs",target:"node24",external:["pg","fastify","bullmq"],define:{M03_SCHEMA_VERSION:String(version)},logLevel:"silent"});
+    artifacts[kind+version]=createHash("sha256").update(readFileSync(file)).digest("hex");return file;
+  };
+  const start=async(file:string)=>{
+    const child=fork(file,[],{env,stdio:["ignore","ignore","ignore","ipc"]});processes.push(child);
+    const result=await new Promise<{kind:string;version:number;port?:number}>((resolve,reject)=>{
+      const timeout=setTimeout(()=>reject(Error("reference ready timeout")),15000);
+      child.once("message",value=>{clearTimeout(timeout);resolve(value as {kind:string;version:number;port?:number});});
+      child.once("exit",code=>{clearTimeout(timeout);reject(Error("reference exited before readiness "+code));});
+    });
+    return {child,...result};
+  };
+  const stop=async(child:ChildProcess)=>{if(child.exitCode!==null||child.signalCode!==null)return;await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{child.kill("SIGKILL");reject(Error("reference shutdown timeout"));},10000);child.once("exit",()=>{clearTimeout(timer);resolve();});child.kill("SIGTERM");});};
+  const headers={authorization:"Bearer "+token,"x-tenant-id":"tenant-a","content-type":"application/json"};
+  const list=async(port:number,tenant="tenant-a")=>fetch("http://127.0.0.1:"+port+"/crm/customers",{headers:{...headers,"x-tenant-id":tenant}});
+  const jobData=(version:1|2,operationId:string)=>({version,applicationId:f.scope.applicationId,installationId:f.scope.installationId,tenantId:"tenant-a",operationId,customerId,...(version===2?{website:"https://example.invalid"}:{})});
+  try{
+    await events.waitUntilReady();
+    const a1=await artifact("api",1),a2=await artifact("api",2),w1=await artifact("worker",1),w2=await artifact("worker",2);
+    expect(artifacts.api1).not.toBe(artifacts.api2);expect(artifacts.worker1).not.toBe(artifacts.worker2);
+    const oldApi=await start(a1);expect(oldApi.kind).toBe("ready");
+    const oldWorker=await start(w1);expect(oldWorker.kind).toBe("ready");
+    expect(await (await list(oldApi.port!)).json()).toMatchObject({version:1,customers:[{name:"Existing"}]});
+    expect((await list(oldApi.port!,"tenant-b")).status).toBe(403);
+    expect((await start(a2)).kind).toBe("refused");expect((await start(w2)).kind).toBe("refused");
+    const firstId=randomUUID(),first=await queue.add("activity",jobData(1,firstId),{attempts:2});
+    expect(await first.waitUntilFinished(events,15000)).toEqual({version:1,effect:"APPLIED"});
+    await stop(oldWorker.child);
+    const queued=await queue.add("activity",jobData(1,randomUUID()),{attempts:2});
+    await apply(f,next,approval(f,old,next));
+    expect(await (await list(oldApi.port!)).json()).toMatchObject({version:1,customers:[{name:"Existing"}]});
+    const newApi=await start(a2),newWorker=await start(w2);expect(newApi.kind).toBe("ready");expect(newWorker.kind).toBe("ready");
+    expect(await queued.waitUntilFinished(events,15000)).toEqual({version:2,effect:"APPLIED"});
+    expect(await (await list(newApi.port!)).json()).toMatchObject({version:2,customers:[{name:"Existing",website:null}]});
+    const effect=randomUUID(),job=await queue.add("activity",jobData(2,effect),{attempts:2});
+    expect(await job.waitUntilFinished(events,15000)).toEqual({version:2,effect:"APPLIED"});
+    const duplicate=await queue.add("activity",jobData(2,effect));
+    expect(await duplicate.waitUntilFinished(events,15000)).toEqual({version:2,effect:"ALREADY_APPLIED"});
+    expect((await uow.run(ta,tx=>tx.query("SELECT count(*)::int AS n FROM "+activity))).rows).toEqual([{n:3}]);
+    expect(await (await list(newApi.port!)).json()).toMatchObject({customers:[{website:"https://example.invalid"}]});
+    const created=await fetch("http://127.0.0.1:"+oldApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"legacy-write",name:"Old version"})});expect(created.status).toBe(200);
+    const created2=await fetch("http://127.0.0.1:"+newApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"new-write",name:"New version",website:"https://new.invalid"})});expect(created2.status).toBe(200);
+    await stop(newWorker.child);
+    const restarted=await start(w1);expect(restarted.kind).toBe("ready");
+    const unsupported=await queue.add("activity",jobData(2,randomUUID()));
+    await expect(unsupported.waitUntilFinished(events,15000)).rejects.toThrow();
+    await stop(restarted.child);await stop(oldApi.child);await stop(newApi.child);
+    console.info("M03_J08_REFERENCE_ARTIFACTS "+JSON.stringify({sha:process.env.GITHUB_SHA??"local",artifacts,oldContract:compileProvisioningContract(old,f.scope).digest,newContract:compileProvisioningContract(next,f.scope).digest,jobVersions:[1,2]}));
+  }finally{
+    for(const child of processes)await stop(child).catch(()=>undefined);
+    await queue.obliterate({force:true});await events.close();await queue.close();
+    rmSync(apiDir,{recursive:true,force:true});rmSync(workerDir,{recursive:true,force:true});
+  }
+},120000);
