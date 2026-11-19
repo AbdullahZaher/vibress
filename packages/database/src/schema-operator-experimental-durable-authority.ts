@@ -12,6 +12,7 @@ import { sameRecoveryHead, type ExperimentalRecoveryAnchor, type RecoveryHead } 
 import { acquireRecoveryLock,inspectDeadWriter,inspectDeadArchivedWriter,inspectDeadRecoveryLock,archiveDeadWriter,archiveDeadRecoveryLock,syncRecoveryDirectory } from "./schema-operator-experimental-offline-lock";
 import type { ClientBase } from "pg";
 import { TenantUnitOfWork,type ScopedTransaction,type VerifiedScope } from "@vibress/tenancy";
+import { verifyExperimentalAdmissionConnection,type ExperimentalAdmissionTarget } from "./schema-operator-experimental-admission";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
 import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
@@ -501,13 +502,16 @@ export class DisposableDurableRecoveryAuthority {
     this.append({kind:boundDigest===undefined?"READY":"READY_V2",evidenceDigest:boundDigest??evidence.readinessEvidenceDigest,
       catalogManifestDigest:evidence.catalogManifestDigest,journalDigest});
   }
-  /** Test-only, authority-local lease. Not distributed fencing or a runtime
-   * grant. No new admission after durable INTENT; settlement holds the lease.
-   * A process crash or a bypassing direct DB path still requires external fencing.
+  /** Legacy V1 test-only local lease. V2 admission is deliberately unsupported.
+   * BUSINESS_ADMIT/SETTLED are additive experimental ledger events; older
+   * readers fail closed on them. No automatic clearing of unknown outcomes.
+   * No new admission after INTENT; settled receipts follow actual UOW release.
+   * A crash or a bypassing direct DB path still requires external fencing.
    */
-  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},runner:TenantUnitOfWork,verifiedScope:VerifiedScope,work:(tx:ScopedTransaction,check:()=>void)=>Promise<T>):Promise<T>{
+  async withExperimentalBusinessAdmission<T>(expected:ExperimentalAdmissionTarget,runner:TenantUnitOfWork,verifiedScope:VerifiedScope,work:(tx:ScopedTransaction)=>Promise<T>):Promise<T>{
     TenantUnitOfWork.prototype.assertOutermost.call(runner);
-    if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY")return refuse();
+    const scope=Object.freeze({...expected});
+    if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY"||verifiedScope.applicationId!==scope.applicationId)return refuse();
     this.assertAnchor();
     const state=this.current();
     if(state.pending||state.businessLease||state.readyProtocol===2||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
@@ -528,7 +532,14 @@ export class DisposableDurableRecoveryAuthority {
     };
     try{
       check();
-      const result=await TenantUnitOfWork.prototype.runOutermost.call(runner,verifiedScope,(tx:ScopedTransaction)=>work(tx,check),settle) as T;
+      const result=await TenantUnitOfWork.prototype.runOutermost.call(runner,verifiedScope,async(tx:ScopedTransaction)=>{
+        check();await verifyExperimentalAdmissionConnection(tx,scope);check();
+        const value=await work(tx);
+        await verifyExperimentalAdmissionConnection(tx,scope);check();
+        // INTENT after final validation permits existing COMMIT to drain.
+        // It does not revoke an already dispatched transaction.
+        return value;
+      },settle) as T;
       if(receipt.outcome!=="COMMITTED")return refuse();
       this.append({kind:"BUSINESS_SETTLED",lease,outcome:"COMMITTED"});
       return result;

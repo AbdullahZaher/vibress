@@ -5038,6 +5038,10 @@ it("M03-INT-01: ACTIVE authority must deny stale actual persisted database epoch
 it("M03-INT-02: unmanaged outer transaction must not acquire nested admission",async()=>{
   const f=await intAdmissionLab("cr");let entered=false,second=false;
   try{
+    const before=f.authority.authenticatedSnapshot();
+    const structural={run:async()=>{throw Error("must not invoke structural runner");}} as unknown as TenantUnitOfWork;
+    await expect(runExperimentalRecoveryUnit(f.authority,structural,f.expected,f.scope,async()=>{entered=true;})).rejects.toThrow();
+    expect(f.authority.authenticatedSnapshot()).toEqual(before);
     const outcome=await f.uow.run(f.scope,async outer=>{
       const first=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='nested-admission' WHERE name='Alice'");}).then(()=> "ADMITTED",()=> "REFUSED");
       const backend=(await outer.query<{pid:number}>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
@@ -5128,15 +5132,42 @@ it("M03-INT-04: signed wrong previous digest must not become valid during real q
       resume();
       expect(await pending).toEqual(good);
     }finally{resume();lab.dbAdmin.query=query;}
-    let effects=0;
+    const reordered=Object.fromEntries(Object.entries(evidence).reverse()) as typeof evidence;
+    expect(registryAcceptanceMessage(reordered)).toEqual(registryAcceptanceMessage(evidence));
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,reordered,attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
+    expect(good.evidenceDigestVersion).toBe(2);
+    let effects=0,queries=0;
     const getter={...evidence};
     Object.defineProperty(getter,"previousDigest",{enumerable:true,get(){effects++;return evidence.previousDigest;}});
     const proxy=new Proxy(evidence,{get(){effects++;throw Error("trap");}});
-    for(const bad of [getter,proxy,{...evidence,extra:true},{...evidence,dataDigests:{[lab.table]:"bad"}},{...evidence,version:2},Object.assign(Object.create(evidence),evidence)]){
-      await expect(verifyExperimentalRegistry(lab.dbAdmin,bad as typeof evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
-    }
-    expect(effects).toBe(0);
+    const nestedGetter={...evidence.dataDigests};
+    Object.defineProperty(nestedGetter,lab.table,{enumerable:true,get(){effects++;return evidence.dataDigests[lab.table];}});
+    const cyclic:Record<string,unknown>={};cyclic[lab.table]=cyclic;
+    const oversized=Object.fromEntries(Array.from({length:129},(_,i)=>["vr_x_"+i.toString(16).padStart(12,"0"),"a".repeat(64)]));
+    lab.dbAdmin.query=(async(...args:unknown[])=>{queries++;return Reflect.apply(query,lab.dbAdmin,args);}) as typeof query;
+    try{
+      for(const bad of [getter,proxy,{...evidence,dataDigests:nestedGetter},{...evidence,dataDigests:new Proxy(evidence.dataDigests,{ownKeys(){effects++;throw Error("trap");}})},
+        {...evidence,[Symbol("unexpected")]:true},{...evidence,extra:true},{...evidence,dataDigests:{[lab.table]:"bad"}},{...evidence,dataDigests:cyclic},
+        {...evidence,dataDigests:oversized},{...evidence,version:2},Object.assign(Object.create(evidence),evidence)]){
+        await expect(verifyExperimentalRegistry(lab.dbAdmin,bad as typeof evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+      }
+      expect(effects).toBe(0);expect(queries).toBe(0);
+    }finally{lab.dbAdmin.query=query;}
     expect(await verifyExperimentalRegistry(lab.dbAdmin,Object.freeze({...evidence,dataDigests:Object.freeze({...evidence.dataDigests})}),attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
+    let authorityEntered!:()=>void,authorityRelease!:()=>void;
+    const authorityBarrier=new Promise<void>(r=>{authorityEntered=r;}),authorityHold=new Promise<void>(r=>{authorityRelease=r;});
+    let firstAuthorityQuery=true;
+    lab.dbAdmin.query=(async(...args:unknown[])=>{
+      const result=await Reflect.apply(query,lab.dbAdmin,args);
+      if(firstAuthorityQuery){firstAuthorityQuery=false;authorityEntered();await authorityHold;}
+      return result;
+    }) as typeof query;
+    const changedAuthority=verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority).then(()=>false,()=>true);
+    try{
+      await Promise.race([authorityBarrier,changedAuthority.then(()=>{throw Error("early result");})]);
+      authority.beginRecovery();authorityRelease();
+      expect(await changedAuthority).toBe(true);
+    }finally{authorityRelease();await changedAuthority;lab.dbAdmin.query=query;}
   }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
   }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
 },30000);
@@ -5189,7 +5220,7 @@ it("M03-INT-02B: top-level lease owns nested work and rejects reentrant admissio
   const active=f.run(async tx=>{
     await expect(f.run(async()=>{throw Error("must not reach nested work");})).rejects.toThrow("outermost");
     await f.uow.run(f.scope,async nested=>{
-      expect(await nested.query("SELECT pg_backend_pid()")).toEqual(await tx.query("SELECT pg_backend_pid()"));
+      expect((await nested.query("SELECT pg_backend_pid()")).rows).toEqual((await tx.query("SELECT pg_backend_pid()")).rows);
       await nested.query("UPDATE "+f.q+" SET name='nested-drain' WHERE name='Alice'");
     });
     stale=()=>tx.query("SELECT 1");
@@ -5216,6 +5247,12 @@ it("M03-INT-02C: actual lost COMMIT acknowledgment retains durable unresolved ad
   void proxy.serverCommitObserved.catch(()=>undefined);
   const url=new URL(urlFor(f.lab.name,f.lab.runtimeRole));url.port=String(proxy.port);
   const pool=new Pool({connectionString:url.toString(),max:1,connectionTimeoutMillis:4000});
+  const transportErrors:string[]=[];
+  let signalTransport!:()=>void;
+  const transportObserved=new Promise<void>(r=>{signalTransport=r;});
+  const observeTransport=(error:Error)=>{transportErrors.push(error.message);signalTransport();};
+  pool.on("connect",client=>client.on("error",observeTransport));
+  pool.on("error",observeTransport);
   try{
     const pending=runExperimentalRecoveryUnit(f.authority,new TenantUnitOfWork(pool),f.expected,f.scope,async tx=>{
       await tx.query("UPDATE "+f.q+" SET name='committed-without-ack' WHERE name='Alice'");
@@ -5223,6 +5260,8 @@ it("M03-INT-02C: actual lost COMMIT acknowledgment retains durable unresolved ad
     const rejected=pending.then(()=>false,()=>true);
     await proxy.serverCommitObserved;
     expect(await rejected).toBe(true);
+    await transportObserved;
+    expect(transportErrors.every(message=>/connection terminated|socket|ECONNRESET/i.test(message))).toBe(true);
     expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Bob,committed-without-ack").digest("hex"));
     expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:expect.any(String)});
     const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
@@ -5281,7 +5320,7 @@ it("M03-INT-02D: recovery intent after final check drains actual COMMIT and reta
       if(args[0]==="COMMIT"){dispatch();await dispatchGate;const result=await Reflect.apply(original,c,args);receipt();await receiptGate;return result;}
       return Reflect.apply(original,c,args);
     }) as typeof original;
-    c.release=(destroy?:boolean)=>{c.query=original;c.release=release;release(destroy);};
+    c.release=(destroy?:boolean|Error)=>{c.query=original;c.release=release;release(destroy);};
     return c;
   }});
   const active=runExperimentalRecoveryUnit(f.authority,runner,f.expected,f.scope,async tx=>{

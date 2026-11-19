@@ -62,15 +62,16 @@ function snapshotEvidence(input:unknown):AcceptedRegistryEvidence{
   }
   return Object.freeze({version,applicationId,installationId,databaseName,epoch,ledgerId,authorityHead,authoritySequence,operationId,submissionId,approvalId,planDigest,previousDigest,manifestDigest,dataDigests:Object.freeze(dataDigests)});
 }
-export function registryAcceptanceMessage(e:AcceptedRegistryEvidence):Buffer{
+function encodeSigningBytes(e:AcceptedRegistryEvidence):Buffer{
   return Buffer.from(JSON.stringify(["VIBRESS-M03-REGISTRY-ACCEPTANCE-V1",e.version,e.applicationId,e.installationId,e.databaseName,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.operationId,e.submissionId,e.approvalId,e.planDigest,e.previousDigest,e.manifestDigest,Object.entries(e.dataDigests).sort(([a],[b])=>a.localeCompare(b))]));
 }
+export function registryAcceptanceMessage(e:AcceptedRegistryEvidence):Buffer{return encodeSigningBytes(snapshotEvidence(e));}
 export async function verifyExperimentalRegistry(db:ClientBase,input:AcceptedRegistryEvidence,signature:string,pinnedApprovalKey:KeyObject,authority:DisposableDurableRecoveryAuthority){
   const e=snapshotEvidence(input);
-  const signingBytes=registryAcceptanceMessage(e);
+  const signingBytes=encodeSigningBytes(e);
   if(process.env.NODE_ENV==="production"||e.version!==1||!/^vibress_s03_[a-z0-9_]+$/.test(e.databaseName)||
     ![e.epoch,e.ledgerId,e.operationId,e.submissionId,e.approvalId].every(x=>uuid.test(x))||![e.planDigest,e.previousDigest,e.manifestDigest,e.authorityHead].every(x=>sha.test(x))||!Number.isSafeInteger(e.authoritySequence)||e.authoritySequence<1||
-    pinnedApprovalKey.type!=="public"||pinnedApprovalKey.asymmetricKeyType!=="ed25519"||!/^[A-Za-z0-9_-]{86}$/.test(signature)||
+    typeof signature!=="string"||pinnedApprovalKey.type!=="public"||pinnedApprovalKey.asymmetricKeyType!=="ed25519"||!/^[A-Za-z0-9_-]{86}$/.test(signature)||
     !verify(null,signingBytes,pinnedApprovalKey,Buffer.from(signature,"base64url")))return deny();
   const external=authority.authenticatedSnapshot();
   const committed=external.operations.find(o=>o.operationId===e.operationId);
@@ -110,5 +111,5 @@ export async function verifyExperimentalRegistry(db:ClientBase,input:AcceptedReg
   const final=await collectDisposableRecoveryReadiness(db,{installationId:e.installationId,databaseName:e.databaseName,epoch:e.epoch,manifestDigest:e.manifestDigest,dataDigests:e.dataDigests});
   if(JSON.stringify(final)!==JSON.stringify(ready)||JSON.stringify(authority.authenticatedSnapshot())!==JSON.stringify(external))return deny();
   return {version:1 as const,lifecycle:"VERIFIED_COMMITTED" as const,revisionDigest:manifest.digest,previousDigest:e.previousDigest,operationId:e.operationId,physical,
-    evidenceDigest:createHash("sha256").update(signingBytes).update(JSON.stringify(external)).update(ready.readinessEvidenceDigest).update(physical.digest).digest("hex")};
+    evidenceDigestVersion:2 as const,evidenceDigest:createHash("sha256").update(JSON.stringify(["VIBRESS-M03-REGISTRY-RESULT-V2",signingBytes.toString("base64url"),external,ready,physical.digest])).digest("hex")};
 }
