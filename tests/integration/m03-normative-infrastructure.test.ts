@@ -423,6 +423,31 @@ describe("M03 actual isolated normative infrastructure",()=>{
       expect((await uow.run(ta,tx=>tx.query("SELECT id::text AS id,name,website FROM "+q+" ORDER BY id"))).rows).toEqual([{id,name:"Retained",website:null}]);
     }
     expect(a.namespace).not.toBe(b.namespace);
+    // Typed V2 content stays installation-neutral and installs on both databases.
+    const typed=(f:Lab,extended:boolean)=>{
+      const defs:ResourceDefinition[]=[
+        {...f.scope,id:"customers",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"name",type:"text",required:true},{id:"website",type:"text",required:false},...(extended?[
+          {id:"due",type:"date" as const,required:false},{id:"quantity",type:"integer" as const,required:false},
+          {id:"rate",type:"decimal" as const,precision:9,scale:2,required:false},
+        ]:[])]},
+        {...f.scope,id:"deals",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"customer",type:"relation",required:true,targetResource:"customers"},{id:"stage",type:"enum",required:true,values:["open","won"]}]},
+        {...f.scope,id:"activities",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"deal",type:"relation",required:false,targetResource:"deals"},{id:"done",type:"boolean",required:true}]},
+      ];
+      return createSchemaManifest(compileResourceSchema(defs,f.scope));
+    };
+    expect(typed(a,false).digest).toBe(a2.digest);
+    const typedA=typed(a,true),typedB=typed(b,true);
+    expect(provisioningProfileFor(typedA)).toBe(PROVISIONING_PROFILE_V2);
+    const typedAUpgrade=compilePortableProvisioningIdentity(a2,typedA,a.scope),typedBUpgrade=compilePortableProvisioningIdentity(b2,typedB,b.scope);
+    expect(typedAUpgrade).toEqual(typedBUpgrade);
+    expect(typedAUpgrade.parentContentDigest).toBe(upgradeA.contentDigest);
+    expect(typedAUpgrade.contentDigest).not.toBe(upgradeA.contentDigest);
+    for(const [f,old,next] of [[a,a2,typedA],[b,b2,typedB]] as const){
+      await apply(f,next,approval(f,old,next));
+      expect(await check(f,next)).toBe(compileProvisioningContract(next,f.scope).digest);
+      const columns=(await f.admin.query<{name:string}>(`SELECT attname::text AS name FROM pg_catalog.pg_attribute WHERE attrelid=to_regclass('${table(f,next,"customers")}') AND attnum>0 AND NOT attisdropped AND attname IN ('due','quantity','rate')`)).rows.map(r=>r.name).sort();
+      expect(columns).toEqual(["due","quantity","rate"]);
+    }
     console.info("M03_C05_PORTABLE_CONTENT_AND_MIGRATION=PASS");
   },60000);
   // These are contract regression tests, not asserted reproduction results.

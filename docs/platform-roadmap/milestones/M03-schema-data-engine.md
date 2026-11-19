@@ -114,6 +114,8 @@ The [independent second review and **8.0/10 roadmap-quality score**](../SECOND-R
 Select per-installation physical schema ownership and tenant discriminators; add application_id only where justified by physical deployment. Define deterministic resource migration and stable event/schema compatibility contracts.
 
 **Evidence required:** code/ADR SHA, negative or contract test, runnable clean consumer where appropriate, owner and actual CI/restore result.
+
+**Local progress (2026-11-19):** `compilePortableProvisioningIdentity` is profile-generic; the C05/J03 integration test now proves the typed `DEDICATED_PG16_TYPED_V2` content/migration digests are installation-neutral across two real dedicated installs and that the V1→V2 transition parent digest matches the V1 content digest, then installs the typed additive (optional date/integer/decimal) columns on both databases and verifies the exact physical digest. CORE V1 digest bytes remain frozen by `historical-v1-digests.test.ts`. Additive money columns still require review because their currency companion carries a CHECK; that refusal is preserved, not relaxed.
 ### Additional blocking exit checks
 
 - [ ] Physical keys and scoped foreign keys match the approved per-installation topology, with tests of tenant isolation independent of unnecessary app_id duplication.
