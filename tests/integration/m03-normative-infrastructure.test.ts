@@ -225,6 +225,46 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
     console.info("M03_A02_VERSION_CAS_SOFT_DELETE_KEYSET=PASS");
   },60000);
+  it("A02: general optional scalar fields persist with validation, partial update and tenant scoping",async()=>{
+    const f=await lab("scalars","reference-inventory-scalars");
+    const m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"items",ownership:"tenant",fields:[
+      {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+      {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+      {id:"active",type:"boolean",required:false},{id:"label",type:"text",required:false,maxLength:12},
+      {id:"due_at",type:"datetime",required:false}
+    ]}],f.scope));
+    await apply(f,m,approval(f,null,m));
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.items.create","resource.items.update","resource.items.delete","resource.items.read"];
+    const scoped=(tenant:string)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-scalars-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
+    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"items",f.authority)));
+    const created=await open(ta,resource=>resource.create("item-1","First",{active:true,label:"Alpha",due_at:"2026-01-02T03:04:05.000Z"})) as {id:string;version_token:string;code:string;name:string;active:boolean;label:string;due_at:Date};
+    expect(created).toMatchObject({code:"item-1",name:"First",active:true,label:"Alpha"});
+    expect(created.due_at).toBeInstanceOf(Date);
+    expect(created.due_at.toISOString()).toBe("2026-01-02T03:04:05.000Z");
+    const listed=(await open(ta,resource=>resource.list(10)) as {records:typeof created[]}).records;
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).toMatchObject({id:created.id,active:true,label:"Alpha"});
+    // Unknown fields, wrong value types, over-long text and non-ISO dates are
+    // refused before SQL; the declared maxLength CHECK still exists in PostgreSQL.
+    for(const values of [{color:"red"},{active:"yes"},{label:"1234567890123"},{due_at:"tomorrow"},{label:"bad\u0000value"}]){
+      await expect(open(ta,resource=>resource.create("item-2","Second",values))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    }
+    // Partial update: omitted columns keep their values, provided null clears.
+    const updated=await open(ta,resource=>resource.update(created.id,created.version_token,"First revised",{label:"Beta"})) as typeof created;
+    expect(updated).toMatchObject({name:"First revised",label:"Beta",active:true});
+    const cleared=await open(ta,resource=>resource.update(created.id,updated.version_token,"First revised",{label:null})) as typeof created;
+    expect(cleared).toMatchObject({label:null,active:true});
+    // Wrong tenant cannot see or mutate the row; stale versions are refused.
+    expect((await open(tb,resource=>resource.list(10)) as {records:unknown[]}).records).toEqual([]);
+    expect(await open(tb,resource=>resource.update(created.id,cleared.version_token,"Wrong tenant",{label:"Nope"}))).toBeNull();
+    expect(await open(ta,resource=>resource.update(created.id,created.version_token,"Stale",{label:"Nope"}))).toBeNull();
+    console.info("M03_A02_SCALAR_FIELDS=PASS");
+  },60000);
   it("B01: persistent lifecycle CAS, immutable history, installer refusal, DB_COMMITTED vs ACTIVE, concurrency and supersession",async()=>{
     const f=await lab("lifecycle","reference-lifecycle"),m=crm(f),a=approval(f,null,m);
     const life=(digest:string)=>f.admin.query<{state:LifecycleState;state_version:number}>("SELECT state,state_version FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,digest]).then(r=>r.rows[0]);
