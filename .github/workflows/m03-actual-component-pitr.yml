@@ -79,7 +79,7 @@ jobs:
           test "$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc 'SHOW server_version_num')" = 160016
           docker inspect "$(docker compose -f compose.dev.yml ps -q postgres)" --format '{{.Image}}'
       - name: New actual role matrix and additive compatibility
-        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t 'M03-(WRITER-01|WRITER-02|COMPAT-01|ADMISSION-01|REGISTRY-01|WATCHDOG-01)'
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t 'M03-(WRITER-01|WRITER-02|COMPAT-01|ADMISSION-01|REGISTRY-01|WATCHDOG-01|INT-)'
       - name: Historical operator, logical recovery and wire faults
         run: pnpm exec vitest run --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts tests/integration/platform-schema-migration-fault-injection.test.ts
       - name: Historical schema, authority and architecture checks

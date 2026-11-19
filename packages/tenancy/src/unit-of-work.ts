@@ -9,6 +9,7 @@ import {
 export interface QueryResult<TRow = unknown> {
   readonly rows: TRow[];
   readonly rowCount: number | null;
+  readonly command?: string;
 }
 
 export interface Queryable {
@@ -246,10 +247,23 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
     this.#pool = pool;
   }
 
-  async run<T>(
-    scope: VerifiedScope,
-    work: (transaction: ScopedTransaction) => Promise<T>,
-  ): Promise<T> {
+  /** A real outermost transaction, not a structural runner or caller flag. */
+  assertOutermost(): void {
+    if (!(#pool in this) || transactionStorage.getStore()) throw new TenantTransactionError("outermost recovery transaction required");
+  }
+
+  runOutermost<T>(scope: VerifiedScope,work:(transaction:ScopedTransaction)=>Promise<T>,
+    onSettlement:(outcome:"COMMITTED"|"ROLLED_BACK")=>void):Promise<T>{
+    TenantUnitOfWork.prototype.assertOutermost.call(this);
+    return this.#run(scope,work,onSettlement);
+  }
+
+  run<T>(scope:VerifiedScope,work:(transaction:ScopedTransaction)=>Promise<T>):Promise<T>{
+    return this.#run(scope,work);
+  }
+
+  async #run<T>(scope:VerifiedScope,work:(transaction:ScopedTransaction)=>Promise<T>,
+    onSettlement?:(outcome:"COMMITTED"|"ROLLED_BACK")=>void):Promise<T>{
     assertVerifiedScope(scope);
     if (!isVerifiedScope(scope)) {
       throw new TenantTransactionError("invalid verified scope");
@@ -294,8 +308,10 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
     let settled = false;
     let destroy = false;
     let commitAttempted = false;
+    let acknowledged:"COMMITTED"|"ROLLED_BACK"|undefined;
     try {
-      await client.query("BEGIN");
+      const begin=await client.query("BEGIN");
+      if(onSettlement&&begin.command!=="BEGIN")throw new TenantTransactionError("BEGIN acknowledgment unavailable");
       const identity = await applyTenantContext(client, scope);
       const transaction = createScopedTransaction(
         client,
@@ -326,7 +342,8 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
       }
 
       if (rollback.value) {
-        const rolledBack = await safeRollback(client);
+        const rolledBack = await safeRollback(client,!!onSettlement);
+        if(rolledBack&&!commitAttempted)acknowledged="ROLLED_BACK";
         settled = true;
         destroy = !rolledBack;
         throw new TenantTransactionRollbackOnlyError(
@@ -358,7 +375,8 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
         rollback.value = true;
         rollback.reason =
           error instanceof Error ? error.message : "transaction is aborted";
-        const rolledBack = await safeRollback(client);
+        const rolledBack = await safeRollback(client,!!onSettlement);
+        if(rolledBack&&!commitAttempted)acknowledged="ROLLED_BACK";
         settled = true;
         destroy = !rolledBack;
         throw new TenantTransactionRollbackOnlyError(rollback.reason);
@@ -368,7 +386,7 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
         probe.currentUser !== identity.currentUser ||
         probe.sessionUser !== identity.sessionUser
       ) {
-        await safeRollback(client);
+        if(await safeRollback(client,!!onSettlement))acknowledged="ROLLED_BACK";
         settled = true;
         destroy = true;
         throw new TenantRoleSwitchError(
@@ -377,7 +395,12 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
       }
 
       commitAttempted = true;
-      await client.query("COMMIT");
+      const receipt=await client.query("COMMIT");
+      if(onSettlement&&receipt.command!=="COMMIT"){
+        if(receipt.command==="ROLLBACK"){acknowledged="ROLLED_BACK";settled=true;}
+        throw new TenantTransactionError("COMMIT acknowledgment unavailable or rolled back");
+      }
+      acknowledged="COMMITTED";
       settled = true;
       return result;
     } catch (error) {
@@ -390,7 +413,8 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
           // queue behind it, so destroy the connection instead.
           destroy = true;
         } else {
-          const rolledBack = await safeRollback(client);
+          const rolledBack = await safeRollback(client,!!onSettlement);
+        if(rolledBack&&!commitAttempted)acknowledged="ROLLED_BACK";
           // Destroy when the transaction outcome is unknown (ROLLBACK failed
           // or COMMIT already failed).
           if (!rolledBack || commitAttempted) {
@@ -401,6 +425,9 @@ export class TenantUnitOfWork implements TenantUnitOfWorkRunner {
       throw error;
     } finally {
       client.release(destroy);
+      // Report only an acknowledged terminal result after actual pool release.
+      // A failed COMMIT, escaped SQL or failed release reports no settlement.
+      if(acknowledged)onSettlement?.(acknowledged);
     }
   }
 }
@@ -446,10 +473,10 @@ async function applyTenantContext(
   return { currentUser: row.current_user, sessionUser: row.session_user };
 }
 
-async function safeRollback(client: Queryable): Promise<boolean> {
+async function safeRollback(client: Queryable,strict=false): Promise<boolean> {
   try {
-    await client.query("ROLLBACK");
-    return true;
+    const result=await client.query("ROLLBACK");
+    return !strict||result.command==="ROLLBACK";
   } catch {
     // The connection may already be unusable; the caller destroys it.
     return false;

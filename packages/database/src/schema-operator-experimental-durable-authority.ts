@@ -29,12 +29,14 @@ type Event =
   | ({ kind: "OUTCOME"; operationId: string; evidenceDigest?: string } & ({outcome:"COMMITTED";newDigest:string}|{outcome:"UNCERTAIN"|"ROLLED_BACK";newDigest?:never}))
   | { kind:"ROLLBACK_WITNESS"; operationId:string; witness:RollbackWitness }
   | { kind: "TAKEOVER"; nonce:string; writerDigest:string; signature:string; maintenanceDigest?:string; anchorLockDigest?:string; action?:"MAINTENANCE_TAKEOVER" }
+  | { kind: "BUSINESS_ADMIT"; lease: string; epoch:string }
+  | { kind: "BUSINESS_SETTLED"; lease:string; outcome:"COMMITTED"|"ROLLED_BACK" }
   | { kind: "INTENT"; intent: string }
   | { kind: "ADVANCE"; epoch: string; evidenceDigest: string }
   | { kind: "ADVANCE_V2"; epoch:string; evidenceDigest:string; scopedTarget:ScopedRecoveryTarget }
   | { kind: "READY"|"READY_V2"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
+  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation> };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -75,7 +77,7 @@ function reduce(s: State|undefined,e: Event): State {
   const next:State={...s,epochs:[...s.epochs],operations:new Map(s.operations)};
   switch(e.kind){
     case "ADMIT":
-      if(s.pending || [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN") || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
+      if(s.businessLease||s.pending || [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN") || !validOperation(e.operation) || e.operation.outcome!=="ADMITTED" ||
         e.operation.newDigest!==undefined || e.operation.epoch!==s.epoch || s.operations.has(e.operation.operationId)) return refuse();
       if([...s.operations.values()].some(o=>o.submissionId===e.operation.submissionId||o.approvalId===e.operation.approvalId)) return refuse();
       next.operations.set(e.operation.operationId,{...e.operation});break;
@@ -98,12 +100,19 @@ function reduce(s: State|undefined,e: Event): State {
         (e.maintenanceDigest!==undefined&&!SHA.test(e.maintenanceDigest))||(e.anchorLockDigest!==undefined&&!SHA.test(e.anchorLockDigest)))return refuse();
       if(!s.pending){next.pending=true;next.advanced=false;next.intent=e.nonce;}
       break;
+    case "BUSINESS_ADMIT":
+      if(s.pending||s.businessLease||s.readyProtocol===2||e.epoch!==s.epoch||!UUID.test(e.lease)||
+        [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))return refuse();
+      next.businessLease=e.lease;break;
+    case "BUSINESS_SETTLED":
+      if(!s.businessLease||s.businessLease!==e.lease||!["COMMITTED","ROLLED_BACK"].includes(e.outcome))return refuse();
+      delete next.businessLease;break;
     case "INTENT":
       if(s.pending || !UUID.test(e.intent)) return refuse();
       next.pending=true;next.advanced=false;next.intent=e.intent;break;
     case "ADVANCE":
     case "ADVANCE_V2":
-      if(!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
+      if(s.businessLease||!s.pending||s.advanced||!UUID.test(e.epoch)||s.epochs.includes(e.epoch)||!SHA.test(e.evidenceDigest)||
         [...s.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")) return refuse();
       if(e.kind==="ADVANCE"&&s.readyProtocol===2)return refuse();
       if(e.kind==="ADVANCE_V2"&&!validScopedTarget(e.scopedTarget,s))return refuse();
@@ -113,7 +122,7 @@ function reduce(s: State|undefined,e: Event): State {
     case "READY":
     case "READY_V2":
       if(e.kind==="READY_V2"?s.readyProtocol!==2||!s.scopedTarget:s.readyProtocol===2)return refuse();
-      if(!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
+      if(s.businessLease||!s.pending||!s.advanced||!SHA.test(e.evidenceDigest)||!SHA.test(e.catalogManifestDigest)||!SHA.test(e.journalDigest)) return refuse();
       next.pending=false;next.advanced=false;delete next.intent;delete next.scopedTarget;break;
     default:return refuse();
   }
@@ -330,7 +339,7 @@ export class DisposableDurableRecoveryAuthority {
       if(state.signingIdentity!==keyIdentity(createPublicKey(key))||state.administrationIdentity!==keyIdentity(administrationKey)) refuse();
       a.assertAnchor();
       // A restarted authority never assumes in-flight outcomes or dead sessions.
-      if([...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")){
+      if(state.businessLease||[...state.operations.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")){
         if(!state.pending) a.beginRecovery();
         for(const o of a.current().operations.values()) if(o.outcome==="ADMITTED")
           a.append({kind:"OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
@@ -376,7 +385,7 @@ export class DisposableDurableRecoveryAuthority {
   snapshot(){
     const s=this.current();
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
-      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
+      epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.businessLease?{businessLease:s.businessLease}:{}),...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
   }
   authenticatedSnapshot(){this.assertAnchor();return this.snapshot();}
@@ -495,23 +504,37 @@ export class DisposableDurableRecoveryAuthority {
    * grant. No new admission after durable INTENT; settlement holds the lease.
    * A process crash or a bypassing direct DB path still requires external fencing.
    */
-  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},work:(check:()=>void)=>Promise<T>):Promise<T>{
+  async withExperimentalBusinessAdmission<T>(scope:{installationId:string;databaseName:string;epoch:string;confirm:"DISPOSABLE_ONLY"},work:(check:()=>void,settle:(outcome:"COMMITTED"|"ROLLED_BACK")=>void)=>Promise<T>):Promise<T>{
     if(process.env.NODE_ENV!=="test"||scope.confirm!=="DISPOSABLE_ONLY")return refuse();
     this.assertAnchor();
     const state=this.current();
-    if(state.pending||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
+    if(state.pending||state.businessLease||state.readyProtocol===2||state.installationId!==scope.installationId||state.databaseName!==scope.databaseName||state.epoch!==scope.epoch||this.fences.size!==0)return refuse();
     const lease=randomUUID();let invalid=false;
     const check=()=>{
       this.assertAnchor();
       const s=this.current();
       if(invalid||s.pending||s.epoch!==scope.epoch||!this.fences.has(lease))return refuse();
     };
+    // Durable admission before connection acquisition. An unresolved lease
+    // survives process replacement; no automatic administrative clearing path.
+    this.append({kind:"BUSINESS_ADMIT",lease,epoch:scope.epoch});
     this.fences.set(lease,()=>{invalid=true;});
-    try{check();return await work(check);}
-    catch(error){
-      // Unknown callback settlement must not automatically retry. Conservatively
-      // enter durable pending even for ordinary failures in this prototype.
+    const receipt:{outcome?:"COMMITTED"|"ROLLED_BACK"}={};
+    const settle=(outcome:"COMMITTED"|"ROLLED_BACK")=>{
+      if(receipt.outcome||!this.fences.has(lease))return refuse();
+      receipt.outcome=outcome;
+    };
+    try{
+      check();
+      const result=await work(check,settle);
+      if(receipt.outcome!=="COMMITTED")return refuse();
+      this.append({kind:"BUSINESS_SETTLED",lease,outcome:"COMMITTED"});
+      return result;
+    }catch(error){
       if(!this.current().pending)this.beginRecovery();
+      if(receipt.outcome==="ROLLED_BACK")this.append({kind:"BUSINESS_SETTLED",lease,outcome:"ROLLED_BACK"});
+      // An unknown outcome retains the durable marker. Neither a signed
+      // quiescence assertion nor a released socket resolves this business tx.
       throw error;
     }finally{this.fences.delete(lease);}
   }

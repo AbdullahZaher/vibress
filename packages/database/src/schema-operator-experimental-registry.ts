@@ -2,6 +2,7 @@
 // normative journal. Actual registry settlement still belongs to P06 operator.
 import { createHash,verify,type KeyObject } from "node:crypto";
 import type { ClientBase } from "pg";
+import { types } from "node:util";
 import { asApplicationId,asInstallationId } from "@vibress/platform-kernel";
 import { parseSchemaManifest,renderTrustedAdditiveColumn } from "@vibress/schema-engine";
 import { compileExperimentalPhysicalContract } from "@vibress/schema-engine";
@@ -28,14 +29,49 @@ export interface AcceptedRegistryEvidence {
   readonly manifestDigest:string;
   readonly dataDigests:Readonly<Record<string,string>>;
 }
+const evidenceKeys=["version","applicationId","installationId","databaseName","epoch","ledgerId","authorityHead","authoritySequence","operationId","submissionId","approvalId","planDigest","previousDigest","manifestDigest","dataDigests"] as const;
+function ownData(value:unknown,limit:number):Record<string,unknown>{
+  if(!value||typeof value!=="object"||types.isProxy(value)||Object.getPrototypeOf(value)!==Object.prototype)return deny();
+  const keys=Reflect.ownKeys(value);
+  if(keys.length>limit||keys.some(k=>typeof k!=="string"))return deny();
+  const out:Record<string,unknown>=Object.create(null) as Record<string,unknown>;
+  for(const key of keys){
+    if(typeof key!=="string"||key==="__proto__"||key==="constructor"||key==="prototype")return deny();
+    const descriptor=Object.getOwnPropertyDescriptor(value,key);
+    if(!descriptor||!descriptor.enumerable||!("value" in descriptor))return deny();
+    out[key]=descriptor.value;
+  }
+  return out;
+}
+function snapshotEvidence(input:unknown):AcceptedRegistryEvidence{
+  const obj=ownData(input,evidenceKeys.length);
+  if(Object.keys(obj).length!==evidenceKeys.length||evidenceKeys.some(k=>!Object.hasOwn(obj,k)))return deny();
+  const ident=/^[a-z][a-z0-9_-]{1,62}$/;
+  const pattern=(x:unknown,re:RegExp):x is string=>typeof x==="string"&&x.length<=128&&re.test(x);
+  const {version,applicationId,installationId,databaseName,epoch,ledgerId,authorityHead,authoritySequence,operationId,submissionId,approvalId,planDigest,previousDigest,manifestDigest}=obj;
+  if(version!==1||!pattern(applicationId,ident)||!pattern(installationId,ident)||!pattern(databaseName,/^vibress_s03_[a-z0-9_]+$/)||databaseName.length>63||
+    !pattern(epoch,uuid)||!pattern(ledgerId,uuid)||!pattern(operationId,uuid)||!pattern(submissionId,uuid)||!pattern(approvalId,uuid)||
+    !pattern(authorityHead,sha)||!pattern(planDigest,sha)||!pattern(previousDigest,sha)||!pattern(manifestDigest,sha)||
+    typeof authoritySequence!=="number"||!Number.isSafeInteger(authoritySequence)||authoritySequence<1)return deny();
+  const raw=ownData(obj.dataDigests,128),entries=Object.entries(raw);
+  if(entries.length===0)return deny();
+  const dataDigests:Record<string,string>={};
+  for(const [key,value] of entries){
+    if(key.length>63||!/^vr_[a-z0-9_]+_[a-f0-9]{12}$/.test(key)||!pattern(value,sha))return deny();
+    dataDigests[key]=value;
+  }
+  return Object.freeze({version,applicationId,installationId,databaseName,epoch,ledgerId,authorityHead,authoritySequence,operationId,submissionId,approvalId,planDigest,previousDigest,manifestDigest,dataDigests:Object.freeze(dataDigests)});
+}
 export function registryAcceptanceMessage(e:AcceptedRegistryEvidence):Buffer{
   return Buffer.from(JSON.stringify(["VIBRESS-M03-REGISTRY-ACCEPTANCE-V1",e.version,e.applicationId,e.installationId,e.databaseName,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.operationId,e.submissionId,e.approvalId,e.planDigest,e.previousDigest,e.manifestDigest,Object.entries(e.dataDigests).sort(([a],[b])=>a.localeCompare(b))]));
 }
-export async function verifyExperimentalRegistry(db:ClientBase,e:AcceptedRegistryEvidence,signature:string,pinnedApprovalKey:KeyObject,authority:DisposableDurableRecoveryAuthority){
+export async function verifyExperimentalRegistry(db:ClientBase,input:AcceptedRegistryEvidence,signature:string,pinnedApprovalKey:KeyObject,authority:DisposableDurableRecoveryAuthority){
+  const e=snapshotEvidence(input);
+  const signingBytes=registryAcceptanceMessage(e);
   if(process.env.NODE_ENV==="production"||e.version!==1||!/^vibress_s03_[a-z0-9_]+$/.test(e.databaseName)||
     ![e.epoch,e.ledgerId,e.operationId,e.submissionId,e.approvalId].every(x=>uuid.test(x))||![e.planDigest,e.previousDigest,e.manifestDigest,e.authorityHead].every(x=>sha.test(x))||!Number.isSafeInteger(e.authoritySequence)||e.authoritySequence<1||
     pinnedApprovalKey.type!=="public"||pinnedApprovalKey.asymmetricKeyType!=="ed25519"||!/^[A-Za-z0-9_-]{86}$/.test(signature)||
-    !verify(null,registryAcceptanceMessage(e),pinnedApprovalKey,Buffer.from(signature,"base64url")))return deny();
+    !verify(null,signingBytes,pinnedApprovalKey,Buffer.from(signature,"base64url")))return deny();
   const external=authority.authenticatedSnapshot();
   const committed=external.operations.find(o=>o.operationId===e.operationId);
   if(external.pending||external.installationId!==e.installationId||external.databaseName!==e.databaseName||external.epoch!==e.epoch||
@@ -74,5 +110,5 @@ export async function verifyExperimentalRegistry(db:ClientBase,e:AcceptedRegistr
   const final=await collectDisposableRecoveryReadiness(db,{installationId:e.installationId,databaseName:e.databaseName,epoch:e.epoch,manifestDigest:e.manifestDigest,dataDigests:e.dataDigests});
   if(JSON.stringify(final)!==JSON.stringify(ready)||JSON.stringify(authority.authenticatedSnapshot())!==JSON.stringify(external))return deny();
   return {version:1 as const,lifecycle:"VERIFIED_COMMITTED" as const,revisionDigest:manifest.digest,previousDigest:e.previousDigest,operationId:e.operationId,physical,
-    evidenceDigest:createHash("sha256").update(registryAcceptanceMessage(e)).update(ready.readinessEvidenceDigest).update(physical.digest).digest("hex")};
+    evidenceDigest:createHash("sha256").update(signingBytes).update(JSON.stringify(external)).update(ready.readinessEvidenceDigest).update(physical.digest).digest("hex")};
 }
