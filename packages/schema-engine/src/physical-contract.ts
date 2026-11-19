@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createSchemaManifest, parseSchemaManifest, planSchemaChanges, type SchemaManifest } from "./planning";
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import { renderTrustedAdditiveColumn } from "./operator-contract";
-import { compileResourceSchema, type SchemaCompilationScope } from "./schema";
+import { compileResourceSchema, moneyCurrencyColumn, type SchemaCompilationScope } from "./schema";
 
 /** No namespace reservation, DDL authority or tenant provisioning. The only
  * supported physical topology here is the existing M03-S03 application-owned
@@ -49,6 +49,23 @@ export function prepareExperimentalPhysicalTransition(current:SchemaManifest|nul
 // Versioned opt-in provisioning profile. This extends (does not reinterpret)
 // Manifest V1 and the frozen restricted ADD_FIELD operator.
 export const PROVISIONING_PROFILE="DEDICATED_PG16_CORE_V1" as const;
+// Additive profile for exact extended scalars (integer, decimal, money, date,
+// bounded json/text). CORE V1 manifests keep their original profile string and
+// every historical signed digest is unchanged.
+export const PROVISIONING_PROFILE_V2="DEDICATED_PG16_TYPED_V2" as const;
+export type ProvisioningProfile=typeof PROVISIONING_PROFILE|typeof PROVISIONING_PROFILE_V2;
+export const PROVISIONING_PROFILES:readonly ProvisioningProfile[]=[PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2];
+export function isProvisioningProfile(value:unknown):value is ProvisioningProfile{
+  return typeof value==="string"&&(PROVISIONING_PROFILES as readonly string[]).includes(value);
+}
+export function provisioningProfileFor(manifest:SchemaManifest):ProvisioningProfile{
+  const extended=manifest.resources.some(resource=>resource.fields.some(field=>
+    field.logicalType==="integer"||field.logicalType==="decimal"||field.logicalType==="money"||
+    field.logicalType==="date"||field.logicalType==="json"||
+    field.logicalType==="media"||field.logicalType==="localized"||
+    (field.logicalType==="text"&&field.maxLength!==undefined)));
+  return extended?PROVISIONING_PROFILE_V2:PROVISIONING_PROFILE;
+}
 const hashPhysical=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
 export function provisioningIdentifier(value:string):string{
   if(typeof value!=="string"||! /^[a-z][a-z0-9_]{0,62}$/.test(value))throw Error("PROVISIONING_IDENTIFIER");
@@ -63,7 +80,9 @@ export function provisioningNamespace(scope:SchemaCompilationScope):string{
 export const PROVISIONING_CATALOG_VERIFICATION_PROFILE="PG16_CORE_CATALOG_V1" as const;
 export function provisioningColumnCollationV1(type:string):string|null{
   if(type==="text")return "pg_catalog.default";
-  if(["uuid","boolean","double precision","timestamp with time zone"].includes(type))return null;
+  if(["uuid","boolean","double precision","timestamp with time zone","integer","date","jsonb"].includes(type))return null;
+  // Exact numerics carry no collation; bounded forms are format_type output.
+  if(/^numeric\([1-9]\d{0,2},(0|[1-9]\d{0,2})\)$/.test(type))return null;
   throw Error("PROVISIONING_CATALOG_TYPE_UNSUPPORTED");
 }
 export function provisioningIndexKeyV1(type:string){
@@ -72,9 +91,15 @@ export function provisioningIndexKeyV1(type:string){
   throw Error("PROVISIONING_CATALOG_INDEX_UNSUPPORTED");
 }
 export interface ProvisionedColumn {name:string;type:string;required:boolean;enumValues?:readonly string[];target?:string}
+export interface ProvisionedCheck {name:string;columns:readonly string[];expression:string;normalized:string}
 export interface ProvisionedResource {
   id:string;table:string;ownership:"application"|"tenant";columns:readonly ProvisionedColumn[];
   key:readonly string[];unique:readonly string[];relations:readonly {column:string;table:string;columns:readonly string[];targetColumns:readonly string[]}[];
+  checks?:readonly ProvisionedCheck[];
+}
+function numericType(precision:number,scale:number):string{
+  if(!Number.isInteger(precision)||!Number.isInteger(scale)||precision<1||precision>38||scale<0||scale>precision)throw Error("PROVISIONING_NUMERIC");
+  return "numeric("+precision+","+scale+")";
 }
 export function compileProvisioningContract(input:unknown,scope:SchemaCompilationScope){
   const manifest=parseSchemaManifest(input);
@@ -86,6 +111,12 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
     const tenant=resource.ownership==="tenant",key=tenant?["tenant_id","id"]:["id"];
     const columns:ProvisionedColumn[]=[...(tenant?[{name:"tenant_id",type:"text",required:true}]:[]),{name:"id",type:"uuid",required:true}];
     const relations:ProvisionedResource["relations"][number][]=[];
+    const checks:ProvisionedCheck[]=[];
+    // The column expression is the rendered SQL body; normalized is the exact
+    // pg_get_expr rendering the installer must observe in the live catalog.
+    const addCheck=(columns:readonly string[],expression:string,normalized:string)=>{
+      checks.push({name:provisioningConstraintName(resource.tableName,"chk",columns.join("_")),columns,expression,normalized});
+    };
     for(const field of resource.fields){
       provisioningIdentifier(field.id);
       if(Object.hasOwn(field,"default"))throw Error("PROVISIONING_DEFAULT_REVIEW_REQUIRED");
@@ -97,6 +128,43 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
       }else if(field.logicalType==="enum"){
         if(!field.values?.length)throw Error("PROVISIONING_ENUM");
         columns.push({name:field.id,type:"text",required:field.required,enumValues:[...field.values]});
+      }else if(field.logicalType==="integer"){
+        columns.push({name:field.id,type:"integer",required:field.required});
+      }else if(field.logicalType==="date"){
+        columns.push({name:field.id,type:"date",required:field.required});
+      }else if(field.logicalType==="decimal"){
+        columns.push({name:field.id,type:numericType(field.precision??18,field.scale??0),required:field.required});
+      }else if(field.logicalType==="money"){
+        // Exact amount plus an explicit ISO-4217 currency companion column.
+        const currency=moneyCurrencyColumn(field.id);
+        provisioningIdentifier(currency);
+        columns.push({name:field.id,type:numericType(field.precision??19,field.scale??2),required:field.required});
+        columns.push({name:currency,type:"text",required:field.required});
+        addCheck([currency],qi(currency)+" ~ '^[A-Z]{3}$'","("+currency+" ~ '^[A-Z]{3}$'::text)");
+      }else if(field.logicalType==="json"){
+        const maxBytes=field.maxBytes??0;
+        if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>1000000)throw Error("PROVISIONING_JSON_BOUND");
+        columns.push({name:field.id,type:"jsonb",required:field.required});
+        addCheck([field.id],"pg_column_size("+qi(field.id)+") <= "+maxBytes,"(pg_column_size("+field.id+") <= "+maxBytes+")");
+      }else if(field.logicalType==="media"||field.logicalType==="localized"){
+        // Media is a bounded object carrying at least a string `url`; localized
+        // text is a bounded object map. Both are exact jsonb, never untyped text.
+        const maxBytes=field.maxBytes??0;
+        if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>1000000)throw Error("PROVISIONING_JSON_BOUND");
+        const column=qi(field.id),id=field.id;
+        columns.push({name:id,type:"jsonb",required:field.required});
+        addCheck([id],
+          field.logicalType==="media"
+            ? "jsonb_typeof("+column+") = 'object' AND coalesce(jsonb_typeof("+column+" -> 'url'), '') = 'string' AND pg_column_size("+column+") <= "+maxBytes
+            : "jsonb_typeof("+column+") = 'object' AND pg_column_size("+column+") <= "+maxBytes,
+          field.logicalType==="media"
+            ? "((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(jsonb_typeof(("+id+" -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size("+id+") <= "+maxBytes+"))"
+            : "((jsonb_typeof("+id+") = 'object'::text) AND (pg_column_size("+id+") <= "+maxBytes+"))");
+      }else if(field.logicalType==="text"&&field.maxLength!==undefined){
+        const maxLength=field.maxLength;
+        if(!Number.isInteger(maxLength)||maxLength<1||maxLength>100000)throw Error("PROVISIONING_TEXT_BOUND");
+        columns.push({name:field.id,type:"text",required:field.required});
+        addCheck([field.id],"char_length("+qi(field.id)+") <= "+maxLength,"(char_length("+field.id+") <= "+maxLength+")");
       }else{
         if(!field.postgresType||!["text","double precision","boolean","timestamp with time zone"].includes(field.postgresType)||field.mappingStatus!=="MAPPED")throw Error("PROVISIONING_TYPE_UNSUPPORTED");
         columns.push({name:field.id,type:field.postgresType,required:field.required});
@@ -106,7 +174,9 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
     // business key; unrelated fields are never silently promoted to keys.
     const code=columns.find(c=>c.name==="code");
     if(code&&(code.type!=="text"||!code.required||code.enumValues))throw Error("PROVISIONING_CODE_KEY");
-    return {id:resource.id,table:resource.tableName,ownership:resource.ownership,columns,key,unique:code?(tenant?["tenant_id","code"]:["code"]):[],relations};
+    const base={id:resource.id,table:resource.tableName,ownership:resource.ownership,columns,key,unique:code?(tenant?["tenant_id","code"]:["code"]):[],relations};
+    // Omit the key entirely for CORE V1 so historical physical digests match.
+    return checks.length?{...base,checks}:base;
   });
   const seen=new Set<string>(),active=new Set<string>();
   const walk=(name:string)=>{
@@ -117,7 +187,7 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
     active.delete(name);seen.add(name);
   };
   for(const resource of resources)walk(resource.table);
-  const body={version:1 as const,profile:PROVISIONING_PROFILE,applicationId:manifest.applicationId,installationId:manifest.installationId,namespace,manifestDigest:manifest.digest,resources};
+  const body={version:1 as const,profile:provisioningProfileFor(manifest),applicationId:manifest.applicationId,installationId:manifest.installationId,namespace,manifestDigest:manifest.digest,resources};
   return {...body,digest:hashPhysical(body)};
 }
 export type ProvisioningContract=ReturnType<typeof compileProvisioningContract>;
@@ -156,6 +226,7 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
       for(const c of resource.columns){
         if(c.enumValues)statements.push("ALTER TABLE "+q+" ADD CONSTRAINT "+qi(provisioningConstraintName(resource.table,"enum",c.name))+" CHECK ("+qi(c.name)+" = ANY (ARRAY["+c.enumValues.map(v=>"'"+v+"'::text").join(", ")+"]))");
       }
+      for(const check of resource.checks??[])statements.push("ALTER TABLE "+q+" ADD CONSTRAINT "+qi(check.name)+" CHECK ("+check.expression+")");
     }
     for(const resource of all)for(const relation of resource.relations){
       const c=provisioningConstraints(resource,physical.namespace).find(x=>x.name===provisioningConstraintName(resource.table,"fk",relation.column))!;
@@ -173,14 +244,15 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
         JSON.stringify(old.key)!==JSON.stringify(resource.key)||JSON.stringify(old.unique)!==JSON.stringify(resource.unique)||
         JSON.stringify(old.relations)!==JSON.stringify(resource.relations))throw Error("PROVISIONING_DESTRUCTIVE_REFUSED");
       for(const col of old.columns)if(JSON.stringify(col)!==JSON.stringify(resource.columns.find(c=>c.name===col.name)))throw Error("PROVISIONING_DESTRUCTIVE_REFUSED");
+      const checked=new Set((resource.checks??[]).flatMap(c=>c.columns));
       for(const col of resource.columns.filter(c=>!old.columns.some(x=>x.name===c.name))){
-        if(col.required||col.enumValues||col.target)throw Error("PROVISIONING_EVOLUTION_REVIEW_REQUIRED");
+        if(col.required||col.enumValues||col.target||checked.has(col.name))throw Error("PROVISIONING_EVOLUTION_REVIEW_REQUIRED");
         statements.push("ALTER TABLE "+tbl(physical.namespace,resource.table)+" ADD COLUMN "+columnSql(col));
       }
     }
   }
   if(statements.length===0)throw Error("PROVISIONING_NO_CHANGES");
-  const body={version:1 as const,profile:PROVISIONING_PROFILE,parent:before?.digest??null,manifest:next,physical,statements};
+  const body={version:1 as const,profile:physical.profile,parent:before?.digest??null,manifest:next,physical,statements};
   return {...body,digest:hashPhysical(body)};
 }
 
@@ -196,11 +268,11 @@ export function compilePortableProvisioningIdentity(current:unknown|null,propose
   const normalize=(m:SchemaManifest)=>createSchemaManifest(compileResourceSchema(m.canonicalIr.resources.map(r=>({...r,...neutral})),neutral));
   const normalizedNext=normalize(next),normalizedBefore=before?normalize(before):null;
   const normalizedPlan=compileProvisioningTransition(normalizedBefore,normalizedNext,neutral);
-  const content=(m:SchemaManifest)=>hashPhysical(["VIBRESS-PORTABLE-SCHEMA-CONTENT-V1",PROVISIONING_PROFILE,m.schemaVersion,m.canonicalIr.resources,m.resources]);
+  const content=(m:SchemaManifest)=>hashPhysical(["VIBRESS-PORTABLE-SCHEMA-CONTENT-V1",provisioningProfileFor(m),m.schemaVersion,m.canonicalIr.resources,m.resources]);
   const contentDigest=content(normalizedNext),parentContentDigest=normalizedBefore?content(normalizedBefore):null;
   return {
     version:1 as const,profile:"PORTABLE_CONTENT_ONLY_V1" as const,authorization:"NONE" as const,
     contentDigest,parentContentDigest,
-    transitionDigest:hashPhysical(["VIBRESS-PORTABLE-MIGRATION-CONTENT-V1",PROVISIONING_PROFILE,parentContentDigest,contentDigest,normalizedPlan.digest])
+    transitionDigest:hashPhysical(["VIBRESS-PORTABLE-MIGRATION-CONTENT-V1",provisioningProfileFor(normalizedNext),parentContentDigest,contentDigest,normalizedPlan.digest])
   };
 }

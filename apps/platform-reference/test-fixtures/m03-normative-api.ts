@@ -10,7 +10,7 @@ declare const M03_SCHEMA_VERSION:1|2;
 const version=M03_SCHEMA_VERSION;
 const need=(key:string)=>{const value=process.env[key];if(!value)throw Error("missing reference config");return value;};
 const ident=(value:string)=>{if(!/^[a-z][a-z0-9_]{0,62}$/.test(value))throw Error("bad reference identifier");return '"'+value+'"';};
-const local=(value:string)=>{const u=new URL(value);if(process.env.NODE_ENV!=="test"||process.env.M03_NORMATIVE_REFERENCE!=="1"||u.hostname!=="127.0.0.1"||u.port!=="5433"||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(u.pathname))throw Error("isolated reference only");return value;};
+const local=(value:string)=>{const u=new URL(value);const ports=process.env.GITHUB_ACTIONS==="true"?["5433"]:["5433","5434"];if(process.env.NODE_ENV!=="test"||process.env.M03_NORMATIVE_REFERENCE!=="1"||u.hostname!=="127.0.0.1"||!ports.includes(u.port)||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(u.pathname))throw Error("isolated reference only");return value;};
 async function main(){
   const applicationId=asApplicationId(need("M03_APP")),installationId=asInstallationId(need("M03_INSTALLATION")),
     table=ident(need("M03_NAMESPACE"))+"."+ident(need("M03_CUSTOMERS")),runtime=new Pool({connectionString:local(need("M03_RUNTIME_URL")),max:2}),

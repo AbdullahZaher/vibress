@@ -23,8 +23,12 @@ export const TARGET_POSTGRES_VERSION = 16 as const;
 export type PostgreSQLColumnType =
   | "text"
   | "double precision"
+  | "integer"
+  | "numeric"
   | "boolean"
+  | "date"
   | "timestamp with time zone"
+  | "jsonb"
   | null;
 
 export type ColumnMappingStatus = "MAPPED" | "REQUIRES_REVIEW" | "UNSUPPORTED";
@@ -38,6 +42,13 @@ export interface ManifestField {
   readonly default?: string | number | boolean;
   readonly values?: readonly string[];
   readonly targetResource?: string;
+  readonly maxLength?: number;
+  readonly precision?: number;
+  readonly scale?: number;
+  readonly money?: true;
+  readonly maxBytes?: number;
+  readonly maxDepth?: number;
+  readonly maxKeys?: number;
 }
 
 export interface ManifestResource {
@@ -229,14 +240,42 @@ function fieldManifest(field: FieldDefinition): ManifestField {
   };
   switch (field.type) {
     case "text":
-      return Object.freeze({ ...common, postgresType: "text", mappingStatus: "MAPPED" });
+      return Object.freeze({
+        ...common, postgresType: "text", mappingStatus: "MAPPED",
+        ...("maxLength" in field ? { maxLength: field.maxLength } : {}),
+      });
     case "number":
       return Object.freeze({ ...common, postgresType: "double precision", mappingStatus: "MAPPED" });
+    case "integer":
+      return Object.freeze({ ...common, postgresType: "integer", mappingStatus: "MAPPED" });
     case "boolean":
       return Object.freeze({ ...common, postgresType: "boolean", mappingStatus: "MAPPED" });
+    case "date":
+      return Object.freeze({ ...common, postgresType: "date", mappingStatus: "MAPPED" });
     case "datetime":
       return Object.freeze({
         ...common, postgresType: "timestamp with time zone", mappingStatus: "MAPPED",
+      });
+    case "decimal":
+      return Object.freeze({
+        ...common, postgresType: "numeric", mappingStatus: "MAPPED",
+        precision: field.precision, scale: field.scale,
+      });
+    case "money":
+      return Object.freeze({
+        ...common, postgresType: "numeric", mappingStatus: "MAPPED",
+        precision: field.precision, scale: field.scale, money: true as const,
+      });
+    case "json":
+      return Object.freeze({
+        ...common, postgresType: "jsonb", mappingStatus: "MAPPED",
+        maxBytes: field.maxBytes, maxDepth: field.maxDepth, maxKeys: field.maxKeys,
+      });
+    case "media":
+    case "localized":
+      return Object.freeze({
+        ...common, postgresType: "jsonb", mappingStatus: "MAPPED",
+        maxBytes: field.maxBytes, maxDepth: field.maxDepth, maxKeys: field.maxKeys,
       });
     case "enum":
       return Object.freeze({
@@ -340,6 +379,9 @@ function classifyNewField(field: ManifestField): {
   }
   if (field.required || Object.prototype.hasOwnProperty.call(field, "default")) {
     return { status: "REQUIRES_REVIEW", reason: "required columns or defaults need reviewed backfill/lock policy" };
+  }
+  if (field.maxLength !== undefined || field.money || field.maxBytes !== undefined) {
+    return { status: "REQUIRES_REVIEW", reason: "bounded or money columns carry reviewed CHECK constraints" };
   }
   return { status: "PLANNED", reason: "optional scalar with no database default (operator approval still required)" };
 }

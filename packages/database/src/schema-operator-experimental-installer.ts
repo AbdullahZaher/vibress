@@ -4,7 +4,7 @@
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
-import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,type ProvisioningContract} from "@vibress/schema-engine";
+import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
 const fail=(reason="INVARIANT"):never=>{throw Error("M03_PROVISIONING_REFUSED:"+reason);};
@@ -25,7 +25,10 @@ async function identity(db:ClientBase){
 }
 function assertLocalUrl(url:string,faultProxyPort?:number){
   const u=new URL(url);
-  if(process.env.NODE_ENV!=="test"||u.protocol!=="postgresql:"||!["127.0.0.1","localhost"].includes(u.hostname)||(u.port!=="5433"&&(faultProxyPort===undefined||!Number.isInteger(faultProxyPort)||Number(u.port)!==faultProxyPort))||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(u.pathname)||u.search||u.hash)return fail();
+  // CI is pinned to the canonical 5433 topology; local test runs may also use
+  // the separately owned 16.16 container on 5434 with identical credentials.
+  const ports=process.env.GITHUB_ACTIONS==="true"?["5433"]:["5433","5434"];
+  if(process.env.NODE_ENV!=="test"||u.protocol!=="postgresql:"||!["127.0.0.1","localhost"].includes(u.hostname)||(!ports.includes(u.port)&&(faultProxyPort===undefined||!Number.isInteger(faultProxyPort)||Number(u.port)!==faultProxyPort))||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(u.pathname)||u.search||u.hash)return fail();
 }
 async function roleContract(db:ClientBase,installer:string,runtime:string,namespace:string){
   if(installer===runtime)return fail();
@@ -79,7 +82,7 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
 }
 // Approval is a canonical bounded wire string, not a mutable caller object.
 // Only an installation-configured key is loaded by the installer.
-export interface ProvisioningApproval {version:1;profile:typeof PROVISIONING_PROFILE;applicationId:string;installationId:string;databaseName:string;databaseOid:string;epoch:string;ledgerId:string;authorityHead:string;authoritySequence:number;parent:string|null;manifestDigest:string;physicalDigest:string;planDigest:string;operationId:string;approvalId:string}
+export interface ProvisioningApproval {version:1;profile:ProvisioningProfile;applicationId:string;installationId:string;databaseName:string;databaseOid:string;epoch:string;ledgerId:string;authorityHead:string;authoritySequence:number;parent:string|null;manifestDigest:string;physicalDigest:string;planDigest:string;operationId:string;approvalId:string}
 export function provisioningApprovalMessage(e:ProvisioningApproval){
   return JSON.stringify(["VIBRESS-M03-PROVISIONING-APPROVAL-V1",e.version,e.profile,e.applicationId,e.installationId,e.databaseName,e.databaseOid,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.parent,e.manifestDigest,e.physicalDigest,e.planDigest,e.operationId,e.approvalId]);
 }
@@ -89,7 +92,7 @@ function parseApproval(wire:string):ProvisioningApproval{
   if(!Array.isArray(raw)||raw.length!==17||raw[0]!=="VIBRESS-M03-PROVISIONING-APPROVAL-V1")return fail();
   const [_,version,profile,applicationId,installationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,parent,manifestDigest,physicalDigest,planDigest,operationId,approvalId]=raw as unknown[];
   const s=(v:unknown,re:RegExp):v is string=>typeof v==="string"&&re.test(v);
-  if(version!==1||profile!==PROVISIONING_PROFILE||!s(applicationId,/^[a-z][a-z0-9_-]{1,62}$/)||!s(installationId,/^[a-z][a-z0-9_-]{1,62}$/)||
+  if(version!==1||!isProvisioningProfile(profile)||!s(applicationId,/^[a-z][a-z0-9_-]{1,62}$/)||!s(installationId,/^[a-z][a-z0-9_-]{1,62}$/)||
     !s(databaseName,/^vibress_s03_norm_[a-z0-9_]+$/)||!s(databaseOid,/^\d{1,10}$/)||!s(epoch,uuid)||!s(ledgerId,uuid)||!s(authorityHead,sha)||typeof authoritySequence!=="number"||!Number.isSafeInteger(authoritySequence)||authoritySequence<1||
     !(parent===null||s(parent,sha))||!s(manifestDigest,sha)||!s(physicalDigest,sha)||!s(planDigest,sha)||!s(operationId,uuid)||!s(approvalId,uuid))return fail();
   const e={version,profile,applicationId,installationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,parent,manifestDigest,physicalDigest,planDigest,operationId,approvalId} as const;
@@ -129,8 +132,8 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
     if(!equal(columnCollations,desired.map(c=>({name:c.name,collation:provisioningColumnCollationV1(c.type)}))))return fail("CATALOG_COLUMN_COLLATION_V1");
     const cons=(await db.query<{name:string;kind:string;columns:string[];target:string|null;targetNamespace:string|null;targetColumns:string[];valid:boolean;defer:boolean;update:string;del:string;match:string;expression:string}>("SELECT co.conname AS name,co.contype AS kind,ARRAY(SELECT a.attname::text FROM unnest(co.conkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,f.relname AS target,fn.nspname AS \"targetNamespace\",ARRAY(SELECT a.attname::text FROM unnest(co.confkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=f.oid AND a.attnum=k.attnum ORDER BY k.ord) AS \"targetColumns\",co.convalidated AS valid,co.condeferrable OR co.condeferred AS defer,co.confupdtype AS update,co.confdeltype AS del,co.confmatchtype AS match,coalesce(pg_get_expr(co.conbin,co.conrelid),'') AS expression FROM pg_constraint co JOIN pg_class c ON c.oid=co.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN pg_class f ON f.oid=co.confrelid LEFT JOIN pg_namespace fn ON fn.oid=f.relnamespace WHERE n.nspname=$1 AND c.relname=$2 ORDER BY co.conname",[namespace,resource.table])).rows;
     const constraints=provisioningConstraints(resource,namespace);
-    const enums=resource.columns.filter(c=>c.enumValues);
-    if(cons.length!==constraints.length+enums.length)return fail("CATALOG_4");
+    const enums=resource.columns.filter(c=>c.enumValues),checks=resource.checks??[];
+    if(cons.length!==constraints.length+enums.length+checks.length)return fail("CATALOG_4");
     for(const c of constraints){
       const actual=cons.find(x=>x.name===c.name);
       if(!actual||!actual.valid||actual.defer||actual.kind!==c.kind||!equal(actual.columns,c.columns)||actual.target!==c.target||!equal(actual.targetColumns,c.targetColumns))return fail("CATALOG_5");
@@ -141,6 +144,10 @@ async function verifyCatalog(db:ClientBase,t:Trust,expected:ProvisioningContract
       const actual=cons.find(x=>x.name===provisioningConstraintName(resource.table,"enum",e.name));
       const expression="("+e.name+" = ANY (ARRAY["+e.enumValues!.map(v=>"'"+v+"'::text").join(", ")+"]))";
       if(!actual||actual.kind!=="c"||!actual.valid||!equal(actual.columns,[e.name])||actual.expression!==expression)return fail("CATALOG_7");
+    }
+    for(const ck of checks){
+      const actual=cons.find(x=>x.name===ck.name);
+      if(!actual||actual.kind!=="c"||!actual.valid||!equal(actual.columns,ck.columns)||actual.expression!==ck.normalized)return fail("CATALOG_CHECK_V2");
     }
     const ix=(await db.query<{name:string;columns:string[];unique:boolean;primary:boolean;valid:boolean;method:string;plain:boolean;options:number[]}>("SELECT i.relname AS name,ARRAY(SELECT a.attname::text FROM unnest(x.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,x.indisunique AS \"unique\",x.indisprimary AS \"primary\",x.indisvalid AND x.indisready AND x.indislive AS valid,am.amname AS method,x.indexprs IS NULL AND x.indpred IS NULL AND x.indnatts=x.indnkeyatts AS plain,ARRAY(SELECT unnest(x.indoption)::int) AS options FROM pg_index x JOIN pg_class c ON c.oid=x.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_class i ON i.oid=x.indexrelid JOIN pg_am am ON am.oid=i.relam WHERE n.nspname=$1 AND c.relname=$2",[namespace,resource.table])).rows;
     const expectedIx=[...constraints.filter(c=>c.kind!=="f").map(c=>({name:c.name,columns:c.columns,unique:true,primary:c.kind==="p"})),...resource.relations.map(e=>({name:provisioningConstraintName(resource.table,"ix",e.column),columns:e.columns,unique:false,primary:false}))];
@@ -202,7 +209,8 @@ export async function installExperimentalRevision(connectionString:string,manife
     if(hash(keyBytes)!==t.approval_key_digest||key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(approvalWire),key,Buffer.from(signature,"base64url"))||
       state.pending||state.businessLease||state.readyProtocol===2||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.databaseName!==t.database_name||state.installationId!==t.installation_id||
       e.applicationId!==t.application_id||e.installationId!==t.installation_id||e.databaseName!==t.database_name||e.databaseOid!==t.database_oid||e.epoch!==t.epoch||
-      e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence||e.manifestDigest!==manifest.digest)return fail();
+      e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence||e.manifestDigest!==manifest.digest||
+      e.profile!==provisioningProfileFor(manifest))return fail();
     const heads=(await db.query<{manifest:string;manifest_digest:string;application_id:string;installation_id:string;database_name:string;operator_role:string;runtime_role:string;environment:string}>("SELECT * FROM public.platform_schema_registry")).rows,head=heads[0];
     if(heads.length>1||head&&(head.application_id!==scope.applicationId||head.installation_id!==scope.installationId||head.database_name!==t.database_name||head.operator_role!==t.installer_role||head.runtime_role!==t.runtime_role||head.environment!=="test"))return fail();
     if((head?.manifest_digest??null)!==e.parent)return fail();
@@ -283,6 +291,7 @@ async function verifyProvisioningHistory(db:ClientBase,t:Trust,operations:readon
     if(manifest.digest!==row.revision_digest||JSON.stringify(manifest)!==row.manifest||e.operationId!==row.operation_id||
       e.installationId!==t.installation_id||e.applicationId!==t.application_id||e.databaseName!==t.database_name||
       e.databaseOid!==t.database_oid||e.ledgerId!==t.ledger_id||e.manifestDigest!==manifest.digest||
+      e.profile!==provisioningProfileFor(manifest)||
       compileProvisioningContract(manifest,scopeOf(t)).digest!==row.physical_digest)return fail();
   }
   return rows;

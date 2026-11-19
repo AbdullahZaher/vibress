@@ -11,8 +11,8 @@ const version=M03_SCHEMA_VERSION;
 const need=(key:string)=>{const value=process.env[key];if(!value)throw Error("missing worker config");return value;};
 const ident=(value:string)=>{if(!/^[a-z][a-z0-9_]{0,62}$/.test(value))throw Error("bad identifier");return '"'+value+'"';};
 async function main(){
-  const url=new URL(need("M03_RUNTIME_URL"));
-  if(process.env.NODE_ENV!=="test"||process.env.M03_NORMATIVE_REFERENCE!=="1"||url.hostname!=="127.0.0.1"||url.port!=="5433"||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(url.pathname))throw Error("isolated worker only");
+  const url=new URL(need("M03_RUNTIME_URL")),ports=process.env.GITHUB_ACTIONS==="true"?["5433"]:["5433","5434"];
+  if(process.env.NODE_ENV!=="test"||process.env.M03_NORMATIVE_REFERENCE!=="1"||url.hostname!=="127.0.0.1"||!ports.includes(url.port)||!/^\/vibress_s03_norm_[a-z0-9_]+$/.test(url.pathname))throw Error("isolated worker only");
   const applicationId=asApplicationId(need("M03_APP")),installationId=need("M03_INSTALLATION"),principalId=asPrincipalId(referenceProducer),
     namespace=ident(need("M03_NAMESPACE")),customers=namespace+"."+ident(need("M03_CUSTOMERS")),activities=namespace+"."+ident(need("M03_ACTIVITIES")),pool=new Pool({connectionString:url.toString(),max:2});
   const readerUrl=new URL(need("M03_MEMBERSHIP_URL"));

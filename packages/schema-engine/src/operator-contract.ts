@@ -121,9 +121,25 @@ export interface RenderedAddColumn {
 const TABLE_PATTERN = /^vr_[a-z][a-z0-9_]*_[0-9a-f]{12}$/;
 const COLUMN_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
+type CandidateAColumnType = RenderedAddColumn["columnType"];
+const CANDIDATE_A_TYPES: readonly CandidateAColumnType[] =
+  ["text", "double precision", "boolean", "timestamp with time zone"];
+
+/** Frozen Candidate A accepts only its four plain scalars. Extended exact
+ * types and any bounded/money metadata are refused here, not silently added
+ * without their CHECK constraints. */
+function supportedColumnType(type: ManifestField["postgresType"]): type is CandidateAColumnType {
+  return type !== null && (CANDIDATE_A_TYPES as readonly string[]).includes(type);
+}
+
+function hasConstraintMetadata(field: ManifestField): boolean {
+  return field.maxLength !== undefined || field.money || field.maxBytes !== undefined;
+}
+
 function assertSupportedFields(fields: readonly ManifestField[]): void {
   for (const field of fields) {
     if (field.mappingStatus !== "MAPPED" || field.postgresType === null ||
+      !supportedColumnType(field.postgresType) || hasConstraintMetadata(field) ||
       Object.prototype.hasOwnProperty.call(field, "default")) {
       reject("UNSUPPORTED_OPERATION", "existing table has unsupported field mapping or default");
     }
@@ -163,8 +179,9 @@ export function renderAdditiveColumn(
   }
   assertSupportedFields(before.fields);
   const field = after.fields.find(candidate => candidate.id === operation.fieldId);
-  if (!field || field.mappingStatus !== "MAPPED" || field.postgresType === null ||
-    field.required || Object.prototype.hasOwnProperty.call(field, "default") ||
+  if (!field || field.mappingStatus !== "MAPPED" || !supportedColumnType(field.postgresType) ||
+    hasConstraintMetadata(field) || field.required ||
+    Object.prototype.hasOwnProperty.call(field, "default") ||
     field.id !== operation.fieldId) {
     return reject("OPERATION_BLOCKED", "field must be optional mapped scalar with no default");
   }

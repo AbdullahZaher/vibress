@@ -23,6 +23,13 @@ export async function startTransactionAckFaultProxy(command: "BEGIN" | "COMMIT",
 }
 
 export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | "ALTER TABLE" | "UPDATE" | "INSERT" | "ROLLBACK", fault: "DROP" | "STALL" | "OBSERVE", onObserved?:()=>void): Promise<CommitAckDrop> {
+  // CI targets the canonical 5433 topology; local runs may select the owned
+  // 16.16 container on 5434. No arbitrary upstreams are accepted.
+  const upstreamPort = (() => {
+    const raw = process.env.M03_FAULT_UPSTREAM_PORT ?? "5433";
+    if (raw !== "5433" && raw !== "5434") throw Error("PG_PROXY_UPSTREAM");
+    return Number(raw);
+  })();
   const marker = command === "BEGIN" ? "BEGIN ISOLATION LEVEL READ COMMITTED\u0000" :
     command === "ALTER TABLE" ? "ALTER TABLE " :
     command === "UPDATE" ? "UPDATE public.platform_schema_registry SET manifest" :
@@ -36,7 +43,7 @@ export async function startStatementAckFaultProxy(command: "BEGIN" | "COMMIT" | 
     rejectCommit = reject;
   });
   const server: Server = net.createServer((downstream) => {
-    const upstream = net.createConnection({ host: "127.0.0.1", port: 5433 });
+    const upstream = net.createConnection({ host: "127.0.0.1", port: upstreamPort });
     clients.add(downstream);
     upstreams.add(upstream);
     let armed = false;

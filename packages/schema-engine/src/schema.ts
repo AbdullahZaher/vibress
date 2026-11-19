@@ -16,11 +16,53 @@ interface FieldBase {
   readonly required: boolean;
 }
 
+/**
+ * Canonical IR V1 field union. Extended scalar kinds are additive: documents
+ * authored only with CORE V1 kinds serialize exactly as before, so historical
+ * canonical/manifest/physical digests are unchanged. Media, localization and
+ * Studio-document fields are intentionally absent: they reference existing
+ * platform contracts rather than a generated physical column.
+ */
 export type FieldDefinition =
-  | (FieldBase & { readonly type: "text"; readonly default?: string })
+  | (FieldBase & {
+      readonly type: "text";
+      readonly default?: string;
+      readonly maxLength?: number;
+    })
   | (FieldBase & { readonly type: "number"; readonly default?: number })
+  | (FieldBase & { readonly type: "integer"; readonly default?: number })
   | (FieldBase & { readonly type: "boolean"; readonly default?: boolean })
+  | (FieldBase & { readonly type: "date"; readonly default?: string })
   | (FieldBase & { readonly type: "datetime"; readonly default?: string })
+  | (FieldBase & {
+      readonly type: "decimal";
+      readonly precision: number;
+      readonly scale: number;
+      readonly default?: string;
+    })
+  | (FieldBase & {
+      readonly type: "money";
+      readonly precision: number;
+      readonly scale: number;
+    })
+  | (FieldBase & {
+      readonly type: "json";
+      readonly maxBytes: number;
+      readonly maxDepth: number;
+      readonly maxKeys: number;
+    })
+  | (FieldBase & {
+      readonly type: "media";
+      readonly maxBytes: number;
+      readonly maxDepth: number;
+      readonly maxKeys: number;
+    })
+  | (FieldBase & {
+      readonly type: "localized";
+      readonly maxBytes: number;
+      readonly maxDepth: number;
+      readonly maxKeys: number;
+    })
   | (FieldBase & {
       readonly type: "enum";
       readonly values: readonly string[];
@@ -193,6 +235,11 @@ const ENGINE_RESERVED = new Set([
 
 const NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
+/** A money field stores an exact amount plus a companion ISO-4217 currency. */
+export function moneyCurrencyColumn(fieldId: string): string {
+  return fieldId + "_currency";
+}
+
 function identifier(value: unknown, path: string): string {
   if (
     typeof value !== "string" ||
@@ -268,6 +315,70 @@ function timestampLiteral(value: unknown, path: string): string {
   return canonical;
 }
 
+function literalInteger(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) ||
+      value < -2147483648 || value > 2147483647) {
+    return fail("UNSAFE_DEFINITION", path, "expected a signed 32-bit integer literal");
+  }
+  return Object.is(value, -0) ? 0 : value;
+}
+
+function dateLiteral(value: unknown, path: string): string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return fail("UNSAFE_DEFINITION", path, "expected a YYYY-MM-DD calendar date literal");
+  }
+  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  if (utc.getUTCFullYear() !== y || utc.getUTCMonth() !== m - 1 || utc.getUTCDate() !== d) {
+    return fail("UNSAFE_DEFINITION", path, "invalid calendar date");
+  }
+  return value;
+}
+
+function boundedInteger(value: unknown, path: string, min: number, max: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
+    return fail("INVALID_DEFINITION", path, "expected an integer within " + min + ".." + max);
+  }
+  return value;
+}
+
+const DECIMAL_LITERAL = /^-?\d{1,38}(?:\.\d{1,38})?$/;
+
+function decimalLiteral(value: unknown, path: string, precision: number, scale: number): string {
+  if (typeof value !== "string" || !DECIMAL_LITERAL.test(value)) {
+    return fail("UNSAFE_DEFINITION", path, "expected an exact decimal string literal, not an expression");
+  }
+  const negative = value.startsWith("-");
+  const [whole = "", fraction = ""] = (negative ? value.slice(1) : value).split(".");
+  if (fraction.length > scale || (whole.length + fraction.length) > precision ||
+      (whole.replace(/^0+/, "").length + fraction.replace(/0+$/, "").length) > precision) {
+    return fail("UNSAFE_DEFINITION", path, "literal exceeds declared precision or scale");
+  }
+  return value;
+}
+
+function precisionScale(input: Record<string, unknown>, path: string, fallback: number, min: number) {
+  const precision = input.precision === undefined
+    ? fallback : boundedInteger(input.precision, path + ".precision", min, 38);
+  const scale = input.scale === undefined
+    ? min : boundedInteger(input.scale, path + ".scale", 0, precision);
+  if (scale > precision) return fail("INVALID_DEFINITION", path + ".scale", "scale exceeds precision");
+  return { precision, scale };
+}
+
+function boundedJson(input: Record<string, unknown>, path: string) {
+  const maxBytes = input.maxBytes === undefined
+    ? fail("INVALID_DEFINITION", path + ".maxBytes", "bounded JSON requires maxBytes")
+    : boundedInteger(input.maxBytes, path + ".maxBytes", 1, 1000000);
+  return {
+    maxBytes,
+    maxDepth: input.maxDepth === undefined
+      ? 8 : boundedInteger(input.maxDepth, path + ".maxDepth", 1, 32),
+    maxKeys: input.maxKeys === undefined
+      ? 1000 : boundedInteger(input.maxKeys, path + ".maxKeys", 1, 10000),
+  };
+}
+
 function compareResourceIds(a: { readonly id: string }, b: { readonly id: string }): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
@@ -275,17 +386,61 @@ function compareResourceIds(a: { readonly id: string }, b: { readonly id: string
 function normalizeField(value: unknown, path: string): FieldDefinition {
   const input = record(value, path);
   // Reject accessors and hidden properties before reading any field values.
-  onlyKeys(input, ["id", "type", "required", "default", "values", "targetResource"], path);
+  onlyKeys(input, ["id", "type", "required", "default", "values", "targetResource",
+    "maxLength", "precision", "scale", "maxBytes", "maxDepth", "maxKeys"], path);
   const id = identifier(input.id, path + ".id");
   const required = requiredFlag(input.required, path + ".required");
   const hasDefault = Object.prototype.hasOwnProperty.call(input, "default");
   switch (input.type) {
     case "text":
-      onlyKeys(input, ["id", "type", "required", "default"], path);
+      onlyKeys(input, ["id", "type", "required", "default", "maxLength"], path);
       return Object.freeze({
         id, type: "text", required,
         ...(hasDefault ? { default: literalString(input.default, path + ".default") } : {}),
+        ...(input.maxLength === undefined ? {} : {
+          maxLength: boundedInteger(input.maxLength, path + ".maxLength", 1, 100000),
+        }),
       });
+    case "integer":
+      onlyKeys(input, ["id", "type", "required", "default"], path);
+      return Object.freeze({
+        id, type: "integer", required,
+        ...(hasDefault ? { default: literalInteger(input.default, path + ".default") } : {}),
+      });
+    case "date":
+      onlyKeys(input, ["id", "type", "required", "default"], path);
+      return Object.freeze({
+        id, type: "date", required,
+        ...(hasDefault ? { default: dateLiteral(input.default, path + ".default") } : {}),
+      });
+    case "decimal": {
+      onlyKeys(input, ["id", "type", "required", "default", "precision", "scale"], path);
+      const { precision, scale } = precisionScale(input, path, 18, 0);
+      return Object.freeze({
+        id, type: "decimal", required, precision, scale,
+        ...(hasDefault ? {
+          default: decimalLiteral(input.default, path + ".default", precision, scale),
+        } : {}),
+      });
+    }
+    case "money": {
+      onlyKeys(input, ["id", "type", "required", "precision", "scale"], path);
+      const { precision, scale } = precisionScale(input, path, 19, 2);
+      if (scale > precision) fail("INVALID_DEFINITION", path + ".scale", "scale exceeds precision");
+      return Object.freeze({ id, type: "money", required, precision, scale });
+    }
+    case "json": {
+      onlyKeys(input, ["id", "type", "required", "maxBytes", "maxDepth", "maxKeys"], path);
+      return Object.freeze({ id, type: "json", required, ...boundedJson(input, path) });
+    }
+    case "media": {
+      onlyKeys(input, ["id", "type", "required", "maxBytes", "maxDepth", "maxKeys"], path);
+      return Object.freeze({ id, type: "media", required, ...boundedJson(input, path) });
+    }
+    case "localized": {
+      onlyKeys(input, ["id", "type", "required", "maxBytes", "maxDepth", "maxKeys"], path);
+      return Object.freeze({ id, type: "localized", required, ...boundedJson(input, path) });
+    }
     case "number":
       onlyKeys(input, ["id", "type", "required", "default"], path);
       return Object.freeze({
@@ -361,6 +516,20 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
       fail("DUPLICATE_IDENTIFIER", "resource.fields." + field.id, "duplicate field id");
     }
     ids.add(field.id);
+    if (field.type === "money") {
+      // Money owns an explicit currency companion column; it must not collide
+      // with a declared field or silently truncate at PostgreSQL's 63 bytes.
+      const currency = moneyCurrencyColumn(field.id);
+      if (ids.has(currency) || fields.some((other) => other !== field && other.id === currency)) {
+        fail("DUPLICATE_IDENTIFIER", "resource.fields." + field.id,
+          "money currency companion collides with a declared field");
+      }
+      if (Buffer.byteLength(currency, "utf8") > 63) {
+        fail("INVALID_IDENTIFIER", "resource.fields." + field.id,
+          "money currency companion name exceeds 63 bytes");
+      }
+      ids.add(currency);
+    }
   }
   fields.sort(compareResourceIds);
   return Object.freeze({

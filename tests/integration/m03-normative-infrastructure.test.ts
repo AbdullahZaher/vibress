@@ -14,7 +14,7 @@ import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy"
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
 import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
-import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
+import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
@@ -63,7 +63,7 @@ function crm(f:Lab,extra?: "website"|"phone"|"notes"):SchemaManifest{
 }
 function approval(f:Lab,before:SchemaManifest|null,next:SchemaManifest,overrides:Partial<ProvisioningApproval>={}){
   const plan=compileProvisioningTransition(before,next,f.scope),state=f.authority.authenticatedSnapshot();
-  const e:ProvisioningApproval={version:1,profile:PROVISIONING_PROFILE,applicationId:f.scope.applicationId,installationId:f.scope.installationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,parent:before?.digest??null,manifestDigest:next.digest,physicalDigest:plan.physical.digest,planDigest:plan.digest,operationId:randomUUID(),approvalId:randomUUID(),...overrides};
+  const e:ProvisioningApproval={version:1,profile:provisioningProfileFor(next),applicationId:f.scope.applicationId,installationId:f.scope.installationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,parent:before?.digest??null,manifestDigest:next.digest,physicalDigest:plan.physical.digest,planDigest:plan.digest,operationId:randomUUID(),approvalId:randomUUID(),...overrides};
   const message=provisioningApprovalMessage(e);
   return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
 }
@@ -76,7 +76,11 @@ function scope(f:Lab,tenant:string){
 }
 beforeAll(async()=>{
   const u=new URL(url);
-  if(!["localhost","127.0.0.1"].includes(u.hostname)||u.port!=="5433"||u.pathname!=="/vibress"||u.username!=="vibress"||u.password!=="vibress"||u.search)throw Error("disposable fixture only");
+  // CI remains restricted to the canonical 5433 topology. Local developer runs
+  // may target the separately owned 16.16 container on 5434 with identical
+  // synthetic credentials; no other host, database or search options pass.
+  const ports=process.env.GITHUB_ACTIONS==="true"?["5433"]:["5433","5434"];
+  if(!["localhost","127.0.0.1"].includes(u.hostname)||!ports.includes(u.port)||u.pathname!=="/vibress"||u.username!=="vibress"||u.password!=="vibress"||u.search)throw Error("disposable fixture only");
   root=await connect("vibress");
   const row=(await root.query<{version:number;superuser:boolean}>("SELECT current_setting('server_version_num')::int AS version,rolsuper AS superuser FROM pg_roles WHERE rolname=current_user")).rows[0]!;
   if(!row.superuser||row.version<160000||row.version>=170000)throw Error("disposable PG16 required");
@@ -706,6 +710,76 @@ it("J07: bounded signed business outcome, real commit/rollback and lost acknowle
     }finally{await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");}
     console.info("M03_J07_BUSINESS_"+lost+"_ACK_RECONCILIATION=PASS");
   }
+},120000);
+
+it("A01/J02: exact typed columns, bounded CHECKs, value refusal and additive evolution on real PostgreSQL",async()=>{
+  const f=await lab("typed","reference-typed-types");
+  const fields:readonly FieldDefinition[]=[
+    {id:"code",type:"text",required:true},
+    {id:"quantity",type:"integer",required:true},
+    {id:"rate",type:"decimal",precision:9,scale:2,required:false},
+    {id:"total",type:"money",required:true},
+    {id:"attributes",type:"json",maxBytes:512,required:false},
+    {id:"reference",type:"text",maxLength:12,required:false},
+    {id:"due",type:"date",required:false},
+    {id:"cover",type:"media",maxBytes:4096,maxDepth:8,maxKeys:1000,required:false},
+    {id:"summary",type:"localized",maxBytes:2048,maxDepth:8,maxKeys:1000,required:true},
+  ];
+  const invoices=(extension:readonly FieldDefinition[]=[])=>createSchemaManifest(compileResourceSchema([
+    {...f.scope,id:"invoices",ownership:"tenant",fields:[...fields,...extension]},
+  ],f.scope));
+  const m=invoices(),plan=compileProvisioningTransition(null,m,f.scope),t=table(f,m,"invoices");
+  expect(provisioningProfileFor(m)).toBe(PROVISIONING_PROFILE_V2);
+  expect(provisioningProfileFor(crm(f))).toBe(PROVISIONING_PROFILE);
+  await expect(apply(f,m,approval(f,null,m,{profile:PROVISIONING_PROFILE}))).rejects.toThrow();
+  await apply(f,m,approval(f,null,m));
+  expect(await check(f,m)).toBe(plan.physical.digest);
+  const columns=(await f.admin.query<{column_name:string;type:string;required:boolean}>("SELECT a.attname AS column_name,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull AS required FROM pg_attribute a WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum",[t])).rows;
+  expect(columns).toEqual(expect.arrayContaining([
+    {column_name:"quantity",type:"integer",required:true},
+    {column_name:"rate",type:"numeric(9,2)",required:false},
+    {column_name:"total",type:"numeric(19,2)",required:true},
+    {column_name:"total_currency",type:"text",required:true},
+    {column_name:"attributes",type:"jsonb",required:false},
+    {column_name:"reference",type:"text",required:false},
+    {column_name:"due",type:"date",required:false},
+    {column_name:"cover",type:"jsonb",required:false},
+    {column_name:"summary",type:"jsonb",required:true},
+  ]));
+  const constraints=(await f.admin.query<{conname:string;def:string}>("SELECT conname,pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conrelid=$1::regclass AND contype='c' ORDER BY conname",[t])).rows;
+  const definitions=constraints.map(row=>row.def).join("\n");
+  expect(definitions).toContain("total_currency ~ '^[A-Z]{3}$'::text");
+  expect(definitions).toContain("pg_column_size(attributes) <= 512");
+  expect(definitions).toContain("char_length(reference) <= 12");
+  expect(definitions).toContain("COALESCE(jsonb_typeof((cover -> 'url'::text)), ''::text) = 'string'::text");
+  expect(definitions).toContain("jsonb_typeof(summary) = 'object'::text");
+  expect(constraints).toHaveLength(5);
+  const uow=new TenantUnitOfWork(f.pool),ta=scope(f,"tenant-a"),tb=scope(f,"tenant-b"),id=randomUUID();
+  await uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,rate,total,total_currency,attributes,reference,due,cover,summary) VALUES($1,$2,'inv',7,12.34,120.50,'USD','{\"a\":1}'::jsonb,'REF-1','2028-02-29','{\"url\":\"/media/a.png\",\"alt\":\"A\"}'::jsonb,'{\"en\":\"Hello\",\"ar\":\"مرحبا\"}'::jsonb)",["tenant-a",id]));
+  expect((await uow.run(ta,tx=>tx.query("SELECT quantity,rate::text AS rate,total::text AS total,total_currency,attributes,reference,due::text AS due,cover,summary FROM "+t+" WHERE id=$1",[id]))).rows).toEqual([{quantity:7,rate:"12.34",total:"120.50",total_currency:"USD",attributes:{a:1},reference:"REF-1",due:"2028-02-29",cover:{url:"/media/a.png",alt:"A"},summary:{en:"Hello",ar:"مرحبا"}}]);
+  expect((await uow.run(tb,tx=>tx.query("SELECT count(*)::int AS n FROM "+t))).rows).toEqual([{n:0}]);
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency) VALUES('tenant-b',$1,'cross',1,1,'USD')",[randomUUID()]))).rejects.toMatchObject({code:"42501"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'usd','{}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',2147483648,1,'USD','{}')",[randomUUID()]))).rejects.toMatchObject({code:"22003"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,99999999999999999999.00,'USD','{}')",[randomUUID()]))).rejects.toMatchObject({code:"22003"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,attributes,summary) VALUES('tenant-a',$1,'bad',1,1,'USD',$2::jsonb,'{}')",[randomUUID(),JSON.stringify({a:"x".repeat(600)})]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,reference,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','REF-TOO-LONG!','{}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,due,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','2026-02-30','{}')",[randomUUID()]))).rejects.toMatchObject({code:"22008"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary,cover) VALUES('tenant-a',$1,'bad',1,1,'USD','{}','{\"alt\":\"no url\"}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary,cover) VALUES('tenant-a',$1,'bad',1,1,'USD','{}','\"just-a-string\"')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','[\"en\"]')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'USD',$2::jsonb)",[randomUUID(),JSON.stringify({en:"x".repeat(2100)})]))).rejects.toMatchObject({code:"23514"});
+  const jsonConstraint=constraints.find(row=>row.def.includes("pg_column_size(attributes)"))!.conname;
+  await f.admin.query("ALTER TABLE "+t+" DROP CONSTRAINT "+qi(jsonConstraint));
+  try{await expect(check(f,m)).rejects.toThrow();}
+  finally{await f.admin.query("ALTER TABLE "+t+" ADD CONSTRAINT "+qi(jsonConstraint)+" CHECK (pg_column_size(\"attributes\") <= 512)");}
+  expect(await check(f,m)).toBe(plan.physical.digest);
+  const next=invoices([{id:"notes",type:"text",required:false}]);
+  await apply(f,next,approval(f,m,next));
+  expect(await check(f,next)).toBe(compileProvisioningContract(next,f.scope).digest);
+  expect((await uow.run(ta,tx=>tx.query("SELECT quantity,total::text AS total,notes FROM "+t+" WHERE id=$1",[id]))).rows).toEqual([{quantity:7,total:"120.50",notes:null}]);
+  expect(()=>compileProvisioningTransition(next,invoices([{id:"bounded",type:"text",maxLength:5,required:false}]),f.scope)).toThrow();
+  console.info("M03_A01_TYPED_COLUMNS_BOUNDS_EVOLUTION=PASS");
 },120000);
 
 
