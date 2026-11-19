@@ -28,6 +28,8 @@ overrides:
   seroval-plugins: 1.6.11
   systeminformation: 5.33.16
   source-map-js: 1.2.2
+  # Nx 23.3.2 pins undici 7.29.0; later 7.x patches the reported advisories.
+  undici: 7.30.1
   # The gaxios -> rimraf@5 -> glob@10 chain carries two moderate advisories.
   # Scope the upgrade to rimraf's glob edge to avoid changing unrelated tooling.
   "rimraf@5>glob": 14.0.2
