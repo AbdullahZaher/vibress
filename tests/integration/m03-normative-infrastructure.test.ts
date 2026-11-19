@@ -371,10 +371,19 @@ it("J07: bounded signed business outcome, real commit/rollback and lost acknowle
     const a=signed(lost==="ROLLBACK"?"known":"lost");
     const proxy=await startStatementAckFaultProxy(lost,"DROP");void proxy.serverCommitObserved.catch(()=>undefined);
     const target=new URL(dbUrl(f.name,f.runtime));target.port=String(proxy.port);
-    const pool=new Pool({connectionString:target.toString(),max:1,connectionTimeoutMillis:4000,query_timeout:15000});pool.on("error",()=>{});
+    const pool=new Pool({connectionString:target.toString(),max:1,connectionTimeoutMillis:4000,query_timeout:15000});
+    const transportErrors:string[]=[];
+    let signalTransport!:()=>void;
+    const transportObserved=new Promise<void>(resolve=>{signalTransport=resolve;});
+    const observeTransport=(error:Error)=>{transportErrors.push(error.message);signalTransport();};
+    pool.on("connect",client=>client.on("error",observeTransport));
+    pool.on("error",observeTransport);
     try{
       const task=run(a,new TenantUnitOfWork(pool));
       await Promise.all([expect(task).rejects.toThrow(),proxy.serverCommitObserved]);
+      await transportObserved;
+      expect(transportErrors.length).toBeGreaterThan(0);
+      expect(transportErrors.every(message=>/connection terminated|socket|ECONNRESET/i.test(message))).toBe(true);
     }finally{await pool.end();await proxy.close();}
     expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:a.e.operationId});
     const retained=f.authority.authenticatedSnapshot();
