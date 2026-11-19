@@ -6,6 +6,7 @@ import {
   type ApplicationId,
   type InstallationId,
 } from "@vibress/platform-kernel";
+import { normalizeDynamicRecordProfile, type DynamicRecordProfile } from "./dynamic-record";
 
 export const CANONICAL_SCHEMA_VERSION = 1 as const;
 
@@ -79,6 +80,7 @@ export interface ResourceDefinition {
   readonly installationId: InstallationId;
   readonly ownership: ResourceOwnership;
   readonly fields: readonly FieldDefinition[];
+  readonly dynamic?: DynamicRecordProfile;
 }
 
 /**
@@ -94,6 +96,7 @@ export interface CanonicalResource {
   readonly id: string;
   readonly ownership: ResourceOwnership;
   readonly fields: readonly FieldDefinition[];
+  readonly dynamic?: DynamicRecordProfile;
 }
 
 export interface CanonicalSchemaIR {
@@ -496,7 +499,7 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
   const source = record(value, "resource");
   onlyKeys(
     source,
-    ["id", "applicationId", "installationId", "ownership", "fields"],
+    ["id", "applicationId", "installationId", "ownership", "fields", "dynamic"],
     "resource",
   );
   const id = identifier(source.id, "resource.id");
@@ -505,7 +508,23 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
   if (source.ownership !== "tenant" && source.ownership !== "application") {
     fail("INVALID_DEFINITION", "resource.ownership", "expected tenant or application");
   }
-  const rawFields = plainArray(source.fields, "resource.fields", 1, 128);
+  const hasDynamic = Object.prototype.hasOwnProperty.call(source, "dynamic");
+  let dynamic: DynamicRecordProfile | undefined;
+  if (hasDynamic) {
+    try {
+      dynamic = normalizeDynamicRecordProfile(source.dynamic);
+    } catch (error) {
+      fail("INVALID_DEFINITION", "resource.dynamic",
+        error instanceof Error ? error.message : "invalid dynamic record profile");
+    }
+  }
+  if (dynamic && source.ownership !== "tenant") {
+    fail("INVALID_DEFINITION", "resource.dynamic", "bounded dynamic storage is tenant-owned only");
+  }
+  const rawFields = plainArray(source.fields, "resource.fields", dynamic ? 0 : 1, 128);
+  if (dynamic && rawFields.length !== 0) {
+    fail("INVALID_DEFINITION", "resource.fields", "dynamic resources declare no typed columns");
+  }
   const fields: FieldDefinition[] = [];
   for (let i = 0; i < rawFields.length; i++) {
     fields[i] = normalizeField(rawFields[i], "resource.fields[" + i + "]");
@@ -536,6 +555,7 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
     id, applicationId: appId, installationId: installId,
     ownership: source.ownership,
     fields: Object.freeze(fields),
+    ...(dynamic ? { dynamic } : {}),
   });
 }
 
@@ -589,6 +609,7 @@ export function compileResourceSchema(
     .sort(compareResourceIds)
     .map((resource): CanonicalResource => Object.freeze({
       id: resource.id, ownership: resource.ownership, fields: resource.fields,
+      ...(resource.dynamic ? { dynamic: resource.dynamic } : {}),
     }));
   return Object.freeze({
     schemaVersion: CANONICAL_SCHEMA_VERSION,
@@ -615,7 +636,7 @@ export function parseCanonicalSchemaIR(value: unknown): CanonicalSchemaIR {
   const resources: ResourceDefinition[] = [];
   for (let i = 0; i < rawResources.length; i++) {
     const entry = record(rawResources[i], "ir.resources[" + i + "]");
-    onlyKeys(entry, ["id", "ownership", "fields"], "ir.resources[" + i + "]");
+    onlyKeys(entry, ["id", "ownership", "fields", "dynamic"], "ir.resources[" + i + "]");
     resources[i] = parseResourceDefinition({
       ...entry,
       applicationId: appId,

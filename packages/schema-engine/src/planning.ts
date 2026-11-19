@@ -11,6 +11,7 @@ import {
   type ResourceOwnership,
   type SchemaCompilationScope,
 } from "./schema";
+import type { DynamicRecordProfile } from "./dynamic-record";
 
 /**
  * M03-S02: a data-only PostgreSQL 16 planning contract. These values never
@@ -58,6 +59,7 @@ export interface ManifestResource {
   readonly tableName: string;
   readonly securityPrerequisite: "TENANT_RLS_AND_ACL" | "APPLICATION_ACL";
   readonly fields: readonly ManifestField[];
+  readonly dynamic?: DynamicRecordProfile;
 }
 
 export interface SchemaManifest {
@@ -75,6 +77,7 @@ export type SchemaOperationType =
   | "CREATE_RESOURCE"
   | "REMOVE_RESOURCE"
   | "ALTER_OWNERSHIP"
+  | "ALTER_DYNAMIC_PROFILE"
   | "ADD_FIELD"
   | "REMOVE_FIELD"
   | "ALTER_FIELD";
@@ -301,6 +304,12 @@ function resourceManifest(resource: CanonicalResource): ManifestResource {
     securityPrerequisite: resource.ownership === "tenant"
       ? "TENANT_RLS_AND_ACL" : "APPLICATION_ACL",
     fields: Object.freeze(resource.fields.map(fieldManifest)),
+    ...(resource.dynamic ? {
+      dynamic: Object.freeze({
+        ...resource.dynamic,
+        fields: Object.freeze(resource.dynamic.fields.map((field) => Object.freeze({ ...field }))),
+      }),
+    } : {}),
   });
 }
 
@@ -471,6 +480,13 @@ export function planSchemaChanges(
         "ownership/security/table identity changes are forbidden"));
       // Do not present column alterations as independently safe once ownership differs.
       continue;
+    }
+    if (JSON.stringify(oldResource.dynamic ?? null) !== JSON.stringify(newResource.dynamic ?? null)) {
+      // Stored payloads are bound to the revision they were written under;
+      // evolving the declared profile in place would silently reinterpret them.
+      operations.push(operation("ALTER_DYNAMIC_PROFILE", newResource.id, null,
+        oldResource, newResource, "DENIED", "BREAKING",
+        "dynamic record profiles are revision-bound; in-place evolution is unsupported"));
     }
     const beforeFields = new Map(oldResource.fields.map((field) => [field.id, field]));
     const afterFields = new Map(newResource.fields.map((field) => [field.id, field]));

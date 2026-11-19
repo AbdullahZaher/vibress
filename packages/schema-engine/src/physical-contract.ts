@@ -3,6 +3,7 @@ import { createSchemaManifest, parseSchemaManifest, planSchemaChanges, type Sche
 import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import { renderTrustedAdditiveColumn } from "./operator-contract";
 import { compileResourceSchema, moneyCurrencyColumn, type SchemaCompilationScope } from "./schema";
+import { dynamicRecordRevision } from "./dynamic-record";
 
 /** No namespace reservation, DDL authority or tenant provisioning. The only
  * supported physical topology here is the existing M03-S03 application-owned
@@ -53,12 +54,16 @@ export const PROVISIONING_PROFILE="DEDICATED_PG16_CORE_V1" as const;
 // bounded json/text). CORE V1 manifests keep their original profile string and
 // every historical signed digest is unchanged.
 export const PROVISIONING_PROFILE_V2="DEDICATED_PG16_TYPED_V2" as const;
-export type ProvisioningProfile=typeof PROVISIONING_PROFILE|typeof PROVISIONING_PROFILE_V2;
-export const PROVISIONING_PROFILES:readonly ProvisioningProfile[]=[PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2];
+// Additive profile for revision-bound dynamic records. CORE V1 and TYPED V2
+// manifests retain their original profile strings and signed digests.
+export const PROVISIONING_PROFILE_V3="DEDICATED_PG16_DYNAMIC_V3" as const;
+export type ProvisioningProfile=typeof PROVISIONING_PROFILE|typeof PROVISIONING_PROFILE_V2|typeof PROVISIONING_PROFILE_V3;
+export const PROVISIONING_PROFILES:readonly ProvisioningProfile[]=[PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,PROVISIONING_PROFILE_V3];
 export function isProvisioningProfile(value:unknown):value is ProvisioningProfile{
   return typeof value==="string"&&(PROVISIONING_PROFILES as readonly string[]).includes(value);
 }
 export function provisioningProfileFor(manifest:SchemaManifest):ProvisioningProfile{
+  if(manifest.resources.some(resource=>resource.dynamic!==undefined))return PROVISIONING_PROFILE_V3;
   const extended=manifest.resources.some(resource=>resource.fields.some(field=>
     field.logicalType==="integer"||field.logicalType==="decimal"||field.logicalType==="money"||
     field.logicalType==="date"||field.logicalType==="json"||
@@ -108,6 +113,31 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
   const resources:ProvisionedResource[]=manifest.resources.map(resource=>{
     provisioningIdentifier(resource.tableName);
     if(resource.fields.length>32)throw Error("PROVISIONING_FIELD_BOUND");
+    if(resource.dynamic){
+      // Dynamic records keep a typed tenant leaf table: opaque revision,
+      // optimistic version, bounded jsonb payload and soft deletion. Only the
+      // object shape and byte size are database-enforced; the compiled profile
+      // forbids anyone from adding payload indexes or query surfaces.
+      if(resource.fields.length!==0||resource.ownership!=="tenant")throw Error("PROVISIONING_DYNAMIC_SCOPE");
+      const revision=dynamicRecordRevision(resource.dynamic),table=resource.tableName;
+      const columns:ProvisionedColumn[]=[
+        {name:"tenant_id",type:"text",required:true},
+        {name:"id",type:"uuid",required:true},
+        {name:"revision",type:"text",required:true},
+        {name:"version_token",type:"uuid",required:true},
+        {name:"payload",type:"jsonb",required:true},
+        {name:"deleted_on",type:"timestamp with time zone",required:false},
+      ];
+      const checks:ProvisionedCheck[]=[
+        {name:provisioningConstraintName(table,"chk","payload"),columns:["payload"],
+          expression:"jsonb_typeof("+qi("payload")+") = 'object' AND pg_column_size("+qi("payload")+") <= "+resource.dynamic.maxBytes,
+          normalized:"((jsonb_typeof(payload) = 'object'::text) AND (pg_column_size(payload) <= "+resource.dynamic.maxBytes+"))"},
+        {name:provisioningConstraintName(table,"chk","revision"),columns:["revision"],
+          expression:qi("revision")+" = '"+revision+"'",
+          normalized:"(revision = '"+revision+"'::text)"},
+      ];
+      return {id:resource.id,table,ownership:"tenant" as const,columns,key:["tenant_id","id"],unique:[],relations:[],checks};
+    }
     const tenant=resource.ownership==="tenant",key=tenant?["tenant_id","id"]:["id"];
     const columns:ProvisionedColumn[]=[...(tenant?[{name:"tenant_id",type:"text",required:true}]:[]),{name:"id",type:"uuid",required:true}];
     const relations:ProvisionedResource["relations"][number][]=[];
