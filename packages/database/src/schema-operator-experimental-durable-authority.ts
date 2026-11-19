@@ -14,6 +14,7 @@ import type { ClientBase } from "pg";
 import { TenantUnitOfWork,type ScopedTransaction,type VerifiedScope } from "@vibress/tenancy";
 import { verifyExperimentalAdmissionConnection,type ExperimentalAdmissionTarget } from "./schema-operator-experimental-admission";
 import type { RollbackWitness } from "./schema-operator-experimental-session";
+import {prepareExperimentalBusiness,performExperimentalBusiness,experimentalBusinessWitnessMessage,collectExperimentalBusinessOutcome,type BusinessAdmission,type BusinessRecord} from "./schema-operator-experimental-business";
 import { collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,persistExperimentalProvisioningReattestation,type ProvisioningCommitEvidence } from "./schema-operator-experimental-installer";
 import { collectDisposableRollbackEvidence,collectScopedRecoveryReadiness,type ScopedRecoveryTarget,SchemaMigrationOperatorError, type SchemaOperatorRequest, type SchemaOperatorResult } from "./platform-schema-migration-operator";
 
@@ -48,6 +49,8 @@ type Event =
   | { kind:"PROVISIONING_OUTCOME"; operationId:string; outcome:"COMMITTED"|"ROLLED_BACK"|"UNCERTAIN"; evidenceDigest?:string }
   | { kind:"PROVISIONING_CHECKPOINT"; evidence:ProvisioningCommitEvidence }
   | { kind:"PROVISIONING_REATTEST"; newEpoch:string; approvalId:string; intent:string; observed:ProvisioningCommitEvidence; evidenceDigest:string }
+  | { kind:"PROVISIONED_BUSINESS_ADMIT"; admission:BusinessAdmission }
+  | { kind:"PROVISIONED_BUSINESS_OUTCOME"; operationId:string; outcome:"COMMITTED"|"ROLLED_BACK"|"UNCERTAIN"; evidenceDigest?:string }
   | { kind: "BUSINESS_ADMIT"; lease: string; epoch:string }
   | { kind: "BUSINESS_SETTLED"; lease:string; outcome:"COMMITTED"|"ROLLED_BACK" }
   | { kind: "INTENT"; intent: string }
@@ -55,7 +58,7 @@ type Event =
   | { kind: "ADVANCE_V2"; epoch:string; evidenceDigest:string; scopedTarget:ScopedRecoveryTarget }
   | { kind: "READY"|"READY_V2"; evidenceDigest: string; catalogManifestDigest:string; journalDigest:string };
 type State = { installationId: string; databaseName: string; epoch: string; epochs: string[]; ledgerId:string; signingIdentity:string; administrationIdentity:string;
-  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation>; provisioning?:Map<string,ProvisioningOperation>; provisioningCheckpoint?:ProvisioningCommitEvidence; provisioningReattestation?:{newEpoch:string;approvalId:string;intent:string;observed:ProvisioningCommitEvidence;evidenceDigest:string} };
+  pending: boolean; advanced: boolean; businessLease?:string; intent?: string; readyProtocol?:2; scopedTarget?:ScopedRecoveryTarget; operations: Map<string,Operation>; provisioning?:Map<string,ProvisioningOperation>; provisionedBusiness?:Map<string,BusinessRecord>; provisioningCheckpoint?:ProvisioningCommitEvidence; provisioningReattestation?:{newEpoch:string;approvalId:string;intent:string;observed:ProvisioningCommitEvidence;evidenceDigest:string} };
 type RecordLine = { previous: string; event: Event; hash: string };
 const ZERO = "0".repeat(64);
 function refuse(): never { throw Error("durable recovery authority refused"); }
@@ -153,8 +156,22 @@ function reduce(s: State|undefined,e: Event): State {
       // Deliberately not READY. No new provisioning or business admission.
       break;
     }
+    case "PROVISIONED_BUSINESS_ADMIT": {
+      const p=e.admission,history=s.provisionedBusiness??new Map<string,BusinessRecord>(),last=[...(s.provisioning?.values()??[])].filter(o=>o.outcome==="COMMITTED").at(-1);
+      if(s.pending||s.businessLease||!last||[...s.provisioning!.values()].some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN")||history.has(p.operationId)||!UUID.test(p.operationId)||!UUID.test(p.rowId)||
+        p.epoch!==s.epoch||p.ledgerId!==s.ledgerId||p.installationId!==s.installationId||p.databaseName!==s.databaseName||p.applicationId!==last.applicationId||p.revision!==last.manifestDigest||p.physicalDigest!==last.physicalDigest||p.databaseOid!==last.databaseOid||
+        !SHA.test(p.workDigest)||!SHA.test(p.effectDigest)||!/^\d{1,20}$/.test(p.xid)||!/^\d{1,20}$/.test(p.systemIdentifier)||!/^\d+\.\d+$/.test(p.postmasterStart)||!Number.isInteger(p.timeline)||p.timeline<1)return refuse();
+      next.provisionedBusiness=new Map(history);next.provisionedBusiness.set(p.operationId,{...p,outcome:"ADMITTED"});next.businessLease=p.operationId;break;
+    }
+    case "PROVISIONED_BUSINESS_OUTCOME": {
+      const p=s.provisionedBusiness?.get(e.operationId);
+      if(!p||s.businessLease!==e.operationId||!(p.outcome==="ADMITTED"||p.outcome==="UNCERTAIN")||!["COMMITTED","ROLLED_BACK","UNCERTAIN"].includes(e.outcome)||
+        (p.outcome==="UNCERTAIN"&&(!s.pending||e.outcome==="UNCERTAIN"||!e.evidenceDigest||!SHA.test(e.evidenceDigest))))return refuse();
+      next.provisionedBusiness=new Map(s.provisionedBusiness!);next.provisionedBusiness.set(p.operationId,{...p,outcome:e.outcome});
+      if(e.outcome!=="UNCERTAIN")delete next.businessLease;break;
+    }
     case "BUSINESS_SETTLED":
-      if(!s.businessLease||s.businessLease!==e.lease||!["COMMITTED","ROLLED_BACK"].includes(e.outcome))return refuse();
+      if(s.provisionedBusiness||!s.businessLease||s.businessLease!==e.lease||!["COMMITTED","ROLLED_BACK"].includes(e.outcome))return refuse();
       delete next.businessLease;break;
     case "INTENT":
       if(s.pending || !UUID.test(e.intent)) return refuse();
@@ -185,6 +202,7 @@ function readLedger(directory:string){
     const record=JSON.parse(line) as RecordLine;
     if(record.previous!==head||record.hash!==hash(head,record.event))return refuse();
     if(record.event.kind==="PROVISIONING_ADMIT"&&(record.event.admission.approvalHead!==head||record.event.admission.approvalSequence!==sequence))return refuse();
+    if(record.event.kind==="PROVISIONED_BUSINESS_ADMIT"&&(record.event.admission.authorityHead!==head||record.event.admission.authoritySequence!==sequence))return refuse();
     state=reduce(state,record.event);head=record.hash;sequence++;
   }
   if(!state)return refuse();
@@ -331,6 +349,7 @@ export class DisposableDurableRecoveryAuthority {
       for(const operation of a.current().operations.values())if(operation.outcome==="ADMITTED")
         a.append({kind:"OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
       for(const operation of a.current().provisioning?.values()??[])if(operation.outcome==="ADMITTED")a.append({kind:"PROVISIONING_OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
+      for(const operation of a.current().provisionedBusiness?.values()??[])if(operation.outcome==="ADMITTED")a.append({kind:"PROVISIONED_BUSINESS_OUTCOME",operationId:operation.operationId,outcome:"UNCERTAIN"});
       syncRecoveryDirectory(directory);return a;
     }catch(error){if(a?.lock!==undefined){closeSync(a.lock);a.lock=undefined;}throw error;}
   }
@@ -395,6 +414,7 @@ export class DisposableDurableRecoveryAuthority {
         for(const o of a.current().operations.values()) if(o.outcome==="ADMITTED")
           a.append({kind:"OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
         for(const o of a.current().provisioning?.values()??[])if(o.outcome==="ADMITTED")a.append({kind:"PROVISIONING_OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
+        for(const o of a.current().provisionedBusiness?.values()??[])if(o.outcome==="ADMITTED")a.append({kind:"PROVISIONED_BUSINESS_OUTCOME",operationId:o.operationId,outcome:"UNCERTAIN"});
       }
       return a;
     }catch(error){a.close();throw error;}
@@ -439,6 +459,7 @@ export class DisposableDurableRecoveryAuthority {
     return {head:this.head,sequence:this.sequence,ledgerId:s.ledgerId,installationId:s.installationId,databaseName:s.databaseName,epoch:s.epoch,
       epochs:[...s.epochs],pending:s.pending,advanced:s.advanced,intent:s.intent,...(s.businessLease?{businessLease:s.businessLease}:{}),...(s.readyProtocol?{readyProtocol:s.readyProtocol}:{}),...(s.scopedTarget?{scopedTarget:JSON.parse(JSON.stringify(s.scopedTarget)) as ScopedRecoveryTarget}:{}),
       ...(s.provisioning?{provisioningOperations:[...s.provisioning.values()].map(p=>({...p}))}:{}),
+      ...(s.provisionedBusiness?{provisionedBusinessOperations:[...s.provisionedBusiness.values()].map(p=>({...p}))}:{}),
       ...(s.provisioningCheckpoint?{provisioningCheckpoint:JSON.parse(JSON.stringify(s.provisioningCheckpoint)) as ProvisioningCommitEvidence}:{}),
       ...(s.provisioningReattestation?{provisioningReattestation:JSON.parse(JSON.stringify(s.provisioningReattestation)) as NonNullable<State["provisioningReattestation"]>}:{}),
       operations:[...s.operations.values()].map(o=>({...o,...(o.rollbackWitness?{rollbackWitness:{...o.rollbackWitness,dataDigests:{...o.rollbackWitness.dataDigests}}}:{})}))};
@@ -638,6 +659,48 @@ export class DisposableDurableRecoveryAuthority {
     if(JSON.stringify(observed)!==input||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
     this.requireAdministration("PROVISIONING_OBSERVED_COMMIT_V1",input,signature);
     this.append({kind:"PROVISIONING_OUTCOME",operationId:p.operationId,outcome:"COMMITTED",evidenceDigest:createHash("sha256").update(input).digest("hex")});
+  }
+  async runExperimentalProvisionedBusiness(runner:TenantUnitOfWork,scope:VerifiedScope,manifestWire:string,approvalWire:string,signature:string){
+    TenantUnitOfWork.prototype.assertOutermost.call(runner);
+    const initial=this.authenticatedSnapshot(),last=initial.provisioningOperations?.filter(o=>o.outcome==="COMMITTED").at(-1);
+    if(process.env.NODE_ENV!=="test"||initial.pending||initial.businessLease||!last||this.fences.size||initial.provisioningOperations?.some(o=>o.outcome==="ADMITTED"||o.outcome==="UNCERTAIN"))return refuse();
+    const progress:{admitted?:BusinessAdmission;receipt?:"COMMITTED"|"ROLLED_BACK"}={};
+    try{
+      await TenantUnitOfWork.prototype.runOutermost.call(runner,scope,async(tx:ScopedTransaction)=>{
+        const prepared=await prepareExperimentalBusiness(tx,scope,manifestWire,approvalWire,signature,{head:initial.head,sequence:initial.sequence,epoch:initial.epoch,ledgerId:initial.ledgerId,installationId:initial.installationId,databaseName:initial.databaseName,revision:last.manifestDigest,physicalDigest:last.physicalDigest});
+        if(JSON.stringify(initial)!==JSON.stringify(this.authenticatedSnapshot())||this.fences.size)return refuse();
+        const a=prepared.admission;
+        this.append({kind:"PROVISIONED_BUSINESS_ADMIT",admission:a});progress.admitted=a;
+        this.fences.set(a.operationId,()=>{});
+        if(this.current().pending)return refuse();
+        const witness=sign(null,Buffer.from(experimentalBusinessWitnessMessage(a)),this.key).toString("base64url");
+        await performExperimentalBusiness(tx,prepared,witness);
+        this.assertAnchor();if(this.current().pending)return refuse();
+      },outcome=>{progress.receipt=outcome;});
+      const admitted=progress.admitted;
+      if(!admitted||progress.receipt!=="COMMITTED")return refuse();
+      this.append({kind:"PROVISIONED_BUSINESS_OUTCOME",operationId:admitted.operationId,outcome:"COMMITTED"});
+      return {status:"COMMITTED" as const,operationId:admitted.operationId,rowId:admitted.rowId};
+    }catch(error){
+      const admitted=progress.admitted;
+      if(admitted){
+        const outcome=progress.receipt==="ROLLED_BACK"?"ROLLED_BACK":"UNCERTAIN";
+        this.append({kind:"PROVISIONED_BUSINESS_OUTCOME",operationId:admitted.operationId,outcome});
+        if(outcome==="UNCERTAIN"&&!this.current().pending)this.beginRecovery();
+      }
+      throw error;
+    }finally{if(progress.admitted)this.fences.delete(progress.admitted.operationId);}
+  }
+  async resolveExperimentalProvisionedBusiness(db:ClientBase,input:string,signature:string):Promise<void>{
+    const s=this.current();
+    if(process.env.NODE_ENV!=="test"||!s.pending||!s.businessLease||this.fences.size||typeof input!=="string"||input.length>16384)return refuse();
+    const p=s.provisionedBusiness?.get(s.businessLease);
+    if(!p||p.outcome!=="UNCERTAIN")return refuse();
+    this.requireAdministration("PROVISIONED_BUSINESS_OBSERVED_V1",input,signature);
+    const snapshot=this.authenticatedSnapshot(),observed=await collectExperimentalBusinessOutcome(db,p,createPublicKey(this.key));
+    if(JSON.stringify(observed)!==input||JSON.stringify(snapshot)!==JSON.stringify(this.authenticatedSnapshot()))return refuse();
+    this.requireAdministration("PROVISIONED_BUSINESS_OBSERVED_V1",input,signature);
+    this.append({kind:"PROVISIONED_BUSINESS_OUTCOME",operationId:p.operationId,outcome:observed.outcome,evidenceDigest:createHash("sha256").update(input).digest("hex")});
   }
   async recordExperimentalProvisioningCheckpoint(db:ClientBase,input:string,signature:string):Promise<void>{
     const s=this.current();

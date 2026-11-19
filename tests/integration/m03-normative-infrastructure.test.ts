@@ -12,7 +12,8 @@ import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibres
 import {TenantUnitOfWork,verifyTenantScope} from "@vibress/tenancy";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
-import {startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
+import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
+import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
@@ -347,3 +348,56 @@ describe.skipIf(process.env.M03_NORMATIVE_PHYSICAL!=="1")("M03 normative physica
     console.info("M03_J06_PHYSICAL_REATTESTATION=PASS");
   },300000);
 });
+
+
+it("J07: bounded signed business outcome, real commit/rollback and lost acknowledgements",async()=>{
+  for(const lost of ["COMMIT","ROLLBACK"] as const){
+    const f=await lab("business_"+lost.toLowerCase(),"reference-crm"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    const sc=scope(f,"tenant-a"),uow=new TenantUnitOfWork(f.pool),c=table(f,m,"customers");
+    const signed=(code:string,rowId=randomUUID())=>{
+      const state=f.authority.authenticatedSnapshot();
+      const e:BusinessApproval={version:1,operationId:randomUUID(),applicationId:f.scope.applicationId,installationId:f.scope.installationId,databaseName:f.name,databaseOid:f.oid,epoch:state.epoch,ledgerId:state.ledgerId,authorityHead:state.head,authoritySequence:state.sequence,revision:m.digest,physicalDigest:compileProvisioningContract(m,f.scope).digest,tenantId:"tenant-a",principalId:"fixture-principal",rowId,code,name:"Business customer"};
+      const message=experimentalBusinessMessage(e);return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
+    };
+    const run=(a:ReturnType<typeof signed>,runner=uow)=>f.authority.runExperimentalProvisionedBusiness(runner,sc,wire(m),a.message,a.signature);
+    const normal=signed("known");
+    await expect(run({...normal,signature:"A".repeat(86)})).rejects.toThrow();
+    expect(await run(normal)).toMatchObject({status:"COMMITTED"});
+    await expect(run(normal)).rejects.toThrow();
+    const duplicate=signed("known");
+    await expect(run(duplicate)).rejects.toThrow();
+    expect(f.authority.authenticatedSnapshot().provisionedBusinessOperations?.map(x=>x.outcome)).toEqual(["COMMITTED","ROLLED_BACK"]);
+    const a=signed(lost==="ROLLBACK"?"known":"lost");
+    const proxy=await startStatementAckFaultProxy(lost,"DROP");void proxy.serverCommitObserved.catch(()=>undefined);
+    const target=new URL(dbUrl(f.name,f.runtime));target.port=String(proxy.port);
+    const pool=new Pool({connectionString:target.toString(),max:1,connectionTimeoutMillis:4000,query_timeout:15000});pool.on("error",()=>{});
+    try{
+      const task=run(a,new TenantUnitOfWork(pool));
+      await Promise.all([expect(task).rejects.toThrow(),proxy.serverCommitObserved]);
+    }finally{await pool.end();await proxy.close();}
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:a.e.operationId});
+    const retained=f.authority.authenticatedSnapshot();
+    f.authority.close();f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);
+    expect(f.authority.authenticatedSnapshot()).toEqual(retained);
+    await expect(run(signed("late"))).rejects.toThrow();
+    await f.pool.end();f.pool=new Pool({connectionString:dbUrl(f.name,f.runtime),max:1});
+    await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS false");
+    try{
+      const p=f.authority.authenticatedSnapshot().provisionedBusinessOperations!.at(-1)!;
+      const observed=await collectExperimentalBusinessOutcome(f.admin,p,epochKeys.publicKey),message=JSON.stringify(observed);
+      expect(observed.outcome).toBe(lost==="COMMIT"?"COMMITTED":"ROLLED_BACK");
+      const authorize=(value:string)=>sign(null,recoveryAdministrationMessage(f.authority.snapshot(),"PROVISIONED_BUSINESS_OBSERVED_V1",value),adminKeys.privateKey).toString("base64url");
+      await expect(f.authority.resolveExperimentalProvisionedBusiness(f.admin,message,"A".repeat(86))).rejects.toThrow();
+      const wrong=JSON.stringify({...observed,operationId:randomUUID()});
+      await expect(f.authority.resolveExperimentalProvisionedBusiness(f.admin,wrong,authorize(wrong))).rejects.toThrow();
+      await f.authority.resolveExperimentalProvisionedBusiness(f.admin,message,authorize(message));
+      expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+      expect(f.authority.authenticatedSnapshot().pending).toBe(true);
+      await expect(f.authority.resolveExperimentalProvisionedBusiness(f.admin,message,authorize(message))).rejects.toThrow();
+      const count=(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM "+c+" WHERE id=$1",[a.e.rowId])).rows[0]!.n;
+      expect(count).toBe(lost==="COMMIT"?1:0);
+    }finally{await root.query("ALTER DATABASE "+qi(f.name)+" ALLOW_CONNECTIONS true");}
+    console.info("M03_J07_BUSINESS_"+lost+"_ACK_RECONCILIATION=PASS");
+  }
+},120000);

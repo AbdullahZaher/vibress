@@ -63,6 +63,10 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
     await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(manifest,manifest_digest,updated_at) ON public.platform_schema_registry TO "+qi(installer));
+    await db.query("GRANT SELECT(installation_id,application_id,database_name,database_oid,system_identifier,timeline,epoch,ledger_id,profile,revoked,runtime_role,approval_key,approval_key_digest) ON public.platform_schema_installation_trust_v1 TO "+qi(runtime));
+    await db.query("GRANT SELECT(installation_id,manifest_digest) ON public.platform_schema_registry TO "+qi(runtime));
+    await db.query("GRANT INSERT(operation_id,evidence,signature) ON public.platform_schema_business_witnesses_v1 TO "+qi(runtime));
+    await db.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system(),pg_catalog.pg_control_checkpoint() TO "+qi(runtime));
     await roleContract(db,installer,runtime,namespace);
     if(!equal(state,authority.authenticatedSnapshot()))return fail();
     await db.query("COMMIT");
