@@ -66,7 +66,7 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT SELECT(installation_id,application_id,database_name,database_oid,system_identifier,timeline,epoch,ledger_id,profile,revoked,runtime_role,approval_key,approval_key_digest) ON public.platform_schema_installation_trust_v1 TO "+qi(runtime));
     await db.query("GRANT SELECT(installation_id,manifest_digest) ON public.platform_schema_registry TO "+qi(runtime));
     await db.query("GRANT INSERT(operation_id,evidence,signature) ON public.platform_schema_business_witnesses_v1 TO "+qi(runtime));
-    await db.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system(),pg_catalog.pg_control_checkpoint() TO "+qi(runtime));
+    await db.query("GRANT EXECUTE ON FUNCTION pg_catalog.pg_control_system(),pg_catalog.pg_control_checkpoint() TO "+qi(runtime)+","+qi(installer));
     await roleContract(db,installer,runtime,namespace);
     if(!equal(state,authority.authenticatedSnapshot()))return fail();
     await db.query("COMMIT");
@@ -96,6 +96,10 @@ async function loadTrust(db:ClientBase){
   const id=await identity(db),rows=(await db.query<Trust>("SELECT * FROM public.platform_schema_installation_trust_v1")).rows,t=rows[0];
   if(rows.length!==1||!t||t.revoked||t.profile!==PROVISIONING_PROFILE||t.database_name!==id.name||t.database_oid!==id.oid||t.installer_role!==id.role||id.superuser||
     t.namespace!==provisioningNamespace(scopeOf(t)))return fail();
+  // An OID and logical database name can survive PITR. Non-recovery
+  // operations must match the configured physical identity and timeline too.
+  const physical=(await db.query<{system:string;timeline:number}>("SELECT (pg_catalog.pg_control_system()).system_identifier::text AS system,(pg_catalog.pg_control_checkpoint()).timeline_id AS timeline")).rows;
+  if(physical.length!==1||physical[0]?.system!==t.system_identifier||physical[0]?.timeline!==t.timeline)return fail("PHYSICAL_IDENTITY");
   await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
   return t;
 }

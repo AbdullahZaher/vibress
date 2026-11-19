@@ -95,6 +95,14 @@ describe("M03 actual isolated normative infrastructure",()=>{
     await expect(apply(f,m,{...approval1,signature:sign(null,Buffer.from(approval1.message),generateKeyPairSync("ed25519").privateKey).toString("base64url")})).rejects.toThrow();
     await expect(apply(f,m,approval(f,null,m,{epoch:randomUUID()}))).rejects.toThrow();
     await expect(apply(f,m,approval(f,null,m,{applicationId:"other-app"}))).rejects.toThrow();
+    const physical=(await f.admin.query<{system_identifier:string;timeline:number}>("SELECT system_identifier,timeline FROM public.platform_schema_installation_trust_v1")).rows[0]!;
+    await f.admin.query("UPDATE public.platform_schema_installation_trust_v1 SET system_identifier='0'");
+    try{await expect(apply(f,m,approval1)).rejects.toThrow("PHYSICAL_IDENTITY");}
+    finally{await f.admin.query("UPDATE public.platform_schema_installation_trust_v1 SET system_identifier=$1",[physical.system_identifier]);}
+    await f.admin.query("UPDATE public.platform_schema_installation_trust_v1 SET timeline=timeline+1");
+    try{await expect(apply(f,m,approval1)).rejects.toThrow("PHYSICAL_IDENTITY");}
+    finally{await f.admin.query("UPDATE public.platform_schema_installation_trust_v1 SET timeline=$1",[physical.timeline]);}
+    expect((await f.admin.query("SELECT revision_digest FROM public.platform_schema_revisions_v1")).rows).toEqual([]);
     expect(await apply(f,m,approval1)).toMatchObject({status:"ACTIVE",revision:m.digest});
     expect(await check(f,m)).toBe(plan.physical.digest);
     await expect(apply(f,m,approval1)).rejects.toThrow();
