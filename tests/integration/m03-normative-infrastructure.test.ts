@@ -20,7 +20,7 @@ import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type Busi
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
 import {FileExperimentalRecoveryAnchor} from "../../packages/database/src/schema-operator-experimental-anchor";
-import {recordExperimentalLifecycleTransition,type LifecycleState} from "../../packages/database/src/schema-operator-experimental-registry-lifecycle";
+import {recordExperimentalLifecycleTransition,reattestExperimentalLifecycleAfterRecovery,type LifecycleState} from "../../packages/database/src/schema-operator-experimental-registry-lifecycle";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex");
 const rolePasswords=new Map<string,string>();
@@ -270,6 +270,39 @@ describe("M03 actual isolated normative infrastructure",()=>{
     await expect(f.pool.query("SELECT * FROM public.platform_schema_revision_states_v1")).rejects.toMatchObject({code:"42501"});
     await expect(f.pool.query("SELECT * FROM public.platform_schema_state_transitions_v1")).rejects.toMatchObject({code:"42501"});
     console.info("M03_B01_LIFECYCLE_CAS_HISTORY_SUPERSESSION=PASS");
+  },60000);
+  it("B02: successive recovery epochs reattest the ACTIVE revision atomically with combined append-only history",async()=>{
+    const f=await lab("recovery","reference-recovery"),m=crm(f),a=approval(f,null,m);
+    await apply(f,m,a);
+    const rev=(epoch:string,head:string,sequence:number,operationId=randomUUID())=>({installationId:f.scope.installationId,revisionDigest:m.digest,operationId,approvalId:randomUUID(),authorityEpoch:epoch,authorityHead:head,authoritySequence:sequence,actor:"fixture-recovery"});
+    const state=()=>f.admin.query<{state:LifecycleState;state_version:number;authority_epoch:string;authority_sequence:string}>("SELECT state,state_version,authority_epoch::text AS authority_epoch,authority_sequence::text AS authority_sequence FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,m.digest]).then(r=>r.rows[0]);
+    const history=()=>f.admin.query<{from_state:LifecycleState|null;to_state:LifecycleState;authority_epoch:string}>("SELECT from_state,to_state,authority_epoch::text AS authority_epoch FROM public.platform_schema_state_transitions_v1 WHERE installation_id=$1 AND revision_digest=$2 ORDER BY id",[f.scope.installationId,m.digest]).then(r=>r.rows);
+    const initial=await history(),stored=await state();
+    expect(initial).toHaveLength(6);
+    // Unknown revision and the already-current epoch are refused without touching state.
+    const unknown={...rev(randomUUID(),createHash("sha256").update("x").digest("hex"),1),revisionDigest:createHash("sha256").update("missing").digest("hex")};
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,unknown)).rejects.toThrow("M03_LIFECYCLE_REFUSED:RECOVERY_STATE");
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,rev(stored!.authority_epoch,stored!.authority_epoch,Number(stored!.authority_sequence)+1))).rejects.toThrow("M03_LIFECYCLE_REFUSED:EPOCH_REPLAY");
+    expect(await state()).toMatchObject({state:"ACTIVE",state_version:6});
+    // First recovery epoch: RECOVERY_PENDING keeps the prior epoch, reattestation binds the new one.
+    const e1=randomUUID(),head1=createHash("sha256").update("recovery-e1").digest("hex");
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,rev(e1,head1,1_000_001))).resolves.toEqual({state:"ACTIVE",version:9,epoch:e1});
+    expect(await state()).toMatchObject({state:"ACTIVE",state_version:9,authority_epoch:e1});
+    // Replaying an epoch that already appears in history is refused and stays atomic.
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,rev(stored!.authority_epoch,head1,1_000_002))).rejects.toThrow("M03_LIFECYCLE_REFUSED:EPOCH_REPLAY");
+    // Second successive recovery epoch, sequence regression refused before any transition.
+    const e2=randomUUID(),head2=createHash("sha256").update("recovery-e2").digest("hex");
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,rev(e2,head2,500))).rejects.toThrow("M03_LIFECYCLE_REFUSED:SEQUENCE");
+    expect(await state()).toMatchObject({state:"ACTIVE",state_version:9});
+    await expect(reattestExperimentalLifecycleAfterRecovery(f.admin,rev(e2,head2,1_000_002))).resolves.toEqual({state:"ACTIVE",version:12,epoch:e2});
+    const all=await history();
+    expect(all.slice(0,6)).toEqual(initial);
+    expect(all.slice(6).map(x=>[x.from_state,x.to_state])).toEqual([["ACTIVE","RECOVERY_PENDING"],["RECOVERY_PENDING","REATTESTED"],["REATTESTED","ACTIVE"],["ACTIVE","RECOVERY_PENDING"],["RECOVERY_PENDING","REATTESTED"],["REATTESTED","ACTIVE"]]);
+    expect(all.slice(6).map(x=>x.authority_epoch)).toEqual([stored!.authority_epoch,e1,e1,e1,e2,e2]);
+    // The runtime role cannot reattest.
+    const runtime=await connect(f.name,f.runtime);
+    try{await expect(reattestExperimentalLifecycleAfterRecovery(runtime,rev(randomUUID(),head2,1_000_003))).rejects.toMatchObject({code:"42501"});}finally{await runtime.end();}
+    console.info("M03_B02_RECOVERY_EPOCH_REATTESTATION=PASS");
   },60000);
   it("C05/J03: portable content and migration identity across actual dedicated installs and additive upgrades",async()=>{
     const a=await lab("portablea","reference-portable-a"),b=await lab("portableb","reference-portable-b");
