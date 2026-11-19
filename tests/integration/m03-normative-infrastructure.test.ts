@@ -14,7 +14,7 @@ import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy"
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
 import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
-import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
+import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
@@ -188,6 +188,30 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(tombstone).toEqual([{deleted:true}]);
     expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
     console.info("M03_A02_VERSION_CAS_SOFT_DELETE_KEYSET=PASS");
+  },60000);
+  it("C05/J03: portable content and migration identity across actual dedicated installs and additive upgrades",async()=>{
+    const a=await lab("portablea","reference-portable-a"),b=await lab("portableb","reference-portable-b");
+    const a1=crm(a),b1=crm(b),a2=crm(a,"website"),b2=crm(b,"website");
+    const createA=compilePortableProvisioningIdentity(null,a1,a.scope),createB=compilePortableProvisioningIdentity(null,b1,b.scope);
+    const upgradeA=compilePortableProvisioningIdentity(a1,a2,a.scope),upgradeB=compilePortableProvisioningIdentity(b1,b2,b.scope);
+    expect(createA).toEqual(createB);expect(upgradeA).toEqual(upgradeB);
+    expect(createA.authorization).toBe("NONE");expect(upgradeA.parentContentDigest).toBe(createA.contentDigest);
+    expect(upgradeA.contentDigest).not.toBe(createA.contentDigest);expect(upgradeA.transitionDigest).not.toBe(createA.transitionDigest);
+    expect(a1.digest).not.toBe(b1.digest);expect(a2.digest).not.toBe(b2.digest);
+    expect(compileProvisioningTransition(null,a1,a.scope).digest).not.toBe(compileProvisioningTransition(null,b1,b.scope).digest);
+    expect(compileProvisioningTransition(a1,a2,a.scope).digest).not.toBe(compileProvisioningTransition(b1,b2,b.scope).digest);
+    expect(()=>compilePortableProvisioningIdentity(a1,b2,a.scope)).toThrow();
+    expect(()=>compilePortableProvisioningIdentity(a2,a1,a.scope)).toThrow();
+    expect(compilePortableProvisioningIdentity(a1,crm(a,"notes"),a.scope).transitionDigest).not.toBe(upgradeA.transitionDigest);
+    for(const [f,old,next] of [[a,a1,a2],[b,b1,b2]] as const){
+      await apply(f,old,approval(f,null,old));const uow=new TenantUnitOfWork(f.pool),ta=scope(f,"tenant-a"),q=table(f,old,"customers"),id=randomUUID();
+      await uow.run(ta,tx=>tx.query("INSERT INTO "+q+"(tenant_id,id,code,name) VALUES($1,$2,'portable','Retained')",["tenant-a",id]));
+      await apply(f,next,approval(f,old,next));
+      expect(await check(f,next)).toBe(compileProvisioningContract(next,f.scope).digest);
+      expect((await uow.run(ta,tx=>tx.query("SELECT id::text AS id,name,website FROM "+q+" ORDER BY id"))).rows).toEqual([{id,name:"Retained",website:null}]);
+    }
+    expect(a.namespace).not.toBe(b.namespace);
+    console.info("M03_C05_PORTABLE_CONTENT_AND_MIGRATION=PASS");
   },60000);
   // These are contract regression tests, not asserted reproduction results.
   // Each installs a clean isolated CRM, applies actual drift, records the

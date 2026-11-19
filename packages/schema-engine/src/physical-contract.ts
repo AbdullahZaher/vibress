@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { parseSchemaManifest, planSchemaChanges, type SchemaManifest } from "./planning";
+import { createSchemaManifest, parseSchemaManifest, planSchemaChanges, type SchemaManifest } from "./planning";
+import { asApplicationId, asInstallationId } from "@vibress/platform-kernel";
 import { renderTrustedAdditiveColumn } from "./operator-contract";
-import type { SchemaCompilationScope } from "./schema";
+import { compileResourceSchema, type SchemaCompilationScope } from "./schema";
 
 /** No namespace reservation, DDL authority or tenant provisioning. The only
  * supported physical topology here is the existing M03-S03 application-owned
@@ -181,4 +182,25 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
   if(statements.length===0)throw Error("PROVISIONING_NO_CHANGES");
   const body={version:1 as const,profile:PROVISIONING_PROFILE,parent:before?.digest??null,manifest:next,physical,statements};
   return {...body,digest:hashPhysical(body)};
+}
+
+// Portable content identity is intentionally a different checksum domain.
+// The original manifests, approval messages, plan and physical digests are
+// unchanged and remain installation-bound. No neutral-scope SQL or approval
+// is returned; this evidence cannot authorize any installation.
+export function compilePortableProvisioningIdentity(current:unknown|null,proposed:unknown,scope:SchemaCompilationScope){
+  const next=parseSchemaManifest(proposed),before=current===null?null:parseSchemaManifest(current);
+  // Refuse unsupported or cross-installation transitions before normalization.
+  compileProvisioningTransition(before,next,scope);
+  const neutral={applicationId:asApplicationId("portable-schema"),installationId:asInstallationId("portable-installation")};
+  const normalize=(m:SchemaManifest)=>createSchemaManifest(compileResourceSchema(m.canonicalIr.resources.map(r=>({...r,...neutral})),neutral));
+  const normalizedNext=normalize(next),normalizedBefore=before?normalize(before):null;
+  const normalizedPlan=compileProvisioningTransition(normalizedBefore,normalizedNext,neutral);
+  const content=(m:SchemaManifest)=>hashPhysical(["VIBRESS-PORTABLE-SCHEMA-CONTENT-V1",PROVISIONING_PROFILE,m.schemaVersion,m.canonicalIr.resources,m.resources]);
+  const contentDigest=content(normalizedNext),parentContentDigest=normalizedBefore?content(normalizedBefore):null;
+  return {
+    version:1 as const,profile:"PORTABLE_CONTENT_ONLY_V1" as const,authorization:"NONE" as const,
+    contentDigest,parentContentDigest,
+    transitionDigest:hashPhysical(["VIBRESS-PORTABLE-MIGRATION-CONTENT-V1",PROVISIONING_PROFILE,parentContentDigest,contentDigest,normalizedPlan.digest])
+  };
 }
