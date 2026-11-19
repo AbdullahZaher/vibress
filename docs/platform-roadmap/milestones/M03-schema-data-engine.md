@@ -158,6 +158,31 @@ Apply these requirements to existing **M03-E04/E08/E09**. See [RLS/views](../RLS
 | Deployment/restore evidence | TBD |
 | Independent reviewer and decision | **OPEN — not certified** |
 
+## Execution reconciliation — 2026-11-19
+
+This section records evidence, not normative acceptance. All original criteria above remain intact and unchecked until independently verified. [Restricted baseline owner acceptance](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7000748887) and [independent functional rejection](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7002259332) remain authoritative. No release or M04 runtime authorization.
+
+- RED: unchanged rejected implementation plus harness-only commits, exact SHA `f57f4fd5eaebcaa2efa17dba6fed11106534c552`, [actual PG16 job](https://github.com/AbdullahZaher/vibress/actions/runs/44480424600/job/135411037280): four accepted drift cases, four restored positive controls, six prior tests passed, two physical-only skipped.
+- GREEN: `85c8d049e2d759d21901bbe06609a5cfbb7333d5`, [actual PG16 job](https://github.com/AbdullahZaher/vibress/actions/runs/44481211707/job/135413605637): 12 passing test definitions, two physical-only skipped. 19 ACL and 13 semantic drift scenarios rejected and restored. Protected ACL V1 and catalog semantic verification V1 do not change historical signed digests.
+- Follow-on: `bb86e686ffc84e3c6842d515a9c61b71004620e2`, [actual functional job](https://github.com/AbdullahZaher/vibress/actions/runs/44481592914/job/135414872976): 12 passing, two physical-only skipped. Signed producer, persisted membership and payload-bound effect identity tested; protected runtime business admission verified. No distributed recovery fencing claimed.
+- New internal metadata projection commit `110adf738d726819a1f5aeaab1f4645769672230` is implementation evidence only until exact-SHA CI. No public generated endpoint.
+
+| Epic | Evidence / status | Remaining mandatory limitation |
+| --- | --- | --- |
+| E01 | TESTED_RESTRICTED — CORE V1 resource types | exact decimal/money, bounded JSON, localization, media/Studio, richer types |
+| E02 | TESTED_RESTRICTED — signed committed registry | full lifecycle, revocation, multi-epoch and combined history |
+| E03 | TESTED_RESTRICTED — scoped PK/UQ/FK and indexes | generalized constraints, concurrency tokens, soft delete, pagination |
+| E04 | TESTED_RESTRICTED — semantic catalog V1 and compiler | wider outputs/types; partition and trigger-link negative cases |
+| E05 | TESTED_RESTRICTED — typed physical storage | bounded dynamic storage implementation |
+| E06 | TESTED_RESTRICTED — optional additive field and signed bounded backfill | durable external chunk admission and resume; explicit rename and forward-fix |
+| E07 | TESTED_RESTRICTED — RLS and exact ACL drift tests; introspection implementation pending new CI | distributed admission and full introspection verification |
+| E08 | TESTED_RESTRICTED — isolated installer, namespace, authority checks | module namespace and complete root-trust operational proof |
+| E09 | TESTED_RESTRICTED — drift and actual recovery cases | split-write reconciliation, uncertain installer/backfill outcomes |
+| E10 | TESTED_RESTRICTED — independent CRM/Inventory | portable checksums across topology, real legacy mapping/backfill |
+| E11 | TESTED_RESTRICTED — four real artifacts, signed jobs and payload binding | authenticated READY V2/in-flight compatibility, transactional outbox, actual recovery resume |
+
+No Epic is marked FUNCTIONALLY_COMPLETE. Exact final CI, independent Agent 06 verdict, and external governance remain required. No risk acceptance.
+
 ## Program links
 
 [Master roadmap](../README.md) · [Security gates](../SECURITY-AND-RELEASE-GATES.md) · [Governance](../DELIVERY-GOVERNANCE.md) · [Existing work](../EXISTING-ASSETS.md)

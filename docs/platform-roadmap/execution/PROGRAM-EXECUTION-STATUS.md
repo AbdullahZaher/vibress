@@ -1,5 +1,7 @@
 # Program Execution Status — M00–M12
 
+> **Current implementation reconciliation: 2026-11-19.** Wave 1 [PR #166](https://github.com/AbdullahZaher/vibress/pull/166) merged at `272fd300976f1d5b588ff2491fe8bf2a05b41c2a`, ancestor of frozen main `251bef39325476bcbbe84d80ed451851a079695a`. This is merged implementation, not normative closure. M03 and M04 have isolated experimental implementations; neither is closed. Production remains NO-GO, M04 Batch 03 Runtime not authorized. Prior restricted M03 acceptance [owner record](https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7000748887) remains frozen. The historical November 15 report below is retained as historical evidence, not the current implementation state.
+
 > **Last updated: 2026-11-15.** Implementation branch:
 > `feat/wave1-platform-kernel-tenant-isolation`, cut from `main` at
 > `5183f34f0c404de9c02ba8c79cc54b42bc6975e6`. Verified source HEAD
@@ -18,15 +20,14 @@
 > result is recorded in the evidence table and does not re-attest the code
 > evidence above. Later docs-only heads are covered by their own PR checks.
 >
-> **No wave has passed its gate. No ADR is accepted. No production authorization
-> exists.** This file records measured status only.
+> **Historical November 15 assessment:** no wave had passed its full gate and no production authorization existed. The current reconciliation above distinguishes subsequent merged and restricted evidence from normative milestone approval.
 
 ## Wave status
 
 | Wave | Milestones | Status | Gate |
 | --- | --- | --- | --- |
-| 1 | M00–M02 | **IN PROGRESS — partial implementation, NO-GO** | Not passed |
-| 2 | M03–M06 | Not started | Blocked by Wave 1 |
+| 1 | M00–M02 | **Merged engineering (PR #166); normative milestones OPEN** | Production NO-GO |
+| 2 | M03–M06 | **M03/M04 experimental engineering; M05/M06 not established here** | M03/M04 OPEN; production/runtime not authorized |
 | 3 | M07–M08 | Not started | Blocked |
 | 4 | M09–M10 | Not started | Blocked |
 | 5 | M11–M12 | Not started | Blocked |

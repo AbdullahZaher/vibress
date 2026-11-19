@@ -34,6 +34,8 @@
 | M11 | [Vibress Cloud & Deployment Control Plane](milestones/M11-cloud-control-plane.md) | [#163](https://github.com/AbdullahZaher/vibress/issues/163) |
 | M12 | [Marketplace, Ecosystem & Platform 2.0](milestones/M12-marketplace-ecosystem.md) | [#164](https://github.com/AbdullahZaher/vibress/issues/164) |
 
+**Implementation reconciliation (2026-11-19):** [Wave 1 PR #166](https://github.com/AbdullahZaher/vibress/pull/166) is merged; its merge commit `272fd300976f1d5b588ff2491fe8bf2a05b41c2a` is an ancestor of frozen main. M00–M02 remain OPEN for applicable normative gates; M03/M04 are under isolated experimental engineering and are not closed. See [program status](execution/PROGRAM-EXECUTION-STATUS.md) and [master evidence comment](https://github.com/AbdullahZaher/vibress/issues/165#issuecomment-7002479992). No acceptance checkbox or production gate is relaxed.
+
 ## Waves and release boundaries
 
 - **Wave 1 (M00–M02):** Baseline, universal kernel, security/tenant isolation.
