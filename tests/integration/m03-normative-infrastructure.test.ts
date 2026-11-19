@@ -10,7 +10,9 @@ import {referenceAction,referenceProducer,referenceOperationId,referenceJobMessa
 import {Client,Pool} from "pg";
 import {afterAll,beforeAll,describe,expect,it} from "vitest";
 import {asApplicationId,asInstallationId,asPrincipalId,asTenantId} from "@vibress/platform-kernel";
-import {TenantUnitOfWork,verifyTenantScope} from "@vibress/tenancy";
+import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy";
+import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
+import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
 import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,provisioningIdentifier as qi,PROVISIONING_PROFILE,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
@@ -287,6 +289,36 @@ describe("M03 actual isolated normative infrastructure",()=>{
     ];
     for(const [label,drift,restore] of cases)await expectDriftRefused(f,m,"FUNC-02-"+label,async()=>{await f.admin.query(drift);},async()=>{await f.admin.query(restore);});
   },120000);
+  it("M03 authorized metadata projection hides fields, resources and relationships",async()=>{
+    const f=await lab("introspection","reference-introspection"),m=crm(f);
+    await apply(f,m,approval(f,null,m));
+    f.reader="v3_intro_"+suffix;await createFixtureRole(f.reader);
+    await root.query("GRANT CONNECT ON DATABASE "+qi(f.name)+" TO "+qi(f.reader));
+    await f.admin.query("CREATE TABLE public.platform_memberships(application_id text NOT NULL,tenant_id text NOT NULL,principal_id text NOT NULL,active boolean NOT NULL,roles text[] NOT NULL,permissions text[] NOT NULL,PRIMARY KEY(application_id,tenant_id,principal_id))");
+    const permissions=["schema.customers.read","schema.customers.name","schema.deals.read","schema.deals.stage","schema.deals.customer","schema.activities.deal"];
+    await f.admin.query("INSERT INTO public.platform_memberships VALUES($1,'tenant-a','intro-principal',true,ARRAY['staff'],$2)",[f.scope.applicationId,permissions]);
+    await f.admin.query("GRANT SELECT ON public.platform_memberships TO "+qi(f.reader));
+    const reader=new Pool({connectionString:dbUrl(f.name,f.reader),max:1});
+    const policy=new PolicyEngine(permissions.map(action=>({id:action,action,effect:"allow" as const})));
+    const tenantId=asTenantId("tenant-a"),principal={id:asPrincipalId("intro-principal"),kind:"staff" as const,applicationId:f.scope.applicationId,tenantIds:[tenantId],roles:["staff"],permissions};
+    const args={...f.scope,authority:f.authority,runner:new TenantUnitOfWork(f.pool),resolver:new PlatformMembershipResolver(reader),policy,policyVersion:"introspection-v1",tenantId,principal,manifestWire:wire(m),
+      visibility:{customers:{permission:"schema.customers.read",fields:{name:"schema.customers.name",code:"schema.customers.code"}},deals:{permission:"schema.deals.read",fields:{stage:"schema.deals.stage",customer:"schema.deals.customer"}},activities:{permission:"schema.activities.read",fields:{deal:"schema.activities.deal"}}}};
+    try{
+      const view=await projectExperimentalResources(args);
+      expect(view).toEqual({version:1,resources:[{id:"customers",ownership:"tenant",fields:[{id:"name",type:"text",required:true}]},{id:"deals",ownership:"tenant",fields:[{id:"customer",type:"relation",required:true,targetResource:"customers"},{id:"stage",type:"enum",required:true}]}]});
+      const hideTarget=new PolicyEngine([...permissions.map(action=>({id:action,action,effect:"allow" as const})),{id:"deny-customer-resource",action:"schema.customers.read",effect:"deny" as const}]);
+      expect(await projectExperimentalResources({...args,policy:hideTarget})).toEqual({version:1,resources:[{id:"deals",ownership:"tenant",fields:[{id:"stage",type:"enum",required:true}]}]});
+      await expect(projectExperimentalResources({...args,tenantId:asTenantId("tenant-b")})).rejects.toThrow();
+      await expect(projectExperimentalResources({...args,installationId:asInstallationId("wrong-installation")})).rejects.toThrow();
+      await expect(projectExperimentalResources({...args,manifestWire:wire(crm(f,"website"))})).rejects.toThrow();
+      await f.admin.query("UPDATE public.platform_memberships SET active=false");
+      await expect(projectExperimentalResources(args)).rejects.toThrow();
+      await f.admin.query("UPDATE public.platform_memberships SET active=true");
+      f.authority.beginRecovery();
+      await expect(projectExperimentalResources(args)).rejects.toThrow();
+      console.info("M03_INTROSPECTION_AUTHORIZED_SCOPED_PROJECTION=PASS");
+    }finally{await reader.end();}
+  },60000);
   it("J03: independent non-CMS installation and mutual credential isolation",async()=>{
     const f=await lab("inventory","reference-inventory"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true},{id:"label",type:"text",required:true}]}],f.scope));
     await apply(f,m,approval(f,null,m));await check(f,m);
