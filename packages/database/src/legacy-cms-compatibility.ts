@@ -26,7 +26,8 @@ export type LegacyCmsCompatibilityCode =
   | "LEGACY_CMS_INVENTORY_DRIFT"
   | "LEGACY_CMS_IDENTITY_MISSING"
   | "LEGACY_CMS_IDENTITY_DRIFT"
-  | "LEGACY_CMS_IDENTITY_CONFLICT";
+  | "LEGACY_CMS_IDENTITY_CONFLICT"
+  | "LEGACY_CMS_OUTBOX_INVALID";
 
 export class LegacyCmsCompatibilityError extends Error {
   constructor(
@@ -80,6 +81,9 @@ export interface LegacyCmsInventory {
   readonly publicationCount: number;
   readonly counts: LegacyCmsPublicationCounts;
   readonly publications: readonly LegacyCmsPublicationInventory[];
+  /** Unscoped events remain global, never silently assigned to pub_default. */
+  readonly unattributedOutboxEvents: number;
+  readonly delayedUnattributedOutboxEvents: number;
   readonly digest: string;
 }
 
@@ -256,23 +260,68 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
     `SELECT publication_id, count(*)::int AS n FROM newsletter_sends
       WHERE scheduled_at IS NOT NULL GROUP BY publication_id`,
   );
+  // Read-only, SQL-grouped classification of legacy flat and v1 envelopes.
+  // No event rows, statuses or delivery semantics are ever rewritten.
   const outbox = await db.query<{
-    publication_id: string;
+    format: string;
+    publication_id: string | null;
     n: number;
     delayed: number;
+    sample_id: string;
   }>(
-    `SELECT payload->>'publicationId' AS publication_id, count(*)::int AS n,
-       count(*) FILTER (WHERE status = 'pending' AND available_after IS NOT NULL)::int AS delayed
+    `WITH classified AS (
+      SELECT id,status,available_after,
+        CASE
+          WHEN jsonb_typeof(payload) IS DISTINCT FROM 'object' THEN 'malformed'
+          WHEN payload ? 'version' OR payload ? 'eventType' THEN
+            CASE
+              WHEN payload->'version' IS DISTINCT FROM '1'::jsonb THEN 'unsupported_version'
+              WHEN jsonb_typeof(payload->'eventType') IS DISTINCT FROM 'string'
+                OR payload->>'eventType' IS DISTINCT FROM event_type
+                OR jsonb_typeof(payload->'payload') IS DISTINCT FROM 'object' THEN 'malformed'
+              WHEN (payload ? 'publicationId' AND jsonb_typeof(payload->'publicationId') IS DISTINCT FROM 'string')
+                OR (payload->'payload' ? 'publicationId' AND jsonb_typeof(payload->'payload'->'publicationId') IS DISTINCT FROM 'string') THEN 'malformed'
+              WHEN payload ? 'publicationId'
+                AND payload->>'publicationId' IS DISTINCT FROM payload->'payload'->>'publicationId' THEN 'ambiguous'
+              ELSE 'envelope'
+            END
+          WHEN payload ? 'publicationId' AND jsonb_typeof(payload->'publicationId') IS DISTINCT FROM 'string'
+            THEN 'malformed'
+          ELSE 'flat'
+        END AS format,
+        CASE WHEN payload ? 'version' OR payload ? 'eventType'
+          THEN payload->'payload'->>'publicationId'
+          ELSE payload->>'publicationId' END AS publication_id
       FROM outbox_events
-      WHERE payload->>'publicationId' IS NOT NULL
-      GROUP BY payload->>'publicationId'`,
+    )
+    SELECT format,publication_id,count(*)::int AS n,
+      count(*) FILTER (WHERE status='pending' AND available_after IS NOT NULL)::int AS delayed,
+      min(id) AS sample_id
+    FROM classified GROUP BY format,publication_id ORDER BY format,publication_id`,
   );
-  const outboxMap = new Map(
-    outbox.rows.map((row) => [
-      row.publication_id,
-      { total: Number(row.n), delayed: Number(row.delayed) },
-    ]),
-  );
+  const outboxMap = new Map<string,{total:number;delayed:number}>();
+  const knownPublications = new Set(publications.rows.map(row=>row.id));
+  const unattributed = {total:0,delayed:0};
+  for(const row of outbox.rows){
+    if(row.format!=="flat"&&row.format!=="envelope"){
+      throw new LegacyCmsCompatibilityError("LEGACY_CMS_OUTBOX_INVALID",
+        "Outbox "+row.format+" at id '"+row.sample_id+"' requires operator classification");
+    }
+    if(row.publication_id===null){
+      unattributed.total+=Number(row.n);
+      unattributed.delayed+=Number(row.delayed);
+      continue;
+    }
+    if(!row.publication_id.trim()||!knownPublications.has(row.publication_id)){
+      throw new LegacyCmsCompatibilityError("LEGACY_CMS_OUTBOX_INVALID",
+        "Outbox publication ownership is unknown at id '"+row.sample_id+"'");
+    }
+    const previous=outboxMap.get(row.publication_id)??{total:0,delayed:0};
+    outboxMap.set(row.publication_id,{
+      total:previous.total+Number(row.n),
+      delayed:previous.delayed+Number(row.delayed),
+    });
+  }
 
   const countsFor = (publicationId: string): LegacyCmsPublicationCounts => {
     const entry = entryMap.get(publicationId);
@@ -328,6 +377,8 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
     publicationCount: inventory.length,
     counts: totals,
     publications: inventory,
+    unattributedOutboxEvents: unattributed.total,
+    delayedUnattributedOutboxEvents: unattributed.delayed,
     digest: sha256({
       profile: LEGACY_CMS_IDENTITY_PROFILE,
       publicationCount: inventory.length,
@@ -336,6 +387,10 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
         publicationId: publication.publicationId,
         digest: publication.digest,
       })),
+      ...(unattributed.total>0?{
+        unattributedOutboxEvents:unattributed.total,
+        delayedUnattributedOutboxEvents:unattributed.delayed,
+      }:{}),
     }),
   };
 }
