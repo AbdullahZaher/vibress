@@ -67,7 +67,7 @@ export function provisioningProfileFor(manifest:SchemaManifest):ProvisioningProf
   const extended=manifest.resources.some(resource=>resource.fields.some(field=>
     field.logicalType==="integer"||field.logicalType==="decimal"||field.logicalType==="money"||
     field.logicalType==="date"||field.logicalType==="json"||
-    field.logicalType==="media"||field.logicalType==="localized"||
+    field.logicalType==="media"||field.logicalType==="localized"||field.logicalType==="studio"||
     (field.logicalType==="text"&&field.maxLength!==undefined)));
   return extended?PROVISIONING_PROFILE_V2:PROVISIONING_PROFILE;
 }
@@ -176,20 +176,28 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
         if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>1000000)throw Error("PROVISIONING_JSON_BOUND");
         columns.push({name:field.id,type:"jsonb",required:field.required});
         addCheck([field.id],"pg_column_size("+qi(field.id)+") <= "+maxBytes,"(pg_column_size("+field.id+") <= "+maxBytes+")");
-      }else if(field.logicalType==="media"||field.logicalType==="localized"){
-        // Media is a bounded object carrying at least a string `url`; localized
-        // text is a bounded object map. Both are exact jsonb, never untyped text.
+      }else if(field.logicalType==="media"||field.logicalType==="localized"||field.logicalType==="studio"){
+        // Media is a bounded scoped asset reference carrying a safe asset id;
+        // localized text is a bounded locale-to-string object map; Studio
+        // documents carry the platform document identity schema/version.
+        // Structural validation stays in the trusted write path.
         const maxBytes=field.maxBytes??0;
         if(!Number.isInteger(maxBytes)||maxBytes<1||maxBytes>1000000)throw Error("PROVISIONING_JSON_BOUND");
         const column=qi(field.id),id=field.id;
         columns.push({name:id,type:"jsonb",required:field.required});
-        addCheck([id],
-          field.logicalType==="media"
-            ? qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND coalesce(jsonb_typeof("+column+" -> 'url'), '') = 'string' AND pg_column_size("+column+") <= "+maxBytes+")"
-            : qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND pg_column_size("+column+") <= "+maxBytes+")",
-          field.logicalType==="media"
-            ? "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(jsonb_typeof(("+id+" -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))"
-            : "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))");
+        if(field.logicalType==="media"){
+          addCheck([id],
+            qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND coalesce("+column+" ->> 'id', '') ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$' AND pg_column_size("+column+") <= "+maxBytes+")",
+            "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(("+id+" ->> 'id'::text), ''::text) ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))");
+        }else if(field.logicalType==="studio"){
+          addCheck([id],
+            qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND coalesce("+column+" ->> 'schema', '') = 'vibress-studio' AND coalesce("+column+" ->> 'version', '') = '1' AND pg_column_size("+column+") <= "+maxBytes+")",
+            "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(("+id+" ->> 'schema'::text), ''::text) = 'vibress-studio'::text) AND (COALESCE(("+id+" ->> 'version'::text), ''::text) = '1'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))");
+        }else{
+          addCheck([id],
+            qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND pg_column_size("+column+") <= "+maxBytes+")",
+            "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))");
+        }
       }else if(field.logicalType==="text"&&field.maxLength!==undefined){
         const maxLength=field.maxLength;
         if(!Number.isInteger(maxLength)||maxLength<1||maxLength>100000)throw Error("PROVISIONING_TEXT_BOUND");

@@ -276,6 +276,7 @@ function fieldManifest(field: FieldDefinition): ManifestField {
       });
     case "media":
     case "localized":
+    case "studio":
       return Object.freeze({
         ...common, postgresType: "jsonb", mappingStatus: "MAPPED",
         maxBytes: field.maxBytes, maxDepth: field.maxDepth, maxKeys: field.maxKeys,

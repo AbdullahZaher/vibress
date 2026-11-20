@@ -4,11 +4,18 @@
 // soft-delete FK policy. Trusted callers must not expose arbitrary SQL.
 import {randomUUID} from "node:crypto";
 import {compileProvisioningContract,enforceBoundedJson,moneyCurrencyColumn,parseSchemaManifest,provisioningIdentifier as qi,validateMoney,PROVISIONING_PROFILE,type MoneyValue} from "@vibress/schema-engine";
+import {CURRENT_STUDIO_VERSION,assertStudioDocumentEditable,checkDocumentResourceLimits,normalizeStudioDocument,validateStudioDocument} from "@vibress/studio-core";
 import {assertVerifiedScope,hasPermission,type ScopedTransaction} from "@vibress/tenancy";
 import type {DisposableDurableRecoveryAuthority} from "./schema-operator-experimental-durable-authority";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const codePattern=/^[a-z0-9-]{1,80}$/;
+// Asset ids are the text primary key of the platform media contract (UUIDs,
+// legacy med_* ids and other safe identifiers); the database CHECK mirrors it.
+const mediaIdPattern=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+// Canonical BCP-47 subset used by the platform locale registry (en, ar-SA,
+// zh-Hant-TW); noncanonical casing/separators are refused rather than guessed.
+const localePattern=/^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|\d{3}))?$/;
 const refuse=():never=>{throw Error("M03_VERSIONED_RESOURCE_REFUSED");};
 const validName=(name:unknown):name is string=>typeof name==="string"&&name.length>0&&name.length<=200&&!name.includes("\u0000");
 type Row={id:string;code:string;name:string;version_token:string}&Record<string,unknown>;
@@ -21,7 +28,16 @@ type Field=
   |{name:string;kind:"enum";values:readonly string[]}
   |{name:string;kind:"money";precision:number;scale:number;currencyColumn:string}
   |{name:string;kind:"json"|"media"|"localized";maxBytes:number;maxDepth:number;maxKeys:number}
+  |{name:string;kind:"studio";maxBytes:number;maxDepth:number;maxKeys:number}
   |{name:string;kind:"relation";required:boolean};
+/**
+ * Media references keep their platform identity; the host resolves that id in
+ * the authenticated publication through its existing media repository.
+ */
+export interface TrustedMediaOwnership{
+  readonly publicationId:string;
+  findById(id:string,publicationId?:string):Promise<unknown>;
+}
 const int4Min=-2147483648,int4Max=2147483647;
 const isoDate=/^\d{4}-\d{2}-\d{2}$/;
 const isPlainObject=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==="object"&&!Array.isArray(value);
@@ -50,7 +66,7 @@ type Identity={application_id:string;installation_id:string;epoch:string;ledger_
  * from another revision/order is refused. It remains per-transaction keyset
  * traversal, not a snapshot. Only exact code filtering is supported.
  */
-export async function openExperimentalVersionedResource(tx:ScopedTransaction,manifestWire:string,resourceId:string,authority:DisposableDurableRecoveryAuthority){
+export async function openExperimentalVersionedResource(tx:ScopedTransaction,manifestWire:string,resourceId:string,authority:DisposableDurableRecoveryAuthority,media?:TrustedMediaOwnership){
   if(process.env.NODE_ENV!=="test"||typeof manifestWire!=="string"||manifestWire.length>1024*1024)return refuse();
   assertVerifiedScope(tx.scope);
   const scope=tx.scope,initial=authority.authenticatedSnapshot(),last=initial.provisioningOperations?.filter(o=>o.outcome==="COMMITTED").at(-1);
@@ -69,6 +85,9 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
   // relations admitted by the compiled physical contract.
   const declared=manifest.resources.find(r=>r.id===resourceId);
   if(!declared)return refuse();
+  // Media writes are admitted only with an authenticated publication scope that
+  // can resolve each referenced asset; otherwise identity alone is insufficient.
+  if(declared.fields.some(f=>f.logicalType==="media")&&(!media||typeof media.publicationId!=="string"||media.publicationId.length<1||media.publicationId.length>200||typeof media.findById!=="function"))return refuse();
   const fields:Field[]=[];
   for(const field of declared.fields){
     if(fixed.has(field.id))continue;
@@ -106,7 +125,7 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       const currencyColumn=moneyCurrencyColumn(field.id),currency=resource.columns.find(c=>c.name===currencyColumn),precision=field.precision??19,scale=field.scale??2;
       if(column.type!=="numeric("+precision+","+scale+")"||column.enumValues||!currency||currency.type!=="text"||currency.required||currency.enumValues||currency.target||declared.fields.some(f=>f.id===currencyColumn))return refuse();
       fields.push({name:field.id,kind:"money",precision,scale,currencyColumn});
-    }else if(field.logicalType==="json"||field.logicalType==="media"||field.logicalType==="localized"){
+    }else if(field.logicalType==="json"||field.logicalType==="media"||field.logicalType==="localized"||field.logicalType==="studio"){
       if(column.type!=="jsonb"||column.enumValues||field.maxBytes===undefined||field.maxDepth===undefined||field.maxKeys===undefined)return refuse();
       fields.push({name:field.id,kind:field.logicalType,maxBytes:field.maxBytes,maxDepth:field.maxDepth,maxKeys:field.maxKeys});
     }else return refuse();
@@ -132,8 +151,32 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
         return validateMoney(field,value.amount,value.currency);
       }
       case "json":enforceBoundedJson(field,value);return value;
-      case "media":enforceBoundedJson(field,value);return isPlainObject(value)&&typeof value.url==="string"?value:refuse();
-      case "localized":enforceBoundedJson(field,value);return isPlainObject(value)?value:refuse();
+      case "media":{
+        if(!isPlainObject(value)||typeof value.id!=="string"||!mediaIdPattern.test(value.id))return refuse();
+        enforceBoundedJson(field,value);
+        return value;
+      }
+      case "localized":{
+        if(!isPlainObject(value))return refuse();
+        const entries=Object.entries(value);
+        if(entries.length===0)return refuse();
+        for(const [locale,text] of entries){
+          if(!localePattern.test(locale)||typeof text!=="string"||text.includes("\u0000"))return refuse();
+        }
+        enforceBoundedJson(field,value);
+        return value;
+      }
+      case "studio":{
+        if(!isPlainObject(value))return refuse();
+        try{
+          checkDocumentResourceLimits(value,{maxSizeBytes:field.maxBytes,maxDepth:field.maxDepth});
+          const document=validateStudioDocument(normalizeStudioDocument(value));
+          assertStudioDocumentEditable(document,document);
+          if(document.version!==CURRENT_STUDIO_VERSION)return refuse();
+          enforceBoundedJson(field,document);
+          return document;
+        }catch{return refuse();}
+      }
     }
   };
   const valuesOf=(input:unknown):Map<string,unknown>=>{
@@ -146,6 +189,13 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       out.set(key,normalize(field,value));
     }
     return out;
+  };
+  const verifyMedia=async(values:Map<string,unknown>)=>{
+    for(const field of fields)if(field.kind==="media"){
+      const value=values.get(field.name);
+      if(value===undefined||value===null)continue;
+      if(!(await media!.findById((value as {id:string}).id,media!.publicationId)))return refuse();
+    }
   };
   const table=qi(physical.namespace)+"."+qi(resource.table),tenant=scope.tenantId;
   const rows=(await tx.query<Identity>(`SELECT t.application_id,t.installation_id,t.epoch,t.ledger_id,r.manifest_digest,t.profile,t.revoked,t.runtime_role,current_user AS role,session_user AS session,current_database() AS db,(SELECT oid::text FROM pg_catalog.pg_database WHERE datname=current_database()) AS oid,t.database_name AS configured_db,t.database_oid AS configured_oid,(pg_catalog.pg_control_system()).system_identifier::text AS system,t.system_identifier AS configured_system,(pg_catalog.pg_control_checkpoint()).timeline_id AS timeline,t.timeline AS configured_timeline FROM public.platform_schema_installation_trust_v1 t JOIN public.platform_schema_registry r USING(installation_id)`)).rows;
@@ -165,7 +215,7 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     field.kind==="datetime"?"::timestamptz":
     field.kind==="date"?"::date":
     field.kind==="decimal"?"::numeric":
-    field.kind==="json"||field.kind==="media"||field.kind==="localized"?"::jsonb":"";
+    field.kind==="json"||field.kind==="media"||field.kind==="localized"||field.kind==="studio"?"::jsonb":"";
   const projection="id::text AS id,code,name,version_token"+fields.flatMap(f=>f.kind==="money"?[f.name,f.currencyColumn]:[f.name]).map(c=>","+qi(c)).join("");
   // Money is one logical value over an exact amount and its currency
   // companion; rows expose the pair under the declared field name.
@@ -193,7 +243,8 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     async create(code:string,name:string,input?:unknown):Promise<Row>{
       allow("create");
       if(typeof code!=="string"||!codePattern.test(code)||!validName(name))return refuse();
-      const values=valuesOf(input),columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null],casts=["","","","","",""];
+      const values=valuesOf(input);await verifyMedia(values);
+      const columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null],casts=["","","","","",""];
       for(const field of fields)if(field.kind==="relation"&&field.required&&!values.has(field.name))return refuse();
       for(const field of fields){
         const value=values.get(field.name)??null;
@@ -211,7 +262,8 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     async update(id:string,expectedVersion:string,name:string,input?:unknown):Promise<Row|null>{
       allow("update");
       if(typeof id!=="string"||!uuid.test(id)||typeof expectedVersion!=="string"||!uuid.test(expectedVersion)||!validName(name))return refuse();
-      const values=valuesOf(input),params:unknown[]=[tenant,id,expectedVersion,name,randomUUID()];
+      const values=valuesOf(input);await verifyMedia(values);
+      const params:unknown[]=[tenant,id,expectedVersion,name,randomUUID()];
       let set="name=$4,version_token=$5";
       for(const field of fields){
         if(!values.has(field.name))continue;

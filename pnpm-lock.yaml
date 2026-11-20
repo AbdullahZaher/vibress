@@ -670,6 +670,9 @@ importers:
       '@vibress/security':
         specifier: workspace:*
         version: link:../security
+      '@vibress/studio-core':
+        specifier: workspace:*
+        version: link:../studio-core
       '@vibress/tenancy':
         specifier: workspace:*
         version: link:../tenancy

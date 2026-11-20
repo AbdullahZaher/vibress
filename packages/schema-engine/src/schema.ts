@@ -21,8 +21,8 @@ interface FieldBase {
  * Canonical IR V1 field union. Extended scalar kinds are additive: documents
  * authored only with CORE V1 kinds serialize exactly as before, so historical
  * canonical/manifest/physical digests are unchanged. Media, localization and
- * Studio-document fields are intentionally absent: they reference existing
- * platform contracts rather than a generated physical column.
+ * Studio documents map to bounded, identity-checked jsonb in the TYPED V2
+ * profile; their structural validation belongs to the trusted write path.
  */
 export type FieldDefinition =
   | (FieldBase & {
@@ -60,6 +60,12 @@ export type FieldDefinition =
     })
   | (FieldBase & {
       readonly type: "localized";
+      readonly maxBytes: number;
+      readonly maxDepth: number;
+      readonly maxKeys: number;
+    })
+  | (FieldBase & {
+      readonly type: "studio";
       readonly maxBytes: number;
       readonly maxDepth: number;
       readonly maxKeys: number;
@@ -443,6 +449,10 @@ function normalizeField(value: unknown, path: string): FieldDefinition {
     case "localized": {
       onlyKeys(input, ["id", "type", "required", "maxBytes", "maxDepth", "maxKeys"], path);
       return Object.freeze({ id, type: "localized", required, ...boundedJson(input, path) });
+    }
+    case "studio": {
+      onlyKeys(input, ["id", "type", "required", "maxBytes", "maxDepth", "maxKeys"], path);
+      return Object.freeze({ id, type: "studio", required, ...boundedJson(input, path) });
     }
     case "number":
       onlyKeys(input, ["id", "type", "required", "default"], path);

@@ -5,6 +5,7 @@ import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
 import {compileProvisioningContract,compileProvisioningTransition,enforceBoundedJson,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
+import {CURRENT_STUDIO_VERSION,assertStudioDocumentEditable,checkDocumentResourceLimits,normalizeStudioDocument,validateStudioDocument} from "@vibress/studio-core";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import {recordExperimentalLifecycleTransition} from "./schema-operator-experimental-registry-lifecycle";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
@@ -457,12 +458,29 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     if(column.type==="text"){
       if(backfillField.logicalType!=="text"||(backfillField.maxLength!==undefined&&e.value.length>backfillField.maxLength))return fail();
     }else if(column.type==="jsonb"){
-      if(backfillField.logicalType!=="json"&&backfillField.logicalType!=="media"&&backfillField.logicalType!=="localized")return fail();
+      // Media values carry a publication-scoped asset identity that the
+      // backfill message cannot prove; they are refused rather than trusted.
+      if(backfillField.logicalType==="media")return backfillRefusal("MEDIA_OWNERSHIP");
+      if(backfillField.logicalType!=="json"&&backfillField.logicalType!=="localized"&&backfillField.logicalType!=="studio")return fail();
       let parsed:unknown;
       try{parsed=JSON.parse(e.value);}catch{return backfillRefusal("VALUE");}
       enforceBoundedJson(backfillField,parsed);
-      if(backfillField.logicalType==="media"&&(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||typeof (parsed as Record<string,unknown>).url!=="string"))return backfillRefusal("VALUE");
-      if(backfillField.logicalType==="localized"&&(!parsed||typeof parsed!=="object"||Array.isArray(parsed)))return backfillRefusal("VALUE");
+      const record=parsed!==null&&typeof parsed==="object"&&!Array.isArray(parsed)?parsed as Record<string,unknown>:undefined;
+      if(backfillField.logicalType==="localized"){
+        if(!record)return backfillRefusal("VALUE");
+        const entries=Object.entries(record);
+        if(entries.length===0)return backfillRefusal("VALUE");
+        for(const [locale,text] of entries)if(!/^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|\d{3}))?$/.test(locale)||typeof text!=="string"||text.includes("\u0000"))return backfillRefusal("VALUE");
+      }
+      if(backfillField.logicalType==="studio"){
+        if(!record)return backfillRefusal("VALUE");
+        try{
+          checkDocumentResourceLimits(record,{maxSizeBytes:backfillField.maxBytes as number,maxDepth:backfillField.maxDepth as number});
+          const document=validateStudioDocument(normalizeStudioDocument(record));
+          assertStudioDocumentEditable(document,document);
+          if(document.version!==CURRENT_STUDIO_VERSION)return backfillRefusal("VALUE");
+        }catch{return backfillRefusal("VALUE");}
+      }
       valueExpression="$3::jsonb";
     }else return fail();
     await verifyCatalog(db,t,physical);

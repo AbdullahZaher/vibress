@@ -14,13 +14,14 @@
   },
   "dependencies": {
     "@vibress/config": "workspace:*",
+    "@vibress/observability": "workspace:*",
     "@vibress/platform-kernel": "workspace:*",
+    "@vibress/schema-engine": "workspace:*",
     "@vibress/security": "workspace:*",
+    "@vibress/studio-core": "workspace:*",
     "@vibress/tenancy": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.22.0",
-    "@vibress/observability": "workspace:*",
-    "@vibress/schema-engine": "workspace:*"
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

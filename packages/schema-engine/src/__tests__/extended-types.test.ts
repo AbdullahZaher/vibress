@@ -224,15 +224,46 @@ describe("extended scalar validation", () => {
     const physical = compileProvisioningContract(manifest, scope);
     const checks = physical.resources[0]!.checks ?? [];
     // Optional jsonb columns must admit NULL; required ones stay NOT NULL.
+    // Media is a scoped asset reference: the object must carry a safe asset id.
     expect(checks.find((c) => c.columns[0] === "cover")?.normalized)
-      .toBe("((cover IS NULL) OR ((jsonb_typeof(cover) = 'object'::text) AND (COALESCE(jsonb_typeof((cover -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size(cover) <= 4096)))");
+      .toBe("((cover IS NULL) OR ((jsonb_typeof(cover) = 'object'::text) AND (COALESCE((cover ->> 'id'::text), ''::text) ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'::text) AND (pg_column_size(cover) <= 4096)))");
     expect(checks.find((c) => c.columns[0] === "title")?.normalized)
       .toBe("((title IS NULL) OR ((jsonb_typeof(title) = 'object'::text) AND (pg_column_size(title) <= 2048)))");
     const sql = compileProvisioningTransition(null, manifest, scope).statements.join("\n");
     expect(sql).toContain('"cover" jsonb');
-    expect(sql).toContain('"cover" IS NULL OR (jsonb_typeof("cover") = \'object\' AND coalesce(jsonb_typeof("cover" -> \'url\'), \'\') = \'string\'');
+    expect(sql).toContain('"cover" IS NULL OR (jsonb_typeof("cover") = \'object\' AND coalesce("cover" ->> \'id\', \'\') ~ \'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$\'');
     expect(sql).toContain('"title" jsonb NOT NULL');
     expect(sql).toContain('"title" IS NULL OR (jsonb_typeof("title") = \'object\'');
+  });
+
+  it("maps Studio documents to bounded jsonb with database-enforced document identity", () => {
+    const manifest = manifestOf([
+      { id: "code", type: "text", required: true },
+      { id: "body", type: "studio", maxBytes: 8192, maxDepth: 32, maxKeys: 1000, required: false },
+    ]);
+    expect(provisioningProfileFor(manifest)).toBe(PROVISIONING_PROFILE_V2);
+    const body = manifest.resources[0]!.fields.find((f) => f.id === "body");
+    expect(body).toMatchObject({
+      logicalType: "studio", postgresType: "jsonb", mappingStatus: "MAPPED",
+      maxBytes: 8192, maxDepth: 32, maxKeys: 1000,
+    });
+    const physical = compileProvisioningContract(manifest, scope);
+    expect(physical.resources[0]!.columns.find((c) => c.name === "body")).toMatchObject({ type: "jsonb", required: false });
+    expect(physical.resources[0]!.checks?.find((c) => c.columns[0] === "body")?.normalized)
+      .toBe("((body IS NULL) OR ((jsonb_typeof(body) = 'object'::text) AND (COALESCE((body ->> 'schema'::text), ''::text) = 'vibress-studio'::text) AND (COALESCE((body ->> 'version'::text), ''::text) = '1'::text) AND (pg_column_size(body) <= 8192)))");
+    expect(compileProvisioningTransition(null, manifest, scope).statements.join("\n"))
+      .toContain('coalesce("body" ->> \'schema\', \'\') = \'vibress-studio\'');
+  });
+
+  it("refuses Studio defaults and unbounded Studio declarations", () => {
+    expect(() => manifestOf([
+      { id: "code", type: "text", required: true },
+      { id: "body", type: "studio", maxBytes: 8192, maxDepth: 32, maxKeys: 100, required: false, default: "{}" } as never,
+    ])).toThrow(ResourceSchemaError);
+    expect(() => manifestOf([
+      { id: "code", type: "text", required: true },
+      { id: "body", type: "studio", required: false } as never,
+    ])).toThrow(ResourceSchemaError);
   });
 
   it("serializes deterministically and round-trips through canonical IR", () => {

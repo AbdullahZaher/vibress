@@ -24,6 +24,8 @@ import {recordExperimentalLifecycleTransition,reattestExperimentalLifecycleAfter
 import {settleExperimentalDomains} from "../../packages/database/src/schema-operator-experimental-settlement";
 import {moduleNamespaceName,reserveExperimentalModuleNamespace,verifyExperimentalModuleNamespace} from "../../packages/database/src/schema-operator-experimental-module-namespace";
 import {continueExperimentalOperation,inspectExperimentalOperations} from "../../packages/database/src/schema-operator-experimental-continuation";
+import {createDefaultStudioDocument} from "../../packages/studio-core/src";
+import {getFallbackChain} from "../../packages/i18n/src";
 const url=process.env.DATABASE_URL??"postgresql://vibress:vibress@127.0.0.1:5433/vibress";
 const suffix=randomBytes(5).toString("hex");
 const rolePasswords=new Map<string,string>();
@@ -322,6 +324,7 @@ describe("M03 actual isolated normative infrastructure",()=>{
         {id:"metadata",type:"json",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
         {id:"attachment",type:"media",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
         {id:"headline",type:"localized",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
+        {id:"body",type:"studio",required:false,maxBytes:8192,maxDepth:32,maxKeys:1000},
         {id:"stage",type:"enum",required:false,values:["draft","live"]},
         {id:"customer",type:"relation",required:false,targetResource:"customers"}
       ]}
@@ -333,20 +336,33 @@ describe("M03 actual isolated normative infrastructure",()=>{
       return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-a01-v1"}});
     };
     const ta=scoped("tenant-a"),tb=scoped("tenant-b");
-    type Deal={id:string;version_token:string;code:string;name:string;quantity:number|null;due_on:Date|null;ratio:string|null;value:{amount:string|null;currency:string|null};metadata:unknown;attachment:unknown;headline:unknown;stage:string|null;customer:string|null};
+    type Deal={id:string;version_token:string;code:string;name:string;quantity:number|null;due_on:Date|null;ratio:string|null;value:{amount:string|null;currency:string|null};metadata:unknown;attachment:unknown;headline:unknown;body:unknown;stage:string|null;customer:string|null};
     type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
-    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"deals",f.authority)));
+    // Media references carry a publication-scoped asset identity. The fixture
+    // persists assets in real PostgreSQL and the host resolves every written id
+    // through its own publication-scoped lookup (never the resource role).
+    await f.admin.query("CREATE TABLE public.fixture_media_assets(id text PRIMARY KEY, publication_id text NOT NULL)");
+    await f.admin.query("INSERT INTO public.fixture_media_assets VALUES('med_cover_a','pub-a'),('med_cover_b','pub-b')");
+    const media={publicationId:"pub-a",findById:async(id:string,publicationId?:string)=>publicationId?((await f.admin.query<{id:string}>("SELECT id FROM public.fixture_media_assets WHERE id=$1 AND publication_id=$2",[id,publicationId])).rows[0]??null):null};
+    const studio=createDefaultStudioDocument("Hello studio");
+    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"deals",f.authority,media)));
     const customerId=randomUUID();
     await uow.run(ta,tx=>tx.query("INSERT INTO "+table(f,m,"customers")+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'cust','C')",[customerId]));
     const created=await open(ta,resource=>resource.create("deal-1","First",{
       quantity:7,due_on:"2026-05-06",ratio:"12.34",
       value:{amount:"19.99",currency:"USD"},
       metadata:{a:[1,true]},
-      attachment:{url:"https://cdn.test/a.png",alt:"a"},
-      headline:{en:{title:"Hi"},ar:{title:"مرحبا"}},
+      attachment:{id:"med_cover_a",alt:"a"},
+      headline:{en:"Hi",ar:"مرحبا"},
+      body:studio,
       stage:"live",customer:customerId,
     })) as Deal;
-    expect(created).toMatchObject({code:"deal-1",name:"First",quantity:7,ratio:"12.34",value:{amount:"19.99",currency:"USD"},metadata:{a:[1,true]},attachment:{url:"https://cdn.test/a.png",alt:"a"},headline:{en:{title:"Hi"},ar:{title:"مرحبا"}},stage:"live",customer:customerId});
+    expect(created).toMatchObject({code:"deal-1",name:"First",quantity:7,ratio:"12.34",value:{amount:"19.99",currency:"USD"},metadata:{a:[1,true]},attachment:{id:"med_cover_a",alt:"a"},headline:{en:"Hi",ar:"مرحبا"},stage:"live",customer:customerId});
+    expect(created.body).toMatchObject({schema:"vibress-studio",version:1});
+    // Localized values resolve through the existing i18n fallback chain.
+    const chain=getFallbackChain("ar-EG"),localized=created.headline as Record<string,string>;
+    expect(chain).toEqual(["ar-EG","ar","en"]);
+    expect(chain.map(locale=>localized[locale]).find(text=>text!==undefined)).toBe("مرحبا");
     expect(created).not.toHaveProperty("value_currency");
     const due=created.due_on!;
     expect([due.getFullYear(),due.getMonth()+1,due.getDate()]).toEqual([2026,5,6]);
@@ -365,7 +381,14 @@ describe("M03 actual isolated normative infrastructure",()=>{
       [{metadata:{a:{b:{c:{d:1}}}}},"JSON_BOUND_REFUSED:DEPTH"],
       [{metadata:{a:undefined}},"JSON_BOUND_REFUSED:VALUE"],
       [{attachment:{alt:"no url"}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{attachment:{id:"med_cover_b"}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{attachment:{id:"https://cdn.test/a.png"}},"M03_VERSIONED_RESOURCE_REFUSED"],
       [{headline:"plain text"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{headline:{"EN":"Hi"}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{headline:{en:7}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{body:{schema:"other-format",version:1,root:{type:"root",children:[]}}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{body:{...studio,version:2}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{body:{schema:"vibress-studio",version:1,root:{type:"root",children:[{type:"text",text:"misplaced"}]}}},"M03_VERSIONED_RESOURCE_REFUSED"],
       [{stage:"archived"},"M03_VERSIONED_RESOURCE_REFUSED"],
       [{color:"red"},"M03_VERSIONED_RESOURCE_REFUSED"],
     ] as const){
@@ -374,8 +397,11 @@ describe("M03 actual isolated normative infrastructure",()=>{
     const deals=table(f,m,"deals");
     // Partial update keeps omitted money/json values and clears on explicit null.
     const updated=await open(ta,resource=>resource.update(created.id,created.version_token,"First revised",{value:{amount:"20.5",currency:"EUR"},metadata:null})) as Deal;
-    expect(updated).toMatchObject({name:"First revised",quantity:7,ratio:"12.34",value:{amount:"20.50",currency:"EUR"},metadata:null,attachment:{url:"https://cdn.test/a.png",alt:"a"}});
-    const cleared=await open(ta,resource=>resource.update(created.id,updated.version_token,"First revised",{value:null})) as Deal;
+    expect(updated).toMatchObject({name:"First revised",quantity:7,ratio:"12.34",value:{amount:"20.50",currency:"EUR"},metadata:null,attachment:{id:"med_cover_a",alt:"a"},headline:{en:"Hi",ar:"مرحبا"}});
+    expect(updated.body).toMatchObject({schema:"vibress-studio",version:1});
+    const revisedStudio=await open(ta,resource=>resource.update(created.id,updated.version_token,"Studio revised",{body:createDefaultStudioDocument("Revised body")})) as Deal;
+    expect(revisedStudio.body).toEqual(createDefaultStudioDocument("Revised body"));
+    const cleared=await open(ta,resource=>resource.update(created.id,revisedStudio.version_token,"First revised",{value:null})) as Deal;
     expect(cleared).toMatchObject({value:{amount:null,currency:null},metadata:null});
     // Version-checked mutation and tenant isolation still hold.
     expect(await open(ta,resource=>resource.update(created.id,created.version_token,"Stale",{value:{amount:"1.00",currency:"USD"}}))).toBeNull();
@@ -384,11 +410,19 @@ describe("M03 actual isolated normative infrastructure",()=>{
     // The database enforces the three-letter currency shape and jsonb bytes but
     // has no predicate for ISO membership or JSON depth/keys.
     await expect(f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,value,value_currency) VALUES('tenant-b',$1,'db-lower','DB',$2,'1.00','usd')",[randomUUID(),randomUUID()])).rejects.toMatchObject({code:"23514"});
-    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,metadata) VALUES('tenant-b',$1,'db-deep','DB',$2,$3::jsonb)",[randomUUID(),randomUUID(),JSON.stringify({a:{b:{c:{d:1}}}})]);
-    // Signed backfill supports bounded text and the declared jsonb families,
-    // refuses money (no pair representation) and applies the same JSON guard.
-    const backfilled=randomUUID();
-    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token) VALUES('tenant-b',$1,'bf-1','BF',$2)",[backfilled,randomUUID()]);
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,metadata,headline,body) VALUES('tenant-b',$1,'db-deep','DB',$2,$3::jsonb,$4::jsonb,$5::jsonb)",[randomUUID(),randomUUID(),JSON.stringify({a:{b:{c:{d:1}}}}),JSON.stringify({en:"Deep"}),JSON.stringify(studio)]);
+    // PostgreSQL independently enforces the Studio document identity, so a
+    // foreign schema/version can never be persisted even outside the adapter.
+    await expect(f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,body) VALUES('tenant-b',$1,'db-studio','DB',$2,$3::jsonb)",[randomUUID(),randomUUID(),JSON.stringify({schema:"vibress-studio",version:2,root:{type:"root",children:[]}})])).rejects.toMatchObject({code:"23514"});
+    await expect(f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,attachment) VALUES('tenant-b',$1,'db-media','DB',$2,$3::jsonb)",[randomUUID(),randomUUID(),JSON.stringify({url:"https://cdn.test/a.png"})])).rejects.toMatchObject({code:"23514"});
+    // Signed backfill supports bounded text and the validated JSON families,
+    // refuses money (no pair representation) and media (unprovable ownership),
+    // and applies the same guards before writing.
+    const backfilled=randomUUID(),bfHeadline=randomUUID(),bfBody=randomUUID();
+    const seedHeadline=JSON.stringify({en:"Seed"}),seedBody=JSON.stringify(createDefaultStudioDocument("Seed body")),seedMetadata=JSON.stringify({seed:true});
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,headline,body) VALUES('tenant-b',$1,'bf-1','BF',$2,$3::jsonb,$4::jsonb)",[backfilled,randomUUID(),seedHeadline,seedBody]);
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,body,metadata) VALUES('tenant-b',$1,'bf-2','BF',$2,$3::jsonb,$4::jsonb)",[bfHeadline,randomUUID(),seedBody,seedMetadata]);
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,headline,metadata) VALUES('tenant-b',$1,'bf-3','BF',$2,$3::jsonb,$4::jsonb)",[bfBody,randomUUID(),seedHeadline,seedMetadata]);
     const physicalDigest=compileProvisioningContract(m,f.scope).digest;
     const chunk=(tenantId:string,column:string,value:string,limit=1)=>{
       const s=f.authority.authenticatedSnapshot();
@@ -398,9 +432,16 @@ describe("M03 actual isolated normative infrastructure",()=>{
     };
     await expect(chunk("tenant-a","metadata",JSON.stringify({a:{b:{c:{d:1}}}}))).rejects.toThrow("JSON_BOUND_REFUSED:DEPTH");
     await expect(chunk("tenant-a","value","1.00")).rejects.toThrow("M03_PROVISIONING_REFUSED");
+    await expect(chunk("tenant-b","attachment",JSON.stringify({id:"med_cover_a"}))).rejects.toThrow("M03_BACKFILL_REFUSED:MEDIA_OWNERSHIP");
+    await expect(chunk("tenant-b","headline",JSON.stringify({EN:"Hi"}))).rejects.toThrow("M03_BACKFILL_REFUSED:VALUE");
+    await expect(chunk("tenant-b","body",JSON.stringify({...studio,version:2}))).rejects.toThrow("M03_BACKFILL_REFUSED:VALUE");
     expect(await chunk("tenant-b","metadata",JSON.stringify({note:"seeded"}))).toMatchObject({status:"COMMITTED",affected:1,complete:false});
     expect(await chunk("tenant-b","metadata",JSON.stringify({note:"seeded"}))).toMatchObject({status:"COMMITTED",affected:0,complete:true});
+    expect(await chunk("tenant-b","headline",JSON.stringify({en:"Backfill",ar:"تعبئة"}))).toMatchObject({status:"COMMITTED",affected:1});
+    expect(await chunk("tenant-b","body",JSON.stringify(studio))).toMatchObject({status:"COMMITTED",affected:1});
     expect((await f.admin.query("SELECT metadata FROM "+deals+" WHERE id=$1",[backfilled])).rows).toEqual([{metadata:{note:"seeded"}}]);
+    expect((await f.admin.query("SELECT headline FROM "+deals+" WHERE id=$1",[bfHeadline])).rows).toEqual([{headline:{en:"Backfill",ar:"تعبئة"}}]);
+    expect((await f.admin.query("SELECT body FROM "+deals+" WHERE id=$1",[bfBody])).rows).toEqual([{body:studio}]);
     console.info("M03_A01_MONEY_JSON_TYPED_WRITES=PASS");
   },60000);
   it("B01: persistent lifecycle CAS, immutable history, installer refusal, DB_COMMITTED vs ACTIVE, concurrency and supersession",async()=>{
@@ -1259,12 +1300,12 @@ it("A01/J02: exact typed columns, bounded CHECKs, value refusal and additive evo
   expect(definitions).toContain("total_currency ~ '^[A-Z]{3}$'::text");
   expect(definitions).toContain("pg_column_size(attributes) <= 512");
   expect(definitions).toContain("char_length(reference) <= 12");
-  expect(definitions).toContain("COALESCE(jsonb_typeof((cover -> 'url'::text)), ''::text) = 'string'::text");
+  expect(definitions).toContain("COALESCE((cover ->> 'id'::text), ''::text) ~ '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$'::text");
   expect(definitions).toContain("jsonb_typeof(summary) = 'object'::text");
   expect(constraints).toHaveLength(5);
   const uow=new TenantUnitOfWork(f.pool),ta=scope(f,"tenant-a"),tb=scope(f,"tenant-b"),id=randomUUID();
-  await uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,rate,total,total_currency,attributes,reference,due,cover,summary) VALUES($1,$2,'inv',7,12.34,120.50,'USD','{\"a\":1}'::jsonb,'REF-1','2028-02-29','{\"url\":\"/media/a.png\",\"alt\":\"A\"}'::jsonb,'{\"en\":\"Hello\",\"ar\":\"مرحبا\"}'::jsonb)",["tenant-a",id]));
-  expect((await uow.run(ta,tx=>tx.query("SELECT quantity,rate::text AS rate,total::text AS total,total_currency,attributes,reference,due::text AS due,cover,summary FROM "+t+" WHERE id=$1",[id]))).rows).toEqual([{quantity:7,rate:"12.34",total:"120.50",total_currency:"USD",attributes:{a:1},reference:"REF-1",due:"2028-02-29",cover:{url:"/media/a.png",alt:"A"},summary:{en:"Hello",ar:"مرحبا"}}]);
+  await uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,rate,total,total_currency,attributes,reference,due,cover,summary) VALUES($1,$2,'inv',7,12.34,120.50,'USD','{\"a\":1}'::jsonb,'REF-1','2028-02-29','{\"id\":\"med_a\",\"alt\":\"A\"}'::jsonb,'{\"en\":\"Hello\",\"ar\":\"مرحبا\"}'::jsonb)",["tenant-a",id]));
+  expect((await uow.run(ta,tx=>tx.query("SELECT quantity,rate::text AS rate,total::text AS total,total_currency,attributes,reference,due::text AS due,cover,summary FROM "+t+" WHERE id=$1",[id]))).rows).toEqual([{quantity:7,rate:"12.34",total:"120.50",total_currency:"USD",attributes:{a:1},reference:"REF-1",due:"2028-02-29",cover:{id:"med_a",alt:"A"},summary:{en:"Hello",ar:"مرحبا"}}]);
   expect((await uow.run(tb,tx=>tx.query("SELECT count(*)::int AS n FROM "+t))).rows).toEqual([{n:0}]);
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency) VALUES('tenant-b',$1,'cross',1,1,'USD')",[randomUUID()]))).rejects.toMatchObject({code:"42501"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'usd','{}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
@@ -1273,7 +1314,7 @@ it("A01/J02: exact typed columns, bounded CHECKs, value refusal and additive evo
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,attributes,summary) VALUES('tenant-a',$1,'bad',1,1,'USD',$2::jsonb,'{}')",[randomUUID(),JSON.stringify({a:"x".repeat(600)})]))).rejects.toMatchObject({code:"23514"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,reference,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','REF-TOO-LONG!','{}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,due,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','2026-02-30','{}')",[randomUUID()]))).rejects.toMatchObject({code:"22008"});
-  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary,cover) VALUES('tenant-a',$1,'bad',1,1,'USD','{}','{\"alt\":\"no url\"}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
+  await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary,cover) VALUES('tenant-a',$1,'bad',1,1,'USD','{}','{\"url\":\"/media/a.png\"}')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary,cover) VALUES('tenant-a',$1,'bad',1,1,'USD','{}','\"just-a-string\"')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'USD','[\"en\"]')",[randomUUID()]))).rejects.toMatchObject({code:"23514"});
   await expect(uow.run(ta,tx=>tx.query("INSERT INTO "+t+"(tenant_id,id,code,quantity,total,total_currency,summary) VALUES('tenant-a',$1,'bad',1,1,'USD',$2::jsonb)",[randomUUID(),JSON.stringify({en:"x".repeat(2100)})]))).rejects.toMatchObject({code:"23514"});
