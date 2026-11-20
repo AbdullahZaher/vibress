@@ -4957,6 +4957,7 @@ it("M03-REGISTRY-01: signed committed registry provenance, pure physical plannin
     dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
   const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
   await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await awaitQuiescentLab(cluster,lab.dbAdmin,lab.name);
   await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
   try{
     const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
