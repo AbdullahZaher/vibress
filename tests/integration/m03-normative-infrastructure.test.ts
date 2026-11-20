@@ -14,8 +14,8 @@ import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy"
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
 import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
-import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningConstraintName,provisioningIdentifier as qi,provisioningNamespace,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
-import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
+import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,compileRenameIntent,provisioningConstraintName,provisioningIdentifier as qi,provisioningNamespace,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
+import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,runExperimentalRename,experimentalRenameMessage,type ProvisioningApproval,type ExperimentalBackfillApproval,type ExperimentalRenameApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
 import {DisposableDurableRecoveryAuthority,recoveryAdministrationMessage} from "../../packages/database/src/schema-operator-experimental-durable-authority";
@@ -62,6 +62,14 @@ async function lab(tag:string,app:string):Promise<Lab>{
 function crm(f:Lab,extra?: "website"|"phone"|"notes"):SchemaManifest{
   const defs:ResourceDefinition[]=[
     {...f.scope,id:"customers",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"name",type:"text",required:true},...(extra?[{id:extra,type:"text" as const,required:false}]:[])]},
+    {...f.scope,id:"deals",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"customer",type:"relation",required:true,targetResource:"customers"},{id:"stage",type:"enum",required:true,values:["open","won"]}]},
+    {...f.scope,id:"activities",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"deal",type:"relation",required:false,targetResource:"deals"},{id:"done",type:"boolean",required:true}]},
+  ];
+  return createSchemaManifest(compileResourceSchema(defs,f.scope));
+}
+function renamedCrm(f:Lab,requiredTitle=false):SchemaManifest{
+  const defs:ResourceDefinition[]=[
+    {...f.scope,id:"customers",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"title",type:"text",required:requiredTitle}]},
     {...f.scope,id:"deals",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"customer",type:"relation",required:true,targetResource:"customers"},{id:"stage",type:"enum",required:true,values:["open","won"]}]},
     {...f.scope,id:"activities",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"deal",type:"relation",required:false,targetResource:"deals"},{id:"done",type:"boolean",required:true}]},
   ];
@@ -869,6 +877,93 @@ describe("M03 actual isolated normative infrastructure",()=>{
     await f.admin.query("DROP SCHEMA "+qi(holdings));
     expect((await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"holdings"})).status).toBe("RESERVED");
     console.info("M03_B06_MODULE_NAMESPACE=PASS");
+  },60000);
+  it("B05: reviewed rename expansion, signed bounded copy backfill and validation never drop the source column",async()=>{
+    const f=await lab("rename","reference-rename"),current=crm(f),target=renamedCrm(f);
+    await apply(f,current,approval(f,null,current));
+    const customers=table(f,current,"customers"),rowId=()=>randomUUID();
+    const intent={version:1 as const,resourceId:"customers",from:"name",to:"title",rationale:"Rename display name to title"};
+    const plan=compileRenameIntent(JSON.parse(wire(current)),JSON.parse(wire(target)),intent,f.scope);
+    expect(plan).toMatchObject({profile:"M03_RENAME_INTENT_V1",authorization:"NONE",compatibility:"EXPAND_AND_BACKFILL",destructive:false,resource:{id:"customers",table:current.resources.find(x=>x.id==="customers")!.tableName},from:{column:"name",type:"text"},to:{column:"title",type:"text"}});
+    expect(plan.phases.expand.execution).toBe("INSTALLER_REVIEW_REQUIRED");
+    expect(plan.phases.expand.statements).toHaveLength(1);
+    expect(plan.phases.expand.statements[0]).toContain(" ADD COLUMN ");
+    expect(plan.phases.expand.statements[0]).not.toMatch(/DROP|ALTER COLUMN|SET NOT NULL/i);
+    expect(plan.phases.backfill).toMatchObject({sourceColumn:"name",targetColumn:"title",execution:"SIGNED_BOUNDED_BACKFILL_REQUIRED"});
+    expect(plan.phases.validate.predicates).toEqual(['count(*) FILTER (WHERE "title" IS NULL) = 0']);
+    expect(plan.phases.contract.executable).toBe(false);
+    expect(plan.digest).toMatch(/^[a-f0-9]{64}$/);
+    // A rename is refused by the ordinary evolution compiler and inference to a
+    // required destination is refused by the intent compiler.
+    expect(()=>compileProvisioningTransition(current,target,f.scope)).toThrow("PROVISIONING_DESTRUCTIVE_REFUSED");
+    expect(()=>compileRenameIntent(JSON.parse(wire(current)),JSON.parse(wire(renamedCrm(f,true))),intent,f.scope)).toThrow("RENAME_INTENT_REFUSED");
+    const ids={ "tenant-a":[rowId(),rowId()], "tenant-b":[rowId()] };
+    for(const [tenant,rows] of Object.entries(ids))for(const id of rows)await f.admin.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES($1,$2,$3,'N')",[tenant,id,id]);
+    const approve=(phase:"EXPAND"|"BACKFILL"|"VALIDATE",tenantId:string,overrides:Partial<ExperimentalRenameApproval>={})=>{
+      const s=f.authority.authenticatedSnapshot();
+      const e:ExperimentalRenameApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:s.epoch,ledgerId:s.ledgerId,authorityHead:s.head,authoritySequence:s.sequence,revision:current.digest,targetRevision:target.digest,planDigest:plan.digest,operationId:randomUUID(),resourceId:"customers",from:"name",to:"title",phase,tenantId,limit:phase==="BACKFILL"?1:0,rationale:"Rename display name to title",...overrides};
+      const message=experimentalRenameMessage(e);
+      return {e,message,signature:sign(null,Buffer.from(message),credentials.privateKey).toString("base64url")};
+    };
+    const run=(x:ReturnType<typeof approve>,wireTarget=wire(target),signature=x.signature)=>runExperimentalRename(dbUrl(f.name,f.installer),x.message,signature,f.authority,wireTarget);
+    const columns=async()=>(await f.admin.query<{column:string;type:string;nullable:boolean;default:string|null}>("SELECT a.attname AS column,format_type(a.atttypid,a.atttypmod) AS type,NOT a.attnotnull AS nullable,pg_get_expr(d.adbin,d.adrelid) AS default FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum",[customers])).rows;
+    const before=await columns();
+    // Nothing runs without the exact signed plan binding, and a phase for an
+    // unreviewed expand is refused.
+    await expect(run(approve("EXPAND",""),wire(target),"A".repeat(86))).rejects.toThrow();
+    await expect(run(approve("EXPAND","",{planDigest:"f".repeat(64)}))).rejects.toThrow("M03_RENAME_REFUSED");
+    await expect(run(approve("EXPAND","",{targetRevision:"f".repeat(64)}))).rejects.toThrow("M03_RENAME_REFUSED");
+    await expect(run(approve("EXPAND",""),wire(renamedCrm(f,true)))).rejects.toThrow("M03_RENAME_REFUSED");
+    await expect(run(approve("BACKFILL","tenant-a"))).rejects.toThrow("M03_RENAME_REFUSED:NOT_EXPANDED");
+    await expect(run(approve("VALIDATE","tenant-a"))).rejects.toThrow("M03_RENAME_REFUSED:NOT_EXPANDED");
+    const runtimeApproval=approve("EXPAND","");
+    await expect(runExperimentalRename(dbUrl(f.name,f.runtime),runtimeApproval.message,runtimeApproval.signature,f.authority,wire(target))).rejects.toMatchObject({code:"42501"});
+    expect(await columns()).toEqual(before);
+    // EXPAND applies the reviewed statement once; the source column and its
+    // data survive and the strict catalog gate flags the uninstalled drift.
+    const expand=approve("EXPAND","");
+    expect(await run(expand)).toEqual({status:"APPLIED",phase:"EXPAND",column:"title"});
+    const expanded=await columns();
+    expect(expanded).toHaveLength(before.length+1);
+    expect(expanded.slice(0,before.length)).toEqual(before);
+    expect(expanded.at(-1)).toEqual({column:"title",type:"text",nullable:true,default:null});
+    expect((await f.admin.query("SELECT name FROM "+customers+" ORDER BY id")).rows.map(x=>x.name)).toEqual(["N","N","N"]);
+    expect(await run(expand)).toEqual({status:"ALREADY_APPLIED",phase:"EXPAND",column:"title"});
+    expect(await run(expand)).toEqual({status:"ALREADY_APPLIED",phase:"EXPAND",column:"title"});
+    await expect(run(approve("EXPAND",""))).rejects.toThrow("M03_RENAME_REFUSED:EXISTS");
+    expect(await columns()).toEqual(expanded);
+    await expect(check(f,current)).rejects.toThrow("M03_PROVISIONING_REFUSED");
+    // Validation is honest before and during the copy.
+    expect(await run(approve("VALIDATE","tenant-a"))).toMatchObject({status:"INCOMPLETE",rows:2,missing:2,divergent:0});
+    const first=approve("BACKFILL","tenant-a");
+    expect(await run(first)).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await run(first)).toMatchObject({status:"ALREADY_COMMITTED",affected:1});
+    expect(await run(approve("BACKFILL","tenant-a"))).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await run(approve("BACKFILL","tenant-a"))).toMatchObject({status:"COMMITTED",affected:0,complete:true});
+    await expect(run(approve("BACKFILL","tenant-a"))).rejects.toThrow("M03_RENAME_REFUSED:COMPLETE");
+    expect(await run(approve("VALIDATE","tenant-a"))).toEqual({status:"VALIDATED",rows:2,missing:0,divergent:0});
+    expect(await run(approve("VALIDATE","tenant-b"))).toMatchObject({status:"INCOMPLETE",rows:1,missing:1});
+    expect(await run(approve("BACKFILL","tenant-b"))).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await run(approve("BACKFILL","tenant-b"))).toMatchObject({status:"COMMITTED",affected:0,complete:true});
+    expect(await run(approve("VALIDATE","tenant-b"))).toEqual({status:"VALIDATED",rows:1,missing:0,divergent:0});
+    expect((await f.admin.query("SELECT tenant_id,title,name FROM "+customers+" ORDER BY tenant_id,id")).rows).toEqual([
+      {tenant_id:"tenant-a",title:"N",name:"N"},{tenant_id:"tenant-a",title:"N",name:"N"},{tenant_id:"tenant-b",title:"N",name:"N"},
+    ]);
+    const progress=await f.admin.query<{chunks:number;affected_total:string;complete:boolean}>("SELECT chunks,affected_total::text AS affected_total,complete FROM public.platform_schema_rename_progress_v1 ORDER BY tenant_id").then(r=>r.rows);
+    expect(progress).toEqual([{chunks:3,affected_total:"2",complete:true},{chunks:2,affected_total:"1",complete:true}]);
+    // Durable rename evidence is append-only and never rewritable.
+    await expect(f.admin.query("UPDATE public.platform_schema_rename_chunks_v1 SET affected=0")).rejects.toThrow("M03_RENAME_EVIDENCE_IMMUTABLE");
+    await expect(f.admin.query("DELETE FROM public.platform_schema_rename_phases_v1")).rejects.toThrow("M03_RENAME_EVIDENCE_IMMUTABLE");
+    await expect(f.admin.query("UPDATE public.platform_schema_rename_progress_v1 SET complete=false")).rejects.toThrow("M03_RENAME_PROGRESS_IMMUTABLE");
+    const runtime=await connect(f.name,f.runtime);
+    try{
+      for(const t of ["platform_schema_rename_phases_v1","platform_schema_rename_chunks_v1","platform_schema_rename_progress_v1"])await expect(runtime.query("SELECT * FROM public."+t)).rejects.toMatchObject({code:"42501"});
+    }finally{await runtime.end();}
+    // The destructive contract phase remains unexecutable: the source column
+    // and its data are still present after every non-destructive phase.
+    expect((await columns()).some(x=>x.column==="name")).toBe(true);
+    expect((await f.admin.query("SELECT name FROM "+customers+" ORDER BY id")).rows.map(x=>x.name)).toEqual(["N","N","N"]);
+    console.info("M03_B05_NON_DESTRUCTIVE_RENAME=PASS");
   },60000);
   it("B03: authenticated continuation settles an interrupted operation idempotently across restart",async()=>{
     const f=await lab("continuation","reference-continuation"),m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"assets",ownership:"application",fields:[{id:"code",type:"text",required:true}]}],f.scope)),a=approval(f,null,m);

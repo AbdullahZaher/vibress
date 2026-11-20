@@ -4,7 +4,7 @@
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
-import {compileProvisioningContract,compileProvisioningTransition,enforceBoundedJson,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
+import {compileProvisioningContract,compileProvisioningTransition,compileRenameIntent,enforceBoundedJson,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
 import {CURRENT_STUDIO_VERSION,assertStudioDocumentEditable,checkDocumentResourceLimits,normalizeStudioDocument,validateStudioDocument} from "@vibress/studio-core";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import {recordExperimentalLifecycleTransition} from "./schema-operator-experimental-registry-lifecycle";
@@ -68,9 +68,9 @@ export async function reserveExperimentalNamespace(db:ClientBase,scope:Scope,rol
     await db.query("GRANT USAGE ON SCHEMA "+qi(namespace)+" TO "+qi(runtime));
     const physical=(await db.query<{system:string;timeline:number}>("SELECT (pg_control_system()).system_identifier::text AS system,(pg_control_checkpoint()).timeline_id AS timeline")).rows[0]!;
     await db.query("INSERT INTO public.platform_schema_installation_trust_v1(installation_id,application_id,database_name,database_oid,system_identifier,timeline,namespace,installer_role,runtime_role,approval_key,approval_key_digest,epoch,ledger_id,profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)",[target.installationId,target.applicationId,id.name,id.oid,physical.system,physical.timeline,namespace,installer,runtime,keyBytes.toString("base64"),keyDigest,state.epoch,state.ledgerId,PROVISIONING_PROFILE]);
-    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_revision_states_v1 TO "+qi(installer));
-    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 TO "+qi(installer));
-    await db.query("GRANT UPDATE(chunks,affected_total,complete,completed_at,updated_at) ON public.platform_schema_backfill_targets_v1 TO "+qi(installer));
+    await db.query("GRANT SELECT ON public.platform_schema_installation_trust_v1,public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_rename_phases_v1,public.platform_schema_rename_chunks_v1,public.platform_schema_rename_progress_v1,public.platform_schema_revision_states_v1 TO "+qi(installer));
+    await db.query("GRANT INSERT ON public.platform_schema_registry,public.platform_schema_revisions_v1,public.platform_schema_backfill_chunks_v1,public.platform_schema_backfill_targets_v1,public.platform_schema_rename_phases_v1,public.platform_schema_rename_chunks_v1,public.platform_schema_rename_progress_v1,public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 TO "+qi(installer));
+    await db.query("GRANT UPDATE(chunks,affected_total,complete,completed_at,updated_at) ON public.platform_schema_backfill_targets_v1,public.platform_schema_rename_progress_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(state,state_version,operation_id,approval_id,authority_epoch,authority_head,authority_sequence,actor,updated_at) ON public.platform_schema_revision_states_v1 TO "+qi(installer));
     await db.query("GRANT UPDATE(manifest,manifest_digest,updated_at) ON public.platform_schema_registry TO "+qi(installer));
     await db.query("GRANT SELECT(installation_id,application_id,database_name,database_oid,system_identifier,timeline,epoch,ledger_id,profile,revoked,runtime_role,approval_key,approval_key_digest) ON public.platform_schema_installation_trust_v1 TO "+qi(runtime));
@@ -510,4 +510,135 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     if(dispatched){if(!authority.authenticatedSnapshot().pending)authority.beginRecovery();throw new ExperimentalProvisioningUnknown();}
     await db.query("ROLLBACK").catch(()=>undefined);throw error;
   }finally{await db.end().catch(()=>undefined);}
+}
+
+export interface ExperimentalRenameApproval{
+ version:1;installationId:string;applicationId:string;databaseName:string;databaseOid:string;epoch:string;ledgerId:string;authorityHead:string;authoritySequence:number;
+ revision:string;targetRevision:string;planDigest:string;operationId:string;resourceId:string;from:string;to:string;
+ phase:"EXPAND"|"BACKFILL"|"VALIDATE";tenantId:string;limit:number;rationale:string;
+}
+export function experimentalRenameMessage(e:ExperimentalRenameApproval){
+ return JSON.stringify(["VIBRESS-M03-RENAME-V1",e.version,e.installationId,e.applicationId,e.databaseName,e.databaseOid,e.epoch,e.ledgerId,e.authorityHead,e.authoritySequence,e.revision,e.targetRevision,e.planDigest,e.operationId,e.resourceId,e.from,e.to,e.phase,e.tenantId,e.limit,e.rationale]);
+}
+const renameRefusal=(reason:string):never=>{throw Error("M03_RENAME_REFUSED:"+reason);};
+const tenantIdPattern=/^[a-z][a-z0-9_-]{1,62}$/;
+function parseRename(wire:string):ExperimentalRenameApproval{
+ if(typeof wire!=="string"||wire.length>16384)return fail();
+ const raw:unknown=JSON.parse(wire);
+ if(!Array.isArray(raw)||raw.length!==21||raw[0]!=="VIBRESS-M03-RENAME-V1")return fail();
+ const [_,version,installationId,applicationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,revision,targetRevision,planDigest,operationId,resourceId,from,to,phase,tenantId,limit,rationale]=raw as unknown[];
+ const is=(v:unknown,re:RegExp):v is string=>typeof v==="string"&&re.test(v);
+ if(version!==1||!is(installationId,/^[a-z][a-z0-9_-]{1,62}$/)||!is(applicationId,/^[a-z][a-z0-9_-]{1,62}$/)||!is(databaseName,/^vibress_s03_norm_[a-z0-9_]+$/)||!is(databaseOid,/^\d{1,10}$/)||
+   !is(epoch,uuid)||!is(ledgerId,uuid)||!is(authorityHead,sha)||typeof authoritySequence!=="number"||!Number.isSafeInteger(authoritySequence)||authoritySequence<1||
+   !is(revision,sha)||!is(targetRevision,sha)||!is(planDigest,sha)||!is(operationId,uuid)||!is(resourceId,/^[a-z][a-z0-9_]{0,62}$/)||
+   !is(from,/^[a-z][a-z0-9_]{0,62}$/)||!is(to,/^[a-z][a-z0-9_]{0,62}$/)||from===to||
+   (phase!=="EXPAND"&&phase!=="BACKFILL"&&phase!=="VALIDATE")||typeof tenantId!=="string"||typeof limit!=="number"||!Number.isInteger(limit)||
+   typeof rationale!=="string"||rationale.trim().length<8||rationale.length>512||rationale.includes("\u0000"))return fail();
+ if(phase==="EXPAND"?(tenantId!==""||limit!==0):!is(tenantId,tenantIdPattern)||tenantId==="pub_default")return fail();
+ if(phase==="BACKFILL"?(limit<1||limit>100):limit!==0)return fail();
+ const e={version,installationId,applicationId,databaseName,databaseOid,epoch,ledgerId,authorityHead,authoritySequence,revision,targetRevision,planDigest,operationId,resourceId,from,to,phase,tenantId,limit,rationale} as const;
+ if(experimentalRenameMessage(e as ExperimentalRenameApproval)!==wire)return fail();
+ return e;
+}
+/** Reviewed non-destructive rename phases. EXPAND applies the compiler's
+ * exact reviewed ADD COLUMN, BACKFILL copies source to destination for one
+ * tenant in bounded chunks, VALIDATE runs the compiler predicate. The source
+ * column is never dropped and no destructive contract phase is reachable. */
+export async function runExperimentalRename(connectionString:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority,proposedWire:string){
+ assertLocalUrl(connectionString);
+ const e=parseRename(approvalWire);
+ if(typeof signature!=="string"||!/^[A-Za-z0-9_-]{86}$/.test(signature)||typeof proposedWire!=="string"||proposedWire.length>1024*1024)return fail();
+ const db=new Client({connectionString,connectionTimeoutMillis:4000,query_timeout:15000});
+ let transportFailed=false,dispatched=false;db.on("error",()=>{transportFailed=true;});
+ try{
+  await db.connect();await db.query("BEGIN");
+  await db.query("SET LOCAL search_path=pg_catalog; SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='10s'");
+  await db.query("SELECT pg_advisory_xact_lock(118033,301)");
+  const t=await loadTrust(db),state=authority.authenticatedSnapshot();
+  const keyBytes=Buffer.from(t.approval_key,"base64"),key=createPublicKey({key:keyBytes,format:"der",type:"spki"});
+  if(hash(keyBytes)!==t.approval_key_digest||key.asymmetricKeyType!=="ed25519"||!verify(null,Buffer.from(approvalWire),key,Buffer.from(signature,"base64url"))||
+    state.pending||state.businessLease||state.epoch!==t.epoch||state.ledgerId!==t.ledger_id||state.installationId!==t.installation_id||state.databaseName!==t.database_name||
+    e.applicationId!==t.application_id||e.installationId!==t.installation_id||e.databaseName!==t.database_name||e.databaseOid!==t.database_oid||
+    e.epoch!==t.epoch||e.ledgerId!==state.ledgerId||e.authorityHead!==state.head||e.authoritySequence!==state.sequence)return fail();
+  const history=await verifyProvisioningHistory(db,t,state.provisioningOperations??[]);
+  const active=(await db.query<{manifest:string;manifest_digest:string}>("SELECT manifest,manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",[t.installation_id])).rows[0];
+  if(!active||active.manifest_digest!==e.revision||history.at(-1)?.revision_digest!==e.revision)return fail();
+  const current=parseSchemaManifest(JSON.parse(active.manifest)),scope=scopeOf(t),physical=compileProvisioningContract(current,scope);
+  let target;
+  try{target=parseSchemaManifest(JSON.parse(proposedWire));}catch{return renameRefusal("PLAN");}
+  if(JSON.stringify(target)!==proposedWire||target.digest!==e.targetRevision)return renameRefusal("PLAN");
+  let plan;
+  try{plan=compileRenameIntent(current,target,{version:1,resourceId:e.resourceId,from:e.from,to:e.to,rationale:e.rationale},scope);}catch{return renameRefusal("PLAN");}
+  if(plan.digest!==e.planDigest||plan.resource.id!==e.resourceId||plan.from.column!==e.from||plan.to.column!==e.to||
+    plan.from.type!==plan.to.type||plan.destructive||plan.authorization!=="NONE")return renameRefusal("PLAN");
+  const resource=physical.resources.find(r=>r.id===e.resourceId);
+  if(!resource||resource.table!==plan.resource.table)return renameRefusal("SHAPE");
+  const q=qualified(t.namespace,resource.table);
+  const columns=async()=>(await db.query<{name:string;type:string;notnull:boolean;default:string|null;identity:string}>(`SELECT a.attname::text AS name,format_type(a.atttypid,a.atttypmod) AS type,a.attnotnull AS notnull,pg_get_expr(d.adbin,d.adrelid) AS default,a.attidentity::text AS identity FROM pg_catalog.pg_attribute a LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum WHERE a.attrelid=$1::regclass AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum`,[q])).rows;
+  if(e.phase==="EXPAND"){
+    const prior=(await db.query<{evidence:string;signature:string}>("SELECT evidence,signature FROM public.platform_schema_rename_phases_v1 WHERE operation_id=$1",[e.operationId])).rows[0];
+    if(prior){
+      if(prior.evidence!==approvalWire||prior.signature!==signature)return fail();
+      const observed=await columns(),added=observed.find(c=>c.name===e.to);
+      if(observed.length!==resource.columns.length+1||!added||added.type!==plan.to.type||added.notnull||added.default!==null||added.identity!=="")return renameRefusal("SHAPE");
+      await db.query("ROLLBACK");return {status:"ALREADY_APPLIED" as const,phase:"EXPAND" as const,column:e.to};
+    }
+    if((await db.query("SELECT 1 FROM public.platform_schema_rename_phases_v1 WHERE installation_id=$1 AND revision_digest=$2 AND target_revision_digest=$3 AND resource_id=$4 AND source_column=$5 AND target_column=$6",[t.installation_id,e.revision,e.targetRevision,e.resourceId,e.from,e.to])).rowCount!==0)return renameRefusal("EXISTS");
+    await verifyCatalog(db,t,physical);
+    const observed=await columns();
+    if(observed.some(c=>c.name===e.to))return renameRefusal("EXISTS");
+    const source=observed.find(c=>c.name===e.from);
+    if(!source||source.type!==plan.from.type||observed.length!==resource.columns.length)return renameRefusal("SHAPE");
+    const statements=plan.phases.expand.statements;
+    if(statements.length!==1||!/^ALTER TABLE [a-z0-9_."]+ ADD COLUMN [a-z0-9_"]+ [a-z0-9_ ()]+$/.test(statements[0]!)||/DROP|ALTER COLUMN|SET NOT NULL/i.test(statements[0]!))return renameRefusal("PLAN");
+    for(const statement of statements)await db.query(statement);
+    const after=await columns(),added=after.find(c=>c.name===e.to);
+    if(after.length!==observed.length+1||!added||added.type!==plan.to.type||added.notnull||added.default!==null||added.identity!==""||
+      !equal(after.slice(0,observed.length),observed))return renameRefusal("SHAPE");
+    await db.query("INSERT INTO public.platform_schema_rename_phases_v1(installation_id,revision_digest,target_revision_digest,resource_id,source_column,target_column,plan_digest,operation_id,evidence,signature) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[t.installation_id,e.revision,e.targetRevision,e.resourceId,e.from,e.to,e.planDigest,e.operationId,approvalWire,signature]);
+    await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
+    if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
+    dispatched=true;if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
+    return {status:"APPLIED" as const,phase:"EXPAND" as const,column:e.to};
+  }
+  const phase=(await db.query<{plan_digest:string}>("SELECT plan_digest FROM public.platform_schema_rename_phases_v1 WHERE installation_id=$1 AND revision_digest=$2 AND target_revision_digest=$3 AND resource_id=$4 AND source_column=$5 AND target_column=$6",[t.installation_id,e.revision,e.targetRevision,e.resourceId,e.from,e.to])).rows[0];
+  if(!phase||phase.plan_digest!==e.planDigest)return renameRefusal("NOT_EXPANDED");
+  const observed=await columns(),source=observed.find(c=>c.name===e.from),added=observed.find(c=>c.name===e.to);
+  if(!source||source.type!==plan.from.type||observed.length!==resource.columns.length+1||!added||added.type!==plan.to.type||added.notnull||added.default!==null||added.identity!==""||
+    !equal(observed.slice(0,resource.columns.length),resource.columns.map(c=>({name:c.name,type:c.type,notnull:c.required,default:null,identity:""}))))return renameRefusal("SHAPE");
+  if(e.phase==="BACKFILL"){
+    const prior=(await db.query<{evidence:string;signature:string;affected:number;ids:string[]}>("SELECT evidence,signature,affected,ids FROM public.platform_schema_rename_chunks_v1 WHERE operation_id=$1",[e.operationId])).rows[0];
+    if(prior){
+      if(prior.evidence!==approvalWire||prior.signature!==signature)return fail();
+      const complete=(await db.query<{complete:boolean}>("SELECT complete FROM public.platform_schema_rename_progress_v1 WHERE installation_id=$1 AND revision_digest=$2 AND target_revision_digest=$3 AND tenant_id=$4 AND resource_id=$5 AND source_column=$6 AND target_column=$7",[t.installation_id,e.revision,e.targetRevision,e.tenantId,e.resourceId,e.from,e.to])).rows[0]?.complete??false;
+      await db.query("ROLLBACK");return {status:"ALREADY_COMMITTED" as const,affected:prior.affected,ids:prior.ids,complete};
+    }
+    await db.query("INSERT INTO public.platform_schema_rename_progress_v1(installation_id,revision_digest,target_revision_digest,tenant_id,resource_id,source_column,target_column) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING",[t.installation_id,e.revision,e.targetRevision,e.tenantId,e.resourceId,e.from,e.to]);
+    const progress=(await db.query<{complete:boolean}>("SELECT complete FROM public.platform_schema_rename_progress_v1 WHERE installation_id=$1 AND revision_digest=$2 AND target_revision_digest=$3 AND tenant_id=$4 AND resource_id=$5 AND source_column=$6 AND target_column=$7 FOR UPDATE",[t.installation_id,e.revision,e.targetRevision,e.tenantId,e.resourceId,e.from,e.to])).rows[0];
+    if(!progress)return renameRefusal("PROGRESS");
+    if(progress.complete)return renameRefusal("COMPLETE");
+    await db.query("SELECT set_config('vibress.application_id',$1,true),set_config('vibress.tenant_id',$2,true)",[e.applicationId,e.tenantId]);
+    const from=qi(e.from),to=qi(e.to);
+    const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+to+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+to+"=d."+from+" FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+to+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit])).rows;
+    const ids=updated.map(x=>x.id).sort();
+    await db.query("INSERT INTO public.platform_schema_rename_chunks_v1(installation_id,revision_digest,target_revision_digest,operation_id,tenant_id,resource_id,source_column,target_column,evidence,signature,affected,ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[t.installation_id,e.revision,e.targetRevision,e.operationId,e.tenantId,e.resourceId,e.from,e.to,approvalWire,signature,ids.length,ids]);
+    await db.query("UPDATE public.platform_schema_rename_progress_v1 SET chunks=chunks+1,affected_total=affected_total+$8,complete=$9,completed_at=CASE WHEN $9 THEN clock_timestamp() ELSE completed_at END,updated_at=clock_timestamp() WHERE installation_id=$1 AND revision_digest=$2 AND target_revision_digest=$3 AND tenant_id=$4 AND resource_id=$5 AND source_column=$6 AND target_column=$7",[t.installation_id,e.revision,e.targetRevision,e.tenantId,e.resourceId,e.from,e.to,ids.length,ids.length===0]);
+    await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
+    if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
+    dispatched=true;if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
+    return {status:"COMMITTED" as const,affected:ids.length,ids,complete:ids.length===0};
+  }
+  const predicate=plan.phases.validate.predicates[0];
+  if(plan.phases.validate.predicates.length!==1||!predicate||!/^count\(\*\) FILTER \(WHERE "[a-z0-9_]+" IS NULL\) = 0$/.test(predicate)||!predicate.includes(qi(e.to)))return renameRefusal("PLAN");
+  await db.query("SELECT set_config('vibress.application_id',$1,true),set_config('vibress.tenant_id',$2,true)",[e.applicationId,e.tenantId]);
+  const validated=(await db.query<{ok:boolean;rows:number;missing:number;divergent:number}>("SELECT ("+predicate+") AS ok,count(*)::int AS rows,count(*) FILTER (WHERE "+qi(e.to)+" IS NULL)::int AS missing,count(*) FILTER (WHERE "+qi(e.to)+" IS NOT NULL AND "+qi(e.to)+" IS DISTINCT FROM "+qi(e.from)+")::int AS divergent FROM "+q+" WHERE tenant_id=$1",[e.tenantId])).rows[0]!;
+  if((validated.missing===0)!==validated.ok)return renameRefusal("SHAPE");
+  await roleContract(db,t.installer_role,t.runtime_role,t.namespace);
+  if(!equal(state,authority.authenticatedSnapshot())||transportFailed)return fail();
+  if((await db.query("COMMIT")).command!=="COMMIT"||transportFailed)throw new ExperimentalProvisioningUnknown();
+  return {status:validated.ok&&validated.divergent===0?"VALIDATED" as const:"INCOMPLETE" as const,rows:validated.rows,missing:validated.missing,divergent:validated.divergent};
+ }catch(error){
+  if(dispatched){if(!authority.authenticatedSnapshot().pending)authority.beginRecovery();throw new ExperimentalProvisioningUnknown();}
+  await db.query("ROLLBACK").catch(()=>undefined);throw error;
+ }finally{await db.end().catch(()=>undefined);}
 }

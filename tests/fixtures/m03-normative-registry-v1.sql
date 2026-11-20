@@ -150,3 +150,65 @@ CREATE FUNCTION public.platform_module_namespaces_immutable_v1() RETURNS trigger
 BEGIN RAISE EXCEPTION 'M03_MODULE_NAMESPACE_IMMUTABLE'; END $module_namespaces$;
 CREATE TRIGGER platform_module_namespaces_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_module_namespaces_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_module_namespaces_immutable_v1();
 REVOKE ALL ON FUNCTION public.platform_module_namespaces_immutable_v1() FROM PUBLIC;
+
+-- Rename intent evidence v1: reviewed EXPAND, bounded copy chunks and
+-- monotonic per-tenant progress. The source column is never dropped here.
+CREATE TABLE public.platform_schema_rename_phases_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ plan_digest text NOT NULL CHECK(plan_digest ~ '^[a-f0-9]{64}$'),
+ operation_id uuid NOT NULL UNIQUE,
+ evidence text NOT NULL, signature text NOT NULL,
+ applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,target_revision_digest,resource_id,source_column,target_column),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_phases_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_rename_evidence_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $rename_evidence$
+BEGIN RAISE EXCEPTION 'M03_RENAME_EVIDENCE_IMMUTABLE'; END $rename_evidence$;
+CREATE TRIGGER platform_schema_rename_phases_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_phases_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_evidence_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_rename_evidence_immutable_v1() FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_rename_chunks_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ operation_id uuid PRIMARY KEY,
+ tenant_id text NOT NULL, resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ evidence text NOT NULL, signature text NOT NULL, affected integer NOT NULL CHECK(affected BETWEEN 0 AND 100),
+ ids text[] NOT NULL, committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_chunks_v1 FROM PUBLIC;
+CREATE TRIGGER platform_schema_rename_chunks_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_chunks_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_evidence_immutable_v1();
+
+CREATE TABLE public.platform_schema_rename_progress_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ tenant_id text NOT NULL, resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ chunks integer NOT NULL DEFAULT 0 CHECK(chunks>=0),
+ affected_total bigint NOT NULL DEFAULT 0 CHECK(affected_total>=0),
+ complete boolean NOT NULL DEFAULT false,
+ completed_at timestamptz, updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,target_revision_digest,tenant_id,resource_id,source_column,target_column),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_progress_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_rename_progress_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $rename_progress$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF OLD.complete THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NEW.installation_id<>OLD.installation_id OR NEW.revision_digest<>OLD.revision_digest OR NEW.target_revision_digest<>OLD.target_revision_digest OR
+    NEW.tenant_id<>OLD.tenant_id OR NEW.resource_id<>OLD.resource_id OR NEW.source_column<>OLD.source_column OR NEW.target_column<>OLD.target_column THEN
+   RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE';
+ END IF;
+ IF NEW.chunks<OLD.chunks OR NEW.affected_total<OLD.affected_total THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NEW.complete AND NEW.completed_at IS NULL THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NOT NEW.complete AND NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ RETURN NEW;
+END $rename_progress$;
+CREATE TRIGGER platform_schema_rename_progress_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_progress_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_progress_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_rename_progress_immutable_v1() FROM PUBLIC;
