@@ -334,6 +334,17 @@ describe("C01 legacy CMS additive application/installation identity", () => {
     });
     expect((await inventoryLegacyCms(cms)).digest).toBe(before.digest);
     expect((await cms.query("SELECT id,payload,status FROM outbox_events ORDER BY id")).rows).toEqual(preserved.rows);
+    // Historical flat payloads may have a domain-specific "version" field;
+    // do not confuse that field with the envelope's version discriminator.
+    await cms.query(
+      "INSERT INTO outbox_events(id,event_type,payload,status,attempts) VALUES('ob_flat_business_version','content_entry.updated',$1::jsonb,'pending',0)",
+      [JSON.stringify({publicationId:"pub_alpha",entryId:"ce_a1",version:2})],
+    );
+    try{
+      const historical=await inventoryLegacyCms(cms);
+      expect(historical.publications.find(p=>p.publicationId==="pub_alpha")?.counts.outboxEvents).toBe(3);
+      expect(historical.digest).not.toBe(before.digest);
+    }finally{await cms.query("DELETE FROM outbox_events WHERE id='ob_flat_business_version'");}
     const rejected=[
       {id:"ob_bad_version",event:"post.published",payload:{version:2,eventType:"post.published",payload:{publicationId:"pub_alpha"}}},
       {id:"ob_bad_mismatch",event:"post.published",payload:{version:1,eventType:"post.deleted",payload:{publicationId:"pub_alpha"}}},
