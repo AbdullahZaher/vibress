@@ -456,6 +456,87 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
     console.info("M03_A02_RELATION_AWARE_PARENT_CHILD_SOFT_DELETE=PASS");
   },60000);
+  it("A02/J02: two real PostgreSQL sessions serialize child creation and parent soft-delete",async()=>{
+    const f=await lab("relationrace","reference-parent-child-concurrency");
+    const m=createSchemaManifest(compileResourceSchema([
+      {...f.scope,id:"parents",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false}
+      ]},
+      {...f.scope,id:"children",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+        {id:"parent",type:"relation",required:false,targetResource:"parents"}
+      ]}
+    ],f.scope));
+    await apply(f,m,approval(f,null,m));
+    const uow=new TenantUnitOfWork(f.pool);
+    const permissions=["resource.parents.create","resource.parents.delete","resource.parents.read","resource.children.create","resource.children.read"];
+    const tenantId=asTenantId("tenant-a"),principalId=asPrincipalId("fixture-race-principal"),applicationId=f.scope.applicationId;
+    const scoped=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-relation-race-v1"}});
+    const ptable=table(f,m,"parents"),ctable=table(f,m,"children");
+    const parent=await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).create("race-p1","Race parent 1"));
+    let signalChecked!:()=>void,releaseChecked!:()=>void;
+    const relationChecked=new Promise<void>(resolve=>{signalChecked=resolve;});
+    const allowChildInsert=new Promise<void>(resolve=>{releaseChecked=resolve;});
+    // Pause a real adapter after PostgreSQL has answered the live-parent
+    // verification but before the child INSERT. No query result is mocked.
+    const childWork=uow.run(scoped,async tx=>{
+      const barrier=new Proxy(tx,{get(target,key){
+        if(key==="query")return async <T=unknown>(sql:string,params?:unknown[])=>{
+          const result=await target.query<T>(sql,params);
+          if(sql.includes("deleted_on IS NULL")&&sql.includes(ptable)){
+            signalChecked();
+            await allowChildInsert;
+          }
+          return result;
+        };
+        return Reflect.get(target,key,target);
+      }});
+      return (await openExperimentalVersionedResource(barrier,wire(m),"children",f.authority)).create("race-child-1","Race child 1",{parent:parent.id});
+    });
+    await relationChecked;
+    let deletionError:unknown;
+    try{
+      // Baseline's unprotected EXISTS permits deletion to COMMIT here.
+      // A compatible parent-row lock must instead force SQLSTATE 55P03.
+      await uow.run(scoped,async tx=>{
+        await tx.query("SET LOCAL lock_timeout = '250ms'");
+        return (await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).remove(parent.id,parent.version_token);
+      });
+    }catch(error){deletionError=error;}
+    finally{releaseChecked();}
+    const created=await childWork;
+    expect(deletionError).toMatchObject({code:"55P03"});
+    const joined=await f.admin.query<{child_deleted:boolean;parent_deleted:boolean}>(
+      "SELECT c.deleted_on IS NOT NULL AS child_deleted,p.deleted_on IS NOT NULL AS parent_deleted FROM "+ctable+" c JOIN "+ptable+" p ON p.tenant_id=c.tenant_id AND p.id=c.parent WHERE c.id=$1",[created.id]);
+    expect(joined.rows).toEqual([{child_deleted:false,parent_deleted:false}]);
+
+    const second=await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).create("race-p2","Race parent 2"));
+    let parentLocked!:()=>void,releaseParent!:()=>void;
+    const holding=new Promise<void>(resolve=>{parentLocked=resolve;});
+    const continueParent=new Promise<void>(resolve=>{releaseParent=resolve;});
+    const parentWork=uow.run(scoped,async tx=>{
+      await tx.query("SELECT id FROM "+ptable+" WHERE tenant_id=$1 AND id=$2 FOR NO KEY UPDATE",["tenant-a",second.id]);
+      parentLocked();
+      await continueParent;
+      return (await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).remove(second.id,second.version_token);
+    });
+    await holding;
+    let insertionError:unknown;
+    try{
+      await uow.run(scoped,async tx=>{
+        await tx.query("SET LOCAL lock_timeout = '250ms'");
+        return (await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("race-child-2","Must wait for deletion",{parent:second.id});
+      });
+    }catch(error){insertionError=error;}
+    finally{releaseParent();}
+    expect(insertionError).toMatchObject({code:"55P03"});
+    expect(await parentWork).toBe(true);
+    await expect(uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("race-child-3","Deleted target",{parent:second.id}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    console.info("M03_213_01_PG16_TWO_SESSION_RELATION_LOCKING=PASS");
+  },120000);
   it("A01: typed leaf resources enforce money and bounded JSON on create, partial update, CAS and signed backfill",async()=>{
     const f=await lab("a01","reference-typed-guards");
     const m=createSchemaManifest(compileResourceSchema([
