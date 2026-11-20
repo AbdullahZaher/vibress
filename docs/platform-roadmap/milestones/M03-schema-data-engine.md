@@ -152,13 +152,13 @@ Apply these requirements to existing **M03-E04/E08/E09**. See [RLS/views](../RLS
 
 | Evidence | Status / link |
 | --- | --- |
-| Accountable owner | TBD |
+| Accountable owner | Agent 01 — Principal Software Architect / Engineering Director / Engineering Integration Lead (local execution only); Agent 06 independent certification OPEN |
 | ADR / public contract | TBD |
-| Immutable implementation commit SHA | TBD |
-| CI checks and test fixtures | TBD |
-| Security/tenancy and migration evidence | TBD |
-| Deployment/restore evidence | TBD |
-| Independent reviewer and decision | **OPEN — not certified** |
+| Immutable implementation commit SHA | Final branch HEAD at handoff; exact SHA/tree, preserved commits and CI run IDs are recorded in the consolidated M03 handoff report. Earlier activation point: `7574067236a35650e16eaabe1ff281dfa86d9bb0` (tree `a8962ebf9fb3efe723ce882008afb43492f7ece9`) |
+| CI checks and test fixtures | Dedicated M03 push run `44809868253` (all 4 physical + 4 normative-physical + normative-functional scenarios green at the activation SHA); full repository CI push run `44809868247`; successor-SHA results recorded in the consolidated report |
+| Security/tenancy and migration evidence | Full integration 834 passed / 14 CI-gated skips; role-atomic 19/19; schema-engine 92/92; fresh replay 61 migrations / 111 public tables; production dependency audit clean; development advisory dispositioned below |
+| Deployment/restore evidence | Dedicated owned-PG16 PITR/rewind matrix passed in CI; no deployment performed and no production-grade durability claimed |
+| Independent reviewer and decision | **OPEN — not certified (Agent 06; FUNC-01/FUNC-02 remain independently unresolved)** |
 
 ## Execution reconciliation — 2026-11-19
 
@@ -200,6 +200,68 @@ This section records evidence, not normative acceptance. All original criteria a
 | E11 | TESTED_RESTRICTED — four real artifacts, signed jobs and payload binding; V2 admission predicate binds the ACTIVE parent revision (unit tested only); legacy CMS mutations and their outbox rows commit atomically with deterministic-event-id replay dedupe | authenticated READY V2 provisioning journey, lifecycle epoch reattestation, in-flight compatibility, actual recovery resume |
 
 No Epic is marked FUNCTIONALLY_COMPLETE. Exact final CI, independent Agent 06 verdict, and external governance remain required. No risk acceptance.
+
+
+## Final integrated reconciliation — 2026-11-20 (supersedes stale execution statuses above)
+
+This section supersedes only the *execution statuses* recorded in the earlier local checkpoints above; the original acceptance criteria, historical RED/GREEN evidence and all preserved commits remain intact. No epic is independently accepted. Status vocabulary: **IMPLEMENTED** (code exists), **LOCAL_TESTED** (executed on the owned disposable topology), **CI_VERIFIED** (executed on the exact candidate SHA by push-triggered GitHub Actions), **TESTED_RESTRICTED** (fixture-bound evidence with an explicit residual), **INDEPENDENT_REVIEW_PENDING**, **BLOCKED_BY_POLICY**, **BLOCKED_BY_INFRASTRUCTURE**.
+
+### Work packages A/B/C
+
+| Package | Status | Evidence and residual |
+| --- | --- | --- |
+| A01 | TESTED_RESTRICTED / INDEPENDENT_REVIEW_PENDING | Money and bounded JSON on create/update/CAS/signed backfill, media ownership, localized fallback and Studio document limits on real PG16. JSON depth/key budgets, fractional exactness, pair nullability and currency membership remain application-enforced; no privileged validation routine is approved. |
+| A02 | TESTED_RESTRICTED | Version CAS, soft deletion, declared scoped uniques, compound index ordering, bounded cursors, relation-aware writes and optional scalars. Compound index *evolution* and non-scalar types beyond relations are not supported. |
+| A03 | TESTED_RESTRICTED | Frozen CORE V1 digests unchanged; manifest/IR/provisioning/physical identity deterministic; rename intent is a pure signed artifact. Destructive CONTRACT execution is BLOCKED_BY_POLICY pending operator approval. |
+| A04 | TESTED_RESTRICTED | Real PG16 profile-revision binding, create/update CAS, soft delete, keyset pagination, per-tenant budget and query refusal. No payload filtering/ordering indexes; in-place profile evolution refused. |
+| B01 | TESTED_RESTRICTED / CI_VERIFIED (physical matrix) | Persistent lifecycle CAS, immutable history, installer admission, `DB_COMMITTED` vs `ACTIVE`, concurrency, supersession; normative physical CI matrix passes preserved/rewound revisions and data. |
+| B02 | TESTED_RESTRICTED | Successive recovery epochs reattest the single `ACTIVE` revision atomically with combined append-only history; epoch/sequence replay is refused. True physical epoch-2 driver is CI-only. |
+| B03 | TESTED_RESTRICTED | Repeatable-read cross-domain settlement with contradiction refusal; authenticated continuation for PROVISIONING and BUSINESS operations across authority restart. Backfill is not an admitted continuation kind. |
+| B04 | TESTED_RESTRICTED | Durable target/chunk ledger, conflict/completion/replay refusal, plus a real wire-level COMMIT-ACK loss test showing exactly one progress record, pending authority, restart continuity and safe replay refusal. Backfill-specific authenticated continuation is BLOCKED_BY_POLICY (kind unsupported); no independent PITR durability claim. |
+| B05 | IMPLEMENTED / BLOCKED_BY_POLICY | Explicit rename intent, signed bounded backfill and VALIDATE phases execute; CONTRACT/drop remains deliberately non-executable pending operator approval. |
+| B06 | TESTED_RESTRICTED | Deterministic immutable module namespace reservation with installation binding, catalog verification, collision/forged-row refusal, plus a new post-reservation catalog-drift fail-closed test. Provisioning generated resources *inside* a module namespace is not implemented: the verifier requires zero objects, so module-to-revision resource binding remains a documented limitation. |
+| B07 | TESTED_RESTRICTED / BLOCKED_BY_INFRASTRUCTURE | Dedicated physical CI exercises READY_V2 scoped advance/activation and a fresh signed operation under V2; the parent-ACTIVE installer predicate is unit-tested. A generic authenticated principal+tenant V2 transaction fence for the reference API/worker is not available in the existing authority contracts and was not invented. |
+| C01 | TESTED | Additive migration 0061, publication identity preservation, idempotent operator-only mapping, digest/drift refusal and reconnect continuity on real PG16. Canonical adoption requires an ADR for append-only/update semantics, rebind/forward-fix policy, a TRUNCATE defense decision and C01-specific dump/restore evidence. |
+| C02 | TESTED_RESTRICTED | Persisted membership revocation closes reference API and worker admission in both artifact versions; physical recovery-admission journey remains CI-gated. |
+| C03 | TESTED | Mutation + outbox event commit atomically, stable scoped event ids, retry, stale-claim reclaim, consumer dedupe and replay. At-least-once semantics only; no exactly-once claim. |
+| C04 | TESTED_RESTRICTED | Real V1/V2 API and worker binaries, queued V1 job consumed by V2 worker across live expansion, worker restart compatibility, and a new real failed-attempt/retry assertion with exactly one effect. No production rolling deployment; no V1/V2 outbox dispatcher artifacts. |
+| C05 | TESTED | Installation-neutral portable typed-V2 identity across two real dedicated installs; V1→V2 transition parent matches V1 digest. |
+
+### Journeys J01–J08
+
+| Journey | Status |
+| --- | --- |
+| J01 / J02 | CI_VERIFIED / TESTED_RESTRICTED — signed CRM, exact catalog, scoped relations, RLS, CAS and cursors on real PG16. |
+| J03 | TESTED — independent installation isolation and portable identity across dedicated installs. |
+| J04 | TESTED_RESTRICTED — additive expansion, competing CAS, drift, lock refusal, immutable history. |
+| J05 | TESTED_RESTRICTED — lost COMMIT acknowledgment, durable unknown, authenticated exact committed evidence. |
+| J06 | CI_VERIFIED (dedicated physical matrix) — preserved/rewound physical revisions, data, and signed business witnesses; no production durability claim. |
+| J07 | TESTED_RESTRICTED — bounded signed business commit/rollback and lost acknowledgments. |
+| J08 | TESTED_RESTRICTED — genuinely different API/worker artifacts, signed jobs, old queued jobs, live expansion, retry and worker restart; rolling deployment not performed. |
+
+### Epic status matrix
+
+| Epic | Status | Limitation |
+| --- | --- | --- |
+| E01 | TESTED_RESTRICTED | Application-vs-PostgreSQL enforcement boundary; no trusted JSON/money write path yet. |
+| E02 | CI_VERIFIED (mechanics) / INDEPENDENT_REVIEW_PENDING | Physical epoch-2 lifecycle reattestation is CI-only; revocation propagation to running workers is not claimed. |
+| E03 | TESTED_RESTRICTED | No compound index evolution or generalized constraints beyond the leaf adapter. |
+| E04 | TESTED_RESTRICTED | Wider outputs/types and partition/trigger-link negatives not claimed. |
+| E05 | TESTED_RESTRICTED | A04 is bounded dynamic storage, not a generalized storage engine. |
+| E06 | TESTED_RESTRICTED / BLOCKED_BY_POLICY | Rename CONTRACT/drop non-executable; no independent PITR durability for backfill outcomes. |
+| E07 | TESTED_RESTRICTED | Distributed admission and full introspection verification outstanding. |
+| E08 | TESTED_RESTRICTED | Module-to-revision resource binding and root-trust operational proof outstanding. |
+| E09 | TESTED_RESTRICTED | Non-quiescent or externally repaired split-write reconciliation and backfill continuation unsupported. |
+| E10 | TESTED_RESTRICTED | Real legacy mapping executed, but canonical migration adoption needs the 0061 policy ADR. |
+| E11 | TESTED_RESTRICTED / INDEPENDENT_REVIEW_PENDING | READY V2 physical admission is partially evidenced; generic V2 reference transaction fence and actual recovery resume of the reference paths remain unresolved. |
+
+### Final verification and advisory disposition
+
+- Toolchain pinned: Node `24.22.3`, pnpm `11.22.0`, owned PostgreSQL `16.16` (`160016`), disposable Redis/MinIO/Mailpit, frozen lockfile.
+- Local final candidate gates: schema-engine 92/92; unit 2762 passed / 7 skipped; integration 834 passed / 14 CI-gated skips; role-atomic 19/19; typecheck 75/75; lint exit 0; explicit-any 193/220; architecture 22/22; docs links 798; migration replay 61 migrations / 111 public tables; production audit clean; Platform Reference E2E 8/8; setup wizard 5/5; container build 5/5 images; full main browser suite independently passed on the GitHub runner (PR merge-ref run `44805636631`, e2e job success). Local full-suite browser runs were contention-sensitive; individual failing specs passed in isolation and no assertion was weakened.
+- The 14 integration skips are the dedicated physical/CI groups plus opt-in role fault injection; the role group was executed separately (19/19). CI state was never spoofed.
+- GHSA-g3hv-75wg-m249 (minimatch, moderate, dev tooling only): affected versions `>=7 <11.0.1`; only Nx/eslint/typescript-eslint 10.x edges were pinned to the already-resolved `11.0.3`, leaving legacy `3.1.5` and production dependencies unchanged. Production audit gate remains enforced; full audit is now clean.
+- Governance: risk acceptance NONE; production release NO-GO; no canonical merge, tag, deployment, DELTA-08 activation, P07-RC-C adoption, M04 Batch 03 Runtime, or destructive CONTRACT execution. Policy A, P05/R1, P06/E2-A, the immutable `ab6afcdc` target and D1 (2517 ms, restricted scope) are preserved. M remains NOT DETERMINABLE.
 
 ## Program links
 

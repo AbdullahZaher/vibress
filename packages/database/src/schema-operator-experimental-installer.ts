@@ -426,8 +426,8 @@ function parseBackfill(wire:string):ExperimentalBackfillApproval{
  * expression. This prototype provides atomic DB checkpoints, not independent
  * crash/PITR durability of backfill outcomes. A lost ACK fences the authority.
  */
-export async function runExperimentalBackfillChunk(connectionString:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority){
-  assertLocalUrl(connectionString);
+export async function runExperimentalBackfillChunk(connectionString:string,approvalWire:string,signature:string,authority:DisposableDurableRecoveryAuthority,faultProxyPort?:number){
+  assertLocalUrl(connectionString,faultProxyPort);
   const e=parseBackfill(approvalWire);
   if(typeof signature!=="string"||!/^[A-Za-z0-9_-]{86}$/.test(signature))return fail();
   const db=new Client({connectionString,connectionTimeoutMillis:4000,query_timeout:15000});

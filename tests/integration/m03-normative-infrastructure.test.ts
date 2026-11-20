@@ -726,6 +726,35 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(chunks).toBe(4);
     console.info("M03_B04_DURABLE_BACKFILL_ADMISSION_PROGRESS=PASS");
   },60000);
+  it("B04: lost COMMIT acknowledgment on a signed backfill chunk leaves one durable progress record and a pending authority across restart",async()=>{
+    const f=await lab("backfill_ack","reference-backfill"),old=crm(f),next=crm(f,"website");
+    await apply(f,old,approval(f,null,old));await apply(f,next,approval(f,old,next));
+    const customers=table(f,next,"customers"),physicalDigest=compileProvisioningContract(next,f.scope).digest;
+    for(const n of [0,1])await f.admin.query("INSERT INTO "+customers+"(tenant_id,id,code,name) VALUES('tenant-a',$1,$2,'N')",[randomUUID(),"ack-"+n]);
+    const s=f.authority.authenticatedSnapshot();
+    const e:ExperimentalBackfillApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:s.epoch,ledgerId:s.ledgerId,authorityHead:s.head,authoritySequence:s.sequence,revision:next.digest,physicalDigest,operationId:randomUUID(),tenantId:"tenant-a",resourceId:"customers",column:"website",value:"ack",limit:1};
+    const message=experimentalBackfillMessage(e),signature=sign(null,Buffer.from(message),credentials.privateKey).toString("base64url");
+    const proxy=await startTransactionAckFaultProxy("COMMIT","DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    try{
+      const target=new URL(dbUrl(f.name,f.installer));target.port=String(proxy.port);
+      await expect(runExperimentalBackfillChunk(target.toString(),message,signature,f.authority,proxy.port)).rejects.toThrow("M03_INSTALLER_COMMIT_UNKNOWN_NO_RETRY");
+      await proxy.serverCommitObserved;
+      const progress=(await f.admin.query<{chunks:number;affected_total:string;complete:boolean}>("SELECT chunks,affected_total::text AS affected_total,complete FROM public.platform_schema_backfill_targets_v1 WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id='tenant-a'",[f.scope.installationId,next.digest])).rows;
+      expect(progress).toEqual([{chunks:1,affected_total:"1",complete:false}]);
+      const chunks=(await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM public.platform_schema_backfill_chunks_v1 WHERE operation_id=$1",[e.operationId])).rows;
+      expect(chunks).toEqual([{n:1}]);
+      expect(f.authority.authenticatedSnapshot().pending).toBe(true);
+      // Replay is refused while recovery is pending; no second progress record.
+      await expect(runExperimentalBackfillChunk(dbUrl(f.name,f.installer),message,signature,f.authority)).rejects.toThrow();
+      const pending=f.authority.authenticatedSnapshot();
+      f.authority.close();
+      f.authority=DisposableDurableRecoveryAuthority.open(f.dir,epochKeys.privateKey,f.anchor,adminKeys.publicKey);
+      expect(f.authority.authenticatedSnapshot()).toEqual(pending);
+      expect((await f.admin.query<{chunks:number;affected_total:string}>("SELECT chunks,affected_total::text AS affected_total FROM public.platform_schema_backfill_targets_v1 WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id='tenant-a'",[f.scope.installationId,next.digest])).rows).toEqual([{chunks:1,affected_total:"1"}]);
+      console.info("M03_B04_BACKFILL_ACK_LOSS_RESTART_SAFE_REFUSAL=PASS");
+    }finally{await proxy.close();}
+  },60000);
   it("B03: idempotent cross-domain settlement reconciles provisioning, backfill and business evidence",async()=>{
     const f=await lab("settle","reference-settle"),m=crm(f,"website");
     await apply(f,m,approval(f,null,m));
@@ -879,6 +908,19 @@ describe("M03 actual isolated normative infrastructure",()=>{
     await f.admin.query("DROP SCHEMA "+qi(holdings));
     expect((await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"holdings"})).status).toBe("RESERVED");
     console.info("M03_B06_MODULE_NAMESPACE=PASS");
+  },60000);
+  it("B06: post-reservation catalog drift is refused while the immutable reservation row survives",async()=>{
+    const f=await lab("modules_drift","reference-modules"),namespace=moduleNamespaceName({...f.scope,moduleId:"analytics"});
+    expect(await reserveExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"})).toMatchObject({status:"RESERVED",namespace});
+    const row=(await f.admin.query("SELECT installation_id,application_id,module_id,namespace,installer_role,runtime_role,binding_digest::text FROM public.platform_module_namespaces_v1")).rows;
+    await f.admin.query("CREATE TABLE "+qi(namespace)+".unexpected(id int)");
+    try{
+      await expect(verifyExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"})).rejects.toThrow("M03_MODULE_NAMESPACE_REFUSED:CATALOG");
+      await expect(f.pool.query("SELECT 1 FROM "+qi(namespace)+".unexpected")).rejects.toMatchObject({code:"42501"});
+      expect((await f.admin.query("SELECT installation_id,application_id,module_id,namespace,installer_role,runtime_role,binding_digest::text FROM public.platform_module_namespaces_v1")).rows).toEqual(row);
+      console.info("M03_B06_MODULE_NAMESPACE_DRIFT_REFUSAL=PASS");
+    }finally{await f.admin.query("DROP TABLE IF EXISTS "+qi(namespace)+".unexpected");}
+    expect(await verifyExperimentalModuleNamespace(f.admin,{scope:f.scope,moduleId:"analytics"})).toBe(namespace);
   },60000);
   it("B05: reviewed rename expansion, signed bounded copy backfill and validation never drop the source column",async()=>{
     const f=await lab("rename","reference-rename"),current=crm(f),target=renamedCrm(f);
@@ -1326,6 +1368,22 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
     const newApi=await start(a2),newWorker=await start(w2);expect(newApi.kind).toBe("ready");expect(newWorker.kind).toBe("ready");
     expect(await queued.waitUntilFinished(events,15000)).toEqual({version:2,effect:"APPLIED"});
     expect(await (await list(newApi.port!)).json()).toMatchObject({version:2,customers:[{name:"Existing",website:null}]});
+    // A real in-flight failure and retry: the first attempt is refused while
+    // persisted worker membership is disabled; membership is restored before
+    // the backoff retry, and the same signed V2 job must then commit one effect.
+    await f.admin.query("UPDATE public.platform_memberships SET active=false WHERE principal_id=$1",[referenceProducer]);
+    const retried=await queue.add("activity",jobData(2,randomUUID()),{attempts:2,backoff:{type:"fixed",delay:1500}});
+    let attemptsMade=0;
+    for(let i=0;i<100;i++){
+      attemptsMade=(await queue.getJob(retried.id!))?.attemptsMade??0;
+      if(attemptsMade>=1)break;
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    expect(attemptsMade).toBeGreaterThanOrEqual(1);
+    await f.admin.query("UPDATE public.platform_memberships SET active=true WHERE principal_id=$1",[referenceProducer]);
+    expect(await retried.waitUntilFinished(events,20000)).toEqual({version:2,effect:"APPLIED"});
+    expect((await queue.getJob(retried.id!))?.attemptsMade).toBe(2);
+    console.info("M03_C04_IN_FLIGHT_RETRY_AFTER_EXPANSION=PASS");
     const effect=randomUUID(),job=await queue.add("activity",jobData(2,effect),{attempts:2});
     expect(await job.waitUntilFinished(events,15000)).toEqual({version:2,effect:"APPLIED"});
     const duplicate=await queue.add("activity",jobData(2,effect));
@@ -1342,7 +1400,7 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
       await expect(revoked.waitUntilFinished(events,15000)).rejects.toThrow();
     }finally{await f.admin.query("UPDATE public.platform_memberships SET active=true WHERE principal_id=$1",[referenceProducer]);}
     console.info("M03_JOB_SIGNED_AUTHORIZATION_AND_PAYLOAD_BINDING=PASS");
-    expect((await uow.run(ta,tx=>tx.query("SELECT count(*)::int AS n FROM "+activity))).rows).toEqual([{n:3}]);
+    expect((await uow.run(ta,tx=>tx.query("SELECT count(*)::int AS n FROM "+activity))).rows).toEqual([{n:4}]);
     expect(await (await list(newApi.port!)).json()).toMatchObject({customers:[{website:"https://example.invalid"}]});
     const created=await fetch("http://127.0.0.1:"+oldApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"legacy-write",name:"Old version"})});expect(created.status).toBe(200);
     const created2=await fetch("http://127.0.0.1:"+newApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"new-write",name:"New version",website:"https://new.invalid"})});expect(created2.status).toBe(200);

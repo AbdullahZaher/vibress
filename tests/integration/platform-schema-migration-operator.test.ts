@@ -103,6 +103,39 @@ async function connect(database: string, role?: string): Promise<Client> {
   return client;
 }
 
+/**
+ * The supervisor closes its dedicated PostgreSQL client without awaiting the
+ * socket close (see schema-operator-experimental-supervisor.ts `void close()`).
+ * On a loaded CI runner that asynchronous disconnect can still be visible to
+ * `pg_stat_activity` when the recovery observer starts its quiescence check.
+ * Prepare the disposable fixture deterministically: wait until the only
+ * remaining backend in the lab database is the observer itself before the
+ * database is fenced. This never relaxes the production fence; it only makes
+ * the test's fixture state reproducible before the fence is asserted.
+ */
+async function awaitQuiescentLab(cluster: Client, observer: Client, database: string): Promise<void> {
+  const self = (await observer.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+  if (typeof self !== "number") throw Error("disposable observer identity unavailable");
+  const count = async () => Number((await cluster.query<{ others: string }>(
+    "SELECT count(*)::text AS others FROM pg_stat_activity a " +
+    "JOIN pg_database d ON d.oid = a.datid WHERE d.datname = $1 AND a.pid <> $2",
+    [database, self],
+  )).rows[0]?.others ?? -1);
+  // First allow an in-flight graceful close to settle.
+  for (let i = 0; i < 40 && await count() !== 0; i++) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  // A supervisor client that is still connected after its operation settled
+  // is an abandoned disposable fixture connection, not a live participant.
+  await cluster.query(
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+    "WHERE datname = $1 AND pid <> $2",
+    [database, self],
+  );
+  const others = await count();
+  if (others !== 0) throw Error("disposable lab " + database + " is not quiescent: " + others + " backend(s) remain");
+}
+
 async function createLab(key: Key, installE2 = true): Promise<Lab> {
   const name = "vibress_s03_" + key + "_" + id;
   const installationId = asInstallationId("s03-" + key);
@@ -5087,6 +5120,7 @@ it("M03-INT-04: signed wrong previous digest must not become valid during real q
     dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
   const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
   await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await awaitQuiescentLab(cluster,lab.dbAdmin,lab.name);
   await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
   try{
     const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
