@@ -13,6 +13,7 @@ import {
 } from "@vibress/platform-kernel";
 import { verifyTenantScope } from "@vibress/tenancy";
 import { createDefaultStudioDocument } from "../../packages/studio-core/src";
+import { writeScopedOutboxEvent } from "../../packages/events/src/scoped-outbox";
 import {
   inventoryLegacyCms,
   mapLegacyCmsIdentity,
@@ -207,7 +208,11 @@ async function seedLegacyCms(client: Client): Promise<void> {
     `INSERT INTO outbox_events (id, event_type, payload, status, available_after) VALUES
        ('ob_a1', 'content_entry.published', '{"publicationId":"pub_alpha","entryId":"ce_a1"}'::jsonb, 'pending', now() + interval '1 hour'),
        ('ob_b1', 'content_entry.published', '{"publicationId":"pub_beta","entryId":"ce_b1"}'::jsonb, 'pending', NULL),
-       ('ob_d1', 'content_entry.published', '{"publicationId":"pub_default","entryId":"legacy"}'::jsonb, 'pending', NULL)`,
+       ('ob_d1', 'content_entry.published', '{"publicationId":"pub_default","entryId":"legacy"}'::jsonb, 'pending', NULL),
+       ('ob_e_a1', 'post.published', '{"version":1,"eventType":"post.published","payload":{"publicationId":"pub_alpha","postId":"post_a1","title":"Hello","slug":"hello"}}'::jsonb, 'pending', now() + interval '2 hours'),
+       ('ob_e_b1', 'post.deleted', '{"version":1,"eventType":"post.deleted","payload":{"publicationId":"pub_beta","postId":"post_b1"}}'::jsonb, 'delivered', NULL),
+       ('ob_e_d1', 'post.unpublished', '{"version":1,"eventType":"post.unpublished","payload":{"publicationId":"pub_default","postId":"post_d1","slug":"draft"}}'::jsonb, 'pending', NULL),
+       ('ob_global', 'post.published', '{"version":1,"eventType":"post.published","payload":{"postId":"post_a1","title":"Hello","slug":"hello"}}'::jsonb, 'pending', NULL)`,
   );
 }
 
@@ -249,6 +254,8 @@ describe("C01 legacy CMS additive application/installation identity", () => {
     expect(inventory.profile).toBe("LEGACY_CMS_IDENTITY_V1");
     expect(inventory.publicationCount).toBe(3);
     expect(inventory.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(inventory.unattributedOutboxEvents).toBe(1);
+    expect(inventory.delayedUnattributedOutboxEvents).toBe(0);
     const byId = new Map(
       inventory.publications.map((publication) => [
         publication.publicationId,
@@ -283,8 +290,8 @@ describe("C01 legacy CMS additive application/installation identity", () => {
         subscriptions: 1,
         billingCustomers: 1,
         scheduledNewsletterSends: 1,
-        outboxEvents: 1,
-        delayedOutboxEvents: 1,
+        outboxEvents: 2,
+        delayedOutboxEvents: 2,
       },
     });
     expect(byId.get("pub_beta")?.counts).toMatchObject({
@@ -292,14 +299,14 @@ describe("C01 legacy CMS additive application/installation identity", () => {
       posts: 1,
       members: 1,
       subscriptions: 0,
-      outboxEvents: 1,
+      outboxEvents: 2,
       delayedOutboxEvents: 0,
     });
     expect(byId.get("pub_default")?.counts).toMatchObject({
       contentModels: 0,
       posts: 0,
       memberships: 1,
-      outboxEvents: 1,
+      outboxEvents: 2,
       delayedOutboxEvents: 0,
     });
     expect(byId.get("pub_alpha")!.digest).not.toBe(
@@ -313,6 +320,37 @@ describe("C01 legacy CMS additive application/installation identity", () => {
     );
     expect(catalog.rows[0]!.count).toBe("0");
   }, 30000);
+
+  it("classifies mixed outbox formats, preserves identities and rejects bad owners",async()=>{
+    const before=await inventoryLegacyCms(cms);
+    expect(before.counts.outboxEvents).toBe(6);
+    expect(before.unattributedOutboxEvents).toBe(1);
+    const preserved=await cms.query("SELECT id,payload,status FROM outbox_events ORDER BY id");
+    // The current writer's ON CONFLICT is insertion-idempotent, not delivery
+    // exactly-once; replay must not rewrite an existing versioned payload.
+    await writeScopedOutboxEvent(cms,{
+      id:"ob_e_a1",eventType:"post.published",payload:{postId:"post_a1",title:"Hello",slug:"hello"},
+    });
+    expect((await inventoryLegacyCms(cms)).digest).toBe(before.digest);
+    expect((await cms.query("SELECT id,payload,status FROM outbox_events ORDER BY id")).rows).toEqual(preserved.rows);
+    const rejected=[
+      {id:"ob_bad_version",event:"post.published",payload:{version:2,eventType:"post.published",payload:{publicationId:"pub_alpha"}}},
+      {id:"ob_bad_mismatch",event:"post.published",payload:{version:1,eventType:"post.deleted",payload:{publicationId:"pub_alpha"}}},
+      {id:"ob_bad_ambiguous",event:"post.published",payload:{version:1,eventType:"post.published",publicationId:"pub_alpha",payload:{publicationId:"pub_beta"}}},
+      {id:"ob_bad_unknown",event:"post.published",payload:{publicationId:"pub_unknown"}},
+      {id:"ob_bad_malformed",event:"post.published",payload:{publicationId:15}},
+    ];
+    for(const item of rejected){
+      await cms.query("INSERT INTO outbox_events (id,event_type,payload,status,attempts) VALUES($1,$2,$3::jsonb,'pending',0)",[item.id,item.event,JSON.stringify(item.payload)]);
+      try{
+        await expect(inventoryLegacyCms(cms)).rejects.toMatchObject({code:"LEGACY_CMS_OUTBOX_INVALID"});
+      }finally{
+        await cms.query("DELETE FROM outbox_events WHERE id=$1",[item.id]);
+      }
+    }
+    expect((await inventoryLegacyCms(cms)).digest).toBe(before.digest);
+    console.info("M03_213_02_MIXED_OUTBOX_INVENTORY_AND_REPLAY=PASS");
+  },60000);
 
   it("maps the installation additively, idempotently and without rewriting CMS rows", async () => {
     const before = await inventoryLegacyCms(cms);
