@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { randomBytes } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
@@ -509,6 +510,8 @@ describe("C01 legacy CMS additive application/installation identity", () => {
         installationId: otherInstallation,
       }),
     ).rejects.toThrow(/only trusted DB provisioning/);
+    expect((await runtime.query("SELECT has_table_privilege(current_user,'public.platform_legacy_cms_publications','TRUNCATE') AS allowed")).rows[0]).toEqual({allowed:false});
+    await expect(runtime.query("TRUNCATE public.platform_legacy_cms_publications")).rejects.toMatchObject({code:"42501"});
     const leaked = await cms.query<{ n: string }>(
       `SELECT count(*)::text AS n FROM platform_legacy_cms_installations WHERE installation_id = $1`,
       [otherInstallation],
@@ -580,4 +583,57 @@ describe("C01 legacy CMS additive application/installation identity", () => {
       }),
     ).resolves.toEqual([]);
   }, 30000);
+  it.skipIf(process.env.M03_C01_PHYSICAL !== "1")("M03-213-03: physical PostgreSQL 16 pg_dump/pg_restore retains C01 mappings",async()=>{
+    const before=await inventoryLegacyCms(cms);
+    const mapping=await mapLegacyCmsIdentity(cms,{applicationId,installationId,expectedInventoryDigest:before.digest});
+    expect(["MAPPED","UNCHANGED"]).toContain(mapping.status);
+    const mappingBefore=await readLegacyCmsPublicationMapping(cms,{installationId});
+    const restoredName=databaseName+"_restore";
+    await admin.query('CREATE DATABASE "'+restoredName+'"');
+    let restoreClient:Client|undefined;
+    try{
+      const command=(args:string[],input?:Buffer)=>{
+        const result=spawnSync("docker",["compose","-f","compose.dev.yml","exec","-T","postgres",...args],{
+          cwd:process.cwd(),input,encoding:"buffer",timeout:90000,maxBuffer:64*1024*1024,
+        });
+        if(result.error||result.status!==0)throw Error("C01 physical PostgreSQL command failed: "+
+          args[0]+" exit="+String(result.status)+" "+String(result.stderr).slice(0,1200));
+        return result.stdout as Buffer;
+      };
+      const archive=command(["pg_dump","-Fc","--no-owner","-U","vibress","-d",databaseName]);
+      expect(archive.length).toBeGreaterThan(1024);
+      command(["pg_restore","--exit-on-error","--no-owner","-U","vibress","-d",restoredName],archive);
+      restoreClient=await connect(restoredName);
+      expect((await restoreClient.query<{version:string}>("SHOW server_version_num")).rows[0]?.version).toBe("160016");
+      const after=await inventoryLegacyCms(restoreClient);
+      expect(after).toEqual(before);
+      const verified=await verifyLegacyCmsIdentityMapping(restoreClient,{applicationId,installationId});
+      expect(verified.inventoryDigest).toBe(before.digest);
+      const mappingAfter=await readLegacyCmsPublicationMapping(restoreClient,{installationId});
+      expect(mappingAfter).toEqual(mappingBefore);
+      expect((await mapLegacyCmsIdentity(restoreClient,{applicationId,installationId,expectedInventoryDigest:before.digest})).status).toBe("UNCHANGED");
+      await expect(mapLegacyCmsIdentity(restoreClient,{applicationId:otherApplication,installationId})).rejects.toMatchObject({code:"LEGACY_CMS_INSTALLATION_MISMATCH"});
+      const dml=await restoreClient.query<{owner:string;security_definer:boolean;config:string[]}>(
+        "SELECT pg_get_userbyid(p.proowner) AS owner,p.prosecdef AS security_definer,p.proconfig AS config FROM pg_proc p WHERE p.oid='public.platform_legacy_cms_identity_guard()'::regprocedure");
+      expect(dml.rows[0]?.security_definer).toBe(true);
+      expect(dml.rows[0]?.config).toContain("search_path=pg_catalog, pg_temp");
+      const acl=await restoreClient.query<{trunc_allowed:boolean}>(
+        "SELECT has_table_privilege($1,'public.platform_legacy_cms_installations','TRUNCATE') AS trunc_allowed",[runtimeRole]);
+      expect(acl.rows[0]?.trunc_allowed).toBe(false);
+      await restoreClient.query("BEGIN");
+      try{
+        expect((await restoreClient.query("UPDATE platform_legacy_cms_installations SET mapped_by=mapped_by WHERE installation_id=$1",[installationId])).rowCount).toBe(1);
+      }finally{await restoreClient.query("ROLLBACK");}
+      await expect(restoreClient.query("DELETE FROM platform_legacy_cms_publications WHERE publication_id='pub_alpha'")).rejects.toMatchObject({code:"42501"});
+      await restoreClient.query("UPDATE publications SET slug='changed-after-restore' WHERE id='pub_alpha'");
+      await expect(verifyLegacyCmsIdentityMapping(restoreClient,{applicationId,installationId})).rejects.toMatchObject({code:"LEGACY_CMS_IDENTITY_DRIFT"});
+      await restoreClient.query("UPDATE publications SET slug='alpha' WHERE id='pub_alpha'");
+      expect((await verifyLegacyCmsIdentityMapping(restoreClient,{applicationId,installationId})).inventoryDigest).toBe(before.digest);
+      console.info("M03_213_03_PG16_PHYSICAL_RESTORE=PASS archive_bytes="+archive.length+" publications=3 inventory_digest="+before.digest+" restored_digest="+after.digest);
+    }finally{
+      await restoreClient?.end();
+      await admin.query('DROP DATABASE IF EXISTS "'+restoredName+'" WITH (FORCE)');
+    }
+  },180000);
+
 });
