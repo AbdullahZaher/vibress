@@ -39,8 +39,19 @@ export interface OutboxRepository {
 }
 
 export class DrizzleOutboxRepository implements OutboxRepository {
+  /**
+   * An explicit database is required when the outbox rows live outside the
+   * process-configured database (for example a disposable qualification lab).
+   * The default keeps transaction-context resolution for production callers.
+   */
+  constructor(private readonly database?: ReturnType<typeof getDb>) {}
+
+  private db(): ReturnType<typeof getDb> {
+    return this.database ?? getDb();
+  }
+
   async insert(row: NewOutboxEventRow): Promise<void> {
-    const db = getDb();
+    const db = this.db();
     // The event id is the producer's dedupe key: replaying the same logical
     // mutation inside a retried transaction inserts the row at most once.
     // This is insert-idempotency, not exactly-once delivery.
@@ -52,7 +63,7 @@ export class DrizzleOutboxRepository implements OutboxRepository {
   async claimReady(
     opts: { limit?: number; now?: Date } = {},
   ): Promise<OutboxEventRow[]> {
-    const db = getDb();
+    const db = this.db();
     const limit = opts.limit ?? OUTBOX_CLAIM_BATCH_SIZE;
     const now = opts.now ?? new Date();
     const result = await db.execute(sql`
@@ -93,7 +104,7 @@ export class DrizzleOutboxRepository implements OutboxRepository {
 
   async markPublished(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
-    const db = getDb();
+    const db = this.db();
     await db
       .update(outboxEvents)
       .set({
@@ -109,7 +120,7 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     error: string,
     opts: { maxAttempts: number },
   ): Promise<void> {
-    const db = getDb();
+    const db = this.db();
     const maxAttempts = opts.maxAttempts;
     await db.execute(sql`
       UPDATE ${outboxEvents}
@@ -126,7 +137,7 @@ export class DrizzleOutboxRepository implements OutboxRepository {
   async reclaimStaleClaims(
     opts: { staleAfterMs: number; now?: Date } = { staleAfterMs: 60_000 },
   ): Promise<number> {
-    const db = getDb();
+    const db = this.db();
     const now = opts.now ?? new Date();
     const result = await db.execute(sql`
       UPDATE ${outboxEvents}
@@ -142,7 +153,7 @@ export class DrizzleOutboxRepository implements OutboxRepository {
     publishedBefore: Date;
     failedBefore: Date;
   }): Promise<void> {
-    const db = getDb();
+    const db = this.db();
     await db
       .delete(outboxEvents)
       .where(

@@ -32,3 +32,4 @@ export * from "./event-envelope";
 export * from "./outbox-repository";
 export * from "./event-writer";
 export * from "./outbox-dispatcher";
+export * from "./scoped-outbox";

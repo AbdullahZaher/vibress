@@ -2,7 +2,7 @@
 // manifest, installer and TenantUnitOfWork; no new storage or public route.
 // It deliberately does NOT implement distributed recovery admission or a
 // generic soft-delete FK policy. Trusted callers must not expose arbitrary SQL.
-import {randomUUID} from "node:crypto";
+import {createHash,randomUUID} from "node:crypto";
 import {compileProvisioningContract,enforceBoundedJson,moneyCurrencyColumn,parseSchemaManifest,provisioningIdentifier as qi,validateMoney,PROVISIONING_PROFILE,type MoneyValue} from "@vibress/schema-engine";
 import {CURRENT_STUDIO_VERSION,assertStudioDocumentEditable,checkDocumentResourceLimits,normalizeStudioDocument,validateStudioDocument} from "@vibress/studio-core";
 import {assertVerifiedScope,hasPermission,type ScopedTransaction} from "@vibress/tenancy";
@@ -41,6 +41,26 @@ export interface TrustedMediaOwnership{
   readonly publicationId:string;
   findById(id:string,publicationId?:string):Promise<unknown>;
 }
+/**
+ * Transaction-bound outbox port. `emit` must write through the transaction
+ * that performed the mutation, so callers pass an adapter bound to `tx`.
+ */
+export interface VersionedResourceEvent{
+  readonly id:string;
+  readonly eventType:"m03.resource.created"|"m03.resource.updated"|"m03.resource.deleted";
+  readonly payload:{
+    readonly applicationId:string;
+    readonly installationId:string;
+    readonly tenantId:string;
+    readonly resourceId:string;
+    readonly recordId:string;
+    readonly code:string;
+    readonly versionToken:string;
+  };
+}
+export interface VersionedResourceOutbox{
+  emit(event:VersionedResourceEvent):Promise<void>;
+}
 const int4Min=-2147483648,int4Max=2147483647;
 const isoDate=/^\d{4}-\d{2}-\d{2}$/;
 const isPlainObject=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==="object"&&!Array.isArray(value);
@@ -72,7 +92,7 @@ type Identity={application_id:string;installation_id:string;epoch:string;ledger_
  * declared scalar fields; relation targets must be live and a parent cannot be
  * removed while live children still reference it.
  */
-export async function openExperimentalVersionedResource(tx:ScopedTransaction,manifestWire:string,resourceId:string,authority:DisposableDurableRecoveryAuthority,media?:TrustedMediaOwnership){
+export async function openExperimentalVersionedResource(tx:ScopedTransaction,manifestWire:string,resourceId:string,authority:DisposableDurableRecoveryAuthority,media?:TrustedMediaOwnership,outbox?:VersionedResourceOutbox){
   if(process.env.NODE_ENV!=="test"||typeof manifestWire!=="string"||manifestWire.length>1024*1024)return refuse();
   assertVerifiedScope(tx.scope);
   const scope=tx.scope,initial=authority.authenticatedSnapshot(),last=initial.provisioningOperations?.filter(o=>o.outcome==="COMMITTED").at(-1);
@@ -316,12 +336,20 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     if(!Array.isArray(key)||key.length!==2||typeof key[0]!=="string"||!codePattern.test(key[0])||typeof key[1]!=="string"||!uuid.test(key[1]))return refuse();
     return [key[0],key[1]];
   };
+  // The event identity is deterministic over the committed scope, record and
+  // version token, so replaying the same logical mutation maps to one row.
+  const eventId=(eventType:VersionedResourceEvent["eventType"],recordId:string,versionToken:string)=>createHash("sha256").update(JSON.stringify(["VIBRESS-M03-RESOURCE-EVENT-V1",initial.installationId,scope.applicationId,scope.tenantId,resourceId,recordId,eventType,versionToken])).digest("hex");
+  const publish=async(eventType:VersionedResourceEvent["eventType"],row:{id:string;code:string;version_token:string})=>{
+    if(!outbox)return;
+    await outbox.emit({id:eventId(eventType,row.id,row.version_token),eventType,payload:{applicationId:scope.applicationId,installationId:initial.installationId,tenantId:scope.tenantId,resourceId,recordId:row.id,code:row.code,versionToken:row.version_token}});
+  };
   return {
     async create(code:string,name:string,input?:unknown):Promise<Row>{
       allow("create");
       if(typeof code!=="string"||!codePattern.test(code)||!validName(name))return refuse();
       const values=valuesOf(input);await verifyMedia(values);await verifyRelations(values);
-      const columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null],casts=["","","","","",""];
+      const recordId=randomUUID(),token=randomUUID();
+      const columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,recordId,code,name,token,null],casts=["","","","","",""];
       for(const field of fields)if(field.kind==="relation"&&field.required&&!values.has(field.name))return refuse();
       for(const field of fields){
         const value=values.get(field.name)??null;
@@ -333,14 +361,17 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       const placeholders=columns.map((_,index)=>"$"+(index+1)+casts[index]);
       const result=await tx.query<Row>("INSERT INTO "+table+"("+columns.map(qi).join(",")+") VALUES("+placeholders.join(",")+") RETURNING "+projection,params);
       unchanged();
-      if(result.rowCount!==1||!result.rows[0])return refuse();
-      return shape(result.rows[0])!;
+      const created=shape(result.rows[0]??null);
+      if(result.rowCount!==1||!created)return refuse();
+      await publish("m03.resource.created",created);
+      return created;
     },
     async update(id:string,expectedVersion:string,name:string,input?:unknown):Promise<Row|null>{
       allow("update");
       if(typeof id!=="string"||!uuid.test(id)||typeof expectedVersion!=="string"||!uuid.test(expectedVersion)||!validName(name))return refuse();
       const values=valuesOf(input);await verifyMedia(values);await verifyRelations(values);
-      const params:unknown[]=[tenant,id,expectedVersion,name,randomUUID()];
+      const token=randomUUID();
+      const params:unknown[]=[tenant,id,expectedVersion,name,token];
       let set="name=$4,version_token=$5";
       for(const field of fields){
         if(!values.has(field.name))continue;
@@ -354,12 +385,17 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
         }
       }
       const result=await tx.query<Row>("UPDATE "+table+" SET "+set+" WHERE tenant_id=$1 AND id=$2::uuid AND version_token=$3 AND deleted_on IS NULL RETURNING "+projection,params);
-      unchanged();return shape(result.rows[0]??null);
+      unchanged();
+      const updated=shape(result.rows[0]??null);
+      if(!updated)return null;
+      await publish("m03.resource.updated",updated);
+      return updated;
     },
     async remove(id:string,expectedVersion:string):Promise<boolean>{
       allow("delete");
       if(typeof id!=="string"||!uuid.test(id)||typeof expectedVersion!=="string"||!uuid.test(expectedVersion))return refuse();
-      const result=await tx.query("UPDATE "+table+" SET deleted_on=clock_timestamp(),version_token=$4 WHERE tenant_id=$1 AND id=$2::uuid AND version_token=$3 AND deleted_on IS NULL",[tenant,id,expectedVersion,randomUUID()]);
+      const token=randomUUID();
+      const result=await tx.query<{code:string}>("UPDATE "+table+" SET deleted_on=clock_timestamp(),version_token=$4 WHERE tenant_id=$1 AND id=$2::uuid AND version_token=$3 AND deleted_on IS NULL RETURNING code",[tenant,id,expectedVersion,token]);
       if(result.rowCount!==1){unchanged();return false;}
       // Soft deletion of a parent is refused while any adapter-visible child
       // still references it; the rollback prevents the tombstone from committing.
@@ -367,7 +403,9 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
         const live=(await tx.query<{live:boolean}>("SELECT EXISTS(SELECT 1 FROM "+qi(physical.namespace)+"."+qi(child.table)+" WHERE tenant_id=$1 AND "+qi(child.column)+"=$2::uuid AND deleted_on IS NULL) AS live",[tenant,id])).rows[0];
         if(live?.live){tx.markRollbackOnly("resource still has live children");return refuseChildren();}
       }
-      unchanged();return true;
+      unchanged();
+      await publish("m03.resource.deleted",{id,code:result.rows[0]!.code,version_token:token});
+      return true;
     },
     async list(limit:number,after:string|null=null,code:string|null=null,order:Order="id",filter:Record<string,unknown>={}):Promise<Page>{
       allow("read");
