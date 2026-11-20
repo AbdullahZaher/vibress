@@ -281,6 +281,8 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
                 OR jsonb_typeof(payload->'payload') IS DISTINCT FROM 'object' THEN 'malformed'
               WHEN (payload ? 'publicationId' AND jsonb_typeof(payload->'publicationId') IS DISTINCT FROM 'string')
                 OR (payload->'payload' ? 'publicationId' AND jsonb_typeof(payload->'payload'->'publicationId') IS DISTINCT FROM 'string') THEN 'malformed'
+              WHEN event_type NOT IN ('post.published','post.unpublished','post.deleted',
+                'm03.resource.created','m03.resource.updated','m03.resource.deleted') THEN 'unknown_event_type'
               WHEN payload ? 'publicationId'
                 AND payload->>'publicationId' IS DISTINCT FROM payload->'payload'->>'publicationId' THEN 'ambiguous'
               ELSE 'envelope'
