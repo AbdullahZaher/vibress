@@ -471,7 +471,7 @@ describe("M03 actual isolated normative infrastructure",()=>{
     ],f.scope));
     await apply(f,m,approval(f,null,m));
     const uow=new TenantUnitOfWork(f.pool);
-    const permissions=["resource.parents.create","resource.parents.delete","resource.parents.read","resource.children.create","resource.children.read"];
+    const permissions=["resource.parents.create","resource.parents.delete","resource.parents.read","resource.children.create","resource.children.update","resource.children.read"];
     const tenantId=asTenantId("tenant-a"),principalId=asPrincipalId("fixture-race-principal"),applicationId=f.scope.applicationId;
     const scoped=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-relation-race-v1"}});
     const ptable=table(f,m,"parents"),ctable=table(f,m,"children");
@@ -534,6 +534,35 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(insertionError).toMatchObject({code:"55P03"});
     expect(await parentWork).toBe(true);
     await expect(uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("race-child-3","Deleted target",{parent:second.id}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    // Two child inserts can hold compatible SHARE locks simultaneously; the
+    // eventual parent deletion is refused and cannot leave a live orphan.
+    const sameParent=await Promise.all(["a","b"].map(code=>
+      uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("parallel-"+code,"Parallel "+code,{parent:parent.id}))));
+    expect(sameParent).toHaveLength(2);
+    await expect(uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).remove(parent.id,parent.version_token))).rejects.toThrow("M03_VERSIONED_RESOURCE_CHILDREN");
+    const third=await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)).create("race-p3","Race parent 3"));
+    const retargeted=await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).update(created.id,created.version_token,"Retargeted",{parent:third.id}));
+    expect(retargeted?.parent).toBe(third.id);
+    expect(await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).update(created.id,created.version_token,"Stale",{parent:parent.id}))).toBeNull();
+    const foreignTenant=asTenantId("tenant-b"),foreignPrincipal=asPrincipalId("fixture-race-other-principal");
+    const cross=verifyTenantScope({applicationId,tenantId:foreignTenant,principal:{id:foreignPrincipal,kind:"staff",applicationId,tenantIds:[foreignTenant],roles:["staff"],permissions},membership:{applicationId,tenantId:foreignTenant,principalId:foreignPrincipal,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-relation-race-v1"}});
+    await expect(uow.run(cross,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("cross-parent","Denied",{parent:parent.id}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    // Both explicit application failure and a failed transaction-bound Outbox
+    // emission must roll back the new child row and release every row lock.
+    await expect(uow.run(scoped,async tx=>{
+      await (await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("rollback-child","Rollback",{parent:parent.id});
+      throw Error("expected transaction rollback");
+    })).rejects.toThrow("expected transaction rollback");
+    await expect(uow.run(scoped,async tx=>
+      (await openExperimentalVersionedResource(tx,wire(m),"children",f.authority,undefined,{
+        emit:async()=>{throw Error("outbox emission failure");}
+      })).create("outbox-failure","Rollback",{parent:parent.id})
+    )).rejects.toThrow("outbox emission failure");
+    const rolledBack=await f.admin.query<{code:string}>(
+      "SELECT code FROM "+ctable+" WHERE tenant_id=$1 AND code IN ('rollback-child','outbox-failure')",["tenant-a"]);
+    expect(rolledBack.rows).toEqual([]);
+    // Subsequent operations still succeed after both cancellations and rollback.
+    expect((await uow.run(scoped,async tx=>(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)).create("after-timeout","Recovered",{parent:parent.id}))).code).toBe("after-timeout");
     expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
     console.info("M03_213_01_PG16_TWO_SESSION_RELATION_LOCKING=PASS");
   },120000);
