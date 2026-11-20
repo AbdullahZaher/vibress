@@ -7,7 +7,7 @@ overrides:
   find-my-way: ^9.10.0
   fast-uri: ^3.1.9
   ip-address: ^10.7.4
-  next: ^15.5.28
+  next: ^15.5.29
   fastify: ^5.12.8
   nodemailer: ^10.1.4
   postcss: ^8.5.26
