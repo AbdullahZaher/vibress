@@ -1,7 +1,7 @@
 name: M03 integrated recovery, registry and security closure
 on:
   push:
-    branches: [experiment/m03-final-engineering-closure-20261118, experiment/m03-normative-schema-infrastructure-20261119, experiment/m03-remaining-functional-20261119]
+    branches: [experiment/m03-final-engineering-closure-20261118, experiment/m03-normative-schema-infrastructure-20261119, experiment/m03-remaining-functional-20261119, experiment/m03-remaining-functional-exec-20261119]
 permissions:
   contents: read
 jobs:
