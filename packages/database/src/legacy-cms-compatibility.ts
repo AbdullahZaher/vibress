@@ -273,7 +273,7 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
       SELECT id,status,available_after,
         CASE
           WHEN jsonb_typeof(payload) IS DISTINCT FROM 'object' THEN 'malformed'
-          WHEN payload ? 'version' OR payload ? 'eventType' THEN
+          WHEN payload ? 'eventType' OR payload ? 'payload' THEN
             CASE
               WHEN payload->'version' IS DISTINCT FROM '1'::jsonb THEN 'unsupported_version'
               WHEN jsonb_typeof(payload->'eventType') IS DISTINCT FROM 'string'
@@ -291,7 +291,7 @@ async function readInventory(db: LegacyCmsQueryable): Promise<LegacyCmsInventory
             THEN 'malformed'
           ELSE 'flat'
         END AS format,
-        CASE WHEN payload ? 'version' OR payload ? 'eventType'
+        CASE WHEN payload ? 'eventType' OR payload ? 'payload'
           THEN payload->'payload'->>'publicationId'
           ELSE payload->>'publicationId' END AS publication_id
       FROM outbox_events
