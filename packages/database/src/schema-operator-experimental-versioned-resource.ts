@@ -246,13 +246,21 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
   // A relation may only point at a live row in the same tenant. The FK proves
   // existence and tenancy; when the target is soft-deletable the adapter also
   // refuses references to tombstones, which the FK cannot express.
+  // The parent's soft-delete UPDATE takes FOR NO KEY UPDATE. A row-level
+  // FOR SHARE lock conflicts with it (FOR KEY SHARE does not). Hold the lock
+  // until the caller-owned child INSERT/UPDATE transaction commits.
   const verifyRelations=async(values:Map<string,unknown>)=>{
+    const locks:{table:string;id:string}[]=[];
     for(const [name,target] of relationTargets){
       const value=values.get(name);
-      if(value===undefined||value===null)continue;
-      if(!target.live)continue;
-      const live=(await tx.query<{live:boolean}>("SELECT EXISTS(SELECT 1 FROM "+qi(physical.namespace)+"."+qi(target.table)+" WHERE tenant_id=$1 AND id=$2::uuid AND deleted_on IS NULL) AS live",[tenant,value])).rows[0];
-      if(!live?.live)return refuse();
+      if(value===undefined||value===null||!target.live)continue;
+      locks.push({table:target.table,id:value as string});
+    }
+    // Stable order prevents lock inversions across multiple parent targets.
+    locks.sort((a,b)=>a.table.localeCompare(b.table)||a.id.localeCompare(b.id));
+    for(const lock of locks){
+      const row=(await tx.query<{id:string}>("SELECT id::text AS id FROM "+qi(physical.namespace)+"."+qi(lock.table)+" WHERE tenant_id=$1 AND id=$2::uuid AND deleted_on IS NULL FOR SHARE",[tenant,lock.id])).rows[0];
+      if(!row)return refuse();
     }
   };
   const rows=(await tx.query<Identity>(`SELECT t.application_id,t.installation_id,t.epoch,t.ledger_id,r.manifest_digest,t.profile,t.revoked,t.runtime_role,current_user AS role,session_user AS session,current_database() AS db,(SELECT oid::text FROM pg_catalog.pg_database WHERE datname=current_database()) AS oid,t.database_name AS configured_db,t.database_oid AS configured_oid,(pg_catalog.pg_control_system()).system_identifier::text AS system,t.system_identifier AS configured_system,(pg_catalog.pg_control_checkpoint()).timeline_id AS timeline,t.timeline AS configured_timeline FROM public.platform_schema_installation_trust_v1 t JOIN public.platform_schema_registry r USING(installation_id)`)).rows;
