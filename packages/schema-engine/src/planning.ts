@@ -60,6 +60,8 @@ export interface ManifestResource {
   readonly securityPrerequisite: "TENANT_RLS_AND_ACL" | "APPLICATION_ACL";
   readonly fields: readonly ManifestField[];
   readonly dynamic?: DynamicRecordProfile;
+  readonly uniques?: readonly (readonly string[])[];
+  readonly indexes?: readonly (readonly string[])[];
 }
 
 export interface SchemaManifest {
@@ -78,6 +80,7 @@ export type SchemaOperationType =
   | "REMOVE_RESOURCE"
   | "ALTER_OWNERSHIP"
   | "ALTER_DYNAMIC_PROFILE"
+  | "ALTER_CONSTRAINTS"
   | "ADD_FIELD"
   | "REMOVE_FIELD"
   | "ALTER_FIELD";
@@ -311,6 +314,8 @@ function resourceManifest(resource: CanonicalResource): ManifestResource {
         fields: Object.freeze(resource.dynamic.fields.map((field) => Object.freeze({ ...field }))),
       }),
     } : {}),
+    ...(resource.uniques ? { uniques: Object.freeze(resource.uniques.map((d) => Object.freeze([...d]))) } : {}),
+    ...(resource.indexes ? { indexes: Object.freeze(resource.indexes.map((d) => Object.freeze([...d]))) } : {}),
   });
 }
 
@@ -488,6 +493,12 @@ export function planSchemaChanges(
       operations.push(operation("ALTER_DYNAMIC_PROFILE", newResource.id, null,
         oldResource, newResource, "DENIED", "BREAKING",
         "dynamic record profiles are revision-bound; in-place evolution is unsupported"));
+    }
+    if (JSON.stringify(oldResource.uniques ?? null) !== JSON.stringify(newResource.uniques ?? null) ||
+      JSON.stringify(oldResource.indexes ?? null) !== JSON.stringify(newResource.indexes ?? null)) {
+      operations.push(operation("ALTER_CONSTRAINTS", newResource.id, null,
+        oldResource, newResource, "DENIED", "BREAKING",
+        "declared unique constraints and indexes are creation-scoped; in-place evolution is unsupported"));
     }
     const beforeFields = new Map(oldResource.fields.map((field) => [field.id, field]));
     const afterFields = new Map(newResource.fields.map((field) => [field.id, field]));

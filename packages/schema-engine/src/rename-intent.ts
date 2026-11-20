@@ -90,6 +90,8 @@ export function compileRenameIntent(
     oldResource.ownership !== newResource.ownership ||
     !structurallyEqual(oldResource.key, newResource.key) ||
     !structurallyEqual(oldResource.unique, newResource.unique) ||
+    !structurallyEqual(oldResource.uniques ?? [], newResource.uniques ?? []) ||
+    !structurallyEqual(oldResource.indexes ?? [], newResource.indexes ?? []) ||
     !structurallyEqual(oldResource.relations, newResource.relations)
   ) return refuse();
   const source = oldResource.columns.find((column) => column.name === intent.from);

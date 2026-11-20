@@ -107,6 +107,22 @@ describe("explicit rename-intent contract", () => {
     expect(() => compileRenameIntent(current, drifted, intent, scope)).toThrow("RENAME_INTENT_REFUSED");
   });
 
+  it("refuses a rename that also changes creation-scoped declared constraints", () => {
+    const declared = (renamed: boolean, extra: "indexes" | "uniques") => {
+      const declaration = [[renamed ? "title" : "name", "done"]];
+      return createSchemaManifest(
+        compileResourceSchema(
+          [{ ...scope, id: "invoices", ownership: "tenant", fields: fields(renamed),
+            ...(extra === "indexes" ? { indexes: declaration } : { uniques: declaration }) }],
+          scope,
+        ),
+      );
+    };
+    for (const extra of ["indexes", "uniques"] as const) {
+      expect(() => compileRenameIntent(declared(false, extra), declared(true, extra), intent, scope)).toThrow("RENAME_INTENT_REFUSED");
+    }
+  });
+
   it("refuses a missing current revision or scope mismatch", () => {
     const proposed = manifest(true);
     expect(() => compileRenameIntent(null, proposed, intent, scope)).toThrow("RENAME_INTENT_REFUSED");

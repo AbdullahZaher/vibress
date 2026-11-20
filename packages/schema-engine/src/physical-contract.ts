@@ -64,7 +64,7 @@ export function isProvisioningProfile(value:unknown):value is ProvisioningProfil
 }
 export function provisioningProfileFor(manifest:SchemaManifest):ProvisioningProfile{
   if(manifest.resources.some(resource=>resource.dynamic!==undefined))return PROVISIONING_PROFILE_V3;
-  const extended=manifest.resources.some(resource=>resource.fields.some(field=>
+  const extended=manifest.resources.some(resource=>resource.uniques!==undefined||resource.indexes!==undefined||resource.fields.some(field=>
     field.logicalType==="integer"||field.logicalType==="decimal"||field.logicalType==="money"||
     field.logicalType==="date"||field.logicalType==="json"||
     field.logicalType==="media"||field.logicalType==="localized"||field.logicalType==="studio"||
@@ -93,6 +93,11 @@ export function provisioningColumnCollationV1(type:string):string|null{
 export function provisioningIndexKeyV1(type:string){
   if(type==="text")return {opclass:"pg_catalog.text_ops",family:"pg_catalog.text_ops",collation:"pg_catalog.default"};
   if(type==="uuid")return {opclass:"pg_catalog.uuid_ops",family:"pg_catalog.uuid_ops",collation:"-"};
+  if(type==="boolean")return {opclass:"pg_catalog.bool_ops",family:"pg_catalog.bool_ops",collation:"-"};
+  if(type==="integer")return {opclass:"pg_catalog.int4_ops",family:"pg_catalog.integer_ops",collation:"-"};
+  if(type==="date")return {opclass:"pg_catalog.date_ops",family:"pg_catalog.datetime_ops",collation:"-"};
+  if(type==="timestamp with time zone")return {opclass:"pg_catalog.timestamptz_ops",family:"pg_catalog.datetime_ops",collation:"-"};
+  if(/^numeric\([1-9]\d{0,2},(0|[1-9]\d{0,2})\)$/.test(type))return {opclass:"pg_catalog.numeric_ops",family:"pg_catalog.numeric_ops",collation:"-"};
   throw Error("PROVISIONING_CATALOG_INDEX_UNSUPPORTED");
 }
 export interface ProvisionedColumn {name:string;type:string;required:boolean;enumValues?:readonly string[];target?:string}
@@ -101,6 +106,8 @@ export interface ProvisionedResource {
   id:string;table:string;ownership:"application"|"tenant";columns:readonly ProvisionedColumn[];
   key:readonly string[];unique:readonly string[];relations:readonly {column:string;table:string;columns:readonly string[];targetColumns:readonly string[]}[];
   checks?:readonly ProvisionedCheck[];
+  uniques?:readonly (readonly string[])[];
+  indexes?:readonly (readonly string[])[];
 }
 function numericType(precision:number,scale:number):string{
   if(!Number.isInteger(precision)||!Number.isInteger(scale)||precision<1||precision>38||scale<0||scale>precision)throw Error("PROVISIONING_NUMERIC");
@@ -212,7 +219,27 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
     // business key; unrelated fields are never silently promoted to keys.
     const code=columns.find(c=>c.name==="code");
     if(code&&(code.type!=="text"||!code.required||code.enumValues))throw Error("PROVISIONING_CODE_KEY");
-    const base={id:resource.id,table:resource.tableName,ownership:resource.ownership,columns,key,unique:code?(tenant?["tenant_id","code"]:["code"]):[],relations};
+    // Declared constraints/indexes are exact scalar tuples. Tenant resources are
+    // always scoped by the same tenant_id prefix as the primary key.
+    const indexable=(type:string)=>type==="text"||type==="integer"||type==="date"||type==="timestamp with time zone"||type==="boolean"||type==="uuid"||/^numeric\([1-9]\d{0,2},(0|[1-9]\d{0,2})\)$/.test(type);
+    const declared=(declarations:typeof resource.uniques)=>{
+      if(!declarations)return undefined;
+      const out=declarations.map(declaration=>{
+        if(declaration.length<1||declaration.length>4)throw Error("PROVISIONING_DECLARATION");
+        for(const name of declaration){
+          const column=columns.find(c=>c.name===name);
+          if(!column||column.target||!indexable(column.type))throw Error("PROVISIONING_DECLARATION");
+        }
+        return Object.freeze(tenant?["tenant_id",...declaration]:[...declaration]);
+      });
+      const codeKey=code?(tenant?["tenant_id","code"]:["code"]):null;
+      for(const declaration of out)if(codeKey!==null&&JSON.stringify(declaration)===JSON.stringify(codeKey))throw Error("PROVISIONING_DECLARATION");
+      if(new Set(out.map(declaration=>JSON.stringify(declaration))).size!==out.length)throw Error("PROVISIONING_DECLARATION");
+      return Object.freeze(out);
+    };
+    const declaredUniques=declared(resource.uniques),declaredIndexes=declared(resource.indexes);
+    const base={id:resource.id,table:resource.tableName,ownership:resource.ownership,columns,key,unique:code?(tenant?["tenant_id","code"]:["code"]):[],relations,
+      ...(declaredUniques?.length?{uniques:declaredUniques}:{}),...(declaredIndexes?.length?{indexes:declaredIndexes}:{})};
     // Omit the key entirely for CORE V1 so historical physical digests match.
     return checks.length?{...base,checks}:base;
   });
@@ -236,6 +263,7 @@ const tbl=(namespace:string,table:string)=>qi(namespace)+"."+qi(table);
 export function provisioningConstraints(resource:ProvisionedResource,namespace:string){
   const constraints=[{name:provisioningConstraintName(resource.table,"pk"),kind:"p",columns:[...resource.key],target:null as string|null,targetColumns:[] as string[],expression:"PRIMARY KEY ("+resource.key.join(", ")+")"}];
   if(resource.unique.length)constraints.push({name:provisioningConstraintName(resource.table,"uq"),kind:"u",columns:[...resource.unique],target:null,targetColumns:[],expression:"UNIQUE ("+resource.unique.join(", ")+")"});
+  for(const columns of resource.uniques??[])constraints.push({name:provisioningConstraintName(resource.table,"uq",columns.join("_")),kind:"u",columns:[...columns],target:null,targetColumns:[],expression:"UNIQUE ("+columns.join(", ")+")"});
   for(const relation of resource.relations)constraints.push({name:provisioningConstraintName(resource.table,"fk",relation.column),kind:"f",columns:[...relation.columns],target:relation.table,targetColumns:[...relation.targetColumns],expression:"FOREIGN KEY ("+namesSql(relation.columns)+") REFERENCES "+tbl(namespace,relation.table)+" ("+namesSql(relation.targetColumns)+") ON UPDATE RESTRICT ON DELETE RESTRICT"});
   return constraints;
 }
@@ -265,6 +293,7 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
         if(c.enumValues)statements.push("ALTER TABLE "+q+" ADD CONSTRAINT "+qi(provisioningConstraintName(resource.table,"enum",c.name))+" CHECK ("+qi(c.name)+" = ANY (ARRAY["+c.enumValues.map(v=>"'"+v+"'::text").join(", ")+"]))");
       }
       for(const check of resource.checks??[])statements.push("ALTER TABLE "+q+" ADD CONSTRAINT "+qi(check.name)+" CHECK ("+check.expression+")");
+      for(const columns of resource.indexes??[])statements.push("CREATE INDEX "+qi(provisioningConstraintName(resource.table,"ix",columns.join("_")))+" ON "+q+" ("+namesSql(columns)+")");
     }
     for(const resource of all)for(const relation of resource.relations){
       const c=provisioningConstraints(resource,physical.namespace).find(x=>x.name===provisioningConstraintName(resource.table,"fk",relation.column))!;
@@ -280,6 +309,8 @@ export function compileProvisioningTransition(current:unknown|null,proposed:unkn
       const resource=all.find(x=>x.id===old.id);
       if(!resource||old.table!==resource.table||old.ownership!==resource.ownership||
         JSON.stringify(old.key)!==JSON.stringify(resource.key)||JSON.stringify(old.unique)!==JSON.stringify(resource.unique)||
+        JSON.stringify(old.uniques??null)!==JSON.stringify(resource.uniques??null)||
+        JSON.stringify(old.indexes??null)!==JSON.stringify(resource.indexes??null)||
         JSON.stringify(old.relations)!==JSON.stringify(resource.relations))throw Error("PROVISIONING_DESTRUCTIVE_REFUSED");
       for(const col of old.columns)if(JSON.stringify(col)!==JSON.stringify(resource.columns.find(c=>c.name===col.name)))throw Error("PROVISIONING_DESTRUCTIVE_REFUSED");
       const checked=new Set((resource.checks??[]).flatMap(c=>c.columns));

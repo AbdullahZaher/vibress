@@ -14,7 +14,7 @@ import {TenantUnitOfWork,verifyTenantScope,PolicyEngine} from "@vibress/tenancy"
 import {PlatformMembershipResolver} from "../../packages/database/src/platform-application-registry";
 import {openExperimentalVersionedResource} from "../../packages/database/src/schema-operator-experimental-versioned-resource";
 import {projectExperimentalResources} from "../../packages/database/src/schema-operator-experimental-introspection";
-import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningIdentifier as qi,provisioningNamespace,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
+import {compileResourceSchema,createSchemaManifest,compileProvisioningContract,compileProvisioningTransition,compilePortableProvisioningIdentity,provisioningConstraintName,provisioningIdentifier as qi,provisioningNamespace,provisioningProfileFor,PROVISIONING_PROFILE,PROVISIONING_PROFILE_V2,type FieldDefinition,type ResourceDefinition,type SchemaCompilationScope,type SchemaManifest} from "../../packages/schema-engine/src";
 import {reserveExperimentalNamespace,installExperimentalRevision,verifyExperimentalProvisionedCatalog,provisioningApprovalMessage,collectExperimentalProvisioningCommit,collectExperimentalProvisioningCheckpoint,runExperimentalBackfillChunk,experimentalBackfillMessage,type ProvisioningApproval,type ExperimentalBackfillApproval} from "../../packages/database/src/schema-operator-experimental-installer";
 import {experimentalBusinessMessage,collectExperimentalBusinessOutcome,type BusinessApproval} from "../../packages/database/src/schema-operator-experimental-business";
 import {startStatementAckFaultProxy,startTransactionAckFaultProxy} from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
@@ -309,6 +309,142 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect((await open(tb,resource=>resource.list(10)) as {records:unknown[]}).records).toEqual([]);
     expect(await open(tb,resource=>resource.update(a.id,cleared.version_token,"Wrong tenant",{sponsor:null}))).toBeNull();
     console.info("M03_A02_RELATIONS=PASS");
+  },60000);
+  it("A02: declared scoped uniques, compound index ordering and query-bound cursors",async()=>{
+    const f=await lab("declared","reference-declared-constraints");
+    const m=createSchemaManifest(compileResourceSchema([{...f.scope,id:"catalog",ownership:"tenant",
+      uniques:[["category","slug"]],
+      indexes:[["category","priority"]],
+      fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+        {id:"category",type:"text",required:false},{id:"slug",type:"text",required:false},
+        {id:"priority",type:"integer",required:false}
+      ]}],f.scope));
+    expect(provisioningProfileFor(m)).toBe(PROVISIONING_PROFILE_V2);
+    await apply(f,m,approval(f,null,m));
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    const catalogTable=table(f,m,"catalog");
+    const uniqueName=provisioningConstraintName(m.resources[0]!.tableName,"uq","tenant_id_category_slug");
+    const indexPath=provisioningConstraintName(m.resources[0]!.tableName,"ix","tenant_id_category_priority");
+    expect((await f.admin.query<{n:number}>("SELECT (SELECT count(*) FROM pg_constraint WHERE conrelid=$1::regclass AND conname=$2)::int AS n",[catalogTable,uniqueName])).rows).toEqual([{n:1}]);
+    expect((await f.admin.query<{n:number}>("SELECT count(*)::int AS n FROM pg_indexes WHERE schemaname=$1 AND indexname=$2",[f.namespace,indexPath])).rows).toEqual([{n:1}]);
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.catalog.create","resource.catalog.update","resource.catalog.delete","resource.catalog.read"];
+    const scoped=(tenant:string)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-declared-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    type Item={id:string;code:string;version_token:string;category:string|null;slug:string|null;priority:number|null};
+    type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
+    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"catalog",f.authority)));
+    const one=await open(ta,resource=>resource.create("cat-1","One",{category:"a",slug:"s1",priority:2})) as Item;
+    const two=await open(ta,resource=>resource.create("cat-2","Two",{category:"a",slug:"s2"})) as Item;
+    const three=await open(ta,resource=>resource.create("cat-3","Three",{category:"a",slug:"s3",priority:1})) as Item;
+    const four=await open(ta,resource=>resource.create("cat-4","Four",{category:"b",slug:"s1",priority:5})) as Item;
+    const five=await open(ta,resource=>resource.create("cat-5","Five",{category:"b",slug:"s2",priority:1})) as Item;
+    expect(two.priority).toBeNull();
+    expect(five.priority).toBe(1);
+    // The declared scoped unique is enforced by PostgreSQL itself.
+    await expect(open(ta,resource=>resource.create("cat-6","Duplicate",{category:"a",slug:"s1"}))).rejects.toMatchObject({code:"23505"});
+    await expect(open(tb,resource=>resource.create("cat-6","Other tenant",{category:"a",slug:"s1"}))).resolves.toMatchObject({code:"cat-6"});
+    // Compound ordering follows the declared index signature, NULLs last, id tiebreaker.
+    const expected=["cat-3","cat-1","cat-2","cat-5","cat-4"];
+    const seen:string[]=[];
+    let cursor:string|null=null,firstCursor:string|null=null,pages=0;
+    do{
+      const page=await open(ta,resource=>resource.list(2,cursor,null,["category","priority"]));
+      if(firstCursor===null)firstCursor=page.nextCursor;
+      seen.push(...page.records.map(row=>row.code));cursor=page.nextCursor;pages++;
+    }while(cursor!==null&&pages<10);
+    expect(seen).toEqual(expected);
+    expect(firstCursor).toMatch(/^v2\./);
+    // Equality filters cover declared scalars and bind the cursor to the filter.
+    const filtered=await open(ta,resource=>resource.list(10,null,null,["category","priority"],{category:"a"}));
+    expect(filtered.records.map(row=>row.code)).toEqual(["cat-3","cat-1","cat-2"]);
+    expect(filtered.records.map(row=>row.id)).toEqual([three.id,one.id,two.id]);
+    expect(filtered.nextCursor).toBeNull();
+    await expect(open(ta,resource=>resource.list(2,firstCursor,null,["category","priority"],{category:"a"}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.list(2,firstCursor,null,["category","slug"]))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    // Undeclared order signatures, unknown/mistyped/null filters are refused.
+    await expect(open(ta,resource=>resource.list(10,null,null,["category"]))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.list(10,null,null,["slug","category"]))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.list(10,null,null,"id",{missing:"x"}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.list(10,null,null,"id",{priority:"high"}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    await expect(open(ta,resource=>resource.list(10,null,null,"id",{category:null}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    // A v2 cursor tampered to carry another filter is refused.
+    const tampered="v2."+Buffer.from(JSON.stringify([...JSON.parse(Buffer.from(firstCursor!.slice(3),"base64url").toString("utf8")).slice(0,2),[],["x"]])).toString("base64url");
+    await expect(open(ta,resource=>resource.list(2,tampered,null,["category","priority"]))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    // Scalar orders still page with the original v1 cursor binding.
+    const byId=await open(ta,resource=>resource.list(2));
+    expect(byId.nextCursor).toMatch(/^v1\./);
+    expect((await open(ta,resource=>resource.list(10,byId.nextCursor))).records).toHaveLength(3);
+    // Filters also apply to scalar orders and exclude soft-deleted rows.
+    await expect(open(ta,resource=>resource.remove(four.id,four.version_token))).resolves.toBe(true);
+    const tenantBOnly=await open(tb,resource=>resource.list(10,null,null,"id",{category:"a"}));
+    expect(tenantBOnly.records.map(row=>row.code)).toEqual(["cat-6"]);
+    // Concurrent writers cannot both claim the declared scoped tuple.
+    const raced=await Promise.allSettled([
+      open(ta,resource=>resource.create("race-1","Race one",{category:"c",slug:"same"})),
+      open(ta,resource=>resource.create("race-2","Race two",{category:"c",slug:"same"})),
+    ]);
+    expect(raced.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    expect(raced.find(result=>result.status==="rejected")).toMatchObject({status:"rejected",reason:{code:"23505"}});
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    console.info("M03_A02_DECLARED_UNIQUES_INDEX_PAGINATION=PASS");
+  },60000);
+  it("A02: relation-aware writes and explicit parent/child soft deletion",async()=>{
+    const f=await lab("hierarchy","reference-parent-child");
+    const m=createSchemaManifest(compileResourceSchema([
+      {...f.scope,id:"parents",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false}
+      ]},
+      {...f.scope,id:"children",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+        {id:"parent",type:"relation",required:false,targetResource:"parents"}
+      ]}
+    ],f.scope));
+    await apply(f,m,approval(f,null,m));
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.parents.create","resource.parents.update","resource.parents.delete","resource.parents.read","resource.children.create","resource.children.update","resource.children.delete","resource.children.read"];
+    const scoped=(tenant:string)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-hierarchy-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
+    type Node={id:string;code:string;version_token:string;parent?:string|null};
+    const openParents=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"parents",f.authority)));
+    const openChildren=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"children",f.authority)));
+    const p1=await openParents(ta,resource=>resource.create("parent-1","Parent one")) as Node;
+    const p2=await openParents(ta,resource=>resource.create("parent-2","Parent two")) as Node;
+    const c1=await openChildren(ta,resource=>resource.create("child-1","Child one",{parent:p1.id})) as Node;
+    expect(c1.parent).toBe(p1.id);
+    // Stale-version removal keeps CAS semantics; the live child blocks the commit.
+    expect(await openParents(ta,resource=>resource.remove(p1.id,"00000000-0000-4000-8000-000000000000"))).toBe(false);
+    await expect(openParents(ta,resource=>resource.remove(p1.id,p1.version_token))).rejects.toThrow("M03_VERSIONED_RESOURCE_CHILDREN");
+    expect((await openParents(ta,resource=>resource.list(10))).records.map(row=>row.code)).toEqual(["parent-1","parent-2"]);
+    const parentRow=(await f.admin.query<{deleted:boolean}>("SELECT deleted_on IS NOT NULL AS deleted FROM "+table(f,m,"parents")+" WHERE id=$1",[p1.id])).rows;
+    expect(parentRow).toEqual([{deleted:false}]);
+    // Removing the child allows the parent removal; the child's FK row remains.
+    expect(await openChildren(ta,resource=>resource.remove(c1.id,c1.version_token))).toBe(true);
+    expect(await openParents(ta,resource=>resource.remove(p1.id,p1.version_token))).toBe(true);
+    // The FK would still accept a tombstoned parent; the adapter refuses it.
+    await expect(openChildren(ta,resource=>resource.create("child-2","Tombstoned parent",{parent:p1.id}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    expect((await f.admin.query<{deleted:boolean}>("SELECT deleted_on IS NOT NULL AS deleted FROM "+table(f,m,"parents")+" WHERE id=$1",[p1.id])).rows).toEqual([{deleted:true}]);
+    // Updates re-verify the relation target and keep untouched columns intact.
+    const c3=await openChildren(ta,resource=>resource.create("child-3","Child three",{parent:p2.id})) as Node;
+    await expect(openChildren(ta,resource=>resource.update(c3.id,c3.version_token,"Retarget",{parent:p1.id}))).rejects.toThrow("M03_VERSIONED_RESOURCE_REFUSED");
+    const renamed=await openChildren(ta,resource=>resource.update(c3.id,c3.version_token,"Renamed")) as Node;
+    expect(renamed).toMatchObject({name:"Renamed",parent:p2.id});
+    // Other tenants never observe or mutate the hierarchy.
+    expect((await openParents(tb,resource=>resource.list(10))).records).toEqual([]);
+    expect(await openParents(tb,resource=>resource.remove(p2.id,p2.version_token))).toBe(false);
+    expect(await openChildren(ta,resource=>resource.remove(c3.id,renamed.version_token))).toBe(true);
+    expect(await openParents(ta,resource=>resource.remove(p2.id,p2.version_token))).toBe(true);
+    expect(await check(f,m)).toBe(compileProvisioningContract(m,f.scope).digest);
+    console.info("M03_A02_RELATION_AWARE_PARENT_CHILD_SOFT_DELETE=PASS");
   },60000);
   it("A01: typed leaf resources enforce money and bounded JSON on create, partial update, CAS and signed backfill",async()=>{
     const f=await lab("a01","reference-typed-guards");

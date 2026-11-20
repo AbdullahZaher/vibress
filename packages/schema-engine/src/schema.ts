@@ -87,6 +87,10 @@ export interface ResourceDefinition {
   readonly ownership: ResourceOwnership;
   readonly fields: readonly FieldDefinition[];
   readonly dynamic?: DynamicRecordProfile;
+  /** Ordered field-id tuples; tenant resources are always tenant-scoped. */
+  readonly uniques?: readonly (readonly string[])[];
+  /** Ordered field-id tuples for compound lookup/ordering indexes. */
+  readonly indexes?: readonly (readonly string[])[];
 }
 
 /**
@@ -103,6 +107,8 @@ export interface CanonicalResource {
   readonly ownership: ResourceOwnership;
   readonly fields: readonly FieldDefinition[];
   readonly dynamic?: DynamicRecordProfile;
+  readonly uniques?: readonly (readonly string[])[];
+  readonly indexes?: readonly (readonly string[])[];
 }
 
 export interface CanonicalSchemaIR {
@@ -505,11 +511,50 @@ function normalizeField(value: unknown, path: string): FieldDefinition {
   }
 }
 
+const ORDERABLE_FIELD_TYPES = new Set(["text", "integer", "date", "datetime", "boolean", "decimal", "enum"]);
+
+/**
+ * Declarations are ordered field-id tuples. The tuple order is significant
+ * (compound column order); the declaration list order is not, so it is sorted
+ * canonically. Only exact scalar families can back a btree constraint/index.
+ */
+function fieldDeclarationList(value: unknown, path: string): readonly (readonly string[])[] | undefined {
+  if (value === undefined) return undefined;
+  const raw = plainArray(value, path, 1, 16);
+  const seen = new Set<string>();
+  const declarations: (readonly string[])[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const entryPath = path + "[" + i + "]";
+    const items = plainArray(raw[i], entryPath, 1, 4);
+    const ids: string[] = [];
+    const inner = new Set<string>();
+    for (let j = 0; j < items.length; j++) {
+      const id = identifier(items[j], entryPath + "[" + j + "]");
+      if (inner.has(id)) {
+        fail("DUPLICATE_IDENTIFIER", entryPath, "duplicate field in declaration");
+      }
+      inner.add(id);
+      ids.push(id);
+    }
+    const key = JSON.stringify(ids);
+    if (seen.has(key)) {
+      fail("DUPLICATE_IDENTIFIER", entryPath, "duplicate declaration");
+    }
+    seen.add(key);
+    declarations.push(Object.freeze(ids));
+  }
+  declarations.sort((a, b) => {
+    const left = JSON.stringify(a), right = JSON.stringify(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+  return Object.freeze(declarations);
+}
+
 export function parseResourceDefinition(value: unknown): ResourceDefinition {
   const source = record(value, "resource");
   onlyKeys(
     source,
-    ["id", "applicationId", "installationId", "ownership", "fields", "dynamic"],
+    ["id", "applicationId", "installationId", "ownership", "fields", "dynamic", "uniques", "indexes"],
     "resource",
   );
   const id = identifier(source.id, "resource.id");
@@ -561,11 +606,35 @@ export function parseResourceDefinition(value: unknown): ResourceDefinition {
     }
   }
   fields.sort(compareResourceIds);
+  const uniques = fieldDeclarationList(source.uniques, "resource.uniques");
+  const indexes = fieldDeclarationList(source.indexes, "resource.indexes");
+  if (dynamic && (uniques !== undefined || indexes !== undefined)) {
+    fail("INVALID_DEFINITION", "resource", "dynamic resources declare no typed constraints or indexes");
+  }
+  const declared = new Map(fields.map((field) => [field.id, field]));
+  for (const [declarations, path] of [[uniques, "resource.uniques"], [indexes, "resource.indexes"]] as const) {
+    for (const declaration of declarations ?? []) {
+      for (const id of declaration) {
+        const field = declared.get(id);
+        if (!field) {
+          fail("INVALID_DEFINITION", path, "declaration references an undeclared field: " + id);
+        }
+        if (!ORDERABLE_FIELD_TYPES.has(field.type)) {
+          fail("INVALID_DEFINITION", path, "field type cannot back a declared constraint or index: " + id);
+        }
+      }
+      if (declaration.length === 1 && declaration[0] === "code") {
+        fail("DUPLICATE_IDENTIFIER", path, "declaration duplicates the implicit scoped code key");
+      }
+    }
+  }
   return Object.freeze({
     id, applicationId: appId, installationId: installId,
     ownership: source.ownership,
     fields: Object.freeze(fields),
     ...(dynamic ? { dynamic } : {}),
+    ...(uniques ? { uniques } : {}),
+    ...(indexes ? { indexes } : {}),
   });
 }
 
@@ -620,6 +689,8 @@ export function compileResourceSchema(
     .map((resource): CanonicalResource => Object.freeze({
       id: resource.id, ownership: resource.ownership, fields: resource.fields,
       ...(resource.dynamic ? { dynamic: resource.dynamic } : {}),
+      ...(resource.uniques ? { uniques: Object.freeze(resource.uniques.map((d) => Object.freeze([...d]))) } : {}),
+      ...(resource.indexes ? { indexes: Object.freeze(resource.indexes.map((d) => Object.freeze([...d]))) } : {}),
     }));
   return Object.freeze({
     schemaVersion: CANONICAL_SCHEMA_VERSION,
@@ -646,7 +717,7 @@ export function parseCanonicalSchemaIR(value: unknown): CanonicalSchemaIR {
   const resources: ResourceDefinition[] = [];
   for (let i = 0; i < rawResources.length; i++) {
     const entry = record(rawResources[i], "ir.resources[" + i + "]");
-    onlyKeys(entry, ["id", "ownership", "fields", "dynamic"], "ir.resources[" + i + "]");
+    onlyKeys(entry, ["id", "ownership", "fields", "dynamic", "uniques", "indexes"], "ir.resources[" + i + "]");
     resources[i] = parseResourceDefinition({
       ...entry,
       applicationId: appId,
