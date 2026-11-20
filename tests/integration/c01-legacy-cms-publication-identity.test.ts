@@ -605,7 +605,7 @@ describe("C01 legacy CMS additive application/installation identity", () => {
       expect(archive.length).toBeGreaterThan(1024);
       command(["pg_restore","--exit-on-error","--no-owner","-U","vibress","-d",restoredName],archive);
       restoreClient=await connect(restoredName);
-      expect((await restoreClient.query<{version:string}>("SHOW server_version_num")).rows[0]?.version).toBe("160016");
+      expect((await restoreClient.query<{server_version_num:string}>("SHOW server_version_num")).rows[0]?.server_version_num).toBe("160016");
       const after=await inventoryLegacyCms(restoreClient);
       expect(after).toEqual(before);
       const verified=await verifyLegacyCmsIdentityMapping(restoreClient,{applicationId,installationId});
