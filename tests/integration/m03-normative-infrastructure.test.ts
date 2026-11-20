@@ -1344,6 +1344,17 @@ it("J08 subset: genuinely different API/worker artifacts consume expanded CRM an
     expect(await (await list(newApi.port!)).json()).toMatchObject({customers:[{website:"https://example.invalid"}]});
     const created=await fetch("http://127.0.0.1:"+oldApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"legacy-write",name:"Old version"})});expect(created.status).toBe(200);
     const created2=await fetch("http://127.0.0.1:"+newApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"new-write",name:"New version",website:"https://new.invalid"})});expect(created2.status).toBe(200);
+    // Persisted membership revocation closes the API admission boundary for
+    // both binaries while the expansion is live; nothing falls back to tokens.
+    await f.admin.query("UPDATE public.platform_memberships SET active=false WHERE principal_id='api-principal'");
+    try{
+      expect((await list(oldApi.port!)).status).toBe(403);
+      expect((await list(newApi.port!)).status).toBe(403);
+      const denied=await fetch("http://127.0.0.1:"+newApi.port+"/crm/customers",{method:"POST",headers,body:JSON.stringify({code:"denied",name:"Denied"})});
+      expect(denied.status).toBe(403);
+    }finally{await f.admin.query("UPDATE public.platform_memberships SET active=true WHERE principal_id='api-principal'");}
+    expect((await list(newApi.port!)).status).toBe(200);
+    console.info("M03_C02_C04_REFERENCE_ADMISSION=PASS");
     await stop(newWorker.child);
     const restarted=await start(w1);expect(restarted.kind).toBe("ready");
     const unsupported=await queue.add("activity",jobData(2,randomUUID()));
