@@ -421,6 +421,13 @@
       "when": 1794900000007,
       "tag": "0060_platform_schema_authenticated_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794900000008,
+      "tag": "0061_legacy_cms_publication_identity",
+      "breakpoints": true
     }
   ]
 }
