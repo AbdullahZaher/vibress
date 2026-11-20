@@ -4,7 +4,7 @@
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {Client,type ClientBase} from "pg";
 import {asApplicationId,asInstallationId} from "@vibress/platform-kernel";
-import {compileProvisioningContract,compileProvisioningTransition,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
+import {compileProvisioningContract,compileProvisioningTransition,enforceBoundedJson,parseSchemaManifest,provisioningConstraintName,provisioningConstraints,provisioningColumnCollationV1,provisioningIndexKeyV1,provisioningIdentifier as qi,provisioningNamespace,provisioningTenantExpression,PROVISIONING_PROFILE,isProvisioningProfile,provisioningProfileFor,type ProvisioningProfile,type ProvisioningContract} from "@vibress/schema-engine";
 import {verifyProtectedMetadataAuthority} from "./schema-operator-experimental-protected-acl";
 import {recordExperimentalLifecycleTransition} from "./schema-operator-experimental-registry-lifecycle";
 import type {DisposableDurableRecoveryAuthority,ExperimentalProvisioningAdmission} from "./schema-operator-experimental-durable-authority";
@@ -448,7 +448,23 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     const manifest=parseSchemaManifest(JSON.parse(active.manifest)),physical=compileProvisioningContract(manifest,scopeOf(t));
     if(physical.digest!==e.physicalDigest||manifest.digest!==e.revision)return fail();
     const resource=physical.resources.find(x=>x.id===e.resourceId),column=resource?.columns.find(x=>x.name===e.column);
-    if(!resource||resource.ownership!=="tenant"||!column||column.type!=="text"||column.required||column.enumValues||column.target)return fail();
+    const declared=manifest.resources.find(x=>x.id===e.resourceId),backfillField=declared?.fields.find(x=>x.id===e.column);
+    if(!resource||resource.ownership!=="tenant"||!declared||!column||!backfillField||column.required||column.enumValues||column.target)return fail();
+    // Text stays a literal fill with the declared length bound. The bounded
+    // JSON families are admitted only through the shared JSON guard; money has
+    // no pair representation in the V1 message and is refused.
+    let valueExpression="$3";
+    if(column.type==="text"){
+      if(backfillField.logicalType!=="text"||(backfillField.maxLength!==undefined&&e.value.length>backfillField.maxLength))return fail();
+    }else if(column.type==="jsonb"){
+      if(backfillField.logicalType!=="json"&&backfillField.logicalType!=="media"&&backfillField.logicalType!=="localized")return fail();
+      let parsed:unknown;
+      try{parsed=JSON.parse(e.value);}catch{return backfillRefusal("VALUE");}
+      enforceBoundedJson(backfillField,parsed);
+      if(backfillField.logicalType==="media"&&(!parsed||typeof parsed!=="object"||Array.isArray(parsed)||typeof (parsed as Record<string,unknown>).url!=="string"))return backfillRefusal("VALUE");
+      if(backfillField.logicalType==="localized"&&(!parsed||typeof parsed!=="object"||Array.isArray(parsed)))return backfillRefusal("VALUE");
+      valueExpression="$3::jsonb";
+    }else return fail();
     await verifyCatalog(db,t,physical);
     const prior=(await db.query<{evidence:string;signature:string;affected:number;ids:string[]}>("SELECT evidence,signature,affected,ids FROM public.platform_schema_backfill_chunks_v1 WHERE operation_id=$1",[e.operationId])).rows[0];
     if(prior){
@@ -465,7 +481,7 @@ export async function runExperimentalBackfillChunk(connectionString:string,appro
     if(target.value!==e.value)return backfillRefusal("CONFLICT");
     await db.query("SELECT set_config('vibress.application_id',$1,true),set_config('vibress.tenant_id',$2,true)",[e.applicationId,e.tenantId]);
     const q=qualified(t.namespace,resource.table),field=qi(column.name);
-    const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+field+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+field+"=$3 FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+field+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit,e.value])).rows;
+    const updated=(await db.query<{id:string}>("WITH selected AS (SELECT id FROM "+q+" WHERE tenant_id=$1 AND "+field+" IS NULL ORDER BY id LIMIT $2 FOR UPDATE) UPDATE "+q+" d SET "+field+"="+valueExpression+" FROM selected s WHERE d.tenant_id=$1 AND d.id=s.id AND d."+field+" IS NULL RETURNING d.id::text AS id",[e.tenantId,e.limit,e.value])).rows;
     const ids=updated.map(x=>x.id).sort();
     await db.query("INSERT INTO public.platform_schema_backfill_chunks_v1(installation_id,revision_digest,operation_id,tenant_id,resource_id,column_name,evidence,signature,affected,ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",[t.installation_id,e.revision,e.operationId,e.tenantId,e.resourceId,e.column,approvalWire,signature,ids.length,ids]);
     await db.query("UPDATE public.platform_schema_backfill_targets_v1 SET chunks=chunks+1,affected_total=affected_total+$6,complete=$7,completed_at=CASE WHEN $7 THEN clock_timestamp() ELSE completed_at END,updated_at=clock_timestamp() WHERE installation_id=$1 AND revision_digest=$2 AND tenant_id=$3 AND resource_id=$4 AND column_name=$5",[t.installation_id,e.revision,e.tenantId,e.resourceId,e.column,ids.length,ids.length===0]);

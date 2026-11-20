@@ -206,7 +206,7 @@ describe("extended scalar validation", () => {
     ])).toThrow(ResourceSchemaError);
   });
 
-  it("maps media and localized documents to bounded jsonb with exact object CHECKs", () => {
+  it("maps media and localized documents to bounded jsonb with NULL-tolerant object CHECKs", () => {
     const manifest = manifestOf([
       { id: "code", type: "text", required: true },
       { id: "cover", type: "media", maxBytes: 4096, maxDepth: 8, maxKeys: 1000, required: false },
@@ -223,14 +223,16 @@ describe("extended scalar validation", () => {
     });
     const physical = compileProvisioningContract(manifest, scope);
     const checks = physical.resources[0]!.checks ?? [];
+    // Optional jsonb columns must admit NULL; required ones stay NOT NULL.
     expect(checks.find((c) => c.columns[0] === "cover")?.normalized)
-      .toBe("((jsonb_typeof(cover) = 'object'::text) AND (COALESCE(jsonb_typeof((cover -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size(cover) <= 4096))");
+      .toBe("((cover IS NULL) OR ((jsonb_typeof(cover) = 'object'::text) AND (COALESCE(jsonb_typeof((cover -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size(cover) <= 4096)))");
     expect(checks.find((c) => c.columns[0] === "title")?.normalized)
-      .toBe("((jsonb_typeof(title) = 'object'::text) AND (pg_column_size(title) <= 2048))");
+      .toBe("((title IS NULL) OR ((jsonb_typeof(title) = 'object'::text) AND (pg_column_size(title) <= 2048)))");
     const sql = compileProvisioningTransition(null, manifest, scope).statements.join("\n");
     expect(sql).toContain('"cover" jsonb');
-    expect(sql).toContain('jsonb_typeof("cover") = \'object\' AND coalesce(jsonb_typeof("cover" -> \'url\'), \'\') = \'string\'');
+    expect(sql).toContain('"cover" IS NULL OR (jsonb_typeof("cover") = \'object\' AND coalesce(jsonb_typeof("cover" -> \'url\'), \'\') = \'string\'');
     expect(sql).toContain('"title" jsonb NOT NULL');
+    expect(sql).toContain('"title" IS NULL OR (jsonb_typeof("title") = \'object\'');
   });
 
   it("serializes deterministically and round-trips through canonical IR", () => {

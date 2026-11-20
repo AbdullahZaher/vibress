@@ -3,7 +3,7 @@
 // It deliberately does NOT implement distributed recovery admission or a generic
 // soft-delete FK policy. Trusted callers must not expose arbitrary SQL.
 import {randomUUID} from "node:crypto";
-import {compileProvisioningContract,parseSchemaManifest,provisioningIdentifier as qi,PROVISIONING_PROFILE} from "@vibress/schema-engine";
+import {compileProvisioningContract,enforceBoundedJson,moneyCurrencyColumn,parseSchemaManifest,provisioningIdentifier as qi,validateMoney,PROVISIONING_PROFILE,type MoneyValue} from "@vibress/schema-engine";
 import {assertVerifiedScope,hasPermission,type ScopedTransaction} from "@vibress/tenancy";
 import type {DisposableDurableRecoveryAuthority} from "./schema-operator-experimental-durable-authority";
 
@@ -14,7 +14,30 @@ const validName=(name:unknown):name is string=>typeof name==="string"&&name.leng
 type Row={id:string;code:string;name:string;version_token:string}&Record<string,unknown>;
 type Page={records:Row[];nextCursor:string|null};
 type Order="id"|"code";
-type Field={name:string;kind:"text"|"boolean"|"datetime"|"relation";required:boolean;maxLength?:number};
+type Field=
+  |{name:string;kind:"text";maxLength?:number}
+  |{name:string;kind:"boolean"|"datetime"|"integer"|"date"}
+  |{name:string;kind:"decimal";precision:number;scale:number}
+  |{name:string;kind:"enum";values:readonly string[]}
+  |{name:string;kind:"money";precision:number;scale:number;currencyColumn:string}
+  |{name:string;kind:"json"|"media"|"localized";maxBytes:number;maxDepth:number;maxKeys:number}
+  |{name:string;kind:"relation";required:boolean};
+const int4Min=-2147483648,int4Max=2147483647;
+const isoDate=/^\d{4}-\d{2}-\d{2}$/;
+const isPlainObject=(value:unknown):value is Record<string,unknown>=>value!==null&&typeof value==="object"&&!Array.isArray(value);
+const validDate=(value:unknown):value is string=>{
+  if(typeof value!=="string"||!isoDate.test(value))return false;
+  const [year,month,day]=value.split("-").map(Number) as [number,number,number];
+  if(month<1||month>12||day<1)return false;
+  const leap=year%4===0&&(year%100!==0||year%400===0);
+  return day<=(month===2?(leap?29:28):[31,0,31,30,31,30,31,31,30,31,30,31][month-1]!);
+};
+const exactDecimal=(value:unknown,precision:number,scale:number):boolean=>{
+  if(typeof value!=="string"||!/^-?\d{1,38}(?:\.\d{1,38})?$/.test(value))return false;
+  const [whole="",fraction=""]=value.replace(/^-/,"").split(".");
+  const integer=whole.replace(/^0+(?=\d)/,"").length;
+  return fraction.length<=scale&&(integer<=precision-scale||(whole==="0"&&precision-scale===0));
+};
 type Identity={application_id:string;installation_id:string;epoch:string;ledger_id:string;manifest_digest:string;profile:string;revoked:boolean;runtime_role:string;role:string;session:string;db:string;oid:string;configured_db:string;configured_oid:string;system:string;configured_system:string;timeline:number;configured_timeline:number};
 
 /**
@@ -41,37 +64,77 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
   for(const [name,type,required] of [["code","text",true],["name","text",true],["version_token","text",true],["deleted_on","timestamp with time zone",false]] as const){
     if(!resource.columns.some(c=>c.name===name&&c.type===type&&c.required===required&&!c.enumValues&&!c.target))return refuse();
   }
-  // Beyond the fixed columns, declared fields are optional exact scalars
-  // (text with optional maxLength, boolean, datetime) or relations to
-  // same-ownership resources admitted by the compiled physical contract.
+  // Beyond the fixed columns, declared fields are optional exact scalars,
+  // bounded text, bounded JSON families, money pairs or same-ownership
+  // relations admitted by the compiled physical contract.
   const declared=manifest.resources.find(r=>r.id===resourceId);
   if(!declared)return refuse();
   const fields:Field[]=[];
   for(const field of declared.fields){
     if(fixed.has(field.id))continue;
     const column=resource.columns.find(c=>c.name===field.id);
-    if(!column||column.enumValues)return refuse();
+    if(!column)return refuse();
     if(field.logicalType==="relation"){
       const target=manifest.resources.find(r=>r.id===field.targetResource);
       if(field.required!==column.required||column.type!=="uuid"||!target||column.target!==target.tableName||target.ownership!=="tenant"||!resource.relations.some(r=>r.column===field.id&&r.table===target.tableName&&r.columns.length===2&&r.targetColumns.length===2))return refuse();
       fields.push({name:field.id,kind:"relation",required:column.required});
-    }else if(field.required||column.required||column.target)return refuse();
-    else if(field.logicalType==="text"&&column.type==="text")fields.push({name:field.id,kind:"text",required:false,...(field.maxLength!==undefined?{maxLength:field.maxLength}:{})});
-    else if(field.logicalType==="boolean"&&column.type==="boolean")fields.push({name:field.id,kind:"boolean",required:false});
-    else if(field.logicalType==="datetime"&&column.type==="timestamp with time zone")fields.push({name:field.id,kind:"datetime",required:false});
-    else return refuse();
+      continue;
+    }
+    if(field.required||column.required||column.target)return refuse();
+    if(field.logicalType==="text"){
+      if(column.type!=="text"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"text",...(field.maxLength!==undefined?{maxLength:field.maxLength}:{})});
+    }else if(field.logicalType==="boolean"){
+      if(column.type!=="boolean"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"boolean"});
+    }else if(field.logicalType==="datetime"){
+      if(column.type!=="timestamp with time zone"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"datetime"});
+    }else if(field.logicalType==="integer"){
+      if(column.type!=="integer"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"integer"});
+    }else if(field.logicalType==="date"){
+      if(column.type!=="date"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"date"});
+    }else if(field.logicalType==="decimal"){
+      if(field.precision===undefined||field.scale===undefined||column.type!=="numeric("+field.precision+","+field.scale+")"||column.enumValues)return refuse();
+      fields.push({name:field.id,kind:"decimal",precision:field.precision,scale:field.scale});
+    }else if(field.logicalType==="enum"){
+      if(column.type!=="text"||!column.enumValues||!field.values||JSON.stringify(column.enumValues)!==JSON.stringify(field.values))return refuse();
+      fields.push({name:field.id,kind:"enum",values:field.values});
+    }else if(field.logicalType==="money"){
+      const currencyColumn=moneyCurrencyColumn(field.id),currency=resource.columns.find(c=>c.name===currencyColumn),precision=field.precision??19,scale=field.scale??2;
+      if(column.type!=="numeric("+precision+","+scale+")"||column.enumValues||!currency||currency.type!=="text"||currency.required||currency.enumValues||currency.target||declared.fields.some(f=>f.id===currencyColumn))return refuse();
+      fields.push({name:field.id,kind:"money",precision,scale,currencyColumn});
+    }else if(field.logicalType==="json"||field.logicalType==="media"||field.logicalType==="localized"){
+      if(column.type!=="jsonb"||column.enumValues||field.maxBytes===undefined||field.maxDepth===undefined||field.maxKeys===undefined)return refuse();
+      fields.push({name:field.id,kind:field.logicalType,maxBytes:field.maxBytes,maxDepth:field.maxDepth,maxKeys:field.maxKeys});
+    }else return refuse();
   }
-  if(fields.length!==resource.columns.length-6||!resource.columns.every(c=>fixed.has(c.name)||fields.some(f=>f.name===c.name)))return refuse();
+  const owned=fields.flatMap(f=>f.kind==="money"?[f.name,f.currencyColumn]:[f.name]);
+  if(owned.length!==resource.columns.length-6||!resource.columns.every(c=>fixed.has(c.name)||owned.includes(c.name)))return refuse();
   const normalize=(field:Field,value:unknown):unknown=>{
     if(field.kind==="relation"){
       if(value===null)return field.required?refuse():null;
       return typeof value==="string"&&uuid.test(value)?value:refuse();
     }
     if(value===null)return null;
-    if(field.kind==="boolean")return typeof value==="boolean"?value:refuse();
-    if(field.kind==="text")return typeof value==="string"&&!value.includes("\u0000")&&(field.maxLength===undefined||value.length<=field.maxLength)?value:refuse();
-    if(typeof value!=="string"||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)||!Number.isFinite(Date.parse(value)))return refuse();
-    return value;
+    switch(field.kind){
+      case "boolean":return typeof value==="boolean"?value:refuse();
+      case "text":return typeof value==="string"&&!value.includes("\u0000")&&(field.maxLength===undefined||value.length<=field.maxLength)?value:refuse();
+      case "datetime":return typeof value==="string"&&/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)&&Number.isFinite(Date.parse(value))?value:refuse();
+      case "date":return validDate(value)?value:refuse();
+      case "integer":return typeof value==="number"&&Number.isInteger(value)&&value>=int4Min&&value<=int4Max?value:refuse();
+      case "decimal":return exactDecimal(value,field.precision,field.scale)?value:refuse();
+      case "enum":return typeof value==="string"&&field.values.includes(value)?value:refuse();
+      case "money":{
+        if(!isPlainObject(value)||Object.keys(value).some(key=>key!=="amount"&&key!=="currency"))return refuse();
+        return validateMoney(field,value.amount,value.currency);
+      }
+      case "json":enforceBoundedJson(field,value);return value;
+      case "media":enforceBoundedJson(field,value);return isPlainObject(value)&&typeof value.url==="string"?value:refuse();
+      case "localized":enforceBoundedJson(field,value);return isPlainObject(value)?value:refuse();
+    }
   };
   const valuesOf=(input:unknown):Map<string,unknown>=>{
     if(input===undefined)return new Map();
@@ -98,7 +161,23 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     unchanged();
     if(!hasPermission(scope.authorization.permissions,"resource."+resourceId+"."+action))return refuse();
   };
-  const projection="id::text AS id,code,name,version_token"+fields.map(f=>","+qi(f.name)).join("");
+  const cast=(field:Field)=>
+    field.kind==="datetime"?"::timestamptz":
+    field.kind==="date"?"::date":
+    field.kind==="decimal"?"::numeric":
+    field.kind==="json"||field.kind==="media"||field.kind==="localized"?"::jsonb":"";
+  const projection="id::text AS id,code,name,version_token"+fields.flatMap(f=>f.kind==="money"?[f.name,f.currencyColumn]:[f.name]).map(c=>","+qi(c)).join("");
+  // Money is one logical value over an exact amount and its currency
+  // companion; rows expose the pair under the declared field name.
+  const shape=(row:Row|null):Row|null=>{
+    if(!row)return null;
+    for(const field of fields)if(field.kind==="money"){
+      const amount=row[field.name] as string|null,currency=row[field.currencyColumn] as string|null;
+      delete row[field.currencyColumn];
+      row[field.name]={amount,currency};
+    }
+    return row;
+  };
   const encodeCursor=(order:Order,row:Row)=>"v1."+Buffer.from(JSON.stringify([manifest.digest,order,order==="id"?row.id:[row.code,row.id]])).toString("base64url");
   const decodeCursor=(order:Order,after:string):string|[string,string]=>{
     if(!after.startsWith("v1.")||after.length>512)return refuse();
@@ -114,17 +193,20 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
     async create(code:string,name:string,input?:unknown):Promise<Row>{
       allow("create");
       if(typeof code!=="string"||!codePattern.test(code)||!validName(name))return refuse();
-      const values=valuesOf(input),columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null];
-      for(const field of fields)if(field.required&&!values.has(field.name))return refuse();
-      for(const field of fields){columns.push(field.name);params.push(values.get(field.name)??null);}
-      const placeholders=columns.map((column,index)=>{
-        const field=fields.find(f=>f.name===column);
-        return "$"+(index+1)+(field?.kind==="datetime"?"::timestamptz":"");
-      });
+      const values=valuesOf(input),columns=["tenant_id","id","code","name","version_token","deleted_on"],params:unknown[]=[tenant,randomUUID(),code,name,randomUUID(),null],casts=["","","","","",""];
+      for(const field of fields)if(field.kind==="relation"&&field.required&&!values.has(field.name))return refuse();
+      for(const field of fields){
+        const value=values.get(field.name)??null;
+        if(field.kind==="money"){
+          const pair=value as MoneyValue|null;
+          columns.push(field.name,field.currencyColumn);params.push(pair?.amount??null,pair?.currency??null);casts.push("::numeric","");
+        }else{columns.push(field.name);params.push(value);casts.push(cast(field));}
+      }
+      const placeholders=columns.map((_,index)=>"$"+(index+1)+casts[index]);
       const result=await tx.query<Row>("INSERT INTO "+table+"("+columns.map(qi).join(",")+") VALUES("+placeholders.join(",")+") RETURNING "+projection,params);
       unchanged();
       if(result.rowCount!==1||!result.rows[0])return refuse();
-      return result.rows[0];
+      return shape(result.rows[0])!;
     },
     async update(id:string,expectedVersion:string,name:string,input?:unknown):Promise<Row|null>{
       allow("update");
@@ -133,11 +215,17 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
       let set="name=$4,version_token=$5";
       for(const field of fields){
         if(!values.has(field.name))continue;
-        params.push(values.get(field.name));
-        set+=","+qi(field.name)+"=$"+params.length+(field.kind==="datetime"?"::timestamptz":"");
+        if(field.kind==="money"){
+          const pair=values.get(field.name) as MoneyValue|null;
+          params.push(pair?.amount??null);set+=","+qi(field.name)+"=$"+params.length+"::numeric";
+          params.push(pair?.currency??null);set+=","+qi(field.currencyColumn)+"=$"+params.length;
+        }else{
+          params.push(values.get(field.name));
+          set+=","+qi(field.name)+"=$"+params.length+cast(field);
+        }
       }
       const result=await tx.query<Row>("UPDATE "+table+" SET "+set+" WHERE tenant_id=$1 AND id=$2::uuid AND version_token=$3 AND deleted_on IS NULL RETURNING "+projection,params);
-      unchanged();return result.rows[0]??null;
+      unchanged();return shape(result.rows[0]??null);
     },
     async remove(id:string,expectedVersion:string):Promise<boolean>{
       allow("delete");
@@ -153,7 +241,7 @@ export async function openExperimentalVersionedResource(tx:ScopedTransaction,man
         ?await tx.query<Row>("SELECT "+projection+" FROM "+table+" WHERE tenant_id=$1 AND deleted_on IS NULL AND ($2::uuid IS NULL OR id>$2::uuid) AND ($3::text IS NULL OR code=$3::text) ORDER BY id LIMIT $4",[tenant,key,code,limit+1])
         :await tx.query<Row>("SELECT "+projection+" FROM "+table+" WHERE tenant_id=$1 AND deleted_on IS NULL AND ($2::text IS NULL OR (code,id)>($2::text,$3::uuid)) AND ($4::text IS NULL OR code=$4::text) ORDER BY code,id LIMIT $5",[tenant,key===null?null:(key as [string,string])[0],key===null?null:(key as [string,string])[1],code,limit+1]);
       unchanged();
-      const records=result.rows.slice(0,limit);
+      const records=result.rows.slice(0,limit).map(row=>shape(row)!);
       return {records,nextCursor:result.rows.length>limit?encodeCursor(order,records.at(-1)!):null};
     },
   };

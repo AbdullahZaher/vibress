@@ -308,6 +308,101 @@ describe("M03 actual isolated normative infrastructure",()=>{
     expect(await open(tb,resource=>resource.update(a.id,cleared.version_token,"Wrong tenant",{sponsor:null}))).toBeNull();
     console.info("M03_A02_RELATIONS=PASS");
   },60000);
+  it("A01: typed leaf resources enforce money and bounded JSON on create, partial update, CAS and signed backfill",async()=>{
+    const f=await lab("a01","reference-typed-guards");
+    const m=createSchemaManifest(compileResourceSchema([
+      {...f.scope,id:"customers",ownership:"tenant",fields:[{id:"code",type:"text",required:true},{id:"name",type:"text",required:true}]},
+      {...f.scope,id:"deals",ownership:"tenant",fields:[
+        {id:"code",type:"text",required:true},{id:"name",type:"text",required:true},
+        {id:"version_token",type:"text",required:true},{id:"deleted_on",type:"datetime",required:false},
+        {id:"quantity",type:"integer",required:false},
+        {id:"due_on",type:"date",required:false},
+        {id:"ratio",type:"decimal",required:false,precision:6,scale:2},
+        {id:"value",type:"money",required:false,precision:12,scale:2},
+        {id:"metadata",type:"json",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
+        {id:"attachment",type:"media",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
+        {id:"headline",type:"localized",required:false,maxBytes:512,maxDepth:3,maxKeys:12},
+        {id:"stage",type:"enum",required:false,values:["draft","live"]},
+        {id:"customer",type:"relation",required:false,targetResource:"customers"}
+      ]}
+    ],f.scope));
+    await apply(f,m,approval(f,null,m));
+    const uow=new TenantUnitOfWork(f.pool),permissions=["resource.deals.create","resource.deals.update","resource.deals.delete","resource.deals.read"];
+    const scoped=(tenant:string)=>{
+      const tenantId=asTenantId(tenant),principalId=asPrincipalId("fixture-principal"),applicationId=f.scope.applicationId;
+      return verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions},membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions},authorization:{allowed:true,permissions,policyVersion:"fixture-a01-v1"}});
+    };
+    const ta=scoped("tenant-a"),tb=scoped("tenant-b");
+    type Deal={id:string;version_token:string;code:string;name:string;quantity:number|null;due_on:Date|null;ratio:string|null;value:{amount:string|null;currency:string|null};metadata:unknown;attachment:unknown;headline:unknown;stage:string|null;customer:string|null};
+    type Resource=NonNullable<Awaited<ReturnType<typeof openExperimentalVersionedResource>>>;
+    const open=<T>(scopeArg:ReturnType<typeof scoped>,action:(resource:Resource)=>Promise<T>)=>uow.run(scopeArg,async tx=>action(await openExperimentalVersionedResource(tx,wire(m),"deals",f.authority)));
+    const customerId=randomUUID();
+    await uow.run(ta,tx=>tx.query("INSERT INTO "+table(f,m,"customers")+"(tenant_id,id,code,name) VALUES('tenant-a',$1,'cust','C')",[customerId]));
+    const created=await open(ta,resource=>resource.create("deal-1","First",{
+      quantity:7,due_on:"2026-05-06",ratio:"12.34",
+      value:{amount:"19.99",currency:"USD"},
+      metadata:{a:[1,true]},
+      attachment:{url:"https://cdn.test/a.png",alt:"a"},
+      headline:{en:{title:"Hi"},ar:{title:"مرحبا"}},
+      stage:"live",customer:customerId,
+    })) as Deal;
+    expect(created).toMatchObject({code:"deal-1",name:"First",quantity:7,ratio:"12.34",value:{amount:"19.99",currency:"USD"},metadata:{a:[1,true]},attachment:{url:"https://cdn.test/a.png",alt:"a"},headline:{en:{title:"Hi"},ar:{title:"مرحبا"}},stage:"live",customer:customerId});
+    expect(created).not.toHaveProperty("value_currency");
+    const due=created.due_on!;
+    expect([due.getFullYear(),due.getMonth()+1,due.getDate()]).toEqual([2026,5,6]);
+    // Application-level refusals happen before SQL; PostgreSQL still owns the
+    // numeric type, the jsonb byte bound and the currency syntax CHECK.
+    for(const [values,code] of [
+      [{quantity:1.5},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{quantity:2**31},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{due_on:"2026-02-31"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{ratio:"1.234"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{ratio:"12345.6"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{value:{amount:"10.00"}},"MONEY_REFUSED:PAIR"],
+      [{value:{amount:"10.00",currency:"AAA"}},"MONEY_REFUSED:CURRENCY"],
+      [{value:{amount:"10.001",currency:"USD"}},"MONEY_REFUSED:SCALE"],
+      [{value:{amount:"10.00",currency:"USD",extra:1}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{metadata:{a:{b:{c:{d:1}}}}},"JSON_BOUND_REFUSED:DEPTH"],
+      [{metadata:{a:undefined}},"JSON_BOUND_REFUSED:VALUE"],
+      [{attachment:{alt:"no url"}},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{headline:"plain text"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{stage:"archived"},"M03_VERSIONED_RESOURCE_REFUSED"],
+      [{color:"red"},"M03_VERSIONED_RESOURCE_REFUSED"],
+    ] as const){
+      await expect(open(ta,resource=>resource.create("deal-bad","Bad",values))).rejects.toThrow(code);
+    }
+    const deals=table(f,m,"deals");
+    // Partial update keeps omitted money/json values and clears on explicit null.
+    const updated=await open(ta,resource=>resource.update(created.id,created.version_token,"First revised",{value:{amount:"20.5",currency:"EUR"},metadata:null})) as Deal;
+    expect(updated).toMatchObject({name:"First revised",quantity:7,ratio:"12.34",value:{amount:"20.50",currency:"EUR"},metadata:null,attachment:{url:"https://cdn.test/a.png",alt:"a"}});
+    const cleared=await open(ta,resource=>resource.update(created.id,updated.version_token,"First revised",{value:null})) as Deal;
+    expect(cleared).toMatchObject({value:{amount:null,currency:null},metadata:null});
+    // Version-checked mutation and tenant isolation still hold.
+    expect(await open(ta,resource=>resource.update(created.id,created.version_token,"Stale",{value:{amount:"1.00",currency:"USD"}}))).toBeNull();
+    expect(await open(tb,resource=>resource.update(created.id,cleared.version_token,"Cross tenant",{value:null}))).toBeNull();
+    expect((await open(tb,resource=>resource.list(10)) as {records:unknown[]}).records).toEqual([]);
+    // The database enforces the three-letter currency shape and jsonb bytes but
+    // has no predicate for ISO membership or JSON depth/keys.
+    await expect(f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,value,value_currency) VALUES('tenant-b',$1,'db-lower','DB',$2,'1.00','usd')",[randomUUID(),randomUUID()])).rejects.toMatchObject({code:"23514"});
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token,metadata) VALUES('tenant-b',$1,'db-deep','DB',$2,$3::jsonb)",[randomUUID(),randomUUID(),JSON.stringify({a:{b:{c:{d:1}}}})]);
+    // Signed backfill supports bounded text and the declared jsonb families,
+    // refuses money (no pair representation) and applies the same JSON guard.
+    const backfilled=randomUUID();
+    await f.admin.query("INSERT INTO "+deals+"(tenant_id,id,code,name,version_token) VALUES('tenant-b',$1,'bf-1','BF',$2)",[backfilled,randomUUID()]);
+    const physicalDigest=compileProvisioningContract(m,f.scope).digest;
+    const chunk=(tenantId:string,column:string,value:string,limit=1)=>{
+      const s=f.authority.authenticatedSnapshot();
+      const e:ExperimentalBackfillApproval={version:1,installationId:f.scope.installationId,applicationId:f.scope.applicationId,databaseName:f.name,databaseOid:f.oid,epoch:s.epoch,ledgerId:s.ledgerId,authorityHead:s.head,authoritySequence:s.sequence,revision:m.digest,physicalDigest,operationId:randomUUID(),tenantId,resourceId:"deals",column,value,limit};
+      const message=experimentalBackfillMessage(e);
+      return runExperimentalBackfillChunk(dbUrl(f.name,f.installer),message,sign(null,Buffer.from(message),credentials.privateKey).toString("base64url"),f.authority);
+    };
+    await expect(chunk("tenant-a","metadata",JSON.stringify({a:{b:{c:{d:1}}}}))).rejects.toThrow("JSON_BOUND_REFUSED:DEPTH");
+    await expect(chunk("tenant-a","value","1.00")).rejects.toThrow("M03_PROVISIONING_REFUSED");
+    expect(await chunk("tenant-b","metadata",JSON.stringify({note:"seeded"}))).toMatchObject({status:"COMMITTED",affected:1,complete:false});
+    expect(await chunk("tenant-b","metadata",JSON.stringify({note:"seeded"}))).toMatchObject({status:"COMMITTED",affected:0,complete:true});
+    expect((await f.admin.query("SELECT metadata FROM "+deals+" WHERE id=$1",[backfilled])).rows).toEqual([{metadata:{note:"seeded"}}]);
+    console.info("M03_A01_MONEY_JSON_TYPED_WRITES=PASS");
+  },60000);
   it("B01: persistent lifecycle CAS, immutable history, installer refusal, DB_COMMITTED vs ACTIVE, concurrency and supersession",async()=>{
     const f=await lab("lifecycle","reference-lifecycle"),m=crm(f),a=approval(f,null,m);
     const life=(digest:string)=>f.admin.query<{state:LifecycleState;state_version:number}>("SELECT state,state_version FROM public.platform_schema_revision_states_v1 WHERE installation_id=$1 AND revision_digest=$2",[f.scope.installationId,digest]).then(r=>r.rows[0]);

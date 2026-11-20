@@ -185,11 +185,11 @@ export function compileProvisioningContract(input:unknown,scope:SchemaCompilatio
         columns.push({name:id,type:"jsonb",required:field.required});
         addCheck([id],
           field.logicalType==="media"
-            ? "jsonb_typeof("+column+") = 'object' AND coalesce(jsonb_typeof("+column+" -> 'url'), '') = 'string' AND pg_column_size("+column+") <= "+maxBytes
-            : "jsonb_typeof("+column+") = 'object' AND pg_column_size("+column+") <= "+maxBytes,
+            ? qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND coalesce(jsonb_typeof("+column+" -> 'url'), '') = 'string' AND pg_column_size("+column+") <= "+maxBytes+")"
+            : qi(id)+" IS NULL OR (jsonb_typeof("+column+") = 'object' AND pg_column_size("+column+") <= "+maxBytes+")",
           field.logicalType==="media"
-            ? "((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(jsonb_typeof(("+id+" -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size("+id+") <= "+maxBytes+"))"
-            : "((jsonb_typeof("+id+") = 'object'::text) AND (pg_column_size("+id+") <= "+maxBytes+"))");
+            ? "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (COALESCE(jsonb_typeof(("+id+" -> 'url'::text)), ''::text) = 'string'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))"
+            : "(("+id+" IS NULL) OR ((jsonb_typeof("+id+") = 'object'::text) AND (pg_column_size("+id+") <= "+maxBytes+")))");
       }else if(field.logicalType==="text"&&field.maxLength!==undefined){
         const maxLength=field.maxLength;
         if(!Number.isInteger(maxLength)||maxLength<1||maxLength>100000)throw Error("PROVISIONING_TEXT_BOUND");
