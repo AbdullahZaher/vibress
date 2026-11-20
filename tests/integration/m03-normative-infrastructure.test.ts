@@ -432,7 +432,9 @@ describe("M03 actual isolated normative infrastructure",()=>{
     // Stale-version removal keeps CAS semantics; the live child blocks the commit.
     expect(await openParents(ta,resource=>resource.remove(p1.id,"00000000-0000-4000-8000-000000000000"))).toBe(false);
     await expect(openParents(ta,resource=>resource.remove(p1.id,p1.version_token))).rejects.toThrow("M03_VERSIONED_RESOURCE_CHILDREN");
-    expect((await openParents(ta,resource=>resource.list(10))).records.map(row=>row.code)).toEqual(["parent-1","parent-2"]);
+    // Default order is by random UUID id; assert the declared code order so the
+    // assertion is about stable visibility, not UUID luck.
+    expect((await openParents(ta,resource=>resource.list(10,null,null,"code"))).records.map(row=>row.code)).toEqual(["parent-1","parent-2"]);
     const parentRow=(await f.admin.query<{deleted:boolean}>("SELECT deleted_on IS NOT NULL AS deleted FROM "+table(f,m,"parents")+" WHERE id=$1",[p1.id])).rows;
     expect(parentRow).toEqual([{deleted:false}]);
     // Removing the child allows the parent removal; the child's FK row remains.
