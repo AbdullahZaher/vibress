@@ -337,6 +337,7 @@ describe("C01 legacy CMS additive application/installation identity", () => {
     const rejected=[
       {id:"ob_bad_version",event:"post.published",payload:{version:2,eventType:"post.published",payload:{publicationId:"pub_alpha"}}},
       {id:"ob_bad_mismatch",event:"post.published",payload:{version:1,eventType:"post.deleted",payload:{publicationId:"pub_alpha"}}},
+      {id:"ob_bad_unknown_type",event:"custom.unregistered",payload:{version:1,eventType:"custom.unregistered",payload:{publicationId:"pub_alpha"}}},
       {id:"ob_bad_ambiguous",event:"post.published",payload:{version:1,eventType:"post.published",publicationId:"pub_alpha",payload:{publicationId:"pub_beta"}}},
       {id:"ob_bad_unknown",event:"post.published",payload:{publicationId:"pub_unknown"}},
       {id:"ob_bad_malformed",event:"post.published",payload:{publicationId:15}},
