@@ -10,7 +10,8 @@ Record here after the final commit (Agent 01 pins the exact SHA/tree in the ledg
 
 - Execution branch: `docs/universal-platform-full-execution-checklist-20261121`
 - Implementation checkpoint under review: `ac07c737de0b512f9ad616773715ee3a8cd095a4`
-- Final remediation candidate SHA/tree: pinned by the last commit on the branch
+- Final remediation candidate SHA: 5c79f9bb23797f37f3432ae6bf4cf3740dd886c2
+- Final remediation candidate tree: dfdddcd59b416334357988937fa0ef45238daf90
 - Documentation CI on the implementation checkpoint: [44937688713](https://github.com/AbdullahZaher/vibress/actions/runs/44937688713) (success)
 - Full unit suite on corrected environment: 379 files / 2733 tests passed, exit 0
 
