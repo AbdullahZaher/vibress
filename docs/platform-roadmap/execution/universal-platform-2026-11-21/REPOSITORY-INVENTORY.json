@@ -116,7 +116,7 @@
         "start",
         "typecheck"
       ],
-      "sourceFileCount": 46,
+      "sourceFileCount": 51,
       "dependencies": [
         "@vibress/database",
         "@vibress/platform-kernel",
@@ -863,7 +863,7 @@
       "private": true,
       "hasBuildScript": false,
       "entryKind": "typescript-source",
-      "exportCount": 6,
+      "exportCount": 7,
       "nxTags": [
         "type:platform"
       ],
@@ -2247,7 +2247,7 @@
     {
       "packageName": "@vibress/tenancy",
       "entryKind": "typescript-source",
-      "exportCount": 6
+      "exportCount": 7
     },
     {
       "packageName": "@vibress/testing",

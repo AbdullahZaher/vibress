@@ -55,6 +55,22 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-HANDOFF.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-DEPENDENCY-RECOVERY-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-HARDENING-FINAL-UNIT-LOG.txt",
 ];
 
 export const TEST_SUITES = [

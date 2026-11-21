@@ -1,0 +1,47 @@
+npm warn Unknown project config "public-hoist-pattern". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+npm notice run vibress-monorepo@1.2.0 npx
+npm notice run 'vitest' run --config vitest.oidc.tmp.config.ts
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.oidc.tmp.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /Users/abdullahzaher/vibress
+
+ ❯ apps/platform-reference/src/oidc-live-integration.test.ts (6 tests | 2 failed) 155ms
+     × rejects wrong issuer, audience, bindings, expiry and not-before 8ms
+     × rejects unknown keys, unsupported algorithms and forged signatures 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/platform-reference/src/oidc-live-integration.test.ts > M02-E01 live disposable OIDC/JWKS integration > rejects wrong issuer, audience, bindings, expiry and not-before
+AssertionError: expected undefined to be an instance of InvalidOidcTokenError
+ ❯ expectCode apps/platform-reference/src/oidc-live-integration.test.ts:143:20
+    141|     captured = error;
+    142|   }
+    143|   expect(captured).toBeInstanceOf(InvalidOidcTokenError);
+       |                    ^
+    144|   expect((captured as InvalidOidcTokenError).code).toBe(code);
+    145| }
+ ❯ apps/platform-reference/src/oidc-live-integration.test.ts:179:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/platform-reference/src/oidc-live-integration.test.ts > M02-E01 live disposable OIDC/JWKS integration > rejects unknown keys, unsupported algorithms and forged signatures
+AssertionError: expected undefined to be an instance of InvalidOidcTokenError
+ ❯ expectCode apps/platform-reference/src/oidc-live-integration.test.ts:143:20
+    141|     captured = error;
+    142|   }
+    143|   expect(captured).toBeInstanceOf(InvalidOidcTokenError);
+       |                    ^
+    144|   expect((captured as InvalidOidcTokenError).code).toBe(code);
+    145| }
+ ❯ apps/platform-reference/src/oidc-live-integration.test.ts:186:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  00:26:45
+   Duration  390ms (transform 54ms, setup 0ms, import 84ms, tests 155ms, environment 0ms)
+

@@ -126,7 +126,7 @@ describe("Epic execution traceability ledger (M00-E06)", () => {
     const { errors } = validateLedger(registry, parsedWave, parsedMilestones);
     expect(errors).toEqual(
       expect.arrayContaining([
-        "M02-E01: assessment drift (ledger CERTIFIED_RESTRICTED, checklist PARTIAL); run --write",
+        "M02-E01: assessment drift (ledger CERTIFIED_RESTRICTED, checklist IMPLEMENTED_RESTRICTED); run --write",
       ]),
     );
   });

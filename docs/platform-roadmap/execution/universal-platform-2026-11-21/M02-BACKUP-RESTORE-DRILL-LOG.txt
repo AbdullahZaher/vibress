@@ -1,0 +1,10 @@
+=== Backup/restore authority assertions ===
+PASS backup integrity digest: 4a8be58bc987c9327537f071dea1f0b2fbbad1b17a88c2ac6a799bb332c78977
+PASS A reads own data: A_SECRET
+PASS B reads own data: B_SECRET
+PASS A restore role cannot connect to B: permission denied
+PASS A runtime role cannot connect to B: permission denied
+PASS authorized restore recovers A data: A_SECRET
+PASS backup did not leak into B: 0
+PASS roles are not superuser/BYPASSRLS: f|f
+=== Backup/restore drill: PASS ===

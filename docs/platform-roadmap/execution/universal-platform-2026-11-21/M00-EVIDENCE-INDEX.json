@@ -3,11 +3,11 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "3689cbc5804943b29362f4575a89895fa027713b8904db393f2b490170ecae79"
+      "sha256": "c910e85d8b49a5b015a3e7abf25e298d746e9d2e79229c10f3e86dbd71456c86"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
-      "sha256": "9f1f1ad0c01ac9491afc4bb2ff5161abaae998b84fcf257cb1d0ec41f896dd45"
+      "sha256": "d0aa339efda00c65ec51c1240492ab3f08175ddb8373833ea609f5b7ce59a2d1"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
@@ -156,12 +156,76 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
       "sha256": "79f4b9f132f133c2fad2f2ef7238c09819eef84aadf1f924a34e4c03fe439ce8"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+      "sha256": "9c6a8a67f7912c990bf5c789a215aeed6293583aaf872b97d41e21693870c614"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+      "sha256": "630b76ab576d92e22ddfbe89e743550c53f746e75116ae7220f197c9892cc4af"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+      "sha256": "a8870da52ee75924c276e9c7631549cb69ddcf038a4aa3562bd48791cb2855a4"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+      "sha256": "14b1ec64b82eb87732d6bea7fd75b67fe07cf8ae4ad23cffc7c98b34ab3d453c"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+      "sha256": "f6d9598dab6046e748d063aab999c390abc2469b6262413388b86c84f8e29dfb"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+      "sha256": "fc348c9eab3d24ff10994eb6bb81b70be2b328e1a91cebd90bd4eae777b28f9d"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+      "sha256": "813f601453acd87a7a7751523f65b9f5362f2d30fe92e8cdd10f15459e28a5b7"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+      "sha256": "46a2d82506245479960e13f4e5ad2c547214cbbd280746044e1957a1fec18369"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+      "sha256": "0e3b21c627ab3072f711e367fbb881f26655c2c21fd40a05ae209c0df938ff6e"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+      "sha256": "015b3f3133e20b05bc3e79519d033f0726f9b01371ad2b4e71f8d97c3675d52c"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "sha256": "7a65f519c3d9b7f8d6f08dc928a0194b763add82fc69b352095b521f1bfb080f"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-DEPENDENCY-RECOVERY-HANDOFF.md",
+      "sha256": "6762863ff3f75a6aafac58de1e75e4277acf3838e9a6164ffa2cc19747e24f1f"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+      "sha256": "bb850ddeac03bf0c049bee728af80f7a314e53522d354a12b56d740403f0fd73"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+      "sha256": "ff5f715b2d4ef660b243760c62e9d9a328d324cd098b53d293486f6dc5c6f162"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+      "sha256": "733006ff55c105b22cddba15ff8ee6123c07a88cbfd2e5313b3509703fce16c3"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-HARDENING-FINAL-UNIT-LOG.txt",
+      "sha256": "920c383883d7b650d1707b7d2eb2d1552af028bbaab6fa5a2a361196d863ec04"
     }
   ],
   "testSuites": [
     {
       "path": "scripts/__tests__/execution-traceability.test.mjs",
-      "sha256": "f7d26b2b3826486e5f30b74ec9fe84276b894336fc27f4b26015164f230815ce",
+      "sha256": "cef01df3c92eb73c37de339d98e4a394f2aeb1aa3dd27b273e01e8f467e32232",
       "negativeCases": true
     },
     {
@@ -229,21 +293,39 @@
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-MILESTONE-VERIFICATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-REGISTRY-AND-IDENTITY-SECURITY-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-TENANT-ISOLATION-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-COMPLETE-IMPLEMENTATION-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-MILESTONE-VERIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-IAM-AND-REVOCATION-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-PG16-RLS-DRILL-LOG.txt",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-POSTGRES-RLS-AND-PRIVILEGE-CERTIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/SDK-COMPATIBILITY-INVENTORY.json",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md",
       "examples/external-crm-consumer/src/app.ts",
       "packages/database/src",
       "packages/schema-engine/src",

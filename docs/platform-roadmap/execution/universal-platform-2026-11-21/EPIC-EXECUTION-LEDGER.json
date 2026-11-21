@@ -1311,9 +1311,9 @@
       "owners": [
         "A05"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -1332,12 +1332,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1386,12 +1405,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1440,12 +1478,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1493,12 +1550,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1547,12 +1623,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1601,12 +1696,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1656,12 +1770,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1710,12 +1843,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1764,12 +1916,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1818,12 +1989,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1877,7 +2067,25 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [
           "bounded tenant lifecycle contracts (M02-E11)"
@@ -1887,7 +2095,8 @@
         ],
         "notes": [
           "11 unit tests pass and tenancy typecheck passes. Pure contracts only: no disposable PG/S3/queue drill executed, no backup erasure claimed.",
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1938,12 +2147,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -1994,12 +2222,31 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
-          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed."
+          "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
@@ -2048,13 +2295,32 @@
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
           "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-AUTHORIZATION-CERTIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-AUTHORITY-DRILL.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-REDIS-ACL-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INTEGRATED-SECURITY-VERIFICATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-VERDICT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-LIVE-OIDC-INTEGRATION-REPORT.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-SECURITY-DECISIONS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-IAM-ISOLATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-LIFECYCLE-INTEGRATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-SECURITY-READINESS.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md"
         ],
         "testNames": [],
         "ciRunUrls": [],
         "notes": [
           "M02 security increment: default-deny record/field authorization, disposable PG16 RLS drill (15/15) and Redis ACL installation drill (9/9); no R26 grant, live IdP or S3/backup drill executed.",
-          "Agent 06 bounded finding: label narrowed to PARTIAL; evidence covers Redis ACL + PG only, not S3/backup/queue."
+          "Agent 06 bounded finding: label narrowed to PARTIAL; evidence covers Redis ACL + PG only, not S3/backup/queue.",
+          "Wave 1 hardening increment: disposable OIDC/JWKS 6/6, S3 credential drill 8/8, backup/restore 8/8, signed worker envelopes 6/6; genuine BullMQ/offboarding matrix and human IdP remain pending."
         ]
       },
       "independentReview": {
