@@ -78,6 +78,12 @@ The focused [fourth-pass review R35–R39](FOURTH-PASS-REVIEW-2026-11-14.md) ide
 9. Evidence-based releases and independent review; never infer certification from a green CI check alone.
 10. Open-source self-hosting remains complete; managed cloud is optional.
 
+## Multi-agent execution checklist (2026-11-21 — draft, not certified)
+
+The complete **140-Epic / 13-Milestone / five-Wave execution checklist**, current implementation evidence, Agent 01–12 specialty assignments (Agent 06 independently audits), milestone-end testing cadence, original A1–A8/G0–G7 gates and controlled reviewer/owner merge process are maintained in [the independent 2026-11-21 execution package](execution/universal-platform-2026-11-21/README.md).
+
+This is a **new planning-branch execution overlay**, not a replacement for the original acceptance specification and **not** a certified change to the `main` branch. All formal milestone issues remain open until independently evidenced and owner-authorized. For source-verified implementation statuses, read [the separate evidence reconciliation](execution/universal-platform-2026-11-21/STATUS-AND-BASELINE.md) instead of treating the original 2026-11-14 'Proposed' planning table below as the current Git branch state.
+
 ## Waves
 
 | Wave | Milestones | Business objective |
