@@ -40,6 +40,10 @@ export const platformInstallations = pgTable(
     applicationIdx: index("platform_installations_application_idx").on(
       table.applicationId,
     ),
+    idApplicationUnique: uniqueIndex("platform_installations_id_application_idx").on(
+      table.id,
+      table.applicationId,
+    ),
   }),
 );
 

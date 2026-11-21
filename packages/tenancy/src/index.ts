@@ -5,3 +5,4 @@ export * from "./executor";
 export * from "./lifecycle";
 export * from "./authorization";
 export * from "./worker-envelope";
+export * from "./atomic-worker-effect";
