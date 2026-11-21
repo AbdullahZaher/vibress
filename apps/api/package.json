@@ -77,7 +77,7 @@
     "fastify": "^5.12.8",
     "nodemailer": "^10.3.1",
     "stripe": "^17.7.0",
-    "ws": "^8.22.0",
+    "ws": "^8.23.0",
     "zod": "^4.6.6"
   },
   "devDependencies": {
