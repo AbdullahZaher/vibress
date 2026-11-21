@@ -16,14 +16,16 @@ The original master plan remains normative for scope and acceptance: [Master Roa
 ## Read in this order
 
 1. [Evidence-backed status and remaining work](STATUS-AND-BASELINE.md).
-2. [Specialist agent roster and responsibility rules](AGENTS.md).
-3. [Milestone-end test, independent review and merge protocol](MILESTONE-TEST-AND-MERGE-PROTOCOL.md).
-4. [Wave 1 — M00/M01/M02](WAVE-01-M00-M02.md).
-5. [Wave 2 — M03/M04/M05/M06](WAVE-02-M03-M06.md).
-6. [Wave 3 — M07/M08](WAVE-03-M07-M08.md).
-7. [Wave 4 — M09/M10](WAVE-04-M09-M10.md).
-8. [Wave 5 — M11/M12](WAVE-05-M11-M12.md).
-9. [Cross-wave release gates, verification and decision register](RELEASE-AND-GOVERNANCE-GATES.md).
+2. [Phase 0 branch and PR consolidation inventory](BRANCH-CONSOLIDATION-INVENTORY-2026-11-21.md).
+3. [Machine-readable Epic execution ledger](EPIC-EXECUTION-LEDGER.md) (`EPIC-EXECUTION-LEDGER.json`, verified by `pnpm verify:execution-traceability`).
+4. [Specialist agent roster and responsibility rules](AGENTS.md).
+5. [Milestone-end test, independent review and merge protocol](MILESTONE-TEST-AND-MERGE-PROTOCOL.md).
+6. [Wave 1 — M00/M01/M02](WAVE-01-M00-M02.md).
+7. [Wave 2 — M03/M04/M05/M06](WAVE-02-M03-M06.md).
+8. [Wave 3 — M07/M08](WAVE-03-M07-M08.md).
+9. [Wave 4 — M09/M10](WAVE-04-M09-M10.md).
+10. [Wave 5 — M11/M12](WAVE-05-M11-M12.md).
+11. [Cross-wave release gates, verification and decision register](RELEASE-AND-GOVERNANCE-GATES.md).
 
 ## Checklist semantics — strict
 

@@ -1,0 +1,5768 @@
+{
+  "schemaVersion": 1,
+  "planVersion": "2026-11-21",
+  "registryPath": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
+  "sourceDocuments": {
+    "waves": [
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-M00-M02.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-02-M03-M06.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-03-M07-M08.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-04-M09-M10.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-05-M11-M12.md"
+    ],
+    "milestones": "docs/platform-roadmap/milestones"
+  },
+  "epics": [
+    {
+      "id": "M00-E01",
+      "milestone": "M00",
+      "title": "Repository inventory",
+      "milestoneSpecTitle": "Repository inventory",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A01",
+        "A07"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E02",
+      "milestone": "M00",
+      "title": "Architecture ADRs",
+      "milestoneSpecTitle": "Architecture ADRs",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A01",
+        "A02",
+        "A05"
+      ],
+      "assessment": "BLOCKED_GOVERNANCE",
+      "executionStatus": "BLOCKED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M00-E03",
+      "milestone": "M00",
+      "title": "Boundary enforcement",
+      "milestoneSpecTitle": "Boundary enforcement",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A03",
+        "A11"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E04",
+      "milestone": "M00",
+      "title": "Compatibility baseline",
+      "milestoneSpecTitle": "Compatibility baseline",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A08",
+        "A11"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E05",
+      "milestone": "M00",
+      "title": "Quality governance",
+      "milestoneSpecTitle": "Quality governance",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A11",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E06",
+      "milestone": "M00",
+      "title": "Traceability",
+      "milestoneSpecTitle": "Traceability",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A01",
+        "A11"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E07",
+      "milestone": "M00",
+      "title": "Deployment/identity architecture spike",
+      "milestoneSpecTitle": "Deployment/identity security architecture spike",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A04",
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E08",
+      "milestone": "M00",
+      "title": "Public SDK and migration inventory",
+      "milestoneSpecTitle": "Public SDK and migration inventory",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A10"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E09",
+      "milestone": "M00",
+      "title": "Documentation and milestone validation",
+      "milestoneSpecTitle": "Documentation and milestone validation",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A11",
+        "A10"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E10",
+      "milestone": "M00",
+      "title": "v1 product capability matrix",
+      "milestoneSpecTitle": "v1 product compatibility and architectural proof plan",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A01",
+        "A07",
+        "A08"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E11",
+      "milestone": "M00",
+      "title": "Operational/privacy ownership",
+      "milestoneSpecTitle": "Operational and privacy ownership baseline",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A01",
+        "A04",
+        "A05"
+      ],
+      "assessment": "BLOCKED_GOVERNANCE",
+      "executionStatus": "BLOCKED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M00-E12",
+      "milestone": "M00",
+      "title": "Postgres grant and RLS inventory",
+      "milestoneSpecTitle": "PostgreSQL effective grant and RLS policy inventory",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M00-E13",
+      "milestone": "M00",
+      "title": "First adopter and DX baseline",
+      "milestoneSpecTitle": "First-adopter and documentation quality spike",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_EVIDENCED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E01",
+      "milestone": "M01",
+      "title": "Domain vocabulary",
+      "milestoneSpecTitle": "Domain vocabulary",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E02",
+      "milestone": "M01",
+      "title": "Public kernel contracts",
+      "milestoneSpecTitle": "Public kernel contracts",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A10"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E03",
+      "milestone": "M01",
+      "title": "Application registry",
+      "milestoneSpecTitle": "Application registry",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A02"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E04",
+      "milestone": "M01",
+      "title": "Dependency inversion",
+      "milestoneSpecTitle": "Dependency inversion",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E05",
+      "milestone": "M01",
+      "title": "Strangler compatibility",
+      "milestoneSpecTitle": "Strangler compatibility",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A08"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E06",
+      "milestone": "M01",
+      "title": "Reference consumer",
+      "milestoneSpecTitle": "Reference consumer",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A10"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E07",
+      "milestone": "M01",
+      "title": "Per-installation runtime",
+      "milestoneSpecTitle": "Application-per-installation reference runtime",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A07",
+        "A04"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E08",
+      "milestone": "M01",
+      "title": "Authenticated application context",
+      "milestoneSpecTitle": "Authenticated application context compatibility",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A05",
+        "A07"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E09",
+      "milestone": "M01",
+      "title": "Independent app packaging/extensions",
+      "milestoneSpecTitle": "General application packaging and extension boundary",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A10",
+        "A07"
+      ],
+      "assessment": "NOT_EVIDENCED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M01-E10",
+      "milestone": "M01",
+      "title": "Physical installation isolation",
+      "milestoneSpecTitle": "Real application installation isolation and trust",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A04",
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E01",
+      "milestone": "M02",
+      "title": "Identity",
+      "milestoneSpecTitle": "Identity",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E02",
+      "milestone": "M02",
+      "title": "Authorization",
+      "milestoneSpecTitle": "Authorization",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A03",
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E03",
+      "milestone": "M02",
+      "title": "Trusted context propagation",
+      "milestoneSpecTitle": "Trusted context propagation",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A05",
+        "A07"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E04",
+      "milestone": "M02",
+      "title": "PostgreSQL RLS",
+      "milestoneSpecTitle": "PostgreSQL RLS",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E05",
+      "milestone": "M02",
+      "title": "Role separation",
+      "milestoneSpecTitle": "Role separation",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A04"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E06",
+      "milestone": "M02",
+      "title": "Security tests",
+      "milestoneSpecTitle": "Security tests",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A03",
+        "A11"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E07",
+      "milestone": "M02",
+      "title": "Audit and secrets",
+      "milestoneSpecTitle": "Audit/secrets",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A03",
+        "A04",
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E08",
+      "milestone": "M02",
+      "title": "Scoped unit of work",
+      "milestoneSpecTitle": "Scoped transaction unit of work",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A07"
+      ],
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E09",
+      "milestone": "M02",
+      "title": "RLS policy coverage/exceptions",
+      "milestoneSpecTitle": "RLS policy coverage and maintenance exceptions",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E10",
+      "milestone": "M02",
+      "title": "Plugin provisioning grant migration",
+      "milestoneSpecTitle": "Plugin provisioning grant migration",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A09"
+      ],
+      "assessment": "BLOCKED_GOVERNANCE",
+      "executionStatus": "BLOCKED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M02-E11",
+      "milestone": "M02",
+      "title": "Tenant data lifecycle",
+      "milestoneSpecTitle": "Tenant data lifecycle and authorization",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A05",
+        "A04"
+      ],
+      "assessment": "NOT_EVIDENCED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E12",
+      "milestone": "M02",
+      "title": "Function ACL / SECURITY DEFINER",
+      "milestoneSpecTitle": "Function effective ACL and SECURITY DEFINER audit",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E13",
+      "milestone": "M02",
+      "title": "RLS multi-policy/non-row SQL",
+      "milestoneSpecTitle": "Multi-policy RLS and non-row privilege tests",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A02",
+        "A03"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M02-E14",
+      "milestone": "M02",
+      "title": "Infrastructure cross-install boundaries",
+      "milestoneSpecTitle": "Cross-install infrastructure access tests",
+      "wave": "WAVE-01-M00-M02.md",
+      "owners": [
+        "A04",
+        "A05"
+      ],
+      "assessment": "PARTIAL",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M03-E01",
+      "milestone": "M03",
+      "title": "Universal resource DSL",
+      "milestoneSpecTitle": "Universal resource DSL",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A03"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S01 canonical schema compiler",
+          "M03-S02 canonical PostgreSQL 16 schema manifest"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E02",
+      "milestone": "M03",
+      "title": "Canonical IR and registry",
+      "milestoneSpecTitle": "Canonical IR and registry",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A02"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S02 canonical PostgreSQL 16 schema manifest"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E03",
+      "milestone": "M03",
+      "title": "Relational rules",
+      "milestoneSpecTitle": "Relational rules",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A02"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S02 canonical PostgreSQL 16 schema manifest",
+          "M03-S02 deterministic non-executing change planning"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E04",
+      "milestone": "M03",
+      "title": "Schema compiler",
+      "milestoneSpecTitle": "Schema compiler",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S02 deterministic non-executing change planning"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E05",
+      "milestone": "M03",
+      "title": "Storage strategy",
+      "milestoneSpecTitle": "Storage strategy",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A02"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S02 deterministic non-executing change planning",
+          "M03-S01 canonical schema compiler"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E06",
+      "milestone": "M03",
+      "title": "Schema evolution",
+      "milestoneSpecTitle": "Schema evolution",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A02",
+        "A04"
+      ],
+      "assessment": "PARTIAL_BLOCKED_D02",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M03-E07",
+      "milestone": "M03",
+      "title": "Security coupling",
+      "milestoneSpecTitle": "Security coupling",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A02",
+        "A03",
+        "A05"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "AG06-S02-01: untrusted arrays never dispatch caller collection methods"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E08",
+      "milestone": "M03",
+      "title": "DDL trust boundary",
+      "milestoneSpecTitle": "DDL trust boundary and namespace reservation",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A02",
+        "A07",
+        "A05"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "M03-S02 deterministic non-executing change planning"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M03-E09",
+      "milestone": "M03",
+      "title": "Drift, concurrency, compatibility",
+      "milestoneSpecTitle": "Migration drift, concurrency and compatibility",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A02",
+        "A04",
+        "A07"
+      ],
+      "assessment": "PARTIAL_BLOCKED_D02",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M03-E10",
+      "milestone": "M03",
+      "title": "Topology-aware identity/CMS",
+      "milestoneSpecTitle": "Topology-aware identity and schema compatibility",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A02",
+        "A05"
+      ],
+      "assessment": "PARTIAL_GOVERNANCE_D03",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "Owner/human governance approval required; see Wave checklist."
+      ]
+    },
+    {
+      "id": "M03-E11",
+      "milestone": "M03",
+      "title": "Mixed-version compiler/backfill",
+      "milestoneSpecTitle": "Mixed-version schema compiler and backfill compatibility",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A09",
+        "A04"
+      ],
+      "assessment": "CERTIFIED_RESTRICTED_D01",
+      "executionStatus": "TESTED_PENDING_REVIEW",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b",
+        "pullRequest": 213,
+        "branch": "experiment/m03-remaining-functional-exec-20261119"
+      },
+      "evidence": {
+        "sourcePaths": [
+          "packages/schema-engine/src",
+          "packages/database/src"
+        ],
+        "testNames": [
+          "tests/unit/schema-operator-experimental-deadline.test.ts",
+          "tests/integration/platform-schema-migration-operator.test.ts"
+        ],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801660",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801694",
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44831801713"
+        ],
+        "notes": [
+          "Restricted independent certification only; D-01/D-02/D-03 governance gates remain open and the candidate is unmerged."
+        ]
+      },
+      "independentReview": {
+        "verdict": "CONDITIONAL",
+        "url": "https://github.com/AbdullahZaher/vibress/issues/197#issuecomment-7062090919",
+        "reviewedSha": "a49d0379da06749ef5f163d9e48e9a053d2a375b"
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": [
+        "M03 governance gates D-01/D-02/D-03 and owner merge authorization remain open."
+      ]
+    },
+    {
+      "id": "M04-E01",
+      "milestone": "M04",
+      "title": "CRUD operations compiler",
+      "milestoneSpecTitle": "CRUD operations compiler",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08",
+        "A07"
+      ],
+      "assessment": "IN_PROGRESS_CONTRACT_ONLY",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E02",
+      "milestone": "M04",
+      "title": "REST/OpenAPI generator",
+      "milestoneSpecTitle": "REST/OpenAPI generator",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08",
+        "A03"
+      ],
+      "assessment": "IN_PROGRESS_CONTRACT_ONLY",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E03",
+      "milestone": "M04",
+      "title": "Typed application SDK",
+      "milestoneSpecTitle": "Typed application SDK",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08",
+        "A10"
+      ],
+      "assessment": "IN_PROGRESS_MOCK_ONLY",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E04",
+      "milestone": "M04",
+      "title": "Host-rendered Admin UI",
+      "milestoneSpecTitle": "Host-rendered Admin UI",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08"
+      ],
+      "assessment": "IN_PROGRESS_METADATA_ONLY",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E05",
+      "milestone": "M04",
+      "title": "Authorization binding",
+      "milestoneSpecTitle": "Authorization binding",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A03",
+        "A05",
+        "A08"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E06",
+      "milestone": "M04",
+      "title": "Extension lifecycle",
+      "milestoneSpecTitle": "Extension lifecycle",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A08"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E07",
+      "milestone": "M04",
+      "title": "Performance guardrails",
+      "milestoneSpecTitle": "Performance guardrails",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08",
+        "A11"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E08",
+      "milestone": "M04",
+      "title": "Negative authorization conformance",
+      "milestoneSpecTitle": "Negative authorization conformance suite",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A03",
+        "A05",
+        "A11"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E09",
+      "milestone": "M04",
+      "title": "Resource cost / schema exposure",
+      "milestoneSpecTitle": "Resource cost and schema exposure budget",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A07",
+        "A08",
+        "A11"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M04-E10",
+      "milestone": "M04",
+      "title": "Custom endpoint / frontend security",
+      "milestoneSpecTitle": "Typed custom endpoint and user-facing client security",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A08",
+        "A03",
+        "A10"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E01",
+      "milestone": "M05",
+      "title": "Unified manifest",
+      "milestoneSpecTitle": "Unified manifest",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A07"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E02",
+      "milestone": "M05",
+      "title": "Dependency compatibility solver",
+      "milestoneSpecTitle": "Dependency/compatibility solver",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A10"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E03",
+      "milestone": "M05",
+      "title": "Lifecycle",
+      "milestoneSpecTitle": "Lifecycle",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A02"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E04",
+      "milestone": "M05",
+      "title": "Trusted admission",
+      "milestoneSpecTitle": "Trusted admission",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A03",
+        "A05"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E05",
+      "milestone": "M05",
+      "title": "Safe upgrade",
+      "milestoneSpecTitle": "Safe upgrade",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A04"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E06",
+      "milestone": "M05",
+      "title": "Public SDK",
+      "milestoneSpecTitle": "Public SDK",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A10"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E07",
+      "milestone": "M05",
+      "title": "Trust tiers",
+      "milestoneSpecTitle": "Trust tiers",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A03",
+        "A09",
+        "A04"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E08",
+      "milestone": "M05",
+      "title": "SDK publication/ABI reconciliation",
+      "milestoneSpecTitle": "Existing SDK publication and ABI reconciliation",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A10",
+        "A09"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E09",
+      "milestone": "M05",
+      "title": "Real plugin execution / crash-safe state",
+      "milestoneSpecTitle": "Real plugin execution and crash-safe state",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A04"
+      ],
+      "assessment": "PARTIAL_REUSE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E10",
+      "milestone": "M05",
+      "title": "Public module/event ABI fence",
+      "milestoneSpecTitle": "Public module/event ABI version fence",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A03"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M05-E11",
+      "milestone": "M05",
+      "title": "Operator-trusted grants / upgrade",
+      "milestoneSpecTitle": "Operator-trusted plugin and grant/ABI upgrade compatibility",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A02",
+        "A09",
+        "A05"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E01",
+      "milestone": "M06",
+      "title": "Actions",
+      "milestoneSpecTitle": "Actions",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A07"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E02",
+      "milestone": "M06",
+      "title": "Workflow primitives",
+      "milestoneSpecTitle": "Workflow primitives",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E03",
+      "milestone": "M06",
+      "title": "Transactional outbox/inbox",
+      "milestoneSpecTitle": "Transactional outbox/inbox",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A02"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E04",
+      "milestone": "M06",
+      "title": "Tenant-scoped jobs",
+      "milestoneSpecTitle": "Tenant-scoped jobs",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A05",
+        "A04"
+      ],
+      "assessment": "PARTIAL_REUSE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E05",
+      "milestone": "M06",
+      "title": "Provider adapters",
+      "milestoneSpecTitle": "Provider adapters",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A03"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E06",
+      "milestone": "M06",
+      "title": "Billing/entitlements",
+      "milestoneSpecTitle": "Billing/entitlements",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A02"
+      ],
+      "assessment": "REUSE_BASELINE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E07",
+      "milestone": "M06",
+      "title": "Fault injection",
+      "milestoneSpecTitle": "Fault injection",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A04",
+        "A09",
+        "A11"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E08",
+      "milestone": "M06",
+      "title": "Bounded v1 reliable action slice",
+      "milestoneSpecTitle": "Bounded v1 reliable action slice",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A08"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E09",
+      "milestone": "M06",
+      "title": "Versioned envelopes / poison events",
+      "milestoneSpecTitle": "Versioned event envelopes and poison-event handling",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A09",
+        "A02"
+      ],
+      "assessment": "PARTIAL_REUSE",
+      "executionStatus": "IN_PROGRESS",
+      "scope": "RESTRICTED",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M06-E10",
+      "milestone": "M06",
+      "title": "Cross-install event replay",
+      "milestoneSpecTitle": "Cross-installation service integration and event replay",
+      "wave": "WAVE-02-M03-M06.md",
+      "owners": [
+        "A04",
+        "A05",
+        "A09"
+      ],
+      "assessment": "NOT_VERIFIED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E01",
+      "milestone": "M07",
+      "title": "CLI",
+      "milestoneSpecTitle": "CLI",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E02",
+      "milestone": "M07",
+      "title": "Public application SDK",
+      "milestoneSpecTitle": "Public app SDK",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E03",
+      "milestone": "M07",
+      "title": "Templates",
+      "milestoneSpecTitle": "Templates",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E04",
+      "milestone": "M07",
+      "title": "Clean installed consumers",
+      "milestoneSpecTitle": "Clean installed consumers",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E05",
+      "milestone": "M07",
+      "title": "Upgrade UX",
+      "milestoneSpecTitle": "Upgrade UX",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E06",
+      "milestone": "M07",
+      "title": "Developer docs",
+      "milestoneSpecTitle": "Developer docs",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E07",
+      "milestone": "M07",
+      "title": "Golden apps",
+      "milestoneSpecTitle": "Golden apps",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E08",
+      "milestone": "M07",
+      "title": "Golden-app conformance scope",
+      "milestoneSpecTitle": "Staged Golden App conformance",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E09",
+      "milestone": "M07",
+      "title": "SDK packaging and version gate",
+      "milestoneSpecTitle": "SDK packaging/version gate",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A03"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E10",
+      "milestone": "M07",
+      "title": "User-facing custom app proof",
+      "milestoneSpecTitle": "End-user code-first web app and custom action acceptance",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A08",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M07-E11",
+      "milestone": "M07",
+      "title": "Developer adoption / matched product trial",
+      "milestoneSpecTitle": "External developer adoption and matched product trial",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E01",
+      "milestone": "M08",
+      "title": "Independent security audit",
+      "milestoneSpecTitle": "Independent security audit",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A03",
+        "A05",
+        "A06"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E02",
+      "milestone": "M08",
+      "title": "Compatibility matrix",
+      "milestoneSpecTitle": "Compatibility matrix",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A01",
+        "A07",
+        "A09"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E03",
+      "milestone": "M08",
+      "title": "Performance",
+      "milestoneSpecTitle": "Performance",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A04",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E04",
+      "milestone": "M08",
+      "title": "DR drills",
+      "milestoneSpecTitle": "DR drills",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A02",
+        "A04"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E05",
+      "milestone": "M08",
+      "title": "Supply chain",
+      "milestoneSpecTitle": "Supply chain",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A03",
+        "A04"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E06",
+      "milestone": "M08",
+      "title": "Release docs",
+      "milestoneSpecTitle": "Release docs",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A01",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E07",
+      "milestone": "M08",
+      "title": "Go/no-go board",
+      "milestoneSpecTitle": "Go/no-go board",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A01",
+        "A06"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E08",
+      "milestone": "M08",
+      "title": "Independent authorization",
+      "milestoneSpecTitle": "Explicit independent audit and release authorization",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A06",
+        "A01"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E09",
+      "milestone": "M08",
+      "title": "Published support/scope",
+      "milestoneSpecTitle": "Published support and release scope",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A01",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E10",
+      "milestone": "M08",
+      "title": "General-app / privacy / operations",
+      "milestoneSpecTitle": "General-app proof, privacy and operational service budget",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A08",
+        "A04",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E11",
+      "milestone": "M08",
+      "title": "Effective privilege/infrastructure proof",
+      "milestoneSpecTitle": "Effective privilege and infrastructure isolation release proof",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A02",
+        "A03",
+        "A04",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M08-E12",
+      "milestone": "M08",
+      "title": "Version-skew and operator recovery",
+      "milestoneSpecTitle": "Version-skew and operator recovery release gate",
+      "wave": "WAVE-03-M07-M08.md",
+      "owners": [
+        "A02",
+        "A04",
+        "A09"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E01",
+      "milestone": "M09",
+      "title": "Visual data modeler",
+      "milestoneSpecTitle": "Visual data modeler",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E02",
+      "milestone": "M09",
+      "title": "Form builder",
+      "milestoneSpecTitle": "Form builder",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E03",
+      "milestone": "M09",
+      "title": "Data tables/dashboards",
+      "milestoneSpecTitle": "Data tables and dashboards",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E04",
+      "milestone": "M09",
+      "title": "Page/layout builder",
+      "milestoneSpecTitle": "Page/layout builder",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E05",
+      "milestone": "M09",
+      "title": "Action/data bindings",
+      "milestoneSpecTitle": "Action/data bindings",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A09"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E06",
+      "milestone": "M09",
+      "title": "Visual/code synchronization",
+      "milestoneSpecTitle": "Visual-code synchronization",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E07",
+      "milestone": "M09",
+      "title": "Accessibility/RTL/IME/collaboration",
+      "milestoneSpecTitle": "Accessibility/RTL/IME and collaboration",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A08",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E08",
+      "milestone": "M09",
+      "title": "Canonical IR and ownership",
+      "milestoneSpecTitle": "Canonical IR and code ownership contract",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M09-E09",
+      "milestone": "M09",
+      "title": "Builder preview threat model",
+      "milestoneSpecTitle": "Builder preview threat model",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A03",
+        "A05",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E01",
+      "milestone": "M10",
+      "title": "Agent SDK",
+      "milestoneSpecTitle": "Agent SDK",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E02",
+      "milestone": "M10",
+      "title": "Scoped MCP server",
+      "milestoneSpecTitle": "MCP server with scoped principal and tool capabilities; no arbitrary tenant selectors.",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E03",
+      "milestone": "M10",
+      "title": "Skills/AGENTS.md",
+      "milestoneSpecTitle": "Skills/AGENTS.md",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A10",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E04",
+      "milestone": "M10",
+      "title": "Approval flow",
+      "milestoneSpecTitle": "Approval flow",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A05",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E05",
+      "milestone": "M10",
+      "title": "Constrained agent runtime",
+      "milestoneSpecTitle": "Constrained runtime",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A03",
+        "A04",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E06",
+      "milestone": "M10",
+      "title": "Evaluation harness",
+      "milestoneSpecTitle": "Evaluation harness",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A11",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E07",
+      "milestone": "M10",
+      "title": "Visual builder compatibility",
+      "milestoneSpecTitle": "Visual compatibility",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A12",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E08",
+      "milestone": "M10",
+      "title": "Adversarial tool authorization",
+      "milestoneSpecTitle": "Adversarial tool authorization suite",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A03",
+        "A05",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M10-E09",
+      "milestone": "M10",
+      "title": "Agent quotas and audit",
+      "milestoneSpecTitle": "Agent resource quotas and audit",
+      "wave": "WAVE-04-M09-M10.md",
+      "owners": [
+        "A04",
+        "A05",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E01",
+      "milestone": "M11",
+      "title": "Cloud control plane",
+      "milestoneSpecTitle": "Control plane",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A12",
+        "A04"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E02",
+      "milestone": "M11",
+      "title": "Artifact build/deploy",
+      "milestoneSpecTitle": "Artifact-based build/deploy",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E03",
+      "milestone": "M11",
+      "title": "Secrets and isolation",
+      "milestoneSpecTitle": "Secrets/isolation",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E04",
+      "milestone": "M11",
+      "title": "Networking",
+      "milestoneSpecTitle": "Networking",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A03"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E05",
+      "milestone": "M11",
+      "title": "Operations",
+      "milestoneSpecTitle": "Operations",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E06",
+      "milestone": "M11",
+      "title": "Cloud usage billing",
+      "milestoneSpecTitle": "Billing of cloud usage",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A12",
+        "A09"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E07",
+      "milestone": "M11",
+      "title": "Deploy adapters",
+      "milestoneSpecTitle": "Deploy adapters",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A12",
+        "A04"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E08",
+      "milestone": "M11",
+      "title": "Deployment privileges / recovery",
+      "milestoneSpecTitle": "Deployment privilege and data recovery contract",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A02",
+        "A04",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E09",
+      "milestone": "M11",
+      "title": "Compatible promotion / forward-fix",
+      "milestoneSpecTitle": "Compatible promotion and forward-fix",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A07"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E10",
+      "milestone": "M11",
+      "title": "Tenant offboarding / data rights",
+      "milestoneSpecTitle": "Tenant offboarding and control-plane data rights",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M11-E11",
+      "milestone": "M11",
+      "title": "Per-install infra and rollout isolation",
+      "milestoneSpecTitle": "Provable per-installation infrastructure and rollout isolation",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A04",
+        "A05",
+        "A03"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E01",
+      "milestone": "M12",
+      "title": "Extension/template registry",
+      "milestoneSpecTitle": "Registry",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A09",
+        "A12"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E02",
+      "milestone": "M12",
+      "title": "Marketplace UX",
+      "milestoneSpecTitle": "Marketplace UX",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A12",
+        "A08"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E03",
+      "milestone": "M12",
+      "title": "Publisher identity/signing",
+      "milestoneSpecTitle": "Publisher program",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A09",
+        "A05"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E04",
+      "milestone": "M12",
+      "title": "Supply chain/revocation",
+      "milestoneSpecTitle": "Supply-chain/security",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A03",
+        "A04"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E05",
+      "milestone": "M12",
+      "title": "Enterprise adapters",
+      "milestoneSpecTitle": "Enterprise adapters",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A09",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E06",
+      "milestone": "M12",
+      "title": "Open community governance",
+      "milestoneSpecTitle": "Community",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A01",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E07",
+      "milestone": "M12",
+      "title": "Comparative benchmarks",
+      "milestoneSpecTitle": "Comparative benchmarks",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A11",
+        "A10"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E08",
+      "milestone": "M12",
+      "title": "Publisher/extension isolation",
+      "milestoneSpecTitle": "Publisher and extension isolation admission",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A03",
+        "A04",
+        "A09"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    },
+    {
+      "id": "M12-E09",
+      "milestone": "M12",
+      "title": "Interoperability benchmarks",
+      "milestoneSpecTitle": "Truthful interoperability benchmarks",
+      "wave": "WAVE-05-M11-M12.md",
+      "owners": [
+        "A10",
+        "A11"
+      ],
+      "assessment": "NOT_ACCEPTED",
+      "executionStatus": "NOT_STARTED",
+      "scope": "NONE",
+      "formallyClosed": false,
+      "implementation": {
+        "codeSha": null,
+        "pullRequest": null,
+        "branch": null
+      },
+      "evidence": {
+        "sourcePaths": [],
+        "testNames": [],
+        "ciRunUrls": [],
+        "notes": []
+      },
+      "independentReview": {
+        "verdict": null,
+        "url": null,
+        "reviewedSha": null
+      },
+      "merge": {
+        "mergeSha": null,
+        "mergedTo": null
+      },
+      "ownerAuthorization": {
+        "status": "PENDING",
+        "url": null
+      },
+      "blockers": []
+    }
+  ]
+}

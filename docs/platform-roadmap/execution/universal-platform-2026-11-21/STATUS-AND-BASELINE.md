@@ -60,3 +60,15 @@
 ## Immutable reporting requirements
 
 Every status change cites repo, source SHA/tree, exact job/run IDs, relevant fixture/environment (PG16 version), positive/negative assertions, exceptions, named reviewer decision, actual signer/authority and review timestamp. Unverifiable progress stays `NOT_EVIDENCED`; missing human approvals stay `PENDING`. Publication-domain artifacts and independent CRM must be checked as distinct identities. No fake percentages, fabricated burndown, unapproved future dates or copied CI conclusions.
+
+## 2026-11-21 Phase 0 reconciliation (Agent 01)
+
+**Scope:** branch/PR consolidation inventory and Epic traceability. **No executable code was integrated.** Production remains `NO-GO`.
+
+- [x] Fetched all remotes and verified the stated baselines: execution branch `5644492c`, `main@251bef39`.
+- [x] Verified #151/#166/#174/#176/#193 are included in `main` by **file content**, not ancestry alone. #174's merge commit is not an ancestor of `main`; all 21 paths are nevertheless present.
+- [x] Classified every unmerged candidate. Full evidence: [BRANCH-CONSOLIDATION-INVENTORY-2026-11-21.md](BRANCH-CONSOLIDATION-INVENTORY-2026-11-21.md).
+- [x] `SAFE_TO_INTEGRATE` = **none**. #213 is `BLOCKED_BY_GOVERNANCE` (D-01/D-02/D-03 + no owner merge authorization); #212 is a restricted contract with M04 runtime unauthorized; #198–#203 are `SUPERSEDED_BY_NEWER_IMPLEMENTATION`; #204–#211 and `experiment/*` are `EXPERIMENTAL_KEEP_SEPARATE`.
+- [x] Implemented M00-E06 traceability: `EPIC-EXECUTION-LEDGER.json` enumerates all 140 Epics across 13 milestones with owners, assessment, execution status, scope, evidence, independent review, merge and authorization fields. `pnpm verify:execution-traceability` fails closed on closure without evidence, illegal statuses, checklist drift and invented progress metrics.
+- [x] M00-E06 is `IMPLEMENTED_RESTRICTED`: tooling and tests exist; milestone-end acceptance and independent review remain pending.
+- [ ] M00/M01/M02 formal GO and Wave 1 GO remain blocked by the owner/human gates listed above. No Epic is `FORMALLY_CLOSED`.

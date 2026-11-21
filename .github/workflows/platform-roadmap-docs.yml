@@ -6,6 +6,8 @@ on:
       - 'docs/platform-roadmap/**'
       - 'docs/README.md'
       - 'scripts/verify-platform-roadmap.mjs'
+      - 'scripts/verify-execution-traceability.mjs'
+      - 'scripts/platform/execution/**'
       - '.github/workflows/platform-roadmap-docs.yml'
   push:
     branches:
@@ -15,6 +17,8 @@ on:
       - 'docs/platform-roadmap/**'
       - 'docs/README.md'
       - 'scripts/verify-platform-roadmap.mjs'
+      - 'scripts/verify-execution-traceability.mjs'
+      - 'scripts/platform/execution/**'
       - '.github/workflows/platform-roadmap-docs.yml'
   workflow_dispatch:
 
@@ -37,3 +41,5 @@ jobs:
           node-version: '24'
       - name: Check roadmap document consistency (no network or secrets)
         run: node scripts/verify-platform-roadmap.mjs
+      - name: Verify Epic execution traceability ledger
+        run: node scripts/verify-execution-traceability.mjs

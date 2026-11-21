@@ -30,6 +30,7 @@
     "owner:create": "tsx scripts/bootstrap-owner.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,html,css}\"",
     "verify:clean-tree": "node scripts/verify-clean-tree.mjs",
+    "verify:execution-traceability": "node scripts/verify-execution-traceability.mjs",
     "docs:validate-links": "node scripts/validate-docs-links.mjs docs/platform-roadmap",
     "prod:up": "docker compose -f compose.prod.yml up -d --build",
     "prod:down": "docker compose -f compose.prod.yml down",
