@@ -26,19 +26,27 @@
 
 | Epic | Engineering implemented | Tests passed | Evidence recorded | Specialist review | Human approval | Independent cert | Formal closure |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| E01 inventory | yes | yes | yes | pending A06 | pending | not performed | blocked |
-| E02 ADRs | packages only | n/a | yes | pending | pending owners | not performed | blocked |
-| E03 boundaries | yes | yes | yes | pending A06 | pending | not performed | blocked |
-| E04 compatibility | yes | yes | yes | pending | pending | not performed | blocked |
-| E05 quality/CI | yes | yes | yes | pending | pending | not performed | blocked |
-| E06 traceability | yes | yes | yes | pending | pending | not performed | blocked |
-| E07 deployment identity | nonproduction baseline | n/a | yes | pending A02/04/05 | pending | not performed | blocked |
-| E08 SDK/migration | yes | yes | yes | pending | pending R40 | not performed | blocked |
-| E09 docs validation | yes | yes | yes | pending | pending | not performed | blocked |
-| E10 capability matrix | yes | yes | yes | pending | pending | not performed | blocked |
-| E11 ownership | role definitions only | n/a | yes | pending | pending humans | not performed | blocked |
-| E12 PostgreSQL inventory | read-only scan | yes | yes | pending A02/03/05 | pending DBA | not performed | blocked |
-| E13 DX baseline | yes | yes | yes | pending | pending A2/G6 | not performed | blocked |
+| E01 inventory | yes | yes | yes | milestone-level restricted verdict; no per-Epic closure | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E02 ADRs | packages only | n/a | yes | pending | pending owners | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E03 boundaries | yes | yes | yes | milestone-level restricted verdict; no per-Epic closure | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E04 compatibility | yes | yes | yes | pending | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E05 quality/CI | yes | yes | yes | pending | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E06 traceability | yes | yes | yes | pending | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E07 deployment identity | nonproduction baseline | n/a | yes | pending A02/04/05 | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E08 SDK/migration | yes | yes | yes | pending | pending R40 | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E09 docs validation | yes | yes | yes | pending | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E10 capability matrix | yes | yes | yes | pending | pending | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E11 ownership | role definitions only | n/a | yes | pending | pending humans | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E12 PostgreSQL inventory | read-only scan | yes | yes | pending A02/03/05 | pending DBA | milestone-level restricted verdict; no per-Epic closure | blocked |
+| E13 DX baseline | yes | yes | yes | pending | pending A2/G6 | milestone-level restricted verdict; no per-Epic closure | blocked |
+
+## Certification decision layers
+
+- Technical verification of M00: complete (2733/2733 unit tests, validators, docs CI).
+- Independent certification of the restricted engineering candidate: `M00_ENGINEERING_ACCEPTED` at `77a6043b` by a separate read-only auditor.
+- Delta recertification of the final candidate: recorded in `M00-FINAL-DELTA-INDEPENDENT-RECERTIFICATION.md`.
+- Formal Epic closure: **not authorized**; all Epic-level independent-review fields remain empty.
+- Governance sign-off, owner merge authorization and production release approval: **all pending**.
 
 ## Focused verification runs
 
