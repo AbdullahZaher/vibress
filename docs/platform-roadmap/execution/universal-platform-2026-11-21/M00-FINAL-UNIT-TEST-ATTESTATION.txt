@@ -1,0 +1,11 @@
+M00 final full unit suite attestation
+Command: pnpm test:unit
+Runtime: Node v24.22.3 (declared range >=24.0.0 <25)
+Environment: disposable PostgreSQL 16 (port 15433), Redis 7 (6380), S3-compatible Silo (9000), Mailpit (1025)
+DATABASE_URL: postgresql://vibress:vibress@localhost:15433/vibress (disposable only)
+Shell exit code captured at execution: 0
+Test Files: 379 passed (379)
+Tests: 2733 passed (2733)
+Wall time: 304.19s
+Raw log: M00-FINAL-UNIT-TEST-LOG.txt
+Note: the log contains a benign jsdom "Not implemented: navigation" trace that did not fail any test.

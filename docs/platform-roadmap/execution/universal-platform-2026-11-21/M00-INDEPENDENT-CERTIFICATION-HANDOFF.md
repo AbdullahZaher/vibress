@@ -1,8 +1,8 @@
 # M00 — Independent Certification Handoff (Agent 06)
 
-**Status:** HANDOFF PREPARED; **no independent verdict has been issued**.
+**Status:** INDEPENDENT VERDICT ISSUED — `M00_ENGINEERING_ACCEPTED` at candidate `77a6043b6f442ef7b091ae9bbbe76e08613282e8`.
 
-Agent 01 performed the implementation and remediation in this cycle and therefore cannot act as Agent 06. An auditor who did not write or remediate the reviewed code must be appointed. No verdict is claimed on their behalf.
+Agent 01 performed the implementation and remediation and therefore cannot act as Agent 06. A separate read-only auditor who did not write the code reviewed the immutable candidate and, after remediation of F-01/F-03–F-07, issued `M00_ENGINEERING_ACCEPTED` with remaining governance blockers explicit. This verdict certifies only the restricted engineering baseline; it is not human approval, formal Epic closure, production GO or merge authorization.
 
 ## Immutable candidate identity
 

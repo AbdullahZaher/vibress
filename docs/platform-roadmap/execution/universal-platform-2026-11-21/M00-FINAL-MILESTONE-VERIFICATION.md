@@ -8,7 +8,7 @@
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Full unit suite | **2733/2733 passed**, 379 files, exit 0 | final `pnpm test:unit` run with disposable stack |
+| Full unit suite | **2733/2733 passed**, 379 files, exit 0 | final `pnpm test:unit` run with disposable stack; immutable log `M00-FINAL-UNIT-TEST-LOG.txt` plus attestation |
 | Architecture / boundary tests | PASS | `m00-boundary-contract.test.ts`, `platform-boundaries.test.ts` |
 | 140-Epic traceability validator | PASS, 140 Epics, 0 formally closed | `verify-execution-traceability.mjs` |
 | Repository inventory | PASS, 0 boundary violations | `generate-repository-inventory.mjs --check` |
@@ -39,6 +39,11 @@
 | E11 ownership | role definitions only | n/a | yes | pending | pending humans | not performed | blocked |
 | E12 PostgreSQL inventory | read-only scan | yes | yes | pending A02/03/05 | pending DBA | not performed | blocked |
 | E13 DX baseline | yes | yes | yes | pending | pending A2/G6 | not performed | blocked |
+
+## Focused verification runs
+
+- 19/19 targeted tests passed across `tests/architecture/m00-boundary-contract.test.ts` and `scripts/__tests__/execution-traceability.test.mjs`.
+- Four artifact validators passed: `verify-execution-traceability`, `generate-repository-inventory --check`, `verify-m00-evidence`, `verify-platform-roadmap`.
 
 ## Residual blockers
 

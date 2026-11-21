@@ -44,6 +44,19 @@ if (!process.argv.includes("--write")) {
     console.error("Committed evidence index has a different artifact set; run --write.");
     process.exit(1);
   }
+  const committedSuites = new Map(
+    (committed.testSuites ?? []).map((suite) => [suite.path, suite.sha256]),
+  );
+  if (committedSuites.size !== generated.testSuites.length) {
+    console.error("Committed evidence index has a different test suite set; run --write.");
+    process.exit(1);
+  }
+  for (const suite of generated.testSuites) {
+    if (committedSuites.get(suite.path) !== suite.sha256) {
+      console.error(`Committed evidence index test digest is stale for ${suite.path}; run --write.`);
+      process.exit(1);
+    }
+  }
   for (const [pathOnDisk, digest] of committedByPath) {
     if (!fs.existsSync(path.join(root, pathOnDisk))) {
       console.error(`Committed evidence index references missing file ${pathOnDisk}.`);
