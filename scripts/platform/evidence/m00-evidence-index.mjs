@@ -33,6 +33,9 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-EXTERNAL-CONSUMER-CERTIFICATION.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-MILESTONE-VERIFICATION.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-VERDICT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-UNIT-TEST-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ISOLATION-DRILL-LOG.txt",
 ];
 
 export const TEST_SUITES = [

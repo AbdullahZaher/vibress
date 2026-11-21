@@ -51,7 +51,7 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ENGINEERING-IMPLEMENTATION-REPORT.md",
-      "sha256": "bb3f02d84bdd9747b83ffba49161065834ceeabde0edb5d345e56d3d9f4dc7be"
+      "sha256": "087c49cbeb521c0f49ede3c88a84e0bf06998a07ded62dbcb2b6f2e807c5353c"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-REGISTRY-AND-IDENTITY-SECURITY-REPORT.md",
@@ -68,6 +68,18 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
       "sha256": "939dc7c2671ac76cd9c7618dbbc9e5bc3e29a66ec12dee2ba31ee079868010b3"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-VERDICT.md",
+      "sha256": "a04f20ce2dd9d66578aff2738a79dec4bfccc524c979f599c87aad89afec6b76"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-UNIT-TEST-LOG.txt",
+      "sha256": "95ba555d753eea9fe5a0095f33f4d9c9438607c3d905381da238431b8d3d45e2"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ISOLATION-DRILL-LOG.txt",
+      "sha256": "b45f1632bde5fe133dca47b74bebbe3ddd043125eb4df8a300c46b13ad0b0002"
     }
   ],
   "testSuites": [

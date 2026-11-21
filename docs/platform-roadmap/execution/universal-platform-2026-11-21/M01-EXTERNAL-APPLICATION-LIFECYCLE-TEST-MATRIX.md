@@ -1,7 +1,7 @@
 # M01 — External Application Lifecycle Test Matrix (isolated continuation)
 
 **Branch:** `m01-external-consumer-continuation` (isolated; not merged into M00 or `main`).
-**Status:** test definitions prepared; **M01 milestone-end suite NOT RUN** (wave gate pending).
+**Status:** test definitions prepared and the **M01 milestone-end suite executed** (381 files / 2748 tests passed). The `NOT EVIDENCED` rows below refer only to *runtime* lifecycle/installation operations that belong to later milestones (M05/M08), not to the completed M01 unit/contract suite. No production activation is claimed.
 
 | Lifecycle step | Test intent | Current evidence | Status |
 | --- | --- | --- | --- |

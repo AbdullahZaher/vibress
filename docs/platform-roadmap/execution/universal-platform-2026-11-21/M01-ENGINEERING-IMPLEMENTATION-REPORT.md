@@ -10,7 +10,7 @@
 | `packages/platform-kernel/src/identity.ts` | Added branded `WorkspaceId` / `asWorkspaceId`; `pub_default` remains rejected for all platform identities | E01 |
 | `packages/platform-kernel/src/lifecycle.ts` (new) | Pure application lifecycle state machine: REGISTERED→INSTALLED→ACTIVE→SUSPENDED/REMOVED, CAS revision guards, installation binding, signed manifest digest and schema revision on upgrade, fail-closed invalid transitions | E02, E06 |
 | `packages/platform-kernel/src/index.ts` | Public export of lifecycle contracts | E02 |
-| `packages/platform-kernel/src/__tests__/lifecycle.test.ts` (new) | 8 positive/negative tests for identity and lifecycle | E01, E02 |
+| `packages/platform-kernel/src/__tests__/lifecycle.test.ts` (new) | 7 positive/negative tests for identity and lifecycle | E01, E02 |
 | `tests/architecture/m01-external-consumer-negative.test.ts` (new) | 7 deterministic negative fixtures: private workspace paths, DB/config adapters, Fastify, relative siblings; canonical consumer positive | E04, E09 |
 | `M01-EXTERNAL-APPLICATION-LIFECYCLE-TEST-MATRIX.md` (new) | Lifecycle test inventory with explicit NOT EVIDENCED rows | E09 |
 | `scripts/platform/m01/installation-isolation-drill.sh` (new) | Disposable PG16 A/B schema and role isolation plus Redis DB isolation drill, 7 assertions | E10 |
