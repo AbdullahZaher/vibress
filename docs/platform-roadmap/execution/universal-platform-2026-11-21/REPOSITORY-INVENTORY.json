@@ -1,0 +1,2481 @@
+{
+  "schemaVersion": 1,
+  "toolchain": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=11.17.0",
+    "packageManager": "pnpm@11.22.0"
+  },
+  "applications": [
+    {
+      "directory": "apps/admin",
+      "packageName": "@vibress/admin",
+      "version": "1.2.0",
+      "scripts": [
+        "build",
+        "dev",
+        "lint",
+        "preview",
+        "typecheck"
+      ],
+      "sourceFileCount": 1043,
+      "dependencies": [
+        "@vibress/api-contracts",
+        "@vibress/i18n",
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-html",
+        "@vibress/studio-markdown",
+        "@vibress/studio-nodes",
+        "@vibress/studio-plugin-sdk",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/studio-serializer",
+        "@vibress/studio-transforms",
+        "@vibress/studio-utils",
+        "@vibress/theme-core"
+      ]
+    },
+    {
+      "directory": "apps/api",
+      "packageName": "@vibress/api",
+      "version": "1.2.0",
+      "scripts": [
+        "build",
+        "dev",
+        "lint",
+        "start",
+        "start:prod",
+        "typecheck"
+      ],
+      "sourceFileCount": 581,
+      "dependencies": [
+        "@vibress/ai",
+        "@vibress/analytics",
+        "@vibress/api-contracts",
+        "@vibress/audit",
+        "@vibress/auth",
+        "@vibress/authors",
+        "@vibress/billing",
+        "@vibress/cache",
+        "@vibress/comments",
+        "@vibress/config",
+        "@vibress/content-modeler",
+        "@vibress/database",
+        "@vibress/email",
+        "@vibress/events",
+        "@vibress/i18n",
+        "@vibress/import-export",
+        "@vibress/integrations",
+        "@vibress/media",
+        "@vibress/members",
+        "@vibress/newsletters",
+        "@vibress/notifications",
+        "@vibress/observability",
+        "@vibress/offers",
+        "@vibress/pages",
+        "@vibress/permissions",
+        "@vibress/plans",
+        "@vibress/plugin-sdk",
+        "@vibress/plugins",
+        "@vibress/posts",
+        "@vibress/products",
+        "@vibress/queue",
+        "@vibress/recommendations",
+        "@vibress/redirects",
+        "@vibress/revisions",
+        "@vibress/roles",
+        "@vibress/search",
+        "@vibress/security",
+        "@vibress/settings",
+        "@vibress/setup",
+        "@vibress/storage-core",
+        "@vibress/storage-domain",
+        "@vibress/storage-s3",
+        "@vibress/studio-core",
+        "@vibress/studio-renderer",
+        "@vibress/subscriptions",
+        "@vibress/tags",
+        "@vibress/theme-core",
+        "@vibress/themes",
+        "@vibress/themes-registry",
+        "@vibress/users",
+        "@vibress/utils",
+        "@vibress/webhooks",
+        "@vibress/workspaces"
+      ]
+    },
+    {
+      "directory": "apps/platform-reference",
+      "packageName": "@vibress/platform-reference",
+      "version": "1.2.0",
+      "scripts": [
+        "bootstrap",
+        "build",
+        "dev",
+        "lint",
+        "start",
+        "typecheck"
+      ],
+      "sourceFileCount": 46,
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/platform-kernel",
+        "@vibress/tenancy"
+      ]
+    },
+    {
+      "directory": "apps/portal",
+      "packageName": "@vibress/portal",
+      "version": "1.2.0",
+      "scripts": [
+        "build",
+        "dev",
+        "lint",
+        "preview"
+      ],
+      "sourceFileCount": 51,
+      "dependencies": []
+    },
+    {
+      "directory": "apps/web",
+      "packageName": "@vibress/web",
+      "version": "1.2.0",
+      "scripts": [
+        "build",
+        "dev",
+        "lint",
+        "start",
+        "typecheck"
+      ],
+      "sourceFileCount": 351,
+      "dependencies": [
+        "@vibress/api-contracts",
+        "@vibress/i18n",
+        "@vibress/studio-utils",
+        "@vibress/theme-core",
+        "@vibress/themes",
+        "@vibress/themes-registry"
+      ]
+    },
+    {
+      "directory": "apps/worker",
+      "packageName": "@vibress/worker",
+      "version": "1.2.0",
+      "scripts": [
+        "build",
+        "dev",
+        "lint",
+        "start",
+        "start:prod",
+        "typecheck"
+      ],
+      "sourceFileCount": 74,
+      "dependencies": [
+        "@vibress/analytics",
+        "@vibress/api-contracts",
+        "@vibress/audit",
+        "@vibress/authors",
+        "@vibress/cache",
+        "@vibress/config",
+        "@vibress/database",
+        "@vibress/email",
+        "@vibress/events",
+        "@vibress/members",
+        "@vibress/newsletters",
+        "@vibress/observability",
+        "@vibress/pages",
+        "@vibress/plugins",
+        "@vibress/posts",
+        "@vibress/queue",
+        "@vibress/revisions",
+        "@vibress/search",
+        "@vibress/security",
+        "@vibress/settings",
+        "@vibress/studio-renderer",
+        "@vibress/subscriptions",
+        "@vibress/tags",
+        "@vibress/webhooks"
+      ]
+    }
+  ],
+  "packages": [
+    {
+      "directory": "packages/api-contracts",
+      "packageName": "@vibress/api-contracts",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 21,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/api",
+        "@vibress/members",
+        "@vibress/plugins",
+        "@vibress/settings",
+        "@vibress/web",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/cache",
+      "packageName": "@vibress/cache",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/config"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/queue",
+        "@vibress/setup",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/config",
+      "packageName": "@vibress/config",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 9,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/cache",
+        "@vibress/database",
+        "@vibress/members",
+        "@vibress/security",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/database",
+      "packageName": "@vibress/database",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 17,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/config",
+        "@vibress/observability",
+        "@vibress/platform-kernel",
+        "@vibress/security",
+        "@vibress/tenancy"
+      ],
+      "dependents": [
+        "@vibress/ai",
+        "@vibress/analytics",
+        "@vibress/api",
+        "@vibress/audit",
+        "@vibress/auth",
+        "@vibress/authors",
+        "@vibress/billing",
+        "@vibress/comments",
+        "@vibress/content-modeler",
+        "@vibress/email",
+        "@vibress/events",
+        "@vibress/i18n",
+        "@vibress/import-export",
+        "@vibress/integrations",
+        "@vibress/media",
+        "@vibress/members",
+        "@vibress/newsletters",
+        "@vibress/notifications",
+        "@vibress/offers",
+        "@vibress/pages",
+        "@vibress/permissions",
+        "@vibress/plans",
+        "@vibress/platform-reference",
+        "@vibress/plugins",
+        "@vibress/posts",
+        "@vibress/products",
+        "@vibress/recommendations",
+        "@vibress/redirects",
+        "@vibress/revisions",
+        "@vibress/roles",
+        "@vibress/search",
+        "@vibress/settings",
+        "@vibress/setup",
+        "@vibress/storage-domain",
+        "@vibress/subscriptions",
+        "@vibress/tags",
+        "@vibress/themes",
+        "@vibress/users",
+        "@vibress/webhooks",
+        "@vibress/worker",
+        "@vibress/workspaces"
+      ]
+    },
+    {
+      "directory": "packages/events",
+      "packageName": "@vibress/events",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 7,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/observability"
+      ],
+      "dependents": [
+        "@vibress/ai",
+        "@vibress/analytics",
+        "@vibress/api",
+        "@vibress/auth",
+        "@vibress/billing",
+        "@vibress/comments",
+        "@vibress/content-modeler",
+        "@vibress/email",
+        "@vibress/import-export",
+        "@vibress/integrations",
+        "@vibress/members",
+        "@vibress/newsletters",
+        "@vibress/notifications",
+        "@vibress/offers",
+        "@vibress/plans",
+        "@vibress/plugins",
+        "@vibress/posts",
+        "@vibress/products",
+        "@vibress/recommendations",
+        "@vibress/redirects",
+        "@vibress/search",
+        "@vibress/settings",
+        "@vibress/subscriptions",
+        "@vibress/webhooks",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/i18n",
+      "packageName": "@vibress/i18n",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 12,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/api",
+        "@vibress/theme-core",
+        "@vibress/web"
+      ]
+    },
+    {
+      "directory": "packages/observability",
+      "packageName": "@vibress/observability",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 19,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/queue",
+        "@vibress/security",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/platform-kernel",
+      "packageName": "@vibress/platform-kernel",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 5,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/database",
+        "@vibress/platform-reference",
+        "@vibress/schema-engine",
+        "@vibress/tenancy"
+      ]
+    },
+    {
+      "directory": "packages/plugin-core",
+      "packageName": "@vibress/plugin-core",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 9,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": []
+    },
+    {
+      "directory": "packages/plugin-sdk",
+      "packageName": "@vibress/plugin-sdk",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 41,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/plugins"
+      ]
+    },
+    {
+      "directory": "packages/queue",
+      "packageName": "@vibress/queue",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 14,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/cache",
+        "@vibress/observability"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/schema-engine",
+      "packageName": "@vibress/schema-engine",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 2,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/platform-kernel"
+      ],
+      "dependents": []
+    },
+    {
+      "directory": "packages/security",
+      "packageName": "@vibress/security",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/config",
+        "@vibress/observability"
+      ],
+      "dependents": [
+        "@vibress/ai",
+        "@vibress/api",
+        "@vibress/auth",
+        "@vibress/database",
+        "@vibress/integrations",
+        "@vibress/members",
+        "@vibress/pages",
+        "@vibress/plugins",
+        "@vibress/posts",
+        "@vibress/recommendations",
+        "@vibress/setup",
+        "@vibress/storage-domain",
+        "@vibress/webhooks",
+        "@vibress/worker",
+        "@vibress/workspaces"
+      ]
+    },
+    {
+      "directory": "packages/storage-core",
+      "packageName": "@vibress/storage-core",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/files",
+        "@vibress/media",
+        "@vibress/storage-domain",
+        "@vibress/storage-s3",
+        "@vibress/themes"
+      ]
+    },
+    {
+      "directory": "packages/storage-s3",
+      "packageName": "@vibress/storage-s3",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/storage-core"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/storage-domain"
+      ]
+    },
+    {
+      "directory": "packages/studio-cards",
+      "packageName": "@vibress/studio-cards",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 45,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-core",
+        "@vibress/studio-nodes",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-html",
+        "@vibress/studio-plugin-sdk",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/studio-serializer",
+        "@vibress/studio-testing"
+      ]
+    },
+    {
+      "directory": "packages/studio-core",
+      "packageName": "@vibress/studio-core",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 16,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/api",
+        "@vibress/studio-cards",
+        "@vibress/studio-html",
+        "@vibress/studio-markdown",
+        "@vibress/studio-nodes",
+        "@vibress/studio-plugin-sdk",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/studio-serializer",
+        "@vibress/studio-testing",
+        "@vibress/studio-transforms"
+      ]
+    },
+    {
+      "directory": "packages/studio-html",
+      "packageName": "@vibress/studio-html",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 1,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-nodes",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-react"
+      ]
+    },
+    {
+      "directory": "packages/studio-markdown",
+      "packageName": "@vibress/studio-markdown",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 2,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-core",
+        "@vibress/studio-renderer",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-react"
+      ]
+    },
+    {
+      "directory": "packages/studio-nodes",
+      "packageName": "@vibress/studio-nodes",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 2,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-core",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-cards",
+        "@vibress/studio-html",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/studio-serializer",
+        "@vibress/studio-testing",
+        "@vibress/studio-transforms"
+      ]
+    },
+    {
+      "directory": "packages/studio-plugin-sdk",
+      "packageName": "@vibress/studio-plugin-sdk",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 3,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-react"
+      ]
+    },
+    {
+      "directory": "packages/studio-react",
+      "packageName": "@vibress/studio-react",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 17,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-html",
+        "@vibress/studio-markdown",
+        "@vibress/studio-nodes",
+        "@vibress/studio-plugin-sdk",
+        "@vibress/studio-renderer",
+        "@vibress/studio-serializer",
+        "@vibress/studio-transforms",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin"
+      ]
+    },
+    {
+      "directory": "packages/studio-renderer",
+      "packageName": "@vibress/studio-renderer",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 7,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-nodes",
+        "@vibress/studio-serializer",
+        "@vibress/studio-testing",
+        "@vibress/studio-utils"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/api",
+        "@vibress/newsletters",
+        "@vibress/studio-markdown",
+        "@vibress/studio-react",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/studio-serializer",
+      "packageName": "@vibress/studio-serializer",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 2,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-nodes"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/studio-testing"
+      ]
+    },
+    {
+      "directory": "packages/studio-testing",
+      "packageName": "@vibress/studio-testing",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 3,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-nodes",
+        "@vibress/studio-serializer"
+      ],
+      "dependents": [
+        "@vibress/studio-renderer"
+      ]
+    },
+    {
+      "directory": "packages/studio-transforms",
+      "packageName": "@vibress/studio-transforms",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 1,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/studio-core",
+        "@vibress/studio-nodes"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-react"
+      ]
+    },
+    {
+      "directory": "packages/studio-utils",
+      "packageName": "@vibress/studio-utils",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "declared-entry",
+      "exportCount": 8,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/studio-cards",
+        "@vibress/studio-core",
+        "@vibress/studio-html",
+        "@vibress/studio-markdown",
+        "@vibress/studio-nodes",
+        "@vibress/studio-react",
+        "@vibress/studio-renderer",
+        "@vibress/web"
+      ]
+    },
+    {
+      "directory": "packages/tenancy",
+      "packageName": "@vibress/tenancy",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/platform-kernel"
+      ],
+      "dependents": [
+        "@vibress/database",
+        "@vibress/platform-reference"
+      ]
+    },
+    {
+      "directory": "packages/testing",
+      "packageName": "@vibress/testing",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 7,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": []
+    },
+    {
+      "directory": "packages/theme-core",
+      "packageName": "@vibress/theme-core",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/i18n"
+      ],
+      "dependents": [
+        "@vibress/admin",
+        "@vibress/api",
+        "@vibress/themes",
+        "@vibress/themes-registry",
+        "@vibress/web"
+      ]
+    },
+    {
+      "directory": "packages/themes-registry",
+      "packageName": "@vibress/themes-registry",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 14,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [
+        "@vibress/theme-core"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/web"
+      ]
+    },
+    {
+      "directory": "packages/ui",
+      "packageName": "@vibress/ui",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 2,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": []
+    },
+    {
+      "directory": "packages/utils",
+      "packageName": "@vibress/utils",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:platform"
+      ],
+      "dependencies": [],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/authors",
+        "@vibress/pages",
+        "@vibress/posts",
+        "@vibress/tags"
+      ]
+    },
+    {
+      "directory": "packages/domains/ai",
+      "packageName": "@vibress/ai",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 9,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/security",
+        "@vibress/settings"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/analytics",
+      "packageName": "@vibress/analytics",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/subscriptions"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/audit",
+      "packageName": "@vibress/audit",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/auth",
+        "@vibress/media",
+        "@vibress/pages",
+        "@vibress/posts",
+        "@vibress/setup",
+        "@vibress/storage-domain",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/auth",
+      "packageName": "@vibress/auth",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 9,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/permissions",
+        "@vibress/roles",
+        "@vibress/security",
+        "@vibress/users"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/authors",
+      "packageName": "@vibress/authors",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/users",
+        "@vibress/utils"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/pages",
+        "@vibress/posts",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/billing",
+      "packageName": "@vibress/billing",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 7,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/members",
+        "@vibress/offers",
+        "@vibress/plans",
+        "@vibress/products",
+        "@vibress/subscriptions"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/comments",
+      "packageName": "@vibress/comments",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/content-modeler",
+      "packageName": "@vibress/content-modeler",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/email",
+      "packageName": "@vibress/email",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/files",
+      "packageName": "@vibress/files",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/media",
+        "@vibress/storage-core"
+      ],
+      "dependents": []
+    },
+    {
+      "directory": "packages/domains/import-export",
+      "packageName": "@vibress/import-export",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/integrations",
+      "packageName": "@vibress/integrations",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/media",
+      "packageName": "@vibress/media",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 8,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/database",
+        "@vibress/storage-core"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/files",
+        "@vibress/pages",
+        "@vibress/posts"
+      ]
+    },
+    {
+      "directory": "packages/domains/members",
+      "packageName": "@vibress/members",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 8,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/api-contracts",
+        "@vibress/config",
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/billing",
+        "@vibress/newsletters",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/newsletters",
+      "packageName": "@vibress/newsletters",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 6,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/members",
+        "@vibress/studio-renderer",
+        "@vibress/subscriptions"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/notifications",
+      "packageName": "@vibress/notifications",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/offers",
+      "packageName": "@vibress/offers",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/billing"
+      ]
+    },
+    {
+      "directory": "packages/domains/pages",
+      "packageName": "@vibress/pages",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/authors",
+        "@vibress/database",
+        "@vibress/media",
+        "@vibress/revisions",
+        "@vibress/security",
+        "@vibress/utils"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/permissions",
+      "packageName": "@vibress/permissions",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/auth"
+      ]
+    },
+    {
+      "directory": "packages/domains/plans",
+      "packageName": "@vibress/plans",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/billing"
+      ]
+    },
+    {
+      "directory": "packages/domains/plugins",
+      "packageName": "@vibress/plugins",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 43,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/api-contracts",
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/plugin-sdk",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/posts",
+      "packageName": "@vibress/posts",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 5,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/authors",
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/media",
+        "@vibress/revisions",
+        "@vibress/security",
+        "@vibress/tags",
+        "@vibress/utils"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/products",
+      "packageName": "@vibress/products",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/billing"
+      ]
+    },
+    {
+      "directory": "packages/domains/recommendations",
+      "packageName": "@vibress/recommendations",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/redirects",
+      "packageName": "@vibress/redirects",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/revisions",
+      "packageName": "@vibress/revisions",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/pages",
+        "@vibress/posts",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/roles",
+      "packageName": "@vibress/roles",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/auth",
+        "@vibress/setup"
+      ]
+    },
+    {
+      "directory": "packages/domains/search",
+      "packageName": "@vibress/search",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/settings",
+      "packageName": "@vibress/settings",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 5,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/api-contracts",
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/ai",
+        "@vibress/api",
+        "@vibress/setup",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/setup",
+      "packageName": "@vibress/setup",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/cache",
+        "@vibress/database",
+        "@vibress/roles",
+        "@vibress/security",
+        "@vibress/settings",
+        "@vibress/users"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/storage",
+      "packageName": "@vibress/storage-domain",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/audit",
+        "@vibress/database",
+        "@vibress/security",
+        "@vibress/storage-core",
+        "@vibress/storage-s3"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    },
+    {
+      "directory": "packages/domains/subscriptions",
+      "packageName": "@vibress/subscriptions",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events"
+      ],
+      "dependents": [
+        "@vibress/analytics",
+        "@vibress/api",
+        "@vibress/billing",
+        "@vibress/newsletters",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/tags",
+      "packageName": "@vibress/tags",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/utils"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/posts",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/themes",
+      "packageName": "@vibress/themes",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 8,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/storage-core",
+        "@vibress/theme-core"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/web"
+      ]
+    },
+    {
+      "directory": "packages/domains/users",
+      "packageName": "@vibress/users",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 4,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/auth",
+        "@vibress/authors",
+        "@vibress/setup"
+      ]
+    },
+    {
+      "directory": "packages/domains/webhooks",
+      "packageName": "@vibress/webhooks",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": true,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/events",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api",
+        "@vibress/worker"
+      ]
+    },
+    {
+      "directory": "packages/domains/workspaces",
+      "packageName": "@vibress/workspaces",
+      "version": "1.2.0",
+      "private": true,
+      "hasBuildScript": false,
+      "entryKind": "typescript-source",
+      "exportCount": 3,
+      "nxTags": [
+        "type:domain"
+      ],
+      "dependencies": [
+        "@vibress/database",
+        "@vibress/security"
+      ],
+      "dependents": [
+        "@vibress/api"
+      ]
+    }
+  ],
+  "summary": {
+    "applications": 6,
+    "packages": 70,
+    "privatePackages": 70,
+    "publicPackages": 0,
+    "builtPackages": 40
+  },
+  "dependencyBoundaries": {
+    "violations": [],
+    "rules": [
+      "@vibress/platform-kernel has no workspace dependencies",
+      "@vibress/tenancy may depend only on @vibress/platform-kernel",
+      "packages must not depend on applications",
+      "workspace imports must be declared in package.json",
+      "relative imports must not escape the owning unit directory"
+    ]
+  },
+  "migrations": {
+    "count": 58,
+    "journalEntries": 58,
+    "latestTag": "0058_platform_installation_audit",
+    "journalLatestTag": "0058_platform_installation_audit",
+    "digest": "2b0a77bfb5e614dfa25acb7d66018caee5b5dfb0b9c7f95197fbbaf09c666186",
+    "journalFileMissingTags": [],
+    "journalFileExtraTags": [],
+    "files": [
+      {
+        "name": "0000_graceful_meteorite.sql",
+        "bytes": 4887,
+        "sha256": "e37d6d00aed4b8a2d614b067440b47bbb3963558b1ff38ad916444489063edd8"
+      },
+      {
+        "name": "0001_tidy_living_tribunal.sql",
+        "bytes": 8114,
+        "sha256": "73ed39213c82f5dd60975876c17808ba32225b5ade1aa450d6b91e7e839b9fc8"
+      },
+      {
+        "name": "0002_daffy_gabe_jones.sql",
+        "bytes": 2391,
+        "sha256": "b26440f5373d16afd32ef584c3c7a62ab016b86e86907bfa3a4831945063562a"
+      },
+      {
+        "name": "0003_mixed_purple_man.sql",
+        "bytes": 2529,
+        "sha256": "3286a53030c9d63fb8c4be5a408ca60a4b919e04c2b13805bcb10474e0026245"
+      },
+      {
+        "name": "0004_blushing_songbird.sql",
+        "bytes": 754,
+        "sha256": "b27c714b61084625a37058d8d405bcb5815744b2d3925fc1f7fb5ece4975e4be"
+      },
+      {
+        "name": "0005_calm_banshee.sql",
+        "bytes": 740,
+        "sha256": "f2c2bd8781c6a1dce1c273488dc333c6033fc1efa14e3195405bf35fa406e910"
+      },
+      {
+        "name": "0006_nice_jamie_braddock.sql",
+        "bytes": 2404,
+        "sha256": "6050ee7378ed6eabe60bc9a63092fabd8dc8821b89ecf6c956e9d895ad467ed2"
+      },
+      {
+        "name": "0007_eminent_archangel.sql",
+        "bytes": 8292,
+        "sha256": "15a8ad09b45e4389da48b6c997ec0d77571ad7286c7e0668a7a3b95fab7dc11d"
+      },
+      {
+        "name": "0008_sturdy_puff_adder.sql",
+        "bytes": 7036,
+        "sha256": "f1de73d42ce07cca044e8f0ad430501c32ce64e081646d528b976535b675b120"
+      },
+      {
+        "name": "0009_solid_riptide.sql",
+        "bytes": 5817,
+        "sha256": "d553901ea8d173b71464ceb194dc30c7cd7d29d32ff923ed15e4f3bb6f4bed39"
+      },
+      {
+        "name": "0010_shocking_northstar.sql",
+        "bytes": 4047,
+        "sha256": "ef832fc039fed7a36d08b9ee0a74bca328056c5d3a033919dc20f07c02c08daa"
+      },
+      {
+        "name": "0011_tiny_crystal.sql",
+        "bytes": 5932,
+        "sha256": "56d917a75c2a6a49845dfb8e0360780fb097dbe1cbae5ee5e883b8b5dccc5e7b"
+      },
+      {
+        "name": "0012_rich_rhodey.sql",
+        "bytes": 2181,
+        "sha256": "7a2ab6f6c2350efacf7bbf872748b206794e123044c9abc76c11a62dbbec5be4"
+      },
+      {
+        "name": "0013_brief_rhodey.sql",
+        "bytes": 103,
+        "sha256": "a5bea0ef0df9d7adfd9f1675d8b4de4e67b9517743b2611f34e47b1286e38c22"
+      },
+      {
+        "name": "0014_hot_daimon_hellstrom.sql",
+        "bytes": 102,
+        "sha256": "993215efadecbc8c63638d6a8e342bef028bb8a1cbce3ae6dd563ecb83bea620"
+      },
+      {
+        "name": "0015_dizzy_magdalene.sql",
+        "bytes": 688,
+        "sha256": "9bc7b4e4a5f904cffc24f1430e133f2ec3534b6e26f095f2e1cada27fa52a6bd"
+      },
+      {
+        "name": "0016_first_run_installation.sql",
+        "bytes": 888,
+        "sha256": "f94bbabed98a7b62f21e5bdd8e42db9d8bd5dae82c9d1820d9ee7bb90ddf811c"
+      },
+      {
+        "name": "0017_analytics_traffic.sql",
+        "bytes": 898,
+        "sha256": "41b3722a83dddf790002b89a8d752de11521a7f7fcf6154e3f53592e9376809a"
+      },
+      {
+        "name": "0018_editorial_collaboration.sql",
+        "bytes": 4637,
+        "sha256": "4257ef6c76f2f72cb09b8eff48de5bd3553dbf0aef3c6a521a0764951ffefb30"
+      },
+      {
+        "name": "0019_content_modeler.sql",
+        "bytes": 2434,
+        "sha256": "b2baeb9c20f5c667c30ef10967f9ad7fa63fe8b26a600f09e39773a5bb8502c3"
+      },
+      {
+        "name": "0020_workspaces.sql",
+        "bytes": 1864,
+        "sha256": "1953792198b42676e9102b15561ed68166d0a3f16fdf31a261bd0910260ae511"
+      },
+      {
+        "name": "0021_master_plan_extensions.sql",
+        "bytes": 8105,
+        "sha256": "5e784dea1c6bc1af9a28a3fc307510c05e84820a16dc11318331822f3fa8f806"
+      },
+      {
+        "name": "0022_external_themes.sql",
+        "bytes": 806,
+        "sha256": "2e5d34af1a0f7cda1c649e1f05b5fc2cba8746cc9af695963eea956b37c7dbfd"
+      },
+      {
+        "name": "0023_theme_multi_version.sql",
+        "bytes": 1034,
+        "sha256": "102b1b9bb75b17635db81cc2bfd4faf1df8f8c1a9f9a9daa5ef86e4a0c90af0d"
+      },
+      {
+        "name": "0024_multilingual_publications_translations.sql",
+        "bytes": 1663,
+        "sha256": "b9c868c39fda0bb0e0af3a8e86dc24f5af7f48d378a8bf8477807ad1ebe1e7b6"
+      },
+      {
+        "name": "0025_staff_invitations_and_password_resets.sql",
+        "bytes": 1931,
+        "sha256": "8f63945380c07f821020c94737f5e82689e118e9fa5ed5e6ca37ccbe653d3585"
+      },
+      {
+        "name": "0026_multi_publication_tenant_isolation.sql",
+        "bytes": 13270,
+        "sha256": "9ca048a15b9f5458da560c1716c045eee77a528ddf89b4adea861e1fa9357ce4"
+      },
+      {
+        "name": "0027_comments_hardened_publication_isolation.sql",
+        "bytes": 9466,
+        "sha256": "1c405bb776a3d8841b3530326562c2915064031c9158aea92adf124507a33063"
+      },
+      {
+        "name": "0028_post_feature_image.sql",
+        "bytes": 911,
+        "sha256": "9616b5f142a2932dab3013544cb8a40006e387760a46dde9db81ab4659cc4959"
+      },
+      {
+        "name": "0029_content_modeler_publication_isolation.sql",
+        "bytes": 3896,
+        "sha256": "b136265a16f31b0e971b48db78bf66b2402b5736a0dbc32fc5a629b9ceb7ea5c"
+      },
+      {
+        "name": "0030_content_relationship_publication_integrity.sql",
+        "bytes": 13674,
+        "sha256": "8b2c278b30d0899cdf436bd15f9d540b323b6e2be92103a137797889029976bf"
+      },
+      {
+        "name": "0031_theme_publication_isolation.sql",
+        "bytes": 3340,
+        "sha256": "4d2fa813fabac1d8a90ffa3491bd78331ae114ecb14c6c86701c998a16853392"
+      },
+      {
+        "name": "0032_theme_legacy_installed_compat.sql",
+        "bytes": 2677,
+        "sha256": "0efaf7dc64794bd975bdfb560ef965aedc05535cfd5d3d91994c4c117f025ded"
+      },
+      {
+        "name": "0033_publication_settings_isolation.sql",
+        "bytes": 1861,
+        "sha256": "ab534a9fdd53ea1d1ad3dda41fd1d5bfbbfc51e85e29675002e7dce47c773824"
+      },
+      {
+        "name": "0034_import_export_publication_isolation.sql",
+        "bytes": 552,
+        "sha256": "f1eda03afc00240765aaab94a49e0e2041e67ab22d00be7af31b2c8d1ff61d0e"
+      },
+      {
+        "name": "0035_redirect_publication_isolation.sql",
+        "bytes": 676,
+        "sha256": "997d266c53da19d4355eedb2396459a2993d989252d34adde65735f1a8681458"
+      },
+      {
+        "name": "0036_audit_publication_ownership.sql",
+        "bytes": 1381,
+        "sha256": "84e4e27cb942022ea7e91a6ebcd9536e00c4c80795beea8b4c9f0fec95a885ca"
+      },
+      {
+        "name": "0037_retire_automations_permissions.sql",
+        "bytes": 393,
+        "sha256": "fcf8d5096954b38c88ac80d80242af29328be5123c8b8f331381da0b723c2ec4"
+      },
+      {
+        "name": "0038_search_documents_locale.sql",
+        "bytes": 1296,
+        "sha256": "bd2b0d02c28aa375b389eac82803f639df471613ae8e2116e03b6c0ed435faba"
+      },
+      {
+        "name": "0039_posts_featured.sql",
+        "bytes": 252,
+        "sha256": "18f128838d33571c2db592f8afdc47e379b07058b789b522cc6b7286869baa4d"
+      },
+      {
+        "name": "0040_plugin_publication_states.sql",
+        "bytes": 900,
+        "sha256": "f028d76dacb85430ee2f1a98596035595e40b23de54d1dbbd6a4e4d49b3e07ce"
+      },
+      {
+        "name": "0041_plugin_publication_settings.sql",
+        "bytes": 1260,
+        "sha256": "081c2b689b1f0857cff2c82462086e1f984cfc7956d72ff73719c501703fffc6"
+      },
+      {
+        "name": "0042_plugin_migration_storage_foundation.sql",
+        "bytes": 3202,
+        "sha256": "87e45c3cee25455f44806792fff97bbc063cbc9826c4936c2f6a68ae03321732"
+      },
+      {
+        "name": "0043_plugin_storage_physical_models.sql",
+        "bytes": 1497,
+        "sha256": "bf005a165c20f557c86db49851475003cda8b86aae54869b03893c30f6e97d87"
+      },
+      {
+        "name": "0044_plugin_event_receipts.sql",
+        "bytes": 1277,
+        "sha256": "db3d59fe24f14cc2c6fbb5ebb3f7163765f0118e8adff4fd06085d4a6648e961"
+      },
+      {
+        "name": "0045_plugin_member_records.sql",
+        "bytes": 2011,
+        "sha256": "2623237840079f62bdc7d68017058fc7ea642d53e5d385041fb6ac01ceb04507"
+      },
+      {
+        "name": "0046_member_avatar.sql",
+        "bytes": 216,
+        "sha256": "2e2b873e2f8c19bb491ea477f7d67da903b3424496705ac8e78616fcb182770a"
+      },
+      {
+        "name": "0047_plugin_upgrade_plans.sql",
+        "bytes": 1995,
+        "sha256": "b210293cf7eff0d221ada32c9193a6e005c0945acdc4468761119c8676fff7c7"
+      },
+      {
+        "name": "0048_plugin_upgrade_preflight_approval.sql",
+        "bytes": 1182,
+        "sha256": "104720a685bc21ffcceb21c9d0655754a3148a77f3c99eb3b22df233835efea1"
+      },
+      {
+        "name": "0049_plugin_marketplace_admissions.sql",
+        "bytes": 916,
+        "sha256": "56d1a8edcfa888b6055f884d313fc4d5abd69a77589120ad247a6d38c7ed774f"
+      },
+      {
+        "name": "0050_plugin_marketplace_publisher_revocations.sql",
+        "bytes": 372,
+        "sha256": "7c9e1f4bd43588ea3a611ca5cf1cd7623766fdd714d5e2961500e1f617048101"
+      },
+      {
+        "name": "0051_default_theme_legacy_accent.sql",
+        "bytes": 2984,
+        "sha256": "20999c31e1bdbaf860334bdbe582a73fbf2ef7e0f166bff2a6ec91ec460682e7"
+      },
+      {
+        "name": "0052_newsletter_sends_publication_scope.sql",
+        "bytes": 1219,
+        "sha256": "ed754051422874636cb4cf26d32ff553fd7726650bbc7a7f9b64162e9ebc8a1b"
+      },
+      {
+        "name": "0053_email_suppressions_publication_scope.sql",
+        "bytes": 1122,
+        "sha256": "50ac28f7d35466518604b688d491a9b2fd6a61430225bb2883e4d3d1601451f9"
+      },
+      {
+        "name": "0054_platform_tenant_rls.sql",
+        "bytes": 2895,
+        "sha256": "baa01cb0ecd6453ff0119d857beb3dd2ef31bfa2e83638ddc9088717a6d9feb0"
+      },
+      {
+        "name": "0056_platform_application_registry.sql",
+        "bytes": 2000,
+        "sha256": "cb9b067b2a88e5370f8da0ec17cb96b1edc3befa386ca8bd5c9a36f815b3b95f"
+      },
+      {
+        "name": "0057_platform_registry_change_audit.sql",
+        "bytes": 2377,
+        "sha256": "7cdb1a0feba0faba68791f310a085f0b6b1758824fcaea0001ef311b9a41d238"
+      },
+      {
+        "name": "0058_platform_installation_audit.sql",
+        "bytes": 2333,
+        "sha256": "d0f838493ea87fd7c6c69df5645c9ebfa5e9467ebf4794ce30e97e9c5248a2e8"
+      }
+    ]
+  },
+  "databaseRoles": [
+    {
+      "name": "vibress_platform_app",
+      "usage": "least-privilege serving/provisioning identity",
+      "source": "packages/database/src + scripts/provision-platform-roles.ts"
+    },
+    {
+      "name": "vibress_platform_reader",
+      "usage": "least-privilege serving/provisioning identity",
+      "source": "packages/database/src + scripts/provision-platform-roles.ts"
+    },
+    {
+      "name": "vibress_platform_verifier",
+      "usage": "least-privilege serving/provisioning identity",
+      "source": "packages/database/src + scripts/provision-platform-roles.ts"
+    }
+  ],
+  "workers": {
+    "processors": [
+      "apps/worker/src/processors/analytics-retention.ts",
+      "apps/worker/src/processors/analytics-worker.ts",
+      "apps/worker/src/processors/email-delivery-worker.ts",
+      "apps/worker/src/processors/outbox-dispatcher.ts",
+      "apps/worker/src/processors/plugin-event-worker.ts",
+      "apps/worker/src/processors/plugin-receipt-metrics.ts",
+      "apps/worker/src/processors/search-content-source.ts",
+      "apps/worker/src/processors/search-indexer-worker.ts",
+      "apps/worker/src/processors/trace-helper.ts",
+      "apps/worker/src/processors/webhook-delivery-worker.ts"
+    ],
+    "queues": [
+      "apps/worker/src/queues/email-queue.ts"
+    ]
+  },
+  "publicContracts": [
+    {
+      "packageName": "@vibress/api-contracts",
+      "entryKind": "typescript-source",
+      "exportCount": 21
+    },
+    {
+      "packageName": "@vibress/cache",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/config",
+      "entryKind": "typescript-source",
+      "exportCount": 9
+    },
+    {
+      "packageName": "@vibress/database",
+      "entryKind": "typescript-source",
+      "exportCount": 17
+    },
+    {
+      "packageName": "@vibress/events",
+      "entryKind": "typescript-source",
+      "exportCount": 7
+    },
+    {
+      "packageName": "@vibress/i18n",
+      "entryKind": "typescript-source",
+      "exportCount": 12
+    },
+    {
+      "packageName": "@vibress/observability",
+      "entryKind": "typescript-source",
+      "exportCount": 19
+    },
+    {
+      "packageName": "@vibress/platform-kernel",
+      "entryKind": "typescript-source",
+      "exportCount": 5
+    },
+    {
+      "packageName": "@vibress/plugin-core",
+      "entryKind": "typescript-source",
+      "exportCount": 9
+    },
+    {
+      "packageName": "@vibress/plugin-sdk",
+      "entryKind": "declared-entry",
+      "exportCount": 41
+    },
+    {
+      "packageName": "@vibress/queue",
+      "entryKind": "typescript-source",
+      "exportCount": 14
+    },
+    {
+      "packageName": "@vibress/schema-engine",
+      "entryKind": "typescript-source",
+      "exportCount": 2
+    },
+    {
+      "packageName": "@vibress/security",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/storage-core",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/storage-s3",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/studio-cards",
+      "entryKind": "declared-entry",
+      "exportCount": 45
+    },
+    {
+      "packageName": "@vibress/studio-core",
+      "entryKind": "declared-entry",
+      "exportCount": 16
+    },
+    {
+      "packageName": "@vibress/studio-html",
+      "entryKind": "declared-entry",
+      "exportCount": 1
+    },
+    {
+      "packageName": "@vibress/studio-markdown",
+      "entryKind": "declared-entry",
+      "exportCount": 2
+    },
+    {
+      "packageName": "@vibress/studio-nodes",
+      "entryKind": "declared-entry",
+      "exportCount": 2
+    },
+    {
+      "packageName": "@vibress/studio-plugin-sdk",
+      "entryKind": "declared-entry",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/studio-react",
+      "entryKind": "declared-entry",
+      "exportCount": 17
+    },
+    {
+      "packageName": "@vibress/studio-renderer",
+      "entryKind": "declared-entry",
+      "exportCount": 7
+    },
+    {
+      "packageName": "@vibress/studio-serializer",
+      "entryKind": "declared-entry",
+      "exportCount": 2
+    },
+    {
+      "packageName": "@vibress/studio-testing",
+      "entryKind": "declared-entry",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/studio-transforms",
+      "entryKind": "declared-entry",
+      "exportCount": 1
+    },
+    {
+      "packageName": "@vibress/studio-utils",
+      "entryKind": "declared-entry",
+      "exportCount": 8
+    },
+    {
+      "packageName": "@vibress/tenancy",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/testing",
+      "entryKind": "typescript-source",
+      "exportCount": 7
+    },
+    {
+      "packageName": "@vibress/theme-core",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/themes-registry",
+      "entryKind": "typescript-source",
+      "exportCount": 14
+    },
+    {
+      "packageName": "@vibress/ui",
+      "entryKind": "typescript-source",
+      "exportCount": 2
+    },
+    {
+      "packageName": "@vibress/utils",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/ai",
+      "entryKind": "typescript-source",
+      "exportCount": 9
+    },
+    {
+      "packageName": "@vibress/analytics",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/audit",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/auth",
+      "entryKind": "typescript-source",
+      "exportCount": 9
+    },
+    {
+      "packageName": "@vibress/authors",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/billing",
+      "entryKind": "typescript-source",
+      "exportCount": 7
+    },
+    {
+      "packageName": "@vibress/comments",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/content-modeler",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/email",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/files",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/import-export",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/integrations",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/media",
+      "entryKind": "typescript-source",
+      "exportCount": 8
+    },
+    {
+      "packageName": "@vibress/members",
+      "entryKind": "typescript-source",
+      "exportCount": 8
+    },
+    {
+      "packageName": "@vibress/newsletters",
+      "entryKind": "typescript-source",
+      "exportCount": 6
+    },
+    {
+      "packageName": "@vibress/notifications",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/offers",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/pages",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/permissions",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/plans",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/plugins",
+      "entryKind": "typescript-source",
+      "exportCount": 43
+    },
+    {
+      "packageName": "@vibress/posts",
+      "entryKind": "typescript-source",
+      "exportCount": 5
+    },
+    {
+      "packageName": "@vibress/products",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/recommendations",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/redirects",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/revisions",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/roles",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/search",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/settings",
+      "entryKind": "typescript-source",
+      "exportCount": 5
+    },
+    {
+      "packageName": "@vibress/setup",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/storage-domain",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/subscriptions",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/tags",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/themes",
+      "entryKind": "typescript-source",
+      "exportCount": 8
+    },
+    {
+      "packageName": "@vibress/users",
+      "entryKind": "typescript-source",
+      "exportCount": 4
+    },
+    {
+      "packageName": "@vibress/webhooks",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    },
+    {
+      "packageName": "@vibress/workspaces",
+      "entryKind": "typescript-source",
+      "exportCount": 3
+    }
+  ],
+  "implementationEvidence": {
+    "epicLedger": {
+      "epics": 140,
+      "formallyClosed": 0,
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json"
+    },
+    "referenceApplication": {
+      "path": "apps/platform-reference/src/application.ts",
+      "actions": [
+        "health"
+      ],
+      "httpRoutes": [
+        "/crm/customers",
+        "/crm/customers",
+        "/health"
+      ]
+    }
+  }
+}

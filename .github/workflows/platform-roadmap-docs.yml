@@ -8,6 +8,8 @@ on:
       - 'scripts/verify-platform-roadmap.mjs'
       - 'scripts/verify-execution-traceability.mjs'
       - 'scripts/platform/execution/**'
+      - 'scripts/generate-repository-inventory.mjs'
+      - 'scripts/platform/inventory/**'
       - '.github/workflows/platform-roadmap-docs.yml'
   push:
     branches:
@@ -20,6 +22,8 @@ on:
       - 'scripts/verify-platform-roadmap.mjs'
       - 'scripts/verify-execution-traceability.mjs'
       - 'scripts/platform/execution/**'
+      - 'scripts/generate-repository-inventory.mjs'
+      - 'scripts/platform/inventory/**'
       - '.github/workflows/platform-roadmap-docs.yml'
   workflow_dispatch:
 
@@ -44,3 +48,5 @@ jobs:
         run: node scripts/verify-platform-roadmap.mjs
       - name: Verify Epic execution traceability ledger
         run: node scripts/verify-execution-traceability.mjs
+      - name: Verify deterministic repository inventory
+        run: node scripts/generate-repository-inventory.mjs --check

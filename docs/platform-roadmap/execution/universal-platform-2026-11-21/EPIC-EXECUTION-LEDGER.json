@@ -23,9 +23,9 @@
         "A01",
         "A07"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -33,10 +33,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/inventory/repository-inventory.mjs",
+          "scripts/generate-repository-inventory.mjs",
+          "scripts/__tests__/repository-inventory.test.mjs",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json"
+        ],
+        "testNames": [
+          "deterministic repository inventory (M00-E01)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "6 applications, 70 packages, 58 migrations inventoried; zero boundary violations. Implementation SHA pinned after commit."
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -51,7 +60,9 @@
         "status": "PENDING",
         "url": null
       },
-      "blockers": []
+      "blockers": [
+        "Implementation SHA and docs CI run are pinned in the following ledger update."
+      ]
     },
     {
       "id": "M00-E02",

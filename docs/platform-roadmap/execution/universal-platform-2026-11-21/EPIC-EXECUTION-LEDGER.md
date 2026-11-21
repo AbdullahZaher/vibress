@@ -14,8 +14,8 @@
 | Execution status | Epics |
 | --- | --- |
 | NOT_STARTED | 79 |
-| IN_PROGRESS | 43 |
-| IMPLEMENTED_PENDING_TESTS | 7 |
+| IN_PROGRESS | 42 |
+| IMPLEMENTED_PENDING_TESTS | 8 |
 | TESTED_PENDING_REVIEW | 8 |
 | INDEPENDENTLY_ACCEPTED | 0 |
 | BLOCKED | 3 |
@@ -29,14 +29,14 @@
 | BLOCKED_GOVERNANCE | 3 |
 | CERTIFIED_RESTRICTED | 7 |
 | CERTIFIED_RESTRICTED_D01 | 1 |
-| IMPLEMENTED_RESTRICTED | 7 |
+| IMPLEMENTED_RESTRICTED | 8 |
 | IN_PROGRESS_CONTRACT_ONLY | 2 |
 | IN_PROGRESS_METADATA_ONLY | 1 |
 | IN_PROGRESS_MOCK_ONLY | 1 |
 | NOT_ACCEPTED | 61 |
 | NOT_EVIDENCED | 3 |
 | NOT_VERIFIED | 15 |
-| PARTIAL | 24 |
+| PARTIAL | 23 |
 | PARTIAL_BLOCKED_D02 | 2 |
 | PARTIAL_GOVERNANCE_D03 | 1 |
 | PARTIAL_REUSE | 3 |
@@ -46,7 +46,7 @@
 
 | Epic | Milestone | Title | Assessment | Execution status | Scope | Closed |
 | --- | --- | --- | --- | --- | --- | --- |
-| M00-E01 | M00 | Repository inventory | PARTIAL | IN_PROGRESS | NONE | no |
+| M00-E01 | M00 | Repository inventory | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M00-E02 | M00 | Architecture ADRs | BLOCKED_GOVERNANCE | BLOCKED | NONE | no |
 | M00-E03 | M00 | Boundary enforcement | PARTIAL | IN_PROGRESS | NONE | no |
 | M00-E04 | M00 | Compatibility baseline | PARTIAL | IN_PROGRESS | NONE | no |
