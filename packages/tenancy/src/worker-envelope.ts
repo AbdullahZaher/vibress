@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * M02-E14 — installation-bound, replay-resistant Worker job envelope.
@@ -113,4 +113,20 @@ export function verifyWorkerEnvelope(
     throw new WorkerEnvelopeError("INVALID_SIGNATURE", "envelope signature is invalid");
   }
   return envelope;
+}
+
+
+/** Stable digest for the immutable authenticated SQL operation, independent
+ * of JSON object insertion order. The scope and nonce are stored separately
+ * in the receipt's unique identity. */
+export function workerOperationDigest(
+  envelope: Pick<WorkerEnvelope, "jobType" | "schemaRevision" | "payload">,
+): string {
+  return createHash("sha256")
+    .update(canonical({
+      jobType: envelope.jobType,
+      schemaRevision: envelope.schemaRevision,
+      payload: envelope.payload,
+    }))
+    .digest("hex");
 }
