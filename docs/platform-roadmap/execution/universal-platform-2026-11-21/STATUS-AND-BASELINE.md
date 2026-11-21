@@ -110,3 +110,5 @@ M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet prove
 - 53/53 targeted tests pass across 7 suites (including 13 new M00-completion and boundary tests).
 - Tenancy typecheck clean; all seven artifact validators pass; docs validator and link validator pass (112 files).
 - Full `pnpm test:unit` against disposable PostgreSQL 16 on port 15433: **53 failed / 2324 passed / 356 skipped (2733 total)**. Failures are concentrated in API/security tests returning HTTP 503 (missing external services such as Redis/S3/AI), localStorage being undefined in jsdom, and hook timeouts. This suite therefore **does not pass** and M00 cannot be declared accepted.
+
+**Baseline comparison:** the same two failing files were run at the pre-increment commit `e44477ca` against the same disposable PG16; they failed identically (`expected 503 to be 200`, `window.localStorage` undefined). The failures are environmental and pre-existing, not introduced by the M00 increment. The full suite still fails, so M00 acceptance is not requested.
