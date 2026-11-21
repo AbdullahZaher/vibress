@@ -1,0 +1,17 @@
+=== Effective RLS and privilege assertions ===
+PASS own tenant visible: 1
+PASS other tenant hidden: 0
+PASS cross-tenant insert denied: 42501
+PASS owner forced RLS applies to owner: 0
+PASS FORCE RLS catalog: t
+PASS RLS enabled catalog: t
+PASS TRUNCATE denied to runtime: 42501
+PASS function EXECUTE denied without grant: 42501
+PASS PUBLIC EXECUTE absent: f
+PASS SECURITY DEFINER: t
+PASS search_path hardened: t
+PASS runtime not superuser: f|f|f|f
+PASS view owner is forced-RLS owner: m02_owner
+PASS session A sees own tenant: A_VALUE
+PASS session B scope cannot see A row: 0
+=== M02 PG16 RLS/privilege drill: PASS ===

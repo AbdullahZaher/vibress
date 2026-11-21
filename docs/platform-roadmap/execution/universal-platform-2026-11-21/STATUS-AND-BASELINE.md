@@ -146,3 +146,11 @@ The line above was accurate when written, before the independent auditor was app
 - Integrated execution CI: [44944893593](https://github.com/AbdullahZaher/vibress/actions/runs/44944893593) SUCCESS (documentation workflow).
 - M01 full-suite exit code: 0, captured by the shell at execution; `M01-FINAL-UNIT-TEST-LOG.txt` contains the raw 381/2748 output, and this dated entry records the exit code.
 - Formal M00/M01 closure and merge into `main` remain BLOCKED pending human governance and owner authorization.
+
+## 2026-11-21 — M02 final candidate and CI attribution
+
+- Independent M02 verdict: `M02_CONDITIONALLY_ACCEPTABLE` at `fdf9622139ea9bd8c298682d9401eeab83dab875` / `9f6db4bfe55c79a862e44a3ef9755f72dcb86d3b` (`M02-INDEPENDENT-CERTIFICATION-VERDICT.md`).
+- M02 documentation CI: [44947512861](https://github.com/AbdullahZaher/vibress/actions/runs/44947512861) SUCCESS (documentation workflow only).
+- M02 full unit suite exit code captured by the shell: 0; raw output `M02-FINAL-UNIT-TEST-LOG.txt` shows 382 files / 2756 tests passed.
+- Agent 06 bounded findings closed: CI attribution pinned here; E14 narrowed to PARTIAL (Redis/PG only); unit-log exit code recorded here.
+- M02 remains formally open; R26/F-012/R35, live IdP, S3/backup isolation and human approvals remain PENDING.

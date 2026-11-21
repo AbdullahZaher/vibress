@@ -1,0 +1,11 @@
+=== Redis ACL installation isolation ===
+PASS A writes own key: OK
+PASS B writes own key: OK
+PASS A reads own key: A_SECRET
+PASS B reads own key: B_SECRET
+PASS A cannot read B: NOPERM
+PASS B cannot read A: NOPERM
+PASS A cannot write B queue: NOPERM
+PASS B cannot write A queue: NOPERM
+PASS default user disabled: off
+=== Redis ACL drill: PASS ===
