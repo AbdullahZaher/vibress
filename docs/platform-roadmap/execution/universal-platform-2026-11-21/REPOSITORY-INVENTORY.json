@@ -863,7 +863,7 @@
       "private": true,
       "hasBuildScript": false,
       "entryKind": "typescript-source",
-      "exportCount": 7,
+      "exportCount": 8,
       "nxTags": [
         "type:platform"
       ],
@@ -1774,11 +1774,11 @@
     ]
   },
   "migrations": {
-    "count": 58,
-    "journalEntries": 58,
-    "latestTag": "0058_platform_installation_audit",
-    "journalLatestTag": "0058_platform_installation_audit",
-    "digest": "2b0a77bfb5e614dfa25acb7d66018caee5b5dfb0b9c7f95197fbbaf09c666186",
+    "count": 59,
+    "journalEntries": 59,
+    "latestTag": "0059_platform_worker_effect_receipts",
+    "journalLatestTag": "0059_platform_worker_effect_receipts",
+    "digest": "a7d2286020110491cd00d57a91defa98d9a4c292c764b0efbfca7ebef4ca8645",
     "journalFileMissingTags": [],
     "journalFileExtraTags": [],
     "files": [
@@ -2071,6 +2071,11 @@
         "name": "0058_platform_installation_audit.sql",
         "bytes": 2333,
         "sha256": "d0f838493ea87fd7c6c69df5645c9ebfa5e9467ebf4794ce30e97e9c5248a2e8"
+      },
+      {
+        "name": "0059_platform_worker_effect_receipts.sql",
+        "bytes": 2867,
+        "sha256": "3544e642eea4d9bae30a5709453c7aa99e1664fad71b6554f93788c29a6a6dce"
       }
     ]
   },
@@ -2247,7 +2252,7 @@
     {
       "packageName": "@vibress/tenancy",
       "entryKind": "typescript-source",
-      "exportCount": 7
+      "exportCount": 8
     },
     {
       "packageName": "@vibress/testing",

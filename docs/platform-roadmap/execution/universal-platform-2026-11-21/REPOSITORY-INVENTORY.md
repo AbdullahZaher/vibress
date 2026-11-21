@@ -15,8 +15,8 @@
 - Packages: 70
 - Private packages: 70
 - Packages with a build script: 40
-- Migrations: 58 (journal 58, latest 0058_platform_installation_audit)
-- Migration digest: `2b0a77bfb5e614dfa25acb7d66018caee5b5dfb0b9c7f95197fbbaf09c666186`
+- Migrations: 59 (journal 59, latest 0059_platform_worker_effect_receipts)
+- Migration digest: `a7d2286020110491cd00d57a91defa98d9a4c292c764b0efbfca7ebef4ca8645`
 - Boundary violations: 0
 - Database roles: vibress_platform_app, vibress_platform_reader, vibress_platform_verifier
 - Epic ledger: 140 Epics, 0 formally closed
@@ -60,7 +60,7 @@
 | @vibress/studio-testing | declared-entry | 3 |
 | @vibress/studio-transforms | declared-entry | 1 |
 | @vibress/studio-utils | declared-entry | 8 |
-| @vibress/tenancy | typescript-source | 7 |
+| @vibress/tenancy | typescript-source | 8 |
 | @vibress/testing | typescript-source | 7 |
 | @vibress/theme-core | typescript-source | 6 |
 | @vibress/themes-registry | typescript-source | 14 |
