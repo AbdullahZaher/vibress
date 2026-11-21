@@ -14,7 +14,7 @@
 | Repository inventory | PASS, 0 boundary violations | `generate-repository-inventory.mjs --check` |
 | Compatibility/capability validators | PASS | SDK, CMS manifest, capability matrix scripts |
 | PostgreSQL security inventory | PASS (read-only, no DB contact) | `verify-pg-security-inventory.mjs` |
-| Evidence index | PASS, 7 artifacts / 7 test suites | `verify-m00-evidence.mjs` |
+| Evidence index | PASS, 11 artifacts / 7 test suites | `verify-m00-evidence.mjs` |
 | Docs validation | PASS, 13 milestones, 140 Epics | `verify-platform-roadmap.mjs` |
 | Relative links | PASS, 112 files / 814 links | `validate-docs-links.mjs` |
 | Typecheck | tenancy clean; full suite compiles via Vitest/Vite | `tsc --noEmit -p packages/tenancy/tsconfig.json` |

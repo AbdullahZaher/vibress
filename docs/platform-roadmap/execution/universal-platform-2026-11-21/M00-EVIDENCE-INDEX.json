@@ -3,7 +3,7 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "b8e25a228da4eb6b56e00631b03433046a426ed11021ec8416c33729e053ea0d"
+      "sha256": "2269c956ecefa6f11d6fc960d80a213108c823705c7051ffca0d16d25c08059a"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
@@ -31,15 +31,19 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md",
-      "sha256": "f066f8e68605622785c13104049da2064290a4086980a83a722e725d77ca0631"
+      "sha256": "9210cce241335e1251c149de02f0a5c3aa61e38b539b7e59a06c94670bb7d36e"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MILESTONE-VERIFICATION.md",
-      "sha256": "45fa9e54a506e805e6db998156d3d4d4631ec24d0aad39dd2227e0059b876819"
+      "sha256": "3550705aadf358a3657b8ab370ee09344352c7a2e60e168c83de026b89799370"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
-      "sha256": "e09c4c21d6615fa8f9f4c25d54a5b724caee002c3aceac86ce60261e35420416"
+      "sha256": "e1869bcef4e7caf6973da3299ababd3da21cb482bae2a8157c87dae05332c095"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
+      "sha256": "f50ef875df22984b20f19ecf97674f9fe6ea584f3eb6f8fc0a6c68a5eae799f1"
     }
   ],
   "testSuites": [
@@ -70,7 +74,7 @@
     },
     {
       "path": "tests/architecture/m00-boundary-contract.test.ts",
-      "sha256": "68df6bab885a2402ddf7a11c798cff116e06a71b0fe081eb2bb9cfb5c062ecb9",
+      "sha256": "5d1b0004bde10847677bb49be70f4b36a1afe94e817876ab840c2b738b41d0c5",
       "negativeCases": true
     },
     {

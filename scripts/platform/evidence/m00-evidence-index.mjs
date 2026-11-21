@@ -26,6 +26,7 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MILESTONE-VERIFICATION.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
 ];
 
 export const TEST_SUITES = [

@@ -8,11 +8,13 @@ Agent 01 performed the implementation and remediation in this cycle and therefor
 
 Record here after the final commit (Agent 01 pins the exact SHA/tree in the ledger and evidence index):
 
-- Execution branch: `docs/universal-platform-full-execution-checklist-20261121`
+- Remote execution branch: `docs/universal-platform-full-execution-checklist-20261121` (the local checkout uses the equivalent alias `exec/universal-platform-20261121`; both point at the same candidate SHA)
 - Implementation checkpoint under review: `ac07c737de0b512f9ad616773715ee3a8cd095a4`
 - Final remediation candidate SHA: 5c79f9bb23797f37f3432ae6bf4cf3740dd886c2
 - Final remediation candidate tree: dfdddcd59b416334357988937fa0ef45238daf90
 - Documentation CI on the implementation checkpoint: [44937688713](https://github.com/AbdullahZaher/vibress/actions/runs/44937688713) (success)
+- Documentation CI on the remediation commit: [44939544401](https://github.com/AbdullahZaher/vibress/actions/runs/44939544401) (success)
+- Immutable full-suite log: `M00-FINAL-UNIT-TEST-LOG.txt` (379 files / 2733 tests passed, exit 0)
 - Full unit suite on corrected environment: 379 files / 2733 tests passed, exit 0
 
 ## Evidence package for the auditor

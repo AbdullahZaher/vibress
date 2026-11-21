@@ -28,8 +28,30 @@ console.log(JSON.stringify({
 if (errors.length) process.exit(1);
 if (!process.argv.includes("--write")) {
   const file = path.join(root, INDEX_PATH);
-  if (!fs.existsSync(file) || JSON.parse(fs.readFileSync(file, "utf8")).artifacts.length !== generated.artifacts.length) {
-    console.error("Committed evidence index is stale; run --write.");
+  if (!fs.existsSync(file)) {
+    console.error("Committed evidence index is missing; run --write.");
     process.exit(1);
+  }
+  const committed = JSON.parse(fs.readFileSync(file, "utf8"));
+  const committedByPath = new Map(committed.artifacts.map((artifact) => [artifact.path, artifact.sha256]));
+  for (const artifact of generated.artifacts) {
+    if (committedByPath.get(artifact.path) !== artifact.sha256) {
+      console.error(`Committed evidence index is stale for ${artifact.path}; run --write.`);
+      process.exit(1);
+    }
+  }
+  if (committed.artifacts.length !== generated.artifacts.length) {
+    console.error("Committed evidence index has a different artifact set; run --write.");
+    process.exit(1);
+  }
+  for (const [pathOnDisk, digest] of committedByPath) {
+    if (!fs.existsSync(path.join(root, pathOnDisk))) {
+      console.error(`Committed evidence index references missing file ${pathOnDisk}.`);
+      process.exit(1);
+    }
+    if (digest !== generated.artifacts.find((artifact) => artifact.path === pathOnDisk)?.sha256) {
+      console.error(`Committed evidence index digest does not match file contents: ${pathOnDisk}.`);
+      process.exit(1);
+    }
   }
 }

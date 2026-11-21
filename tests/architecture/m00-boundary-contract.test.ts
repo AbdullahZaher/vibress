@@ -166,6 +166,25 @@ describe("M00-E03 architecture boundary contract", () => {
     expect(body).not.toMatch(/\.\.\/\.\.\/packages/);
   });
 
+  it("keeps UI applications free of direct database imports", () => {
+    const uiUnits = [...units.values()].filter((unit) =>
+      ["apps/admin", "apps/portal", "apps/web"].includes(unit.directory),
+    );
+    expect(uiUnits.length).toBeGreaterThan(0);
+    for (const unit of uiUnits) {
+      for (const entry of specifiers(unit)) {
+        expect(
+          entry.specifier === "@vibress/database" || entry.specifier.startsWith("@vibress/database/"),
+          `${entry.file} imports the database adapter directly`,
+        ).toBe(false);
+      }
+    }
+    // Negative fixture: the rule detects a deliberate violation.
+    const forbiddenUiImport = 'import { getDb } from "@vibress/database";';
+    const detected = [...forbiddenUiImport.matchAll(IMPORT_PATTERN)].map((match) => match[1]);
+    expect(detected).toContain("@vibress/database");
+  });
+
   it("preserves the legal CMS compatibility surface without exposing it through the kernel", () => {
     const compatibilityFile = path.join(ROOT, "packages/database/src/schema/operations.ts");
     expect(fs.existsSync(compatibilityFile)).toBe(true);

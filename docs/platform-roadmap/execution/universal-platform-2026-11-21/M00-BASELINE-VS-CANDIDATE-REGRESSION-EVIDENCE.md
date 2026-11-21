@@ -18,7 +18,7 @@
 ## Changes made to test code
 
 1. `vitest.config.ts`: explicit jsdom origin `http://localhost/` (deterministic Storage origin).
-2. `scripts/__tests__/execution-traceability.test.mjs`: the "closure without evidence" test previously mutated `M00-E01`, which now legitimately has a pinned implementation SHA. It now mutates `M01-E01`, an Epic with no pinned SHA. This restores the test's original intent (rejecting unevidenced closure) without weakening the validator.
+2. `scripts/__tests__/execution-traceability.test.mjs`: the "closure without evidence" test previously mutated `M00-E02`, which now legitimately has a pinned implementation SHA. It now mutates `M01-E01`, an Epic with no pinned SHA. This restores the test's original intent (rejecting unevidenced closure) without weakening the validator.
 
 No application assertion, security check or negative test was disabled, skipped or weakened.
 
