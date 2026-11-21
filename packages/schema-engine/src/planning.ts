@@ -11,6 +11,7 @@ import {
   type ResourceOwnership,
   type SchemaCompilationScope,
 } from "./schema";
+import type { DynamicRecordProfile } from "./dynamic-record";
 
 /**
  * M03-S02: a data-only PostgreSQL 16 planning contract. These values never
@@ -23,8 +24,12 @@ export const TARGET_POSTGRES_VERSION = 16 as const;
 export type PostgreSQLColumnType =
   | "text"
   | "double precision"
+  | "integer"
+  | "numeric"
   | "boolean"
+  | "date"
   | "timestamp with time zone"
+  | "jsonb"
   | null;
 
 export type ColumnMappingStatus = "MAPPED" | "REQUIRES_REVIEW" | "UNSUPPORTED";
@@ -38,6 +43,13 @@ export interface ManifestField {
   readonly default?: string | number | boolean;
   readonly values?: readonly string[];
   readonly targetResource?: string;
+  readonly maxLength?: number;
+  readonly precision?: number;
+  readonly scale?: number;
+  readonly money?: true;
+  readonly maxBytes?: number;
+  readonly maxDepth?: number;
+  readonly maxKeys?: number;
 }
 
 export interface ManifestResource {
@@ -47,6 +59,9 @@ export interface ManifestResource {
   readonly tableName: string;
   readonly securityPrerequisite: "TENANT_RLS_AND_ACL" | "APPLICATION_ACL";
   readonly fields: readonly ManifestField[];
+  readonly dynamic?: DynamicRecordProfile;
+  readonly uniques?: readonly (readonly string[])[];
+  readonly indexes?: readonly (readonly string[])[];
 }
 
 export interface SchemaManifest {
@@ -64,6 +79,8 @@ export type SchemaOperationType =
   | "CREATE_RESOURCE"
   | "REMOVE_RESOURCE"
   | "ALTER_OWNERSHIP"
+  | "ALTER_DYNAMIC_PROFILE"
+  | "ALTER_CONSTRAINTS"
   | "ADD_FIELD"
   | "REMOVE_FIELD"
   | "ALTER_FIELD";
@@ -229,14 +246,43 @@ function fieldManifest(field: FieldDefinition): ManifestField {
   };
   switch (field.type) {
     case "text":
-      return Object.freeze({ ...common, postgresType: "text", mappingStatus: "MAPPED" });
+      return Object.freeze({
+        ...common, postgresType: "text", mappingStatus: "MAPPED",
+        ...("maxLength" in field ? { maxLength: field.maxLength } : {}),
+      });
     case "number":
       return Object.freeze({ ...common, postgresType: "double precision", mappingStatus: "MAPPED" });
+    case "integer":
+      return Object.freeze({ ...common, postgresType: "integer", mappingStatus: "MAPPED" });
     case "boolean":
       return Object.freeze({ ...common, postgresType: "boolean", mappingStatus: "MAPPED" });
+    case "date":
+      return Object.freeze({ ...common, postgresType: "date", mappingStatus: "MAPPED" });
     case "datetime":
       return Object.freeze({
         ...common, postgresType: "timestamp with time zone", mappingStatus: "MAPPED",
+      });
+    case "decimal":
+      return Object.freeze({
+        ...common, postgresType: "numeric", mappingStatus: "MAPPED",
+        precision: field.precision, scale: field.scale,
+      });
+    case "money":
+      return Object.freeze({
+        ...common, postgresType: "numeric", mappingStatus: "MAPPED",
+        precision: field.precision, scale: field.scale, money: true as const,
+      });
+    case "json":
+      return Object.freeze({
+        ...common, postgresType: "jsonb", mappingStatus: "MAPPED",
+        maxBytes: field.maxBytes, maxDepth: field.maxDepth, maxKeys: field.maxKeys,
+      });
+    case "media":
+    case "localized":
+    case "studio":
+      return Object.freeze({
+        ...common, postgresType: "jsonb", mappingStatus: "MAPPED",
+        maxBytes: field.maxBytes, maxDepth: field.maxDepth, maxKeys: field.maxKeys,
       });
     case "enum":
       return Object.freeze({
@@ -262,6 +308,14 @@ function resourceManifest(resource: CanonicalResource): ManifestResource {
     securityPrerequisite: resource.ownership === "tenant"
       ? "TENANT_RLS_AND_ACL" : "APPLICATION_ACL",
     fields: Object.freeze(resource.fields.map(fieldManifest)),
+    ...(resource.dynamic ? {
+      dynamic: Object.freeze({
+        ...resource.dynamic,
+        fields: Object.freeze(resource.dynamic.fields.map((field) => Object.freeze({ ...field }))),
+      }),
+    } : {}),
+    ...(resource.uniques ? { uniques: Object.freeze(resource.uniques.map((d) => Object.freeze([...d]))) } : {}),
+    ...(resource.indexes ? { indexes: Object.freeze(resource.indexes.map((d) => Object.freeze([...d]))) } : {}),
   });
 }
 
@@ -340,6 +394,9 @@ function classifyNewField(field: ManifestField): {
   }
   if (field.required || Object.prototype.hasOwnProperty.call(field, "default")) {
     return { status: "REQUIRES_REVIEW", reason: "required columns or defaults need reviewed backfill/lock policy" };
+  }
+  if (field.maxLength !== undefined || field.money || field.maxBytes !== undefined) {
+    return { status: "REQUIRES_REVIEW", reason: "bounded or money columns carry reviewed CHECK constraints" };
   }
   return { status: "PLANNED", reason: "optional scalar with no database default (operator approval still required)" };
 }
@@ -429,6 +486,19 @@ export function planSchemaChanges(
         "ownership/security/table identity changes are forbidden"));
       // Do not present column alterations as independently safe once ownership differs.
       continue;
+    }
+    if (JSON.stringify(oldResource.dynamic ?? null) !== JSON.stringify(newResource.dynamic ?? null)) {
+      // Stored payloads are bound to the revision they were written under;
+      // evolving the declared profile in place would silently reinterpret them.
+      operations.push(operation("ALTER_DYNAMIC_PROFILE", newResource.id, null,
+        oldResource, newResource, "DENIED", "BREAKING",
+        "dynamic record profiles are revision-bound; in-place evolution is unsupported"));
+    }
+    if (JSON.stringify(oldResource.uniques ?? null) !== JSON.stringify(newResource.uniques ?? null) ||
+      JSON.stringify(oldResource.indexes ?? null) !== JSON.stringify(newResource.indexes ?? null)) {
+      operations.push(operation("ALTER_CONSTRAINTS", newResource.id, null,
+        oldResource, newResource, "DENIED", "BREAKING",
+        "declared unique constraints and indexes are creation-scoped; in-place evolution is unsupported"));
     }
     const beforeFields = new Map(oldResource.fields.map((field) => [field.id, field]));
     const afterFields = new Map(newResource.fields.map((field) => [field.id, field]));

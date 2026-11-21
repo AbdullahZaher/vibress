@@ -6,6 +6,7 @@ import {
   users,
   contentTranslations,
   settings,
+  publicationLocales,
   seedDatabase,
   runMigrations,
 } from "@vibress/database";
@@ -62,6 +63,32 @@ test.describe("Vibress Multilingual & RTL — Final Browser QA & Certification",
     await db
       .delete(settings)
       .where(and(eq(settings.namespace, "site"), eq(settings.key, "locale")));
+
+    // The middleware only rewrites /ar when the publication locale policy
+    // includes the Arabic locale, so provision that policy row explicitly.
+    await db
+      .insert(publicationLocales)
+      .values({
+        id: "f0000000-0000-4000-8000-0000000000a1",
+        publicationId: "pub_default",
+        locale: "ar-SA",
+        isDefault: false,
+        status: "active",
+      })
+      .onConflictDoUpdate({
+        target: [publicationLocales.publicationId, publicationLocales.locale],
+        set: { status: "active", updatedAt: new Date() },
+      });
+
+    // The web layer caches the public site payload briefly; wait for the
+    // Arabic route to resolve before the assertions run.
+    const localeDeadline = Date.now() + 20_000;
+    while (Date.now() < localeDeadline) {
+      const arProbe = await fetch("http://127.0.0.1:7777/ar");
+      if (arProbe.status === 200) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
     await db
       .delete(contentTranslations)
       .where(eq(contentTranslations.contentId, testPostId));

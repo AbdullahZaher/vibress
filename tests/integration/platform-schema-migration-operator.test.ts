@@ -1,0 +1,5395 @@
+// @vitest-environment node
+import { verifyExperimentalRegistry,registryAcceptanceMessage } from "../../packages/database/src/schema-operator-experimental-registry";
+import { verifyExperimentalWriterTopology } from "../../packages/database/src/schema-operator-experimental-writer-contract";
+import { compileExperimentalPhysicalContract,prepareExperimentalPhysicalTransition } from "../../packages/schema-engine/src";
+import { runExperimentalRecoveryUnit } from "../../packages/database/src/schema-operator-experimental-admission";
+import { TenantUnitOfWork,verifyTenantScope } from "@vibress/tenancy";
+import { randomBytes, randomUUID, generateKeyPairSync, sign, createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { RecoveryEpochAuthority, recoveryEpochMessage, type RecoveryEpochChallenge, type RecoveryEpochProof, type RecoveryEpochState } from "../../packages/database/src/schema-operator-experimental-recovery-epoch";
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { migrateDisposableSchemaCandidate } from "../../packages/database/src/__tests__/fixtures/m03-s03-experimental-migrator";
+import { superviseDisposableSchemaOperation } from "../../packages/database/src/schema-operator-experimental-supervisor";
+import { startCommitAckDropProxy, startTransactionAckFaultProxy, startStatementAckFaultProxy } from "../../scripts/platform/m03-s03-fault/pg-wire-proxy";
+import path from "node:path";
+import { Client, Pool, type ClientBase } from "pg";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { asApplicationId, asInstallationId, asPrincipalId, asTenantId } from "@vibress/platform-kernel";
+import {
+  compileResourceSchema,
+  createSchemaManifest,
+  planSchemaChanges,
+} from "../../packages/schema-engine/src";
+import { executeApprovedAdditiveColumn } from "../fixtures/m03-s03-legacy-operator-diagnostic";
+import { executeApprovedAdditiveColumn as executeP06Raw,reconcileApprovedAdditiveColumn as reconcileP06Raw,collectDisposableRecoveryReadiness,collectDisposableRollbackEvidence,type SchemaOperatorRequest } from "../../packages/database/src/platform-schema-migration-operator";
+import { ExperimentalD1Budget } from "../../packages/database/src/schema-operator-experimental-deadline";
+import { FileExperimentalRecoveryAnchor, type ExperimentalRecoveryAnchor } from "../../packages/database/src/schema-operator-experimental-anchor";
+import { retireDisposableIdentity, completeDisposableIdentity } from "../../packages/database/src/schema-operator-experimental-identity-lifecycle";
+import { ExperimentalSessionLifecycle } from "../../packages/database/src/schema-operator-experimental-session";
+import { DisposableDurableRecoveryAuthority, recoveryAdministrationMessage } from "../../packages/database/src/schema-operator-experimental-durable-authority";
+
+/** Controlled PG16 fixture: real DDL only in two fresh localhost-only databases. */
+const BASE_URL = process.env.DATABASE_URL ??
+  "postgresql://vibress:vibress@127.0.0.1:5433/vibress";
+const id = randomBytes(4).toString("hex");
+const applicationId = asApplicationId("s03-crm");
+const password = "disposable_" + id;
+
+type Key = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "aa" | "ab" | "ac" | "ad" | "ae" | "af" | "ag" | "ah" | "ai" | "aj" | "ak" | "al" | "am" | "an" | "ao" | "ap" | "aq" | "ar" | "as" | "at" | "au" | "av" | "aw" | "ax" | "ay" | "az" | "ba" | "bb" | "bc" | "bd" | "be" | "bf" | "bg" | "bh" | "bi" | "bj" | "bk" | "bl" | "bm" | "bn" | "bo" | "bp" | "bq" | "br" | "bs" | "bt" | "bu" | "bv" | "bw" | "bx" | "by" | "bz" | "ca" | "cb" | "cc" | "cd" | "ce" | "cf" | "cg" | "ch" | "ci" | "cj" | "ck" | "cl" | "cm" | "cn" | "co" | "cp" | "cq" | "cr" | "cs" | "ct" | "cu" | "cv" | "cw" | "cx" | "cy" | "cz" | "da";
+interface Lab {
+  readonly key: Key;
+  readonly name: string;
+  readonly installationId: ReturnType<typeof asInstallationId>;
+  readonly author: string;
+  readonly approver: string;
+  readonly operatorRole: string;
+  readonly runtimeRole: string;
+  readonly table: string;
+  readonly current: ReturnType<typeof createSchemaManifest>;
+  readonly plan: ReturnType<typeof planSchemaChanges>;
+  readonly dbAdmin: Client;
+  readonly operator: Client;
+  readonly runtime: Client;
+}
+const labs: Lab[] = [];
+let cluster: Client;
+// External authority is deliberately outside all disposable databases. The
+// signing key is ephemeral and never printed or persisted in a DB dump.
+const epochKeys = generateKeyPairSync("ed25519");
+const recoveryAdminKeys=generateKeyPairSync("ed25519");
+function testAnchor(directory:string){
+  const anchorDirectory=path.join(directory,"separate-anchor");mkdirSync(anchorDirectory);
+  return new FileExperimentalRecoveryAnchor(anchorDirectory,generateKeyPairSync("ed25519").privateKey);
+}
+function attestRecovery(a:DisposableDurableRecoveryAuthority,action:string,payload:unknown){
+  return sign(null,recoveryAdministrationMessage(a.snapshot(),action,payload),recoveryAdminKeys.privateKey).toString("base64url");
+}
+const labEpochs = new Map<string, string>();
+const labRecoveryPending = new Set<string>();
+function proofFor(challenge: RecoveryEpochChallenge, epoch: string, state: RecoveryEpochState = "ACTIVE"): RecoveryEpochProof {
+  return { ...challenge, epoch, state, signature: sign(null, recoveryEpochMessage(challenge, epoch, state),
+    epochKeys.privateKey).toString("base64url") };
+}
+const labRecoveryAuthority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+  const epoch = labEpochs.get(challenge.installationId + ":" + challenge.databaseName);
+  if (!epoch) throw Error("lab recovery authority unavailable");
+  return proofFor(challenge, epoch, labRecoveryPending.has(challenge.installationId+":"+challenge.databaseName)
+    ? "RECOVERY_PENDING" : "ACTIVE");
+});
+function executeP06(db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget) {
+  return executeP06Raw(db, request, budget, labRecoveryAuthority);
+}
+function reconcileP06(db: ClientBase, request: SchemaOperatorRequest, budget: ExperimentalD1Budget) {
+  return reconcileP06Raw(db, request, budget, labRecoveryAuthority);
+}
+
+function urlFor(database: string, role?: string): string {
+  const url = new URL(BASE_URL);
+  url.pathname = "/" + database;
+  if (role) {
+    url.username = role;
+    url.password = password;
+  }
+  return url.toString();
+}
+
+async function connect(database: string, role?: string): Promise<Client> {
+  const client = new Client({
+    connectionString: urlFor(database, role),
+    connectionTimeoutMillis: 4000,
+  });
+  await client.connect();
+  return client;
+}
+
+/**
+ * The supervisor closes its dedicated PostgreSQL client without awaiting the
+ * socket close (see schema-operator-experimental-supervisor.ts `void close()`).
+ * On a loaded CI runner that asynchronous disconnect can still be visible to
+ * `pg_stat_activity` when the recovery observer starts its quiescence check.
+ * Prepare the disposable fixture deterministically: wait until the only
+ * remaining backend in the lab database is the observer itself before the
+ * database is fenced. This never relaxes the production fence; it only makes
+ * the test's fixture state reproducible before the fence is asserted.
+ */
+async function awaitQuiescentLab(cluster: Client, observer: Client, database: string): Promise<void> {
+  const self = (await observer.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+  if (typeof self !== "number") throw Error("disposable observer identity unavailable");
+  const count = async () => Number((await cluster.query<{ others: string }>(
+    "SELECT count(*)::text AS others FROM pg_stat_activity a " +
+    "JOIN pg_database d ON d.oid = a.datid WHERE d.datname = $1 AND a.pid <> $2",
+    [database, self],
+  )).rows[0]?.others ?? -1);
+  // First allow an in-flight graceful close to settle.
+  for (let i = 0; i < 40 && await count() !== 0; i++) {
+    await new Promise(resolve => setTimeout(resolve, 25));
+  }
+  // A supervisor client that is still connected after its operation settled
+  // is an abandoned disposable fixture connection, not a live participant.
+  await cluster.query(
+    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+    "WHERE datname = $1 AND pid <> $2",
+    [database, self],
+  );
+  const others = await count();
+  if (others !== 0) throw Error("disposable lab " + database + " is not quiescent: " + others + " backend(s) remain");
+}
+
+async function createLab(key: Key, installE2 = true): Promise<Lab> {
+  const name = "vibress_s03_" + key + "_" + id;
+  const installationId = asInstallationId("s03-" + key);
+  const author = "s03_author_" + key + "_" + id;
+  const approver = "s03_approver_" + key + "_" + id;
+  const operatorRole = "s03_operator_" + key + "_" + id;
+  const runtimeRole = "s03_runtime_" + key + "_" + id;
+  for (const role of [author, approver, operatorRole, runtimeRole]) {
+    await cluster.query("CREATE ROLE " + cluster.escapeIdentifier(role) +
+      " LOGIN PASSWORD " + cluster.escapeLiteral(password) +
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+  }
+  await cluster.query("CREATE DATABASE " + cluster.escapeIdentifier(name));
+  await cluster.query("REVOKE CONNECT ON DATABASE " +
+    cluster.escapeIdentifier(name) + " FROM PUBLIC");
+  for (const role of [author, approver, operatorRole, runtimeRole]) {
+    await cluster.query("GRANT CONNECT ON DATABASE " + cluster.escapeIdentifier(name) +
+      " TO " + cluster.escapeIdentifier(role));
+  }
+  const dbAdmin = await connect(name);
+  const schema = readFileSync(path.resolve(
+    process.cwd(), "packages/database/migrations/0059_platform_schema_execution_registry.sql"), "utf8");
+  await dbAdmin.query(
+    "CREATE TABLE platform_applications (id text PRIMARY KEY, name text NOT NULL);" +
+    "CREATE TABLE platform_installations (id text PRIMARY KEY, application_id text NOT NULL " +
+    "REFERENCES platform_applications(id), environment text NOT NULL);",
+  );
+  await dbAdmin.query(schema);
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "packages/database/migrations/0060_platform_schema_authenticated_approvals.sql"), "utf8"));
+  // Reuse the identical disposable-only PostgreSQL actor fence as fault harness.
+  await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+    "tests/fixtures/m03-s03-r1-actor-fence-experimental.sql"), "utf8"));
+  // E2-A is ONLY a disposable test fixture, not a numbered migration and not
+  // an approved real actor reactivation policy. 0059/0060 remain unchanged.
+  if (installE2) {
+    await dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
+  }
+  await dbAdmin.query(
+    "INSERT INTO platform_applications (id,name) VALUES ($1,$2)",
+    [applicationId, "Fixture CRM"],
+  );
+  await dbAdmin.query(
+    "INSERT INTO platform_installations (id,application_id,environment) VALUES ($1,$2,'test')",
+    [installationId, applicationId],
+  );
+  const scope = { applicationId, installationId };
+  const resource = (hasWebsite: boolean) => ({
+    ...scope, id: "catalog", ownership: "application" as const,
+    fields: [
+      { id: "name", type: "text" as const, required: true },
+      ...(hasWebsite ? [{ id: "website", type: "text" as const, required: false }] : []),
+    ],
+  });
+  const before = compileResourceSchema([resource(false)], scope);
+  const after = compileResourceSchema([resource(true)], scope);
+  const current = createSchemaManifest(before);
+  const plan = planSchemaChanges(current, after, {
+    scope, expectedCurrentDigest: current.digest,
+  });
+  const table = current.resources[0]?.tableName;
+  if (!table) throw new Error("missing compiled physical table");
+  const qualified = '"public".' + dbAdmin.escapeIdentifier(table);
+  await dbAdmin.query("CREATE TABLE " + qualified + ' ("name" text NOT NULL)');
+  await dbAdmin.query("ALTER TABLE " + qualified + " OWNER TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
+  await dbAdmin.query("INSERT INTO " + qualified + '("name") VALUES ($1),($2)',
+    ["Alice", "Bob"]);
+  await dbAdmin.query("REVOKE CREATE ON SCHEMA public FROM PUBLIC");
+  for (const role of [author, approver, operatorRole, runtimeRole]) {
+    await dbAdmin.query("GRANT USAGE ON SCHEMA public TO " +
+      dbAdmin.escapeIdentifier(role));
+  }
+  await dbAdmin.query("GRANT SELECT,INSERT,UPDATE,DELETE ON " + qualified +
+    " TO " + dbAdmin.escapeIdentifier(runtimeRole));
+  await dbAdmin.query("GRANT SELECT ON platform_installations," +
+    "platform_schema_registry,platform_schema_plans,platform_schema_approvals," +
+    "platform_schema_trusted_actors,platform_schema_migration_journal TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
+  await dbAdmin.query("GRANT UPDATE(manifest,manifest_digest,updated_at) " +
+    "ON platform_schema_registry TO " + dbAdmin.escapeIdentifier(operatorRole));
+  await dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
+    dbAdmin.escapeIdentifier(operatorRole));
+  // Owner-controlled isolated database logins; no direct table DML grants.
+  await dbAdmin.query("INSERT INTO platform_schema_trusted_actors " +
+    "(login_name,principal_id,actor_kind) VALUES ($1,$2,'AUTHOR'),($3,$4,'APPROVER')",
+    [author, "individual:" + author, approver, "individual:" + approver]);
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_submit_plan(text,text,text,text) TO " +
+    dbAdmin.escapeIdentifier(author));
+  await dbAdmin.query("GRANT EXECUTE ON FUNCTION " +
+    "public.platform_schema_approve_operation(text,text,text,timestamptz), " +
+    "public.platform_schema_revoke_operation(text,text,text) TO " +
+    dbAdmin.escapeIdentifier(approver));
+  await dbAdmin.query(
+    "INSERT INTO platform_schema_registry " +
+    "(installation_id,application_id,environment,database_name,operator_role,runtime_role,manifest,manifest_digest) " +
+    "VALUES($1,$2,'test',$3,$4,$5,$6,$7)",
+    [installationId, applicationId, name, operatorRole, runtimeRole,
+      JSON.stringify(current), current.digest],
+  );
+  const writer = await connect(name, author);
+  try {
+    await writer.query(
+      "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+      [installationId, plan.digest, JSON.stringify(current), JSON.stringify(plan)],
+    );
+  } finally {
+    await writer.end();
+  }
+  const operator = await connect(name, operatorRole);
+  const runtime = await connect(name, runtimeRole);
+  return { key, name, installationId, author, approver, operatorRole, runtimeRole,
+    table, current, plan, dbAdmin, operator, runtime };
+}
+
+async function approve(lab: Lab): Promise<void> {
+  const actor = await connect(lab.name, lab.approver);
+  try {
+    await actor.query(
+      "SELECT public.platform_schema_approve_operation(" +
+      "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+      [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+    );
+  } finally {
+    await actor.end();
+  }
+}
+
+async function run(lab: Lab) {
+  return executeApprovedAdditiveColumn(lab.operator, {
+    installationId: lab.installationId, planDigest: lab.plan.digest,
+  });
+}
+async function hasWebsite(lab: Lab): Promise<boolean> {
+  const r = await lab.dbAdmin.query<{ present: boolean }>(
+    "SELECT EXISTS (SELECT 1 FROM pg_attribute a " +
+    "JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace " +
+    "WHERE n.nspname='public' AND c.relname=$1 AND a.attname='website' " +
+    "AND a.attnum>0 AND NOT a.attisdropped) AS present",
+    [lab.table],
+  );
+  return r.rows[0]?.present ?? false;
+}
+
+async function contentChecksum(lab: Lab): Promise<string> {
+  const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+  const result = await lab.dbAdmin.query<{ digest: string }>(
+    "SELECT md5(string_agg(name, ',' ORDER BY name)) AS digest FROM " + qualified,
+  );
+  const value = result.rows[0]?.digest;
+  if (!value) throw new Error("fixture content checksum unavailable");
+  return value;
+}
+
+beforeAll(async () => {
+  const url = new URL(BASE_URL);
+  if (!["127.0.0.1", "localhost"].includes(url.hostname) ||
+    url.port !== "5433" || url.pathname !== "/vibress" ||
+    url.username !== "vibress" || url.password !== "vibress" || url.search !== "") {
+    throw new Error("Refusing migration integration tests outside disposable loopback fixture");
+  }
+  cluster = await connect("vibress");
+  const db = (await cluster.query<{ rolname: string; rolsuper: boolean; ver: number }>(
+    "SELECT current_user AS rolname, r.rolsuper, " +
+    "current_setting('server_version_num')::int AS ver " +
+    "FROM pg_roles r WHERE r.rolname = current_user",
+  )).rows[0];
+  if (!db?.rolsuper || db.ver < 160000 || db.ver >= 170000) {
+    throw new Error("Disposable PostgreSQL 16 superuser lab required");
+  }
+  console.info("M03-S03 disposable lab: Node=" + process.version + " PostgreSQL server_version_num=" + db.ver);
+  labs.push(await createLab("a"));
+  labs.push(await createLab("b"));
+  labs.push(await createLab("c")); // Dedicated concurrent execution and replay fixture.
+  labs.push(await createLab("d")); // Dedicated journal failure/recovery fixture.
+  labs.push(await createLab("e")); // Agent05 identity negative fixture.
+  labs.push(await createLab("f")); // Revocation-before-lock fixture.
+  labs.push(await createLab("g")); // Execution-before-revocation fixture.
+  labs.push(await createLab("h")); // Forced rollback and replay fixture.
+}, 120000);
+
+// The eight baseline labs stay available for regression cases; every
+// additional disposable lab is dismantled immediately after its owning test.
+// Previously retaining each extra lab's 3 sessions until afterAll exhausted
+// PostgreSQL max_connections and hid later security regressions.
+afterEach(async () => {
+  if (!cluster) return;
+  const extra=labs.splice(8);
+  for (const lab of extra) {
+    if (!lab.name.startsWith("vibress_s03_") || !lab.name.endsWith("_"+id)) {
+      throw new Error("REFUSE_NONOWNED_DISPOSABLE_FIXTURE_CLEANUP");
+    }
+    await Promise.allSettled([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    await cluster.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+      "WHERE datname=$1 AND pid<>pg_backend_pid()",[lab.name],
+    );
+    await cluster.query("DROP DATABASE IF EXISTS "+cluster.escapeIdentifier(lab.name));
+    for (const role of [lab.runtimeRole,lab.operatorRole,lab.approver,lab.author, "s03_delegate_" + lab.key + "_" + id, "s03_gateway_" + lab.key + "_" + id]) {
+      await cluster.query("DROP ROLE IF EXISTS "+cluster.escapeIdentifier(role));
+    }
+  }
+});
+
+afterAll(async () => {
+  for (const lab of labs) {
+    await lab.operator.end().catch(() => undefined);
+    await lab.runtime.end().catch(() => undefined);
+    await lab.dbAdmin.end().catch(() => undefined);
+  }
+  if (cluster) {
+    await cluster.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity " +
+      "WHERE datname = ANY($1) AND pid <> pg_backend_pid()",
+      [labs.map(lab => lab.name)]).catch(() => undefined);
+    for (const lab of labs) {
+      await cluster.query("DROP DATABASE IF EXISTS " +
+        cluster.escapeIdentifier(lab.name)).catch(() => undefined);
+      for (const role of [lab.runtimeRole, lab.operatorRole, lab.approver, lab.author, "s03_delegate_" + lab.key + "_" + id, "s03_gateway_" + lab.key + "_" + id]) {
+        await cluster.query("DROP ROLE IF EXISTS " + cluster.escapeIdentifier(role))
+          .catch(() => undefined);
+      }
+    }
+    await cluster.end().catch(() => undefined);
+  }
+});
+
+describe("M03-S03 real disposable PostgreSQL 16 security boundary", () => {
+  it("denies missing approval and preserves the original rows/column state", async () => {
+    const lab = labs[0]!;
+    await expect(run(lab)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query(
+      "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(0);
+  });
+
+  it("runtime cannot ALTER, DROP, CREATE or TRUNCATE, nor access registry", async () => {
+    const lab = labs[0]!;
+    const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    for (const command of [
+      "ALTER TABLE " + qualified + " ADD COLUMN injection text",
+      "DROP TABLE " + qualified,
+      'CREATE TABLE "public"."unapproved" (id text)',
+      "TRUNCATE TABLE " + qualified,
+      "SELECT * FROM platform_schema_plans",
+    ]) {
+      await expect(lab.runtime.query(command)).rejects.toMatchObject({ code: "42501" });
+    }
+    const other = labs[1]!;
+    await expect(connect(other.name, lab.runtimeRole)).rejects.toThrow();
+  });
+
+  it("rejects revoked, expired, changed or forged plan authorization", async () => {
+    const lab = labs[0]!;
+    const originalChecksum = await contentChecksum(lab);
+    await approve(lab);
+    try {
+      // A revoked authorization is denied even with a valid future expiry.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = clock_timestamp() " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // An expired approval remains structurally valid: approved_at < expires_at < DB time.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL, " +
+        "approved_at = clock_timestamp() - interval '2 hours', " +
+        "expires_at = clock_timestamp() - interval '1 hour' " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      const expired = await lab.dbAdmin.query<{ valid_window: boolean; expired: boolean }>(
+        "SELECT approved_at < expires_at AS valid_window, " +
+        "expires_at < clock_timestamp() AS expired " +
+        "FROM platform_schema_approvals WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      expect(expired.rows[0]).toEqual({ valid_window: true, expired: true });
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // Preserve PostgreSQL's actual ordering constraint. A malformed window is
+      // a database error, not an alternative way to represent expiry.
+      await expect(lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET expires_at = approved_at " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      )).rejects.toMatchObject({
+        code: "23514", constraint: "platform_schema_approvals_expiry_check",
+      });
+
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET " +
+        "approved_at = clock_timestamp(), " +
+        "expires_at = clock_timestamp() + interval '20 minutes' " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+
+      // A forged target operator does not authenticate the approver's intent.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET operator_role = $1 " +
+        "WHERE installation_id = $2",
+        [lab.runtimeRole, lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET operator_role = $1 " +
+        "WHERE installation_id = $2",
+        [lab.operatorRole, lab.installationId],
+      );
+
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id = $2",
+        [JSON.stringify({ ...lab.plan, digest: "e".repeat(64) }), lab.installationId],
+      );
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(originalChecksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal WHERE installation_id = $1",
+        [lab.installationId],
+      )).rowCount).toBe(0);
+    } finally {
+      // This fixture is reused for catalog and role-negative checks; always
+      // reset authorized metadata, even when an assertion fails.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_plans SET plan = $1 WHERE installation_id = $2",
+        [JSON.stringify(lab.plan), lab.installationId],
+      );
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL, " +
+        "operator_role = $1, approved_at = clock_timestamp(), " +
+        "expires_at = clock_timestamp() + interval '20 minutes' " +
+        "WHERE installation_id = $2",
+        [lab.operatorRole, lab.installationId],
+      );
+    }
+  });
+
+  it("fails closed on unexpected live column and then permits deliberate fixture repair", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " ADD COLUMN unexpected text");
+    await expect(run(lab)).rejects.toThrow();
+    await lab.dbAdmin.query("ALTER TABLE " + table + " DROP COLUMN unexpected");
+    expect(await hasWebsite(lab)).toBe(false);
+  });
+
+  it("AG06-S03-02 rejects a PUBLIC-executable SECURITY DEFINER in public", async () => {
+    const lab = labs[0]!;
+    const fname = lab.dbAdmin.escapeIdentifier("s03_pub_" + id);
+    await lab.dbAdmin.query(
+      "CREATE FUNCTION public." + fname + "() RETURNS integer LANGUAGE sql " +
+      "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+    );
+    try {
+      const callable = await lab.runtime.query<{ result: number }>(
+        "SELECT public." + fname + "() AS result",
+      );
+      expect(callable.rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP FUNCTION IF EXISTS public." + fname + "()");
+    }
+  });
+
+  it("AG06-S03-02 detects non-public SECURITY DEFINER via schema USAGE + PUBLIC EXECUTE", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_priv_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("GRANT USAGE ON SCHEMA " + schema + " TO " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+      await lab.dbAdmin.query(
+        "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+      );
+      const reachable = await lab.runtime.query<{ result: number }>(
+        "SELECT " + schema + ".probe() AS result",
+      );
+      expect(reachable.rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+    }
+  });
+
+  it("AG06-S03-02 blocks inherited EXECUTE even when PUBLIC access was revoked", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_inh_" + id);
+    const group = lab.dbAdmin.escapeIdentifier("s03_group_" + id);
+    const runtime = lab.dbAdmin.escapeIdentifier(lab.runtimeRole);
+    await lab.dbAdmin.query("CREATE ROLE " + group + " NOLOGIN");
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("GRANT USAGE ON SCHEMA " + schema + " TO " + runtime);
+      await lab.dbAdmin.query(
+        "CREATE FUNCTION " + schema + ".probe() RETURNS integer LANGUAGE sql " +
+        "SECURITY DEFINER SET search_path = pg_catalog AS 'SELECT 7'",
+      );
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + schema +
+        ".probe() FROM PUBLIC");
+      await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + schema +
+        ".probe() TO " + group);
+      await lab.dbAdmin.query("GRANT " + group + " TO " + runtime +
+        " WITH INHERIT TRUE, SET FALSE");
+      expect((await lab.runtime.query<{ result: number }>(
+        "SELECT " + schema + ".probe() AS result",
+      )).rows[0]?.result).toBe(7);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE " + group + " FROM " + runtime).catch(() => undefined);
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+      await lab.dbAdmin.query("DROP ROLE " + group);
+    }
+  });
+
+  it("AG06-S03-02 rejects SET ROLE reachability even without inherited EXECUTE", async () => {
+    const lab = labs[0]!;
+    const group = lab.dbAdmin.escapeIdentifier("s03_set_" + id);
+    const runtime = lab.dbAdmin.escapeIdentifier(lab.runtimeRole);
+    await lab.dbAdmin.query("CREATE ROLE " + group + " NOLOGIN");
+    try {
+      await lab.dbAdmin.query("GRANT " + group + " TO " + runtime +
+        " WITH INHERIT FALSE, SET TRUE");
+      await lab.runtime.query("SET ROLE " + group);
+      expect((await lab.runtime.query<{ principal: string }>(
+        "SELECT current_user AS principal",
+      )).rows[0]?.principal).toBe("s03_set_" + id);
+      await lab.runtime.query("RESET ROLE");
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.runtime.query("RESET ROLE").catch(() => undefined);
+      await lab.dbAdmin.query("REVOKE " + group + " FROM " + runtime);
+      await lab.dbAdmin.query("DROP ROLE " + group);
+    }
+  });
+
+  it("rejects runtime or operator schema CREATE outside public", async () => {
+    const lab = labs[0]!;
+    const schema = lab.dbAdmin.escapeIdentifier("s03_create_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      for (const role of [lab.runtimeRole, lab.operatorRole]) {
+        await lab.dbAdmin.query("GRANT CREATE ON SCHEMA " + schema + " TO " +
+          lab.dbAdmin.escapeIdentifier(role));
+        await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        await lab.dbAdmin.query("REVOKE CREATE ON SCHEMA " + schema + " FROM " +
+          lab.dbAdmin.escapeIdentifier(role));
+      }
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema);
+    }
+  });
+
+  it("operator owner SQL grammar is narrower than the credential's actual ALTER/DROP ability", async () => {
+    const lab = labs[0]!;
+    const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const original = await contentChecksum(lab);
+    await lab.operator.query("ALTER TABLE " + qualified + " ADD COLUMN owner_probe text");
+    expect((await lab.dbAdmin.query<{ present: boolean }>(
+      "SELECT EXISTS(SELECT 1 FROM pg_attribute a " +
+      "JOIN pg_class c ON c.oid=a.attrelid WHERE c.relname=$1 " +
+      "AND a.attname='owner_probe' AND NOT a.attisdropped) AS present",
+      [lab.table],
+    )).rows[0]?.present).toBe(true);
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+    } finally {
+      await lab.operator.query("ALTER TABLE " + qualified + " DROP COLUMN owner_probe");
+    }
+    expect(await contentChecksum(lab)).toBe(original);
+  });
+
+  it("AG06-S03-03 rejects unexpected CHECK constraints and noninternal triggers", async () => {
+    const lab = labs[0]!;
+    const qualified = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const fn = lab.dbAdmin.escapeIdentifier("s03_trigger_" + id);
+    await lab.dbAdmin.query("ALTER TABLE " + qualified +
+      " ADD CONSTRAINT s03_extra_check CHECK (char_length(name) >= 0)");
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + qualified +
+        " DROP CONSTRAINT s03_extra_check");
+    }
+    await lab.dbAdmin.query("CREATE FUNCTION public." + fn +
+      "() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog " +
+      "AS 'BEGIN RETURN NEW; END'");
+    try {
+      await lab.dbAdmin.query("CREATE TRIGGER s03_unexpected BEFORE INSERT ON " +
+        qualified + " FOR EACH ROW EXECUTE FUNCTION public." + fn + "()");
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP TRIGGER IF EXISTS s03_unexpected ON " + qualified);
+      await lab.dbAdmin.query("DROP FUNCTION IF EXISTS public." + fn + "()");
+    }
+  });
+
+
+  it("rejects unexpected target owner, extra schema owner and unmodeled index", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+    const schema = lab.dbAdmin.escapeIdentifier("s03_owned_" + id);
+    await lab.dbAdmin.query("CREATE SCHEMA " + schema);
+    try {
+      await lab.dbAdmin.query("ALTER SCHEMA " + schema + " OWNER TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    } finally {
+      await lab.dbAdmin.query("DROP SCHEMA " + schema + " CASCADE");
+    }
+    const index = lab.dbAdmin.escapeIdentifier("s03_idx_" + id);
+    await lab.dbAdmin.query("CREATE INDEX " + index + " ON " + table + ' ("name")');
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("DROP INDEX public." + index);
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+  });
+
+  it("rejects missing or changed physical columns after non-destructive rename", async () => {
+    const lab = labs[0]!;
+    const table = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const originalChecksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN name TO renamed_name");
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ALTER TABLE " + table + " RENAME COLUMN renamed_name TO name");
+    }
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+  });
+
+  it("AG06-S03-03 rejects a noncooperating DDL commit before table lock acquisition", async () => {
+    const lab = labs[0]!;
+    const sqlTable = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query("ALTER TABLE " + sqlTable + " ADD COLUMN rogue text");
+      const pending = run(lab);
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await lab.dbAdmin.query("COMMIT");
+      await expect(pending).rejects.toMatchObject({ code: "CATALOG_DRIFT" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK").catch(() => undefined);
+      await lab.dbAdmin.query("ALTER TABLE " + sqlTable + " DROP COLUMN IF EXISTS rogue");
+    }
+  }, 15000);
+
+  it("AG06-S03-03 enforces the 2-second ACCESS EXCLUSIVE lock timeout without altering schema", async () => {
+    const lab = labs[0]!;
+    const sqlTable = '"public".' + lab.dbAdmin.escapeIdentifier(lab.table);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query("LOCK TABLE ONLY " + sqlTable + " IN ACCESS EXCLUSIVE MODE");
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK");
+    }
+    expect(await contentChecksum(lab)).toBe(checksum);
+  }, 12000);
+
+  it("rejects overprivileged migration identities despite valid plan approval", async () => {
+    const lab = labs[0]!;
+    const role = lab.dbAdmin.escapeIdentifier(lab.operatorRole);
+    await lab.dbAdmin.query("GRANT CREATE ON SCHEMA public TO " + role);
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE CREATE ON SCHEMA public FROM " + role);
+    }
+    await lab.dbAdmin.query("GRANT CREATE ON DATABASE " +
+      lab.dbAdmin.escapeIdentifier(lab.name) + " TO " + role);
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("REVOKE CREATE ON DATABASE " +
+        lab.dbAdmin.escapeIdentifier(lab.name) + " FROM " + role);
+    }
+  });
+
+  it("serializes concurrent operators and deterministically prevents reapplication", async () => {
+    // Its own installation/database means other tests cannot leave a revoked
+    // approval, drifted catalog or journal from a prior negative test.
+    const lab = labs[2]!;
+    await approve(lab);
+    const originalChecksum = await contentChecksum(lab);
+    const second = await connect(lab.name, lab.operatorRole);
+    try {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = clock_timestamp() " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+      const denied = await Promise.allSettled([
+        run(lab),
+        executeApprovedAdditiveColumn(second, {
+          installationId: lab.installationId, planDigest: lab.plan.digest,
+        }),
+      ]);
+      expect(denied.every(result =>
+        result.status === "rejected" && result.reason?.code === "UNAUTHORIZED",
+      )).toBe(true);
+      expect(await hasWebsite(lab)).toBe(false);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal",
+      )).rowCount).toBe(0);
+    } finally {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET revoked_at = NULL " +
+        "WHERE installation_id = $1",
+        [lab.installationId],
+      );
+    }
+
+    try {
+      const results = await Promise.allSettled([
+        run(lab),
+        executeApprovedAdditiveColumn(second, {
+          installationId: lab.installationId, planDigest: lab.plan.digest,
+        }),
+      ]);
+      // Report actual sanitized operator outcomes if neither applied, rather
+      // than weakening the requirement to accept zero migrations.
+      const outcomes = results.map(result => result.status === "fulfilled"
+        ? result.value.status
+        : result.reason?.code === undefined ? "UNEXPECTED_REJECTION" : String(result.reason.code));
+      const applied = results.filter(result => result.status === "fulfilled" &&
+        result.value.status === "APPLIED");
+      expect(applied, "Concurrent operator outcomes: " + outcomes.join(", "))
+        .toHaveLength(1);
+      expect(results.every(result => result.status === "rejected" ||
+        result.value.status === "APPLIED" || result.value.status === "ALREADY_APPLIED")).toBe(true);
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(originalChecksum);
+      const retry = await run(lab);
+      expect(retry.status).toBe("ALREADY_APPLIED");
+      expect(retry.afterRows).toBe("2");
+      const journal = await lab.dbAdmin.query<{ status: string }>(
+        "SELECT status FROM platform_schema_migration_journal");
+      expect(journal.rows).toEqual([{ status: "COMPLETED" }]);
+
+      // A different plan may not borrow this operation's completed journal.
+      await expect(executeApprovedAdditiveColumn(second, {
+        installationId: lab.installationId, planDigest: "f".repeat(64),
+      })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+
+      // A valid-format conflicting journal checksum must never masquerade as
+      // an already-applied operation. Restore only inside this disposable lab.
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_migration_journal SET new_digest = $1 " +
+        "WHERE installation_id = $2",
+        ["f".repeat(64), lab.installationId],
+      );
+      try {
+        await expect(run(lab)).rejects.toMatchObject({ code: "JOURNAL_CONFLICT" });
+      } finally {
+        await lab.dbAdmin.query(
+          "UPDATE platform_schema_migration_journal SET new_digest = $1 " +
+          "WHERE installation_id = $2",
+          [lab.plan.proposedManifest.digest, lab.installationId],
+        );
+      }
+      expect((await run(lab)).status).toBe("ALREADY_APPLIED");
+    } finally {
+      await second.end();
+    }
+  }, 20000);
+
+  it("fails with bounded advisory lock contention and leaves B unchanged", async () => {
+    const lab = labs[1]!;
+    await approve(lab);
+    const locker = await connect(lab.name, lab.operatorRole);
+    try {
+      await locker.query("BEGIN");
+      await locker.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'), hashtext($1::text))",
+        [lab.installationId],
+      );
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await locker.query("ROLLBACK").catch(() => undefined);
+      await locker.end();
+    }
+  }, 20000);
+
+  it("rolls back ALTER if journal finalization fails, then allows a fresh authorized retry", async () => {
+    const lab = labs[3]!;
+    await approve(lab);
+    await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_migration_journal FROM " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await expect(run(lab)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    const registry = await lab.dbAdmin.query<{ manifest_digest: string }>(
+      "SELECT manifest_digest FROM platform_schema_registry");
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    const result = await run(lab);
+    expect(result.status).toBe("APPLIED");
+    expect(result.beforeRows).toBe("2");
+    expect(result.afterRows).toBe("2");
+    expect(await hasWebsite(lab)).toBe(true);
+    const replay = await run(lab);
+    expect(replay.status).toBe("ALREADY_APPLIED");
+  }, 30000);
+  it("runtime cannot write approvals or registry, and cannot use another installation", async () => {
+    const lab = labs[0]!;
+    for (const command of [
+      "UPDATE public.platform_schema_registry SET updated_at=clock_timestamp()",
+      "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp()",
+      "INSERT INTO public.platform_schema_approvals " +
+        "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+        "VALUES ('x','x','x','x','x','test',clock_timestamp())",
+    ]) {
+      await expect(lab.runtime.query(command)).rejects.toMatchObject({ code: "42501" });
+    }
+    await expect(connect(labs[1]!.name, lab.operatorRole)).rejects.toThrow();
+  });
+
+  it("AG06-S03-03 denies a noncooperating ALTER while the operator already owns the target lock", async () => {
+    // Fixture D has a completed journal from the prior recovery test, so the
+    // operator is performing verified ALREADY_APPLIED replay, not second DDL.
+    const lab = labs[3]!;
+    let signalLock!: () => void;
+    let releaseLock!: () => void;
+    const locked = new Promise<void>(resolve => { signalLock = resolve; });
+    const released = new Promise<void>(resolve => { releaseLock = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, prop) {
+        if (prop === "query") {
+          return async (sql: string, params?: readonly unknown[]) => {
+            const response = await target.query(sql, params);
+            if (sql.startsWith("LOCK TABLE ONLY")) {
+              signalLock();
+              await released;
+            }
+            return response;
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as Client;
+    const pending = executeApprovedAdditiveColumn(proxy, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        locked,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("operator never acquired target lock")), 5000)),
+      ]);
+      await lab.dbAdmin.query("SET lock_timeout = '250ms'");
+      await expect(lab.dbAdmin.query(
+        'ALTER TABLE "public".' + lab.dbAdmin.escapeIdentifier(lab.table) +
+        " ADD COLUMN noncooperating text",
+      )).rejects.toMatchObject({ code: "55P03" });
+    } finally {
+      releaseLock();
+      await lab.dbAdmin.query("RESET lock_timeout").catch(() => undefined);
+    }
+    const result = await pending;
+    expect(result.status).toBe("ALREADY_APPLIED");
+    expect(await hasWebsite(lab)).toBe(true);
+    const unexpected = await lab.dbAdmin.query<{ present: boolean }>(
+      "SELECT EXISTS (SELECT 1 FROM pg_attribute a " +
+      "JOIN pg_class c ON c.oid=a.attrelid " +
+      "WHERE c.relname=$1 AND a.attname='noncooperating' AND NOT a.attisdropped) AS present",
+      [lab.table],
+    );
+    expect(unexpected.rows[0]?.present).toBe(false);
+  }, 15000);
+
+});
+
+describe("M03-S03 Agent05 authenticated provenance and revocation negatives (PG16)", () => {
+  const e = () => labs[4]!;
+  const operation = (lab: Lab) => lab.plan.operations[0]!.id;
+  const approvalSql =
+    "INSERT INTO platform_schema_approvals " +
+    "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+    "VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+interval '20 minutes')";
+
+  it("AUTH-01: records distinct authenticated author/approver from separate sessions", async () => {
+    const lab = e();
+    await approve(lab);
+    const result = await lab.dbAdmin.query<{
+      author_login: string; author_principal_id: string; approver_login: string;
+      approver_principal_id: string; approved_application_id: string;
+    }>(
+      "SELECT p.author_login,p.author_principal_id,a.approver_login," +
+      "a.approver_principal_id,a.approved_application_id FROM platform_schema_plans p " +
+      "JOIN platform_schema_approvals a USING (installation_id,plan_digest)",
+    );
+    expect(result.rows).toEqual([{
+      author_login: lab.author, author_principal_id: "individual:" + lab.author,
+      approver_login: lab.approver, approver_principal_id: "individual:" + lab.approver,
+      approved_application_id: applicationId,
+    }]);
+  });
+
+  it("AUTH-02: forged author text is rejected despite misgranted direct INSERT", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await expect(actor.query(
+        "INSERT INTO platform_schema_plans " +
+        "(installation_id,plan_digest,expected_manifest,plan,author) VALUES($1,$2,$3,$4,$5)",
+        [lab.installationId, "a".repeat(64), JSON.stringify(lab.current),
+         JSON.stringify(lab.plan), lab.approver],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-03: forged approver text is rejected even with direct INSERT", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name, lab.approver);
+    try {
+      await expect(actor.query(approvalSql, [lab.installationId,
+        lab.plan.digest, "forged", lab.author, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-04: same-login dual table grants cannot forge distinct principals", async () => {
+    const lab = e();
+    const role = lab.dbAdmin.escapeIdentifier(lab.author);
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans,platform_schema_approvals TO " + role);
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await expect(actor.query(approvalSql, [lab.installationId,
+        lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans,platform_schema_approvals FROM " + role);
+    }
+  });
+
+  it("AUTH-05: inherited dual grants do not change authenticated principal", async () => {
+    const lab = e();
+    const group = "s03_dual_" + id;
+    const quoted = lab.dbAdmin.escapeIdentifier(group);
+    await lab.dbAdmin.query("CREATE ROLE " + quoted + " NOLOGIN");
+    try {
+      await lab.dbAdmin.query("GRANT INSERT ON platform_schema_plans,platform_schema_approvals TO " + quoted);
+      await lab.dbAdmin.query("GRANT " + quoted + " TO " +
+        lab.dbAdmin.escapeIdentifier(lab.author) + " WITH INHERIT TRUE, SET TRUE");
+      const actor = await connect(lab.name, lab.author);
+      try {
+        await expect(actor.query(approvalSql, [lab.installationId,
+          lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+        ])).rejects.toMatchObject({ code: "42501" });
+      } finally { await actor.end(); }
+    } finally {
+      await lab.dbAdmin.query("REVOKE " + quoted + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_plans,platform_schema_approvals FROM " + quoted);
+      await lab.dbAdmin.query("DROP ROLE " + quoted);
+    }
+  });
+
+  it("AUTH-06: SET ROLE approver cannot impersonate the authenticated login", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT " + lab.dbAdmin.escapeIdentifier(lab.approver) +
+      " TO " + lab.dbAdmin.escapeIdentifier(lab.author) + " WITH SET TRUE, INHERIT FALSE");
+    const actor = await connect(lab.name, lab.author);
+    try {
+      await actor.query("SET ROLE " + actor.escapeIdentifier(lab.approver));
+      const identities = await actor.query<{ current_user: string; session_user: string }>(
+        "SELECT current_user,session_user");
+      expect(identities.rows[0]).toMatchObject({
+        current_user: lab.approver, session_user: lab.author,
+      });
+      await expect(actor.query("SELECT public.platform_schema_approve_operation(" +
+        "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+      [lab.installationId, lab.plan.digest, operation(lab)])).rejects
+        .toMatchObject({ code: "42501" });
+    } finally {
+      await actor.query("RESET ROLE").catch(() => undefined);
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE " + lab.dbAdmin.escapeIdentifier(lab.approver) +
+        " FROM " + lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-07: a PUBLIC direct INSERT misgrant cannot create authenticated approvals", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO PUBLIC");
+    try {
+      await expect(lab.runtime.query(approvalSql, [lab.installationId,
+        lab.plan.digest, operation(lab), lab.approver, lab.operatorRole, "test",
+      ])).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM PUBLIC");
+    }
+  });
+
+  it("AUTH-08: runtime with misgranted EXECUTE cannot issue approvals", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_approve_operation(text,text,text,timestamptz)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(lab.runtime.query(
+        "SELECT public.platform_schema_approve_operation($1,$2,$3,clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,operation(lab)],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    }
+  });
+
+  it("AUTH-09: author cannot revoke approval even with EXECUTE misgrant", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_revoke_operation(text,text,text)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)],
+      )).rejects.toMatchObject({ code: "42501" });
+      const r = await lab.dbAdmin.query("SELECT revoked_at FROM platform_schema_approvals");
+      expect(r.rows[0]?.revoked_at).toBeNull();
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-10: operator with UPDATE misgrant cannot rewrite an approval", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    try {
+      await expect(lab.operator.query(
+        "UPDATE platform_schema_approvals SET expires_at=expires_at+interval '1 day'",
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+  });
+
+  it("AUTH-11: plan identity and canonical plan are immutable to ordinary authors", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_plans TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_plans SET author_login=$1 WHERE installation_id=$2",
+        [lab.approver,lab.installationId],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_plans FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-12: approval for a different operation is rejected at DB boundary", async () => {
+    const lab = e();
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "SELECT public.platform_schema_approve_operation(" +
+        "$1,$2,$3,clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,"wrong-operation"],
+      )).rejects.toMatchObject({ code: "42501" });
+    } finally { await actor.end(); }
+  });
+
+  it("AUTH-13: changed environment/operator/application binding denies execution", async () => {
+    const lab = e();
+    for (const [column,value,original] of [
+      ["environment","development","test"],
+      ["operator_role",lab.runtimeRole,lab.operatorRole],
+      ["approved_application_id","wrong-app",applicationId],
+    ]) {
+      await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+        column + "=$1 WHERE installation_id=$2", [value,lab.installationId]);
+      try {
+        await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+        expect(await hasWebsite(lab)).toBe(false);
+      } finally {
+        await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+          column + "=$1 WHERE installation_id=$2", [original,lab.installationId]);
+      }
+    }
+  });
+
+  it("AUTH-14: legacy pre-0060 records without provenance fail closed", async () => {
+    const lab = e();
+    await lab.dbAdmin.query(
+      "UPDATE platform_schema_approvals SET approver_login=NULL WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await lab.dbAdmin.query(
+        "UPDATE platform_schema_approvals SET approver_login=$1 WHERE installation_id=$2",
+        [lab.approver,lab.installationId],
+      );
+    }
+  });
+
+  it("AUTH-15: expired authorization and crossed installation/digest cannot execute", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+      "approved_at=clock_timestamp()-interval '2 hours', " +
+      "expires_at=clock_timestamp()-interval '1 hour' WHERE installation_id=$1",
+      [lab.installationId]);
+    try {
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    } finally {
+      await lab.dbAdmin.query("UPDATE platform_schema_approvals SET " +
+        "approved_at=clock_timestamp(),expires_at=clock_timestamp()+interval '20 minutes' " +
+        "WHERE installation_id=$1",[lab.installationId]);
+    }
+    const other = labs[5]!;
+    await expect(executeApprovedAdditiveColumn(lab.operator, {
+      installationId:lab.installationId,planDigest:other.plan.digest,
+    })).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    await expect(executeApprovedAdditiveColumn(lab.operator, {
+      installationId:other.installationId,planDigest:lab.plan.digest,
+    })).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+  });
+
+  it("AUTH-16: committed revocation before lock denies DDL and preserves audit", async () => {
+    const lab = labs[5]!;
+    await approve(lab);
+    const revoker = await connect(lab.name,lab.approver);
+    try {
+      await revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+      await expect(revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)])).rejects
+        .toMatchObject({ code:"42501" });
+    } finally { await revoker.end(); }
+    await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    const audit = await lab.dbAdmin.query(
+      "SELECT revoked_by_login FROM platform_schema_revocation_audit");
+    expect(audit.rows).toEqual([{ revoked_by_login: lab.approver }]);
+    expect((await lab.dbAdmin.query("SELECT * FROM platform_schema_migration_journal")).rowCount)
+      .toBe(0);
+  });
+
+  it("AUTH-17: operator transaction advisory lock wins race; revocation waits for COMMIT", async () => {
+    const lab = labs[6]!;
+    await approve(lab);
+    let signalLock!: () => void;
+    let releaseLock!: () => void;
+    const afterLock = new Promise<void>(resolve => { signalLock = resolve; });
+    const gate = new Promise<void>(resolve => { releaseLock = resolve; });
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = await lab.operator.query(sql,params);
+        if (sql.includes("vibress_m03s03_approval")) {
+          signalLock();
+          await gate;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const executing = executeApprovedAdditiveColumn(hooked,{
+      installationId:lab.installationId,planDigest:lab.plan.digest,
+    });
+    const revoker = await connect(lab.name,lab.approver);
+    let revoking: Promise<unknown> | undefined;
+    try {
+      await afterLock;
+      revoking = revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+      let observedWait = false;
+      for (let attempt=0; attempt<30; attempt+=1) {
+        const state = await lab.dbAdmin.query<{ wait_event_type:string|null }>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [revoker.processID ?? -1],
+        );
+        if (state.rows[0]?.wait_event_type === "Lock") { observedWait = true; break; }
+        await new Promise(resolve => setTimeout(resolve,25));
+      }
+      expect(observedWait).toBe(true);
+      releaseLock();
+      const applied = await executing;
+      expect(applied.status).toBe("APPLIED");
+      await revoking;
+      await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(true);
+      expect((await lab.dbAdmin.query(
+        "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
+      const audit = await lab.dbAdmin.query("SELECT revoked_by_login FROM platform_schema_revocation_audit");
+      expect(audit.rows).toEqual([{ revoked_by_login: lab.approver }]);
+    } finally {
+      releaseLock();
+      await Promise.allSettled([executing,revoking ?? Promise.resolve()]);
+      await revoker.end();
+    }
+  },30000);
+
+  it("AUTH-19: accidental actor-roster UPDATE grant cannot reclassify a principal", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_trusted_actors TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    const actor = await connect(lab.name,lab.author);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_trusted_actors SET actor_kind='APPROVER'," +
+        "principal_id=$1 WHERE login_name=$2",
+        ["forged:new-identity",lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+      const result = await lab.dbAdmin.query(
+        "SELECT actor_kind,principal_id FROM platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.author],
+      );
+      expect(result.rows).toEqual([{
+        actor_kind:"AUTHOR",principal_id:"individual:"+lab.author,
+      }]);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_trusted_actors FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.author));
+    }
+  });
+
+  it("AUTH-20: accidental DELETE grant cannot erase committed revocation audit", async () => {
+    const lab = labs[5]!; // AUTH-16 committed one authentic revocation here.
+    await lab.dbAdmin.query("GRANT DELETE ON platform_schema_revocation_audit TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "DELETE FROM platform_schema_revocation_audit WHERE installation_id=$1",
+        [lab.installationId],
+      )).rejects.toMatchObject({code:"42501"});
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_revocation_audit")).rowCount).toBe(1);
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE DELETE ON platform_schema_revocation_audit FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-21: an unregistered runtime login cannot author through a misgranted entrypoint", async () => {
+    const lab = e();
+    const sig = "public.platform_schema_submit_plan(text,text,text,text)";
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION " + sig + " TO " +
+      lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    try {
+      await expect(lab.runtime.query(
+        "SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",
+        [lab.installationId,"d".repeat(64),
+          JSON.stringify(lab.current),JSON.stringify(lab.plan)],
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION " + sig + " FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    }
+  });
+
+  it("AUTH-22: a real approver cannot extend an approval using direct UPDATE", async () => {
+    const lab = e();
+    await lab.dbAdmin.query("GRANT UPDATE ON platform_schema_approvals TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const actor = await connect(lab.name,lab.approver);
+    try {
+      await expect(actor.query(
+        "UPDATE platform_schema_approvals SET expires_at=expires_at+interval '1 day'",
+      )).rejects.toMatchObject({code:"42501"});
+    } finally {
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE UPDATE ON platform_schema_approvals FROM " +
+        lab.dbAdmin.escapeIdentifier(lab.approver));
+    }
+  });
+
+  it("AUTH-18: failed journal authorization rolls back DDL; later approval remains bounded", async () => {
+    const lab = labs[7]!;
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_migration_journal FROM " +
+      lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    try {
+      await expect(run(lab)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+      const current = await lab.dbAdmin.query<{manifest_digest:string}>(
+        "SELECT manifest_digest FROM platform_schema_registry");
+      expect(current.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    } finally {
+      await lab.dbAdmin.query("GRANT INSERT ON platform_schema_migration_journal TO " +
+        lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    }
+    expect((await run(lab)).status).toBe("APPLIED");
+    const revoker = await connect(lab.name,lab.approver);
+    try {
+      await revoker.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,operation(lab)]);
+    } finally { await revoker.end(); }
+    await expect(run(lab)).rejects.toMatchObject({ code:"UNAUTHORIZED" });
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(1);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+  it("AUTH-23: registry-first order prevents direct INSERT/advisory lock inversion", async () => {
+    const lab = e(); // Approved, not yet executed; isolated from Agent02 cases.
+    const actor = await connect(lab.name, lab.approver);
+    const grantRole = lab.dbAdmin.escapeIdentifier(lab.approver);
+    await lab.dbAdmin.query("GRANT INSERT ON platform_schema_approvals TO " + grantRole);
+    let signal!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>(resolve => { signal = resolve; });
+    const released = new Promise<void>(resolve => { release = resolve; });
+    const proxied = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = await lab.operator.query(sql, params);
+        if (sql.includes("FROM public.platform_schema_registry WHERE installation_id") &&
+            sql.includes("FOR UPDATE")) {
+          signal(); // The operator holds the registry row before approval lock.
+          await released;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const execution = executeApprovedAdditiveColumn(proxied, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    let inserted: Promise<unknown> | undefined;
+    try {
+      await Promise.race([
+        locked,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("REGISTRY_LOCK_BARRIER_TIMEOUT")), 5000)),
+      ]);
+      // Deliberately misgrant raw INSERT to a genuine independent approver.
+      // A duplicate approval follows exactly the same advisory key as the
+      // operator. Registry-first acquisition must make INSERT wait here.
+      inserted = actor.query(
+        "INSERT INTO platform_schema_approvals " +
+        "(installation_id,plan_digest,operation_id,approver,operator_role,environment,expires_at) " +
+        "VALUES($1,$2,$3,$4,$5,'test',clock_timestamp()+interval '20 minutes')",
+        [lab.installationId,lab.plan.digest,operation(lab),lab.approver,lab.operatorRole],
+      );
+      let waiting = false;
+      for (let n = 0; n < 40; n += 1) {
+        const state = await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [actor.processID ?? -1],
+        );
+        if (state.rows[0]?.wait_event_type === "Lock") {
+          waiting = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      expect(waiting, "Direct INSERT must wait for registry row lock, not approval lock")
+        .toBe(true);
+      release();
+      expect((await execution).status).toBe("APPLIED");
+      // E2's additional SECURITY INVOKER provenance trigger now denies
+      // a direct, mistakenly granted INSERT rather than fetching privileged
+      // roster data. Existing registry-before-approval lock ordering above
+      // is still verified; E2 fails closed with 42501, not duplicate 23505.
+      await expect(inserted).rejects.toMatchObject({code:"42501"});
+      expect(await hasWebsite(lab)).toBe(true);
+      expect((await lab.dbAdmin.query(
+        "SELECT * FROM platform_schema_migration_journal")).rowCount).toBe(1);
+    } finally {
+      release();
+      await Promise.allSettled([execution,inserted ?? Promise.resolve()]);
+      await actor.end();
+      await lab.dbAdmin.query("REVOKE INSERT ON platform_schema_approvals FROM " + grantRole);
+    }
+  },20000);
+
+});
+
+
+describe("AG06-S03-08 — proposed final pre-DDL approval expiry boundary (PG16)", () => {
+  async function shortApproval(lab: Lab, milliseconds: number): Promise<void> {
+    const actor = await connect(lab.name, lab.approver);
+    try {
+      await actor.query(
+        "SELECT public.platform_schema_approve_operation($1,$2,$3," +
+        "clock_timestamp() + $4::int * interval '1 millisecond')",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id, milliseconds],
+      );
+    } finally {
+      await actor.end();
+    }
+  }
+
+  async function isExpired(lab: Lab): Promise<boolean> {
+    const check = await lab.dbAdmin.query<{ expired: boolean }>(
+      "SELECT expires_at <= clock_timestamp() AS expired " +
+      "FROM public.platform_schema_approvals WHERE installation_id = $1",
+      [lab.installationId],
+    );
+    return check.rows[0]?.expired === true;
+  }
+
+  it("EXP-01: five real table-lock waits crossing expiry must DENY without DDL or journal", async () => {
+    for (const key of ["i", "j", "k", "l", "m"] as const) {
+      const lab = await createLab(key);
+      labs.push(lab);
+      const beforeChecksum = await contentChecksum(lab);
+      const blocker = await connect(lab.name);
+      let pending: Promise<unknown> | undefined;
+      try {
+        await blocker.query("BEGIN");
+        await blocker.query(
+          'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+          " IN ACCESS EXCLUSIVE MODE",
+        );
+        // The approval must be valid at the initial authorization read;
+        // the external relation lock forces expiry before the final decision.
+        await shortApproval(lab, 1100);
+        let signal!: () => void;
+        const aboutToLock = new Promise<void>(resolve => { signal = resolve; });
+        const proxy = new Proxy(lab.operator, {
+          get(target, property) {
+            if (property === "query") {
+              return async (sql: string, params?: readonly unknown[]) => {
+                if (sql.startsWith("LOCK TABLE ONLY")) signal();
+                return target.query(sql, params);
+              };
+            }
+            const value: unknown = Reflect.get(target, property, target);
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+        });
+        pending = executeApprovedAdditiveColumn(proxy, {
+          installationId: lab.installationId, planDigest: lab.plan.digest,
+        });
+        await Promise.race([
+          aboutToLock,
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(Error("authorization never reached table lock")), 2500)),
+        ]);
+        const initiallyValid = await lab.dbAdmin.query<{ valid: boolean }>(
+          "SELECT approved_at <= clock_timestamp() AND expires_at > clock_timestamp() " +
+          "AND revoked_at IS NULL AS valid FROM public.platform_schema_approvals " +
+          "WHERE installation_id = $1",
+          [lab.installationId],
+        );
+        expect(initiallyValid.rows[0]?.valid, "pre-lock approval must be valid").toBe(true);
+        let waiting = false;
+        for (let n = 0; n < 32; n += 1) {
+          const state = await lab.dbAdmin.query<{ wait_event_type: string | null }>(
+            "SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1",
+            [lab.operator.processID ?? -1],
+          );
+          if (state.rows[0]?.wait_event_type === "Lock") { waiting = true; break; }
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        expect(waiting, "operator must encounter a real PostgreSQL relation lock wait")
+          .toBe(true);
+        let expired = false;
+        for (let n = 0; n < 75; n += 1) {
+          if (await isExpired(lab)) { expired = true; break; }
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
+        expect(expired, "approval must expire during the bounded relation lock wait")
+          .toBe(true);
+      } finally {
+        await blocker.query("ROLLBACK").catch(() => undefined);
+        await blocker.end().catch(() => undefined);
+      }
+      expect(pending).toBeDefined();
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(beforeChecksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id = $1",
+        [lab.installationId],
+      )).rowCount).toBe(0);
+      const state = await lab.dbAdmin.query<{ manifest_digest: string }>(
+        "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(state.rows[0]?.manifest_digest).toBe(lab.current.digest);
+      await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    }
+  }, 65000);
+
+  it("EXP-02: expiry after final authorization is nonretroactive under proposed Policy A", async () => {
+    const lab = await createLab("n");
+    labs.push(lab);
+    await shortApproval(lab, 1200);
+    const originalChecksum = await contentChecksum(lab);
+    let signal!: () => void;
+    let release!: () => void;
+    const finalized = new Promise<void>(resolve => { signal = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const proxy = new Proxy(lab.operator, {
+      get(target, property) {
+        if (property === "query") {
+          return async (sql: string, params?: readonly unknown[]) => {
+            const result = await target.query(sql, params);
+            if (sql.includes("clock_timestamp() AS checked_at")) {
+              signal();
+              await gate; // Deliberate test-only post-decision pause, not production code.
+            }
+            return result;
+          };
+        }
+        const value: unknown = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const pending = executeApprovedAdditiveColumn(proxy, {
+      installationId: lab.installationId, planDigest: lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        finalized,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("final authorization point not reached")), 2500)),
+      ]);
+      let expired = false;
+      for (let n = 0; n < 90; n += 1) {
+        if (await isExpired(lab)) { expired = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 16));
+      }
+      expect(expired).toBe(true);
+    } finally {
+      release();
+    }
+    const result = await pending;
+    expect(result.status).toBe("APPLIED");
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(originalChecksum);
+    const journal = await lab.dbAdmin.query<{
+      authorization_policy: string;
+      final_authorized_at: string;
+      completion_after_expiry: boolean;
+    }>(
+      "SELECT catalog_evidence->>'authorizationPolicy' AS authorization_policy, " +
+      "catalog_evidence->>'finalAuthorizedAt' AS final_authorized_at, " +
+      "completed_at > (SELECT expires_at FROM public.platform_schema_approvals " +
+      "WHERE installation_id = $1) AS completion_after_expiry " +
+      "FROM public.platform_schema_migration_journal WHERE installation_id = $1",
+      [lab.installationId],
+    );
+    expect(journal.rows).toHaveLength(1);
+    expect(journal.rows[0]?.authorization_policy).toBe("FINAL_PRE_DDL");
+    expect(journal.rows[0]?.final_authorized_at).toBeTruthy();
+    expect(journal.rows[0]?.completion_after_expiry).toBe(true);
+    await expect(run(lab)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  }, 15000);
+});
+
+
+/**
+ * AG05 + AG03: test-only PostgreSQL 16 adversarial actor-state and watchdog
+ * evidence. No production watchdog, privilege grant, DDL interface or policy
+ * alteration. Owner P05/R1 requires denial after committed pre-final actor
+ * deactivation; epoch and reapproval semantics remain unapproved.
+ */
+describe("M03-S03 IAM-RACE-01 real privileged actor-state transitions", () => {
+  async function assertNoWrite(lab: Lab, before: string): Promise<void> {
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    const journal = await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(0);
+    const registry = await lab.dbAdmin.query<{manifest_digest:string}>(
+      "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+  }
+
+  // A separate real PG session owns ACCESS EXCLUSIVE, so the operator is
+  // confirmed to be waiting at the exact boundary, not merely JS-delayed.
+  async function deactivateDuringTargetWait(
+    key: "o" | "p", kind: "AUTHOR" | "APPROVER",
+  ): Promise<void> {
+    const lab = await createLab(key);
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const original = kind === "AUTHOR" ? lab.author : lab.approver;
+    const blocker = await connect(lab.name);
+    let pending: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    let signal!: () => void;
+    const aboutToLock = new Promise<void>(resolve => { signal = resolve; });
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const proxied = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          if (sql.startsWith("LOCK TABLE ONLY")) signal();
+          return params ? lab.operator.query(sql, params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      pending = executeApprovedAdditiveColumn(proxied, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        aboutToLock,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("ACTOR_TARGET_LOCK_BARRIER_TIMEOUT")), 2500)),
+      ]);
+      let observedWait = false;
+      for (let i = 0; i < 45; i += 1) {
+        const wait = await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (wait.rows[0]?.wait_event_type === "Lock") {
+          observedWait = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 15));
+      }
+      expect(observedWait, "actual PostgreSQL relation lock wait must be observed")
+        .toBe(true);
+      // The actor roster guard allows only owner/superuser. The fixture admin
+      // acts exclusively as disposable owner; ordinary actors cannot do this.
+      await lab.dbAdmin.query("BEGIN");
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1 AND actor_kind=$2",
+        [original, kind],
+      );
+      await lab.dbAdmin.query("COMMIT");
+      const state = await lab.dbAdmin.query<{active:boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [original],
+      );
+      expect(state.rows[0]?.active).toBe(false);
+      // Owner-approved P05/R1: committed deactivation during the real
+      // ACCESS EXCLUSIVE wait MUST deny final authorization.
+      await blocker.query("ROLLBACK");
+      await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await assertNoWrite(lab, before);
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await blocker.end().catch(() => undefined);
+      await Promise.allSettled([pending ?? Promise.resolve()]);
+    }
+  }
+
+  it("R1-02: approver committed inactive during real table wait, experimental source DENIES", async () => {
+    await deactivateDuringTargetWait("o", "APPROVER");
+  }, 30000);
+
+  it("R1-01: author committed inactive during real table wait, experimental source DENIES", async () => {
+    await deactivateDuringTargetWait("p", "AUTHOR");
+  }, 30000);
+
+  it("IAM-RACE-01C: privileged actor deactivated before initial roster read must DENY without DDL", async () => {
+    const lab = await createLab("q");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await assertNoWrite(lab, checksum);
+  }, 30000);
+
+  it("IAM-RACE-01D: queued immediately after approval advisory lock but before roster read, deactivation denies", async () => {
+    const lab = await createLab("r");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    let notify!: () => void;
+    let release!: () => void;
+    const atFence = new Promise<void>(resolve => { notify = resolve; });
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const wrapped = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql:string, params?:unknown[]) => {
+        const result = params ? await lab.operator.query(sql, params) :
+          await lab.operator.query(sql);
+        if (sql.includes("vibress_m03s03_approval")) {
+          notify();
+          await gate;
+        }
+        return result;
+      },
+    } as unknown as ClientBase;
+    const pending = executeApprovedAdditiveColumn(wrapped, {
+      installationId:lab.installationId,planDigest:lab.plan.digest,
+    });
+    try {
+      await Promise.race([
+        atFence,
+        new Promise<never>((_,reject) =>
+          setTimeout(() => reject(Error("ACTOR_ADVISORY_BARRIER_TIMEOUT")), 2500)),
+      ]);
+      // Unlike approval revocation, roster deactivation does not acquire
+      // the approval-specific advisory lock; it commits while fence is held.
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+    } finally {
+      release();
+    }
+    await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await assertNoWrite(lab,checksum);
+  }, 30000);
+
+  it("E2-REPLAY-01: deactivate-reactivate must NOT revive old approval (test-only E2-A)", async () => {
+    const lab = await createLab("s");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true " +
+      "WHERE login_name=$1", [lab.approver],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await contentChecksum(lab)).toBe(before);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal"
+    )).rowCount).toBe(0);
+    // Experimental E2-A generation bound reapproval is NOT owner approved.
+  }, 30000);
+});
+
+/**
+ * IAM-WD-01 READ-ONLY OBSERVATION PROTOTYPE. This is deliberately NOT an
+ * authorization to call pg_cancel_backend: separate PID lookup then signal
+ * has a TOCTOU window, and pg_stat_activity lacks current SET ROLE state.
+ */
+describe("M03-S03 IAM-WD-01 real PostgreSQL backend-binding negatives (observation only)", () => {
+  type Probe = {
+    pid: number;
+    backend_start: string;
+    database_oid: string;
+    database_name: string;
+    login_name: string;
+    backend_type: string;
+  };
+  type Binding = Probe & {
+    operationId: string;
+    createdAtNs: bigint;
+    leaseMs: number;
+    dedicated: boolean;
+    eligible: boolean;
+  };
+  async function observe(lab: Lab, pid: number): Promise<Probe | undefined> {
+    const result = await lab.dbAdmin.query<Probe>(
+      "SELECT pid, backend_start::text AS backend_start, " +
+      "datid::text AS database_oid, datname AS database_name, " +
+      "usename::text AS login_name, backend_type " +
+      "FROM pg_catalog.pg_stat_activity WHERE pid=$1",
+      [pid],
+    );
+    return result.rows[0];
+  }
+  async function matchObservation(
+    lab: Lab, binding: Binding | undefined, claimedOperationId: string,
+  ): Promise<boolean> {
+    if (!binding || !binding.dedicated || !binding.eligible ||
+        !binding.operationId || binding.operationId !== claimedOperationId ||
+        binding.leaseMs <= 0 ||
+        process.hrtime.bigint() - binding.createdAtNs >=
+          BigInt(binding.leaseMs) * 1_000_000n) return false;
+    const current = await observe(lab, binding.pid);
+    return !!current && current.pid === binding.pid &&
+      current.backend_start === binding.backend_start &&
+      current.database_oid === binding.database_oid &&
+      current.database_name === binding.database_name &&
+      current.login_name === binding.login_name &&
+      current.backend_type === "client backend";
+  }
+
+  it("IAM-WD-01A: wrong PID/start/database/OID/login/token/pool/expiry all DENY, correct server snapshot matches", async () => {
+    const lab = await createLab("t");
+    labs.push(lab);
+    const probe = await observe(lab,lab.operator.processID ?? -1);
+    expect(probe).toBeDefined();
+    expect(probe?.login_name).toBe(lab.operatorRole);
+    const binding: Binding = {...probe!,operationId:"opaque-test-only-" + id,
+      createdAtNs:process.hrtime.bigint(),leaseMs:2517,
+      dedicated:true,eligible:true};
+    expect(await matchObservation(lab,binding,binding.operationId)).toBe(true);
+    expect(await matchObservation(lab,{...binding,pid:lab.runtime.processID ?? -1},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,backend_start:"2000-01-01 00:00:00+00"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,database_oid:"0"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,database_name:"wrong_fixture"},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,login_name:lab.runtimeRole},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,binding,"forged-operation")).toBe(false);
+    expect(await matchObservation(lab,{...binding,dedicated:false},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,eligible:false},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,{...binding,
+      createdAtNs:process.hrtime.bigint()-3_000_000_000n},
+      binding.operationId)).toBe(false);
+    expect(await matchObservation(lab,undefined,binding.operationId)).toBe(false);
+    // No pg_cancel_backend or privileged mutation occurs on an accepted
+    // observation. Acceptance is NOT atomic cancel/termination permission.
+  },30000);
+
+  it("IAM-WD-01B: independent runtime cannot cancel or terminate operator; replaced backend denies stale binding", async () => {
+    const lab = await createLab("u");
+    labs.push(lab);
+    await expect(lab.runtime.query(
+      "SELECT pg_catalog.pg_cancel_backend($1)",[lab.operator.processID ?? -1],
+    )).rejects.toMatchObject({code:"42501"});
+    await expect(lab.runtime.query(
+      "SELECT pg_catalog.pg_terminate_backend($1)",[lab.operator.processID ?? -1],
+    )).rejects.toMatchObject({code:"42501"});
+    // Real session replacement must invalidate the old pid/start binding.
+    const previous = await connect(lab.name,lab.operatorRole);
+    const previousProbe = await observe(lab,previous.processID ?? -1);
+    expect(previousProbe).toBeDefined();
+    await previous.end();
+    const replacement = await connect(lab.name,lab.operatorRole);
+    try {
+      const replacementProbe = await observe(lab,replacement.processID ?? -1);
+      expect(replacementProbe).toBeDefined();
+      expect(
+        previousProbe?.pid === replacementProbe?.pid &&
+        previousProbe?.backend_start === replacementProbe?.backend_start,
+      ).toBe(false);
+    } finally {
+      await replacement.end();
+    }
+  },30000);
+});
+
+
+describe("M03-S03 supplemental actor rollback, revocation and SQLSTATE failures", () => {
+  it("IAM-RACE-01F: aborted privileged actor deactivation is not a committed policy change", async () => {
+    const lab = await createLab("v");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+      expect((await lab.dbAdmin.query<{active:boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      )).rows[0]?.active).toBe(false);
+    } finally {
+      await lab.dbAdmin.query("ROLLBACK");
+    }
+    expect((await lab.dbAdmin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    )).rows[0]?.active).toBe(true);
+    expect((await run(lab)).status).toBe("APPLIED");
+    expect(await contentChecksum(lab)).toBe(checksum);
+  },30000);
+
+  it("IAM-RACE-01G: concurrent committed roster change does not bypass approval-revocation fence", async () => {
+    const lab = await createLab("w");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    const revoker = await connect(lab.name, lab.approver);
+    let ready!: () => void;
+    const atTable = new Promise<void>(resolve => { ready = resolve; });
+    let migrating: Promise<Awaited<ReturnType<typeof run>>> | undefined;
+    let revoking: Promise<unknown> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql:string, params?:unknown[]) => {
+          if (sql.startsWith("LOCK TABLE ONLY")) ready();
+          return params ? lab.operator.query(sql,params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked,{
+        installationId:lab.installationId,planDigest:lab.plan.digest,
+      });
+      await Promise.race([
+        atTable,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("ACTOR_REVOKER_TARGET_BARRIER_TIMEOUT")),2500)),
+      ]);
+      let waitingOnTable=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){waitingOnTable=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(waitingOnTable).toBe(true);
+      revoking=revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      );
+      let revocationWaiting=false;
+      for(let i=0;i<45;i+=1) {
+        const state=await lab.dbAdmin.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [revoker.processID ?? -1],
+        );
+        if(state.rows[0]?.wait_event_type==="Lock"){revocationWaiting=true;break;}
+        await new Promise(resolve=>setTimeout(resolve,15));
+      }
+      expect(revocationWaiting).toBe(true);
+      await lab.dbAdmin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      await blocker.query("ROLLBACK");
+      // Actor deactivation was committed before the final decision. Deny.
+      // Approval revocation still awaits the operator's transaction fence.
+      await expect(migrating).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await revoking;
+      await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(0);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_revocation_audit"
+      )).rowCount).toBe(1);
+    } finally {
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([migrating ?? Promise.resolve(),revoking ?? Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },30000);
+
+  it("AG06-S03-10: real SQLSTATE 55P03 lock timeout is classified LOCK_NOT_AVAILABLE", async () => {
+    const lab=await createLab("x");
+    labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const blocker=await connect(lab.name);
+    const waiter=await connect(lab.name,lab.operatorRole);
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query(
+        'LOCK TABLE ONLY "public".' + blocker.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      );
+      await waiter.query("BEGIN");
+      await waiter.query("SET LOCAL lock_timeout='100ms'");
+      await expect(waiter.query(
+        'LOCK TABLE ONLY "public".' + waiter.escapeIdentifier(lab.table) +
+        " IN ACCESS EXCLUSIVE MODE",
+      )).rejects.toMatchObject({code:"55P03"});
+      await waiter.query("ROLLBACK");
+      // The same held real table lock triggers operator's 2000ms cap.
+      // Operational SQLSTATE must not be represented as IAM denial.
+      await expect(run(lab)).rejects.toMatchObject({code:"LOCK_NOT_AVAILABLE"});
+      // The external ACCESS EXCLUSIVE lock also blocks checksum SELECT.
+      // Release it before postconditions; its waiter already timed out safely.
+      await blocker.query("ROLLBACK");
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal"
+      )).rowCount).toBe(0);
+    } finally {
+      await waiter.query("ROLLBACK").catch(()=>undefined);
+      await waiter.end().catch(()=>undefined);
+      await blocker.query("ROLLBACK").catch(()=>undefined);
+      await blocker.end().catch(()=>undefined);
+    }
+  },15000);
+});
+
+
+/**
+ * Isolated P05/R1 post-catalog actor advisory fencing. These deterministic tests
+ * observe actual PG16 blocked backends; poll sleeps only observe wait state,
+ * never determine correctness of transaction ordering.
+ */
+describe("P05/R1 advisory-lock serialization (EXPERIMENT ONLY)", () => {
+  it("R1-06: deactivation queued after final authorization commits after DDL", async () => {
+    const lab = await createLab("y");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const admin = await connect(lab.name);
+    let reached!: () => void;
+    let release!: () => void;
+    const atFinal = new Promise<void>(resolve => { reached = resolve; });
+    const proceed = new Promise<void>(resolve => { release = resolve; });
+    let migrating: ReturnType<typeof executeApprovedAdditiveColumn> | undefined;
+    let deactivating: Promise<unknown> | undefined;
+    try {
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          const result = params ? await lab.operator.query(sql, params) :
+            await lab.operator.query(sql);
+          if (sql.includes("clock_timestamp() AS checked_at")) {
+            reached();
+            await proceed; // ONLY test proxy delays after valid final decision.
+          }
+          return result;
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        atFinal,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("R1_FINAL_BARRIER_TIMEOUT")), 4000)),
+      ]);
+      deactivating = admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.approver],
+      );
+      let blocked = false;
+      for (let j = 0; j < 100; j += 1) {
+        const probe = await lab.dbAdmin.query<{wait_event_type: string | null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [admin.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked = true; break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked, "actor UPDATE must wait for operator's advisory fence").toBe(true);
+      release();
+      expect((await migrating).status).toBe("APPLIED");
+      await deactivating;
+      expect(await hasWebsite(lab)).toBe(true);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const row = await lab.dbAdmin.query<{active: boolean}>(
+        "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      );
+      expect(row.rows[0]?.active).toBe(false);
+      const journal = await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(journal.rowCount).toBe(1);
+    } finally {
+      release();
+      await Promise.allSettled([migrating ?? Promise.resolve(),
+        deactivating ?? Promise.resolve()]);
+      await admin.end().catch(() => undefined);
+    }
+  }, 30000);
+
+  it("R1-09: an uncommitted deactivation blocks final row lock; COMMIT then denies", async () => {
+    const lab = await createLab("z");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const admin = await connect(lab.name);
+    let reached!: () => void;
+    const atActor = new Promise<void>(resolve => { reached = resolve; });
+    let migrating: ReturnType<typeof executeApprovedAdditiveColumn> | undefined;
+    try {
+      await admin.query("BEGIN");
+      await admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      const hooked = {
+        escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+        query: async (sql: string, params?: unknown[]) => {
+          if (sql.includes("pg_advisory_xact_lock(hashtext('vibress_m03s03_actor')")) reached();
+          return params ? lab.operator.query(sql, params) : lab.operator.query(sql);
+        },
+      } as unknown as ClientBase;
+      migrating = executeApprovedAdditiveColumn(hooked, {
+        installationId: lab.installationId, planDigest: lab.plan.digest,
+      });
+      await Promise.race([
+        atActor,
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(Error("R1_ACTOR_ROW_BARRIER_TIMEOUT")), 4000)),
+      ]);
+      let blocked = false;
+      for (let j = 0; j < 100; j += 1) {
+        const probe = await lab.dbAdmin.query<{wait_event_type: string | null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [lab.operator.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked = true; break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked, "operator must wait for actor writer's advisory fence").toBe(true);
+      await admin.query("COMMIT");
+      await expect(migrating).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const journal = await lab.dbAdmin.query(
+        "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(journal.rowCount).toBe(0);
+      const registry = await lab.dbAdmin.query<{manifest_digest: string}>(
+        "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+        [lab.installationId],
+      );
+      expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    } finally {
+      await admin.query("ROLLBACK").catch(() => undefined);
+      await Promise.allSettled([migrating ?? Promise.resolve()]);
+      await admin.end().catch(() => undefined);
+    }
+  }, 30000);
+});
+
+
+/**
+ * R1-10: Real PG16 mixed admin lock inversion proof.
+ * This NEGATIVE test deliberately creates a deadlock between the existing
+ * approval advisory key and the proposed actor-specific advisory key.
+ * It is diagnostic evidence that the prototype is NOT production-ready.
+ * Both sessions always roll back, so no real actor lifecycle mutation,
+ * approval revocation or DDL can be committed by this test.
+ */
+describe("P05/R1 mixed-admin lock-order adversarial test (EXPERIMENT ONLY)", () => {
+  it("R1-10: actor-first admin plus approval-first operator exposes 40P01 safely", async () => {
+    const lab = await createLab("aa");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const operator = lab.operator;
+    const admin = lab.dbAdmin;
+    type Outcome = { ok: boolean; code: string | null };
+    const settle = (p: Promise<unknown>): Promise<Outcome> =>
+      p.then(() => ({ ok: true, code: null }),
+        (err: unknown) => ({
+          ok: false,
+          code: typeof err === "object" && err !== null && "code" in err &&
+            typeof err.code === "string" ? err.code : null,
+        }));
+    let operatorWait: Promise<Outcome> | undefined;
+    let adminWait: Promise<Outcome> | undefined;
+    try {
+      await admin.query("BEGIN");
+      await operator.query("BEGIN");
+      // New fixture trigger holds actor advisory key for admin transaction.
+      await admin.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false " +
+        "WHERE login_name=$1", [lab.author],
+      );
+      // Operator has already obtained its existing approval advisory key A.
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      // Operator now needs actor X, which is owned by the admin.
+      operatorWait = settle(operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), " +
+        "hashtext($1::text))", [lab.author],
+      ));
+      let operatorWaiting = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const probe = await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [operator.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          operatorWaiting = true;
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(operatorWaiting, "must observe real PostgreSQL advisory wait").toBe(true);
+      // Source-pinned diagnostic evidence: PID, exact backend_start, blocking
+      // backend identity and PostgreSQL advisory/transaction locks. These
+      // metadata contain no credentials, actor secrets or raw SQL parameters.
+      const waitingEvidence = await cluster.query<{
+        pid:number; backend_start:string; wait_event_type:string|null;
+        wait_event:string|null; blockers:number[];
+      }>(
+        "SELECT pid,backend_start::text AS backend_start,wait_event_type,wait_event,"+
+        "pg_blocking_pids(pid) AS blockers FROM pg_stat_activity "+
+        "WHERE pid=ANY($1::int[]) ORDER BY pid",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      const advisoryEvidence = await cluster.query<{
+        pid:number;locktype:string;mode:string;granted:boolean;
+        classid:number|null;objid:number|null;objsubid:number|null;
+      }>(
+        "SELECT pid,locktype,mode,granted,classid,objid,objsubid "+
+        "FROM pg_locks WHERE pid=ANY($1::int[]) "+
+        "AND locktype IN ('advisory','transactionid') ORDER BY pid,locktype,mode",
+        [[operator.processID??-1,admin.processID??-1]],
+      );
+      console.info("R1_10_BACKEND_TRACE="+JSON.stringify(waitingEvidence.rows));
+      console.info("R1_10_ADVISORY_TRACE="+JSON.stringify(advisoryEvidence.rows));
+      expect(waitingEvidence.rows.some(x => x.pid===(operator.processID??-1) &&
+        x.wait_event_type==="Lock" &&
+        x.blockers.includes(admin.processID??-1))).toBe(true);
+      // Admin already holds actor X; approval UPDATE trigger needs key A.
+      // PostgreSQL detects the resulting two-backend cycle and aborts one.
+      adminWait = settle(admin.query(
+        "UPDATE public.platform_schema_approvals SET revoked_at=clock_timestamp() " +
+        "WHERE installation_id=$1 AND plan_digest=$2 AND operation_id=$3",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      ));
+      const [opOutcome, adminOutcome] = await Promise.all([operatorWait, adminWait]);
+      expect(
+        [opOutcome, adminOutcome].some(x => x.code === "40P01"),
+        "PG16 must detect and abort one deadlock victim with SQLSTATE 40P01",
+      ).toBe(true);
+    } finally {
+      await admin.query("ROLLBACK").catch(() => undefined);
+      await operator.query("ROLLBACK").catch(() => undefined);
+      await Promise.allSettled([
+        operatorWait ?? Promise.resolve(),
+        adminWait ?? Promise.resolve(),
+      ]);
+    }
+    // The entire simulated admin and operator interaction was rolled back.
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    const journal = await admin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(journal.rowCount).toBe(0);
+    const registry = await admin.query<{manifest_digest:string}>(
+      "SELECT manifest_digest FROM public.platform_schema_registry WHERE installation_id=$1",
+      [lab.installationId],
+    );
+    expect(registry.rows[0]?.manifest_digest).toBe(lab.current.digest);
+    const actor = await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    );
+    expect(actor.rows[0]?.active).toBe(true);
+  }, 30000);
+});
+
+
+/**
+ * L1 global admin order (fixture-only). The supported protocol takes the
+ * approval-specific transaction advisory key first, then actor keys in stable
+ * order, BEFORE the first UPDATE acquires any implicit tuple locks. This is
+ * an owner-only SECURITY INVOKER disposable gateway, NOT an authorized
+ * production administrative entrypoint or privileged function.
+ */
+describe("R1-10 corrected L1 admin ordering (DISPOSABLE ONLY)", () => {
+  it("R1-10-FIX: approval-first admin cannot hold actor X while waiting for operator approval A", async () => {
+    const lab = await createLab("ab");
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const operator = lab.operator, admin = lab.dbAdmin;
+    let adminWait: Promise<unknown> | undefined;
+    try {
+      await operator.query("BEGIN");
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'), " +
+        "hashtext($1::text || ':' || $2::text || ':' || $3::text))",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id],
+      );
+      await admin.query("BEGIN");
+      // L1 test-only SECURITY INVOKER admin gateway serializes I/R/A/X
+      // before actor UPDATE and approval UPDATE. This is not a migration.
+      adminWait = admin.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId, lab.plan.digest, lab.plan.operations[0]?.id, lab.author],
+      );
+      let blocked = false;
+      for (let attempt=0; attempt<100; attempt+=1) {
+        const probe = await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+          [admin.processID ?? -1],
+        );
+        if (probe.rows[0]?.wait_event_type === "Lock") {
+          blocked=true; break;
+        }
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(blocked, "admin must wait for approval key BEFORE any actor row lock").toBe(true);
+      // Operator already has approval A, and can now acquire actor X without
+      // waiting: admin holds NO actor-row/advisory lock in the corrected order.
+      await operator.query(
+        "SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'), hashtext($1::text))",
+        [lab.author],
+      );
+      await operator.query("COMMIT");
+      await adminWait; // Gateway took A and X before the row DML.
+      await admin.query("COMMIT");
+    } finally {
+      await operator.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([adminWait ?? Promise.resolve()]);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(false);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals " +
+      "WHERE installation_id=$1", [lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+});
+
+/**
+ * Experimental E2-A: immutable instance + increasing generation bound into
+ * plan and approval via fixture-only triggers. Owner has NOT approved E2-A.
+ * Neither fixture-only DDL nor these test outcomes imply policy authorization.
+ */
+describe("E2 actor generation/provenance adversarial tests (TEST-ONLY POLICY)", () => {
+  it("E2-01: APPROVER deactivate/reactivate increments epoch and rejects old signed approval", async () => {
+    const lab=await createLab("ac"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const before=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.approver],
+    );
+    const after=(await lab.dbAdmin.query<{
+      actor_instance_id:string;actor_generation:string
+    }>("SELECT actor_instance_id,actor_generation::text FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(after.actor_instance_id).toBe(before.actor_instance_id);
+    expect(BigInt(after.actor_generation)).toBe(BigInt(before.actor_generation)+2n);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query(
+      "SELECT 1 FROM public.platform_schema_migration_journal WHERE installation_id=$1",
+      [lab.installationId],
+    )).rowCount).toBe(0);
+  },30000);
+
+  it("E2-02: AUTHOR deactivate/reactivate rejects old plan and approval", async () => {
+    const lab=await createLab("ad"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+      [lab.author],
+    );
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+      [lab.author],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(lab.dbAdmin.query(
+      "UPDATE public.platform_schema_trusted_actors SET actor_generation=actor_generation+1 " +
+      "WHERE login_name=$1", [lab.author],
+    )).rejects.toMatchObject({code:"42501"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-03: DELETE and re-register same LOGIN gets new actor instance; old approval denied", async () => {
+    const lab=await createLab("ae"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const saved=(await lab.dbAdmin.query<{
+      actor_instance_id:string;principal_id:string
+    }>("SELECT actor_instance_id, principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query(
+      "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.approver],
+    );
+    await lab.dbAdmin.query(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) " +
+      "VALUES($1,$2,'APPROVER')",
+      [lab.approver,saved.principal_id],
+    );
+    const restored=(await lab.dbAdmin.query<{
+      actor_instance_id:string
+    }>("SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).not.toBe(saved.actor_instance_id);
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-04: legacy NULL approval generation fails closed", async () => {
+    const lab=await createLab("af"); labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    // Fixture database owner simulates an old/unauthenticated imported row.
+    await lab.dbAdmin.query(
+      "UPDATE public.platform_schema_approvals SET approver_actor_generation=NULL " +
+      "WHERE installation_id=$1", [lab.installationId],
+    );
+    await expect(run(lab)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+});
+
+
+describe("R1-10 governed ADMIN vs legacy revoker (TEST-ONLY)", () => {
+  it("R1-10-FIX2: legacy approval UPDATE row-before-A and governed gateway remain acyclic", async () => {
+    const lab=await createLab("ag"); labs.push(lab);
+    await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const op=lab.operator, admin=lab.dbAdmin;
+    const revoker=await connect(lab.name,lab.approver);
+    type Result={ok:boolean;code:string|null};
+    const settle=(p:Promise<unknown>):Promise<Result>=>p.then(
+      ()=>({ok:true,code:null}),
+      (e:unknown)=>({ok:false,code:typeof e==="object"&&e!==null&&
+        "code" in e&&typeof e.code==="string"?e.code:null}),
+    );
+    const waitBlocked=async (pid:number):Promise<boolean>=>{
+      for(let i=0;i<120;i+=1){
+        const row=await cluster.query<{wait_event_type:string|null}>(
+          "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",[pid]);
+        if(row.rows[0]?.wait_event_type==="Lock")return true;
+        await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      return false;
+    };
+    let revoking:Promise<Result>|undefined;
+    let adminCall:Promise<Result>|undefined;
+    try {
+      await op.query("BEGIN");
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_approval'),"+
+        "hashtext($1::text||':'||$2::text||':'||$3::text))",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id]);
+      await revoker.query("BEGIN");
+      revoking=settle(revoker.query(
+        "SELECT public.platform_schema_revoke_operation($1,$2,$3)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id],
+      ));
+      expect(await waitBlocked(revoker.processID??-1),
+        "real direct revoker must wait on operator approval A while holding approval row").toBe(true);
+      await admin.query("BEGIN");
+      adminCall=settle(admin.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      ));
+      expect(await waitBlocked(admin.processID??-1),
+        "governed gateway must wait before obtaining actor X").toBe(true);
+      // Operator can acquire X; admin has only the earlier independent lock
+      // chain and cannot hold the actor fence before its approval row/A locks.
+      await op.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),"+
+        "hashtext($1::text))",[lab.author]);
+      await op.query("COMMIT");
+      expect((await revoking).ok).toBe(true);
+      await revoker.query("COMMIT");
+      const adminOutcome=await adminCall;
+      expect(adminOutcome).toEqual({ok:false,code:"42501"});
+      await admin.query("ROLLBACK");
+    } finally {
+      await op.query("ROLLBACK").catch(()=>undefined);
+      await revoker.query("ROLLBACK").catch(()=>undefined);
+      await admin.query("ROLLBACK").catch(()=>undefined);
+      await Promise.allSettled([revoking??Promise.resolve(),adminCall??Promise.resolve()]);
+      await revoker.end().catch(()=>undefined);
+    }
+    expect((await admin.query<{active:boolean}>(
+      "SELECT active FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]?.active).toBe(true);
+    expect((await admin.query<{revoked:boolean}>(
+      "SELECT revoked_at IS NOT NULL AS revoked FROM public.platform_schema_approvals "+
+      "WHERE installation_id=$1",[lab.installationId],
+    )).rows[0]?.revoked).toBe(true);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await admin.query("SELECT 1 FROM public.platform_schema_migration_journal "+
+      "WHERE installation_id=$1",[lab.installationId])).rowCount).toBe(0);
+  },30000);
+});
+
+describe("E2 negative privilege, UUID tombstone and rollback tests (EXPERIMENT ONLY)",()=>{
+  it("E2-05: operator/runtime cannot mutate roster or execute governed admin gateway",async()=>{
+    const lab=await createLab("ah");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    for(const actor of [lab.operator,lab.runtime]){
+      await expect(actor.query(
+        "UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.approver],
+      )).rejects.toMatchObject({code:"42501"});
+      await expect(actor.query(
+        "SELECT public.s03_test_governed_deactivate_and_revoke($1,$2,$3,$4)",
+        [lab.installationId,lab.plan.digest,lab.plan.operations[0]?.id,lab.author],
+      )).rejects.toMatchObject({code:"42501"});
+    }
+    const grants=await lab.dbAdmin.query<{operator_update:boolean;runtime_update:boolean;
+      operator_admin_exec:boolean;runtime_admin_exec:boolean}>(
+      "SELECT has_table_privilege($1,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS operator_update, "+
+      "has_table_privilege($2,'public.platform_schema_trusted_actors','UPDATE') "+
+      "AS runtime_update, "+
+      "has_function_privilege($1,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS operator_admin_exec, "+
+      "has_function_privilege($2,'public.s03_test_governed_deactivate_and_revoke(text,text,text,text)','EXECUTE') "+
+      "AS runtime_admin_exec",
+      [lab.operatorRole,lab.runtimeRole],
+    );
+    expect(grants.rows[0]).toEqual({operator_update:false,runtime_update:false,
+      operator_admin_exec:false,runtime_admin_exec:false});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+
+  it("E2-06: append-only actor-instance history blocks UUID resurrection after DELETE",async()=>{
+    const lab=await createLab("ai");labs.push(lab);
+    await approve(lab);
+    const before=await contentChecksum(lab);
+    const actor=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query("BEGIN");
+    try{
+      await lab.dbAdmin.query(
+        "DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.approver],
+      );
+      await expect(lab.dbAdmin.query(
+        "INSERT INTO public.platform_schema_trusted_actors "+
+        "(login_name,principal_id,actor_kind,actor_instance_id) "+
+        "VALUES($1,$2,'APPROVER',$3::uuid)",
+        [lab.approver,actor.principal_id,actor.actor_instance_id],
+      )).rejects.toMatchObject({code:"23505"});
+    }finally{
+      await lab.dbAdmin.query("ROLLBACK").catch(()=>undefined);
+    }
+    const restored=(await lab.dbAdmin.query<{actor_instance_id:string}>(
+      "SELECT actor_instance_id FROM public.platform_schema_trusted_actors "+
+      "WHERE login_name=$1",[lab.approver])).rows[0]!;
+    expect(restored.actor_instance_id).toBe(actor.actor_instance_id);
+    await expect(lab.dbAdmin.query(
+      "DELETE FROM public.s03_e2_actor_instance_history WHERE actor_instance_id=$1::uuid",
+      [actor.actor_instance_id],
+    )).rejects.toMatchObject({code:"42501"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+  },30000);
+});
+
+describe("P06/D1 experimental dispatch and known committed outcome", () => {
+  it("D1-01: expired budget refuses even BEGIN and preserves database state", async () => {
+    const lab = await createLab("aj");
+    labs.push(lab);
+    await approve(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    tick = 2518;
+    await expect(executeApprovedAdditiveColumn(lab.operator,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget))
+      .rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+  }, 30000);
+
+  it("D1-02: exhaustion after real journal INSERT prevents COMMIT and rolls back DDL", async () => {
+    const lab = await createLab("ak");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    const issued: string[] = [];
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        issued.push(sql);
+        const result = params ? await lab.operator.query(sql, params) : await lab.operator.query(sql);
+        if (sql.startsWith("INSERT INTO public.platform_schema_migration_journal")) tick = 2518;
+        return result;
+      },
+    } as unknown as ClientBase;
+    await expect(executeApprovedAdditiveColumn(hooked,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget))
+      .rejects.toMatchObject({ code: "DEADLINE_EXCEEDED" });
+    expect(issued).not.toContain("COMMIT");
+    expect(issued).toContain("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal")).rowCount).toBe(0);
+  }, 30000);
+
+  it("D1-03: acknowledged real COMMIT after simulated deadline is COMMITTED_LATE, never APPLIED", async () => {
+    const lab = await createLab("al");
+    labs.push(lab);
+    await approve(lab);
+    let tick = 0;
+    const budget = new ExperimentalD1Budget(() => tick);
+    const hooked = {
+      escapeIdentifier: lab.operator.escapeIdentifier.bind(lab.operator),
+      query: async (sql: string, params?: unknown[]) => {
+        const result = params ? await lab.operator.query(sql, params) : await lab.operator.query(sql);
+        if (sql === "COMMIT") tick = 2518;
+        return result;
+      },
+    } as unknown as ClientBase;
+    const result = await executeApprovedAdditiveColumn(hooked,
+      { installationId: lab.installationId, planDigest: lab.plan.digest }, budget);
+    expect(result.status).toBe("COMMITTED_LATE");
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM platform_schema_migration_journal WHERE status='COMPLETED'")).rowCount).toBe(1);
+  }, 30000);
+});
+
+describe("P06 additive authorization identity (disposable prototype)", () => {
+  it("P06-01: same canonical digest, fresh UUIDs, stale approval cannot authorize new operation", async () => {
+    const lab = await createLab("am");
+    labs.push(lab);
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-p06-authorization-identity-experimental.sql"), "utf8"));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO " +
+      lab.dbAdmin.escapeIdentifier(lab.author));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid) TO " +
+      lab.dbAdmin.escapeIdentifier(lab.approver));
+    const author = await connect(lab.name, lab.author);
+    const approver = await connect(lab.name, lab.approver);
+    try {
+      const submit = async () => (await author.query<{ id: string }>(
+        "SELECT public.s03_p06_submit($1,$2) AS id", [lab.installationId, lab.plan.digest])).rows[0]!.id;
+      const sign = async (submission: string) => (await approver.query<{ id: string }>(
+        "SELECT public.s03_p06_approve($1::uuid) AS id", [submission])).rows[0]!.id;
+      const first = await submit();
+      const oldApproval = await sign(first);
+      await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",
+        [lab.approver]);
+      await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",
+        [lab.approver]);
+      await expect(sign(first)).rejects.toMatchObject({ code: "42501" });
+      const second = await submit();
+      const freshApproval = await sign(second);
+      const read = await lab.dbAdmin.query<{ submission_id: string; operation_id: string; canonical_plan_digest: string }>(
+        "SELECT submission_id,operation_id,canonical_plan_digest FROM public.s03_p06_submissions WHERE submission_id=ANY($1::uuid[])",
+        [[first, second]]);
+      const old = read.rows.find(row => row.submission_id === first)!;
+      const fresh = read.rows.find(row => row.submission_id === second)!;
+      expect(old.canonical_plan_digest).toBe(lab.plan.digest);
+      expect(fresh.canonical_plan_digest).toBe(lab.plan.digest);
+      expect(first).not.toBe(second);
+      expect(old.operation_id).not.toBe(fresh.operation_id);
+      expect(oldApproval).not.toBe(freshApproval);
+      const current = async (op: string, approval: string) => (await lab.dbAdmin.query<{ valid: boolean }>(
+        "SELECT public.s03_p06_is_current($1::uuid,$2::uuid) AS valid", [op, approval])).rows[0]?.valid;
+      expect(await current(old.operation_id, oldApproval)).toBe(false);
+      expect(await current(fresh.operation_id, oldApproval)).toBe(false);
+      expect(await current(fresh.operation_id, freshApproval)).toBe(true);
+      await expect(lab.runtime.query("SELECT public.s03_p06_submit($1,$2)",
+        [lab.installationId, lab.plan.digest])).rejects.toMatchObject({ code: "42501" });
+      await expect(approver.query("UPDATE public.s03_p06_approvals SET approver_generation=1"))
+        .rejects.toMatchObject({ code: "42501" });
+      expect(await hasWebsite(lab)).toBe(false);
+    } finally {
+      await author.end();
+      await approver.end();
+    }
+  }, 30000);
+});
+
+describe("L1 delegated actor-only lifecycle gateway (disposable, narrow path)", () => {
+  it("L1-P06-01: denies direct DML, permits scoped gateway, and blocks in-flight stale authorization", async () => {
+    const lab = await createLab("an");
+    labs.push(lab);
+    await approve(lab);
+    const before = await contentChecksum(lab);
+    const delegate = "s03_delegate_" + lab.key + "_" + id;
+    const gateway = "s03_gateway_" + lab.key + "_" + id;
+    const esc = (name: string) => lab.dbAdmin.escapeIdentifier(name);
+    await cluster.query("CREATE ROLE " + esc(delegate) +
+      " LOGIN PASSWORD " + cluster.escapeLiteral(password) +
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE " + esc(gateway) +
+      " NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE " + esc(lab.name) + " TO " + esc(delegate));
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-p06-l1-actor-gateway-experimental.sql"), "utf8"));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO " + esc(delegate) + "," + esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry, public.s03_p06_admin_capability, " +
+      "public.platform_schema_trusted_actors TO " + esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO " + esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO " + esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO " + esc(delegate));
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability VALUES ($1,$2)",
+      [lab.installationId, delegate]);
+    const admin = await connect(lab.name, delegate);
+    const blocker = await connect(lab.name);
+    let pending: ReturnType<typeof run> | undefined;
+    try {
+      for (const query of [
+        "UPDATE public.platform_schema_trusted_actors SET active=false",
+        "DELETE FROM public.platform_schema_trusted_actors",
+        "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES ('x','x','AUTHOR')",
+      ]) await expect(admin.query(query)).rejects.toMatchObject({ code: "42501" });
+      await expect(admin.query("SET ROLE " + esc(gateway))).rejects.toMatchObject({ code: "42501" });
+      await expect(lab.runtime.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        [lab.installationId, lab.author])).rejects.toMatchObject({ code: "42501" });
+      await expect(admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        ["wrong-installation", lab.author])).rejects.toMatchObject({ code: "42501" });
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".' + esc(lab.table) + " IN ACCESS EXCLUSIVE MODE");
+      pending = run(lab);
+      // Attach rejection handler immediately while observing backend lock wait.
+      void pending.catch(() => undefined);
+      let blocked = false;
+      for (let i = 0; i < 100; i++) {
+        const row = (await lab.dbAdmin.query<{ waiting: boolean }>(
+          "SELECT cardinality(pg_blocking_pids($1)) > 0 AS waiting", [lab.operator.processID ?? -1])).rows[0];
+        if (row?.waiting) { blocked = true; break; }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      expect(blocked).toBe(true);
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",
+        [lab.installationId, lab.author]);
+      await blocker.query("ROLLBACK");
+      await expect(pending).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.platform_schema_migration_journal")).rowCount).toBe(0);
+      const row = (await lab.dbAdmin.query<{ active: boolean; actor_generation: string }>(
+        "SELECT active,actor_generation FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+        [lab.author])).rows[0];
+      expect(row).toEqual({ active: false, actor_generation: "2" });
+      const audit = await lab.dbAdmin.query<{ changed_by: string; new_generation: string }>(
+        "SELECT changed_by,new_generation FROM public.s03_p06_lifecycle_audit");
+      expect(audit.rows).toEqual([{ changed_by: delegate, new_generation: "2" }]);
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await pending?.catch(() => undefined);
+      await blocker.end();
+      await admin.end();
+    }
+  }, 30000);
+});
+
+async function p06Install(lab:Lab, alreadyMigrated=false):Promise<void> {
+  await lab.dbAdmin.query("BEGIN");
+  try {
+    if(!alreadyMigrated) for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-l1-actor-gateway-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
+      await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
+    const epoch = randomUUID();
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_recovery_epochs VALUES($1,$2::uuid)", [lab.installationId,epoch]);
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_actor_enrollments(actor_instance_id,epoch_id,role_oid) "+
+      "SELECT a.actor_instance_id,$1::uuid,r.oid FROM public.platform_schema_trusted_actors a JOIN pg_catalog.pg_roles r ON r.rolname=a.login_name", [epoch]);
+    await lab.dbAdmin.query("GRANT SELECT ON public.s03_p06_recovery_epochs,public.s03_p06_actor_enrollments TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+lab.dbAdmin.escapeIdentifier(lab.author));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_approve(uuid),public.s03_p06_revoke(uuid) TO "+lab.dbAdmin.escapeIdentifier(lab.approver));
+    await lab.dbAdmin.query("GRANT SELECT ON public.s03_p06_submissions,public.s03_p06_approvals,public.s03_p06_revocations,public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_completed_operations TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole));
+    await lab.dbAdmin.query("REVOKE EXECUTE ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),public.platform_schema_revoke_operation(text,text,text) FROM "+lab.dbAdmin.escapeIdentifier(lab.approver));
+    await lab.dbAdmin.query("COMMIT");
+    labEpochs.set(lab.installationId+":"+lab.name,epoch);
+  } catch(error){await lab.dbAdmin.query("ROLLBACK");throw error;}
+}
+async function freshP06(lab:Lab):Promise<SchemaOperatorRequest>{
+  const author=await connect(lab.name,lab.author),approver=await connect(lab.name,lab.approver);
+  try{
+    const submissionId=(await author.query<{id:string}>("SELECT public.s03_p06_submit($1,$2) AS id",[lab.installationId,lab.plan.digest])).rows[0]!.id;
+    const approvalId=(await approver.query<{id:string}>("SELECT public.s03_p06_approve($1::uuid) AS id",[submissionId])).rows[0]!.id;
+    const operationId=(await lab.dbAdmin.query<{operation_id:string}>("SELECT operation_id FROM public.s03_p06_submissions WHERE submission_id=$1::uuid",[submissionId])).rows[0]!.operation_id;
+    return {installationId:lab.installationId,planDigest:lab.plan.digest,submissionId,approvalId,operationId,envelopeVersion:1};
+  } finally {await author.end();await approver.end();}
+}
+describe("P06-E2E integrated actual operator and atomic journal",()=>{
+  it("P06-E2E-01: reject legacy, mismatched approval, concurrent retry and stale same-content precondition",async()=>{
+    const lab=await createLab("ao");labs.push(lab);await approve(lab);await p06Install(lab);
+    await expect(executeP06(lab.operator,{installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const first=await freshP06(lab),second=await freshP06(lab);
+    await expect(reconcileP06(lab.operator,first,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(first.planDigest).toBe(second.planDigest);expect(first.operationId).not.toBe(second.operationId);
+    await expect(executeP06(lab.operator,{...first,approvalId:second.approvalId},new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const other=await connect(lab.name,lab.operatorRole);
+    try{
+      const both=await Promise.all([executeP06(lab.operator,first,new ExperimentalD1Budget()),executeP06(other,first,new ExperimentalD1Budget())]);
+      expect(both.map(x=>x.status).sort()).toEqual(["ALREADY_APPLIED","APPLIED"]);
+    }finally{await other.end();}
+    await expect(executeP06(lab.operator,second,new ExperimentalD1Budget())).rejects.toMatchObject({code:"STALE_PLAN"});
+    const evidence=await lab.dbAdmin.query("SELECT operation_id,submission_id,approval_id,canonical_plan_digest FROM public.s03_p06_completed_operations");
+    expect(evidence.rows).toEqual([{operation_id:first.operationId,submission_id:first.submissionId,approval_id:first.approvalId,canonical_plan_digest:first.planDigest}]);
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.platform_schema_migration_journal")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-02: reactivation, revocation and repeated submission in one transaction fail closed",async()=>{
+    const lab=await createLab("ap");labs.push(lab);await p06Install(lab);
+    const old=await freshP06(lab);
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",[lab.approver]);
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=true WHERE login_name=$1",[lab.approver]);
+    await expect(executeP06(lab.operator,old,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const fresh=await freshP06(lab);const approver=await connect(lab.name,lab.approver),author=await connect(lab.name,lab.author);
+    try{
+      await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[fresh.approvalId]);
+      await expect(executeP06(lab.operator,fresh,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await author.query("BEGIN");
+      await author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]);
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await author.query("ROLLBACK");
+    }finally{await author.end();await approver.end();}
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-03: journal constraint failure rolls back DDL and CAS; same identity can retry",async()=>{
+    const lab=await createLab("aq");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);
+    await lab.dbAdmin.query("ALTER TABLE public.s03_p06_completed_operations ADD CONSTRAINT p06_test_fail CHECK(false)");
+    await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"OPERATION_FAILED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest).toBe(lab.current.digest);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    await lab.dbAdmin.query("ALTER TABLE public.s03_p06_completed_operations DROP CONSTRAINT p06_test_fail");
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+});
+
+describe("Integrated P06 D1 and R1 safety",()=>{
+  it("P06-E2E-04: governed actor mutation during target lock wait invalidates actual fresh approval",async()=>{
+    const lab=await createLab("ar");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);
+    const delegate="s03_delegate_"+lab.key+"_"+id,gateway="s03_gateway_"+lab.key+"_"+id;
+    const esc=(name:string)=>lab.dbAdmin.escapeIdentifier(name);
+    await cluster.query("CREATE ROLE "+esc(delegate)+" LOGIN PASSWORD "+cluster.escapeLiteral(password)+
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE "+esc(gateway)+" NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(delegate));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO "+esc(delegate)+","+esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry,public.s03_p06_admin_capability,public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_enter() TO "+esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO "+esc(delegate));
+    await lab.dbAdmin.query("INSERT INTO public.s03_p06_admin_capability(installation_id,delegate_login) VALUES($1,$2)",[lab.installationId,delegate]);
+    const admin=await connect(lab.name,delegate),blocker=await connect(lab.name);
+    let pending:ReturnType<typeof executeP06>|undefined;
+    try{
+      await expect(admin.query("UPDATE public.platform_schema_trusted_actors SET active=false")).rejects.toMatchObject({code:"42501"});
+      await admin.query("BEGIN");
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.author]);
+      await expect(admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.approver])).rejects.toMatchObject({code:"42501"});
+      await admin.query("ROLLBACK");
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+esc(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      pending=executeP06(lab.operator,request,new ExperimentalD1Budget());
+      void pending.catch(()=>undefined);
+      let blocked=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{waiting:boolean}>("SELECT cardinality(pg_blocking_pids($1))>0 AS waiting",[lab.operator.processID??-1])).rows[0];
+        if(row?.waiting){blocked=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(blocked).toBe(true);
+      await admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.approver]);
+      await blocker.query("ROLLBACK");
+      await expect(pending).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await pending?.catch(()=>undefined);await blocker.end();await admin.end();}
+  },30000);
+  it("P06-E2E-05: deadline exhaustion after new journal insertion prevents COMMIT and rolls back",async()=>{
+    const lab=await createLab("as");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),before=await contentChecksum(lab);let tick=0;
+    const budget=new ExperimentalD1Budget(()=>tick);
+    const issued:string[]=[];
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      issued.push(sql);const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql.startsWith("INSERT INTO public.s03_p06_completed_operations"))tick=2518;
+      return result;
+    }} as unknown as ClientBase;
+    await expect(executeP06(wrapped,request,budget)).rejects.toMatchObject({code:"DEADLINE_EXCEEDED"});
+    expect(issued).not.toContain("COMMIT");expect(issued).toContain("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(before);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-06: lost ACK is indeterminate; fresh session reconciles exact UUID without second DDL",async()=>{
+    const lab=await createLab("at");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql==="COMMIT")throw new Error("simulated lost commit acknowledgment after actual server commit");
+      return result;
+    }} as unknown as ClientBase;
+    await expect(executeP06(wrapped,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    const other=await connect(lab.name,lab.operatorRole);
+    try{expect((await reconcileP06(other,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");}
+    finally{await other.end();}
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
+  },30000);
+});
+
+describe("P06 integrated canonical and late-outcome regressions",()=>{
+  it("P06-E2E-07: tampered persisted plan and unsupported envelope cannot authorize DDL",async()=>{
+    const lab=await createLab("au");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    await expect(executeP06(lab.operator,{...request,envelopeVersion:2} as unknown as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await expect(executeP06(lab.operator,{...request,planDigest:"d".repeat(64)},new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await lab.dbAdmin.query("UPDATE public.platform_schema_plans SET plan=$1 WHERE installation_id=$2 AND plan_digest=$3",
+      [JSON.stringify({...lab.plan,digest:"d".repeat(64)}),lab.installationId,lab.plan.digest]);
+    await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-08: actual COMMIT with simulated late clock must not return APPLIED",async()=>{
+    const lab=await createLab("av");labs.push(lab);await p06Install(lab);const request=await freshP06(lab);
+    let tick=0;const budget=new ExperimentalD1Budget(()=>tick);
+    const wrapped={getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),escapeIdentifier:lab.operator.escapeIdentifier.bind(lab.operator),query:async(sql:string,params?:unknown[])=>{
+      const result=params?await lab.operator.query(sql,params):await lab.operator.query(sql);
+      if(sql==="COMMIT")tick=2518;return result;
+    }} as unknown as ClientBase;
+    expect((await executeP06(wrapped,request,budget)).status).toBe("COMMITTED_LATE");
+    expect(await hasWebsite(lab)).toBe(true);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(1);
+  },30000);
+});
+
+describe("P06 disposable additive migration recovery",()=>{
+  it("P06-E2E-09: interrupted additive transaction preserves legacy rows; retry installs with legacy authorization denied",async()=>{
+    const lab=await createLab("aw");labs.push(lab);await approve(lab);
+    const checksum=await contentChecksum(lab);
+    const count=await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals");
+    await lab.dbAdmin.query("BEGIN");
+    try{
+      for(const fixture of ["m03-s03-p06-authorization-identity-experimental.sql","m03-s03-p06-l1-actor-gateway-experimental.sql","m03-s03-p06-integrated-journal-experimental.sql"])
+        await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures",fixture),"utf8"));
+      await expect(lab.dbAdmin.query("SELECT 1/0")).rejects.toMatchObject({code:"22012"});
+    }finally{await lab.dbAdmin.query("ROLLBACK");}
+    expect((await lab.dbAdmin.query("SELECT to_regclass('public.s03_p06_completed_operations') AS journal")).rows[0]?.journal).toBeNull();
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals")).rows).toEqual(count.rows);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    await p06Install(lab);
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.platform_schema_approvals")).rows).toEqual(count.rows);
+    expect((await lab.dbAdmin.query("SELECT count(*)::text AS n FROM public.s03_p06_approvals")).rows[0]?.n).toBe("0");
+    await expect(executeP06(lab.operator,{installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    const request=await freshP06(lab);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+});
+
+describe("Integrated P06 transaction-start acknowledgment safety", () => {
+  it("P06-E2E-10: lost BEGIN acknowledgment rolls back actual server transaction before reporting failure", async () => {
+    const lab = await createLab("ax");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const issued: string[] = [];
+    const wrapped = {
+      getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
+      query: async (sql: string) => {
+        issued.push(sql);
+        const result = await lab.operator.query(sql);
+        if (sql.startsWith("BEGIN")) throw new Error("simulated lost BEGIN acknowledgment");
+        return result;
+      },
+    } as unknown as ClientBase;
+    await expect(executeP06(wrapped, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "VERIFIED_ROLLBACK" });
+    expect(issued).toEqual(["BEGIN ISOLATION LEVEL READ COMMITTED", "ROLLBACK"]);
+    const activity = await lab.dbAdmin.query<{ idle: boolean; no_xact: boolean }>(
+      "SELECT state='idle' AS idle,xact_start IS NULL AS no_xact FROM pg_stat_activity WHERE pid=$1",
+      [lab.operator.processID],
+    );
+    expect(activity.rows).toEqual([{ idle: true, no_xact: true }]);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+
+  it("P06-E2E-11: lost BEGIN and ROLLBACK acknowledgments remain indeterminate without dispatching operation SQL", async () => {
+    const lab = await createLab("ay");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const issued: string[] = [];
+    const wrapped = {
+      getTransactionStatus: () => (lab.operator as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
+      query: async (sql: string) => {
+        issued.push(sql);
+        await lab.operator.query(sql);
+        throw new Error("simulated lost transaction-control acknowledgment");
+      },
+    } as unknown as ClientBase;
+    await expect(executeP06(wrapped, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "INDETERMINATE" });
+    expect(issued).toEqual(["BEGIN ISOLATION LEVEL READ COMMITTED", "ROLLBACK"]);
+    const other = await connect(lab.name, lab.operatorRole);
+    try {
+      await expect(reconcileP06(other, request, new ExperimentalD1Budget()))
+        .rejects.toMatchObject({ code: "INDETERMINATE" });
+    } finally {
+      await other.end();
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  }, 30000);
+});
+
+describe("P06 seeded E2 migration identity preservation", () => {
+  it("P06-E2E-12: migrated actors reserve UUIDs, legacy provenance stays null, and same LOGIN cannot revive authorization", async () => {
+    const lab = await createLab("az", false);
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    // Apply the additive candidate to a genuinely pre-E2 roster and approval.
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8"));
+    const history = await lab.dbAdmin.query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM public.platform_schema_trusted_actors a "+
+      "JOIN public.s03_e2_actor_instance_history h USING(actor_instance_id) "+
+      "WHERE a.login_name=h.login_name AND a.principal_id=h.principal_id",
+    );
+    expect(history.rows[0]?.n).toBe("2");
+    expect((await lab.dbAdmin.query(
+      "SELECT author_actor_instance_id,author_actor_generation FROM public.platform_schema_plans",
+    )).rows).toEqual([{ author_actor_instance_id: null, author_actor_generation: null }]);
+    expect((await lab.dbAdmin.query(
+      "SELECT author_actor_instance_id,author_actor_generation,approver_actor_instance_id,approver_actor_generation "+
+      "FROM public.platform_schema_approvals",
+    )).rows).toEqual([{ author_actor_instance_id: null, author_actor_generation: null,
+      approver_actor_instance_id: null, approver_actor_generation: null }]);
+    await p06Install(lab);
+    const stale = await freshP06(lab);
+    const prior = (await lab.dbAdmin.query<{ actor_instance_id: string; principal_id: string }>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",
+      [lab.author],
+    )).rows[0]!;
+    await lab.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1", [lab.author]);
+    await expect(lab.dbAdmin.query(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind,actor_instance_id) "+
+      "VALUES($1,$2,'AUTHOR',$3::uuid)", [lab.author, prior.principal_id, prior.actor_instance_id],
+    )).rejects.toMatchObject({ code: "23505" });
+    const replacement = (await lab.dbAdmin.query<{ actor_instance_id: string }>(
+      "INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) "+
+      "VALUES($1,$2,'AUTHOR') RETURNING actor_instance_id", [lab.author, prior.principal_id],
+    )).rows[0]!;
+    expect(replacement.actor_instance_id).not.toBe(prior.actor_instance_id);
+    await expect(executeP06(lab.operator, stale, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    const fresh = await freshP06(lab);
+    expect(fresh.planDigest).toBe(stale.planDigest);
+    expect(fresh.operationId).not.toBe(stale.operationId);
+    expect(fresh.approvalId).not.toBe(stale.approvalId);
+    expect((await executeP06(lab.operator, fresh, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+});
+
+describe("P06 integrated residual concurrency and transport safety", () => {
+  it("P06-E2E-13: real COMMIT packet loss quarantines the session; fresh reconciliation sees atomic state", async () => {
+    const lab = await createLab("ba");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const proxy = await startCommitAckDropProxy();
+    const connection = new URL(urlFor(lab.name, lab.operatorRole));
+    connection.port = String(proxy.port);
+    const budget = new ExperimentalD1Budget();
+    const client = new Client({ connectionString: connection.toString(),
+      connectionTimeoutMillis: Math.max(1, Math.floor(budget.remainingMs())),
+      statement_timeout: Math.max(1, Math.floor(budget.remainingMs())) });
+    client.on("error", () => undefined);
+    void proxy.serverCommitObserved.catch(() => undefined);
+    try {
+      await client.connect();
+      await expect(executeP06(client, request, budget)).rejects.toMatchObject({ code: "INDETERMINATE" });
+      await proxy.serverCommitObserved;
+      await expect(executeP06(client, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "INDETERMINATE", message: "session quarantined; use a fresh dedicated connection",
+      });
+      await expect(reconcileP06(client, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "INDETERMINATE", message: "session quarantined; use a fresh dedicated connection",
+      });
+    } finally {
+      await client.end().catch(() => undefined);
+      await proxy.close();
+    }
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest)
+      .toBe(lab.plan.proposedManifest.digest);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows)
+      .toEqual([{ operation_id: request.operationId }]);
+    const other = await connect(lab.name, lab.operatorRole);
+    try {
+      expect((await reconcileP06(other, request, new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");
+    } finally { await other.end(); }
+  }, 30000);
+
+  it("P06-E2E-14: actual overlapping same-client invocation denied and PG lock timeout classified without writes", async () => {
+    const lab = await createLab("bb");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const blocker = await connect(lab.name);
+    let pending: ReturnType<typeof executeP06> | undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      pending = executeP06(lab.operator, request, new ExperimentalD1Budget());
+      void pending.catch(() => undefined);
+      await expect(executeP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session already in use",
+      });
+      await expect(pending).rejects.toMatchObject({ code: "LOCK_NOT_AVAILABLE" });
+    } finally {
+      await blocker.query("ROLLBACK").catch(() => undefined);
+      await pending?.catch(() => undefined);
+      await blocker.end();
+    }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]?.manifest_digest)
+      .toBe(lab.current.digest);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+
+  it("P06-E2E-15: accidental INSERT grant cannot bypass entrypoints; guard maintenance preserves active transaction", async () => {
+    const lab = await createLab("bc");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_submissions,public.s03_p06_approvals,public.s03_p06_revocations,public.platform_schema_plans TO "
+      +lab.dbAdmin.escapeIdentifier(lab.author));
+    const author = await connect(lab.name, lab.author);
+    try {
+      for (const table of ["s03_p06_submissions", "s03_p06_approvals", "s03_p06_revocations", "platform_schema_plans"]) {
+        await expect(author.query("INSERT INTO public."+author.escapeIdentifier(table)+" DEFAULT VALUES"))
+          .rejects.toMatchObject({ code: "42501", message: "protected insert requires governed entrypoint" });
+      }
+      await expect(author.query("SELECT public.s03_p06_prune_call_guard()")).rejects.toMatchObject({ code: "42501" });
+      await author.query("BEGIN");
+      await author.query("SELECT public.s03_p06_submit($1,$2)", [lab.installationId, lab.plan.digest]);
+      await lab.dbAdmin.query("SELECT public.s03_p06_prune_call_guard()");
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)", [lab.installationId, lab.plan.digest]))
+        .rejects.toMatchObject({ code: "42501" });
+      await author.query("ROLLBACK");
+      await lab.dbAdmin.query("SELECT public.s03_p06_prune_call_guard()");
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_call_guard")).rowCount).toBe(0);
+    } finally { await author.query("ROLLBACK").catch(() => undefined); await author.end(); }
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+});
+
+describe("P06 actual Drizzle migration-framework rehearsal", () => {
+  it("P06-E2E-16: seeded 0059/0060 upgrade uses Drizzle journal, rolls back failed replay, then resumes", async () => {
+    const lab = await createLab("bd", false);
+    labs.push(lab);
+    await approve(lab);
+    const checksum = await contentChecksum(lab);
+    const directory = mkdtempSync(path.join(tmpdir(), "vibress-s03-migrations-"));
+    const candidate = readFileSync(path.resolve(process.cwd(),
+      "tests/fixtures/m03-s03-e2-actor-generation-experimental.sql"), "utf8");
+    const aclSql = "SELECT c.relname, c.relacl::text AS acl FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "+
+      "WHERE n.nspname='public' AND c.relname IN ('platform_schema_trusted_actors','platform_schema_plans','platform_schema_approvals') "+
+      "ORDER BY c.relname";
+    const beforeAcl = (await lab.dbAdmin.query(aclSql)).rows;
+    const writeJournal = (includeFault: boolean) => {
+      const entries = [{ idx: 0, version: "7", when: 1, tag: "experimental_e2", breakpoints: true }];
+      if (includeFault) entries.push({ idx: 1, version: "7", when: 2, tag: "experimental_interruption", breakpoints: true });
+      writeFileSync(path.join(directory, "meta", "_journal.json"), JSON.stringify({
+        version: "7", dialect: "postgresql", entries,
+      }));
+    };
+    try {
+      mkdirSync(path.join(directory, "meta"));
+      writeFileSync(path.join(directory, "experimental_e2.sql"), candidate);
+      writeFileSync(path.join(directory, "experimental_interruption.sql"), "SELECT 1/0;");
+      writeJournal(true);
+      await expect(migrateDisposableSchemaCandidate(lab.dbAdmin, directory)).rejects.toThrow();
+      expect((await lab.dbAdmin.query("SELECT to_regclass('public.s03_e2_actor_instance_history') AS history")).rows[0]?.history)
+        .toBeNull();
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(0);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query(aclSql)).rows).toEqual(beforeAcl);
+      writeJournal(false);
+      await migrateDisposableSchemaCandidate(lab.dbAdmin, directory);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(1);
+      const roster = (await lab.dbAdmin.query("SELECT actor_instance_id,actor_generation FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+      expect(roster).toHaveLength(2);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_e2_actor_instance_history")).rowCount).toBe(2);
+      expect((await lab.dbAdmin.query("SELECT author_actor_instance_id,approver_actor_instance_id FROM public.platform_schema_approvals")).rows)
+        .toEqual([{ author_actor_instance_id: null, approver_actor_instance_id: null }]);
+      const restarted = await connect(lab.name);
+      try {
+        await migrateDisposableSchemaCandidate(restarted, directory);
+        expect((await restarted.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(1);
+        expect((await restarted.query("SELECT actor_instance_id,actor_generation FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows)
+          .toEqual(roster);
+      } finally { await restarted.end(); }
+      expect((await lab.dbAdmin.query(aclSql)).rows).toEqual(beforeAcl);
+      const layers=["m03-s03-p06-authorization-identity-experimental","m03-s03-p06-l1-actor-gateway-experimental","m03-s03-p06-integrated-journal-experimental"];
+      const layerEntries=[{idx:0,version:"7",when:1,tag:"experimental_e2",breakpoints:true}];
+      for(const [i,tag] of layers.entries()){
+        writeFileSync(path.join(directory,tag+".sql"),readFileSync(path.resolve(process.cwd(),"tests/fixtures",tag+".sql"),"utf8"));
+        layerEntries.push({idx:i+1,version:"7",when:i+2,tag,breakpoints:true});
+      }
+      const writeLayers=(fail:boolean)=>writeFileSync(path.join(directory,"meta","_journal.json"),JSON.stringify({version:"7",dialect:"postgresql",entries:fail?[...layerEntries,{idx:4,version:"7",when:5,tag:"experimental_interruption",breakpoints:true}]:layerEntries}));
+      writeLayers(true);
+      await expect(migrateDisposableSchemaCandidate(lab.dbAdmin,directory)).rejects.toThrow();
+      expect((await lab.dbAdmin.query("SELECT to_regclass('public.s03_p06_completed_operations') AS journal")).rows[0]?.journal).toBeNull();
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(1);
+      writeLayers(false);
+      await migrateDisposableSchemaCandidate(lab.dbAdmin,directory);
+      await migrateDisposableSchemaCandidate(lab.dbAdmin,directory);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM s03_experimental_drizzle.migration_log")).rowCount).toBe(4);
+      expect((await lab.dbAdmin.query(aclSql)).rows).toEqual(beforeAcl);
+      await p06Install(lab,true);
+      await expect(executeP06(lab.operator, {installationId:lab.installationId,planDigest:lab.plan.digest} as SchemaOperatorRequest,
+        new ExperimentalD1Budget())).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+      expect(await hasWebsite(lab)).toBe(false);
+      expect(await contentChecksum(lab)).toBe(checksum);
+      const request = await freshP06(lab);
+      expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }, 30000);
+});
+
+describe("P06 dedicated session transaction admission", () => {
+  it("P06-E2E-17: caller-owned active and aborted transactions cannot be committed by operator", async () => {
+    const lab = await createLab("be");
+    labs.push(lab);
+    await p06Install(lab);
+    const request = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    try {
+      await lab.operator.query("BEGIN");
+      await lab.operator.query('INSERT INTO "public".'+lab.operator.escapeIdentifier(lab.table)+' ("name") VALUES ($1)', ["uncommitted"]);
+      await expect(executeP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session must be idle before operation",
+      });
+      expect(await contentChecksum(lab)).toBe(checksum);
+      await expect(lab.operator.query("SELECT 1/0")).rejects.toMatchObject({ code: "22012" });
+      await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget())).rejects.toMatchObject({
+        code: "OPERATION_FAILED", message: "dedicated session must be idle before operation",
+      });
+    } finally { await lab.operator.query("ROLLBACK"); }
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator, request, new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }, 30000);
+});
+
+describe("P06 isolated same-name backup and external recovery epoch", () => {
+  it("P06-E2E-18: actual pg_dump/pg_restore rewinds local state but fresh signed epoch prevents historical replay", async () => {
+    const lab = await createLab("bf");
+    labs.push(lab);
+    await p06Install(lab);
+    const stale = await freshP06(lab);
+    const revoked = await freshP06(lab);
+    const completed = await freshP06(lab);
+    const checksum = await contentChecksum(lab);
+    const key = lab.installationId+":"+lab.name;
+    const oldEpoch = labEpochs.get(key)!;
+    const archive = spawnSync("docker", ["compose","-f","compose.dev.yml","exec","-T","postgres",
+      "pg_dump","-U","vibress","--format=custom","--dbname",lab.name],
+      { timeout: 20000, maxBuffer: 16*1024*1024 });
+    expect(archive.status).toBe(0);
+    expect(archive.stdout.length).toBeGreaterThan(0);
+    const approver = await connect(lab.name, lab.approver);
+    try { await approver.query("SELECT public.s03_p06_revoke($1::uuid)", [revoked.approvalId]); }
+    finally { await approver.end(); }
+    const authorityDirectory=mkdtempSync(path.join(tmpdir(),"s03-actual-restore-authority-"));
+    const durable=DisposableDurableRecoveryAuthority.initialize(authorityDirectory,epochKeys.privateKey,lab.installationId,lab.name,oldEpoch,testAnchor(authorityDirectory),recoveryAdminKeys.publicKey);
+    try {
+    expect((await durable.execute(urlFor(lab.name,lab.operatorRole),completed,epochKeys.publicKey)).status).toBe("APPLIED");
+    durable.beginRecovery();
+    await lab.dbAdmin.query("UPDATE public.platform_schema_trusted_actors SET active=false WHERE login_name=$1",[lab.author]);
+    const prior = (await lab.dbAdmin.query<{principal_id:string}>(
+      "SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.approver])).rows[0]!;
+    await lab.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.approver]);
+    await lab.dbAdmin.query("INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES($1,$2,'APPROVER')",
+      [lab.approver,prior.principal_id]);
+    // The harness is the disposable recovery orchestrator. Fence all sessions
+    // first, advance the external epoch, and retain the original DB until the
+    // same-name restore is checked. It is never a production recovery command.
+    await Promise.all([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    const retained = lab.name+"_retained";
+    const escaped = (value:string) => cluster.escapeIdentifier(value);
+    let retainedExists = false;
+    let restored: Lab | undefined;
+    try {
+      await cluster.query("ALTER DATABASE "+escaped(lab.name)+" RENAME TO "+escaped(retained));
+      retainedExists = true;
+      const nextEpoch = randomUUID();
+      await cluster.query("ALTER DATABASE "+escaped(retained)+" ALLOW_CONNECTIONS false");
+      const observation=(await cluster.query<{oid:number;datallowconn:boolean;sessions:number;prepared:number}>(
+        "SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid=d.oid) AS sessions,"+
+        "(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[retained])).rows[0]!;
+      expect(observation).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+      const quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,observation})).digest("hex");
+      durable.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(durable,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
+      labEpochs.set(key,nextEpoch);
+      labRecoveryPending.add(key);
+      await cluster.query("CREATE DATABASE "+escaped(lab.name));
+      await cluster.query("REVOKE CONNECT ON DATABASE "+escaped(lab.name)+" FROM PUBLIC");
+      for (const role of [lab.author,lab.approver,lab.operatorRole,lab.runtimeRole])
+        await cluster.query("GRANT CONNECT ON DATABASE "+escaped(lab.name)+" TO "+escaped(role));
+      const restore = spawnSync("docker", ["compose","-f","compose.dev.yml","exec","-T","postgres",
+        "pg_restore","-U","vibress","--exit-on-error","--single-transaction","--dbname",lab.name],
+        { input: archive.stdout, timeout: 20000, maxBuffer: 16*1024*1024 });
+      expect(restore.status).toBe(0);
+      restored = {...lab,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),
+        runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.indexOf(lab)] = restored;
+      expect((await restored.dbAdmin.query("SELECT epoch_id FROM public.s03_p06_recovery_epochs")).rows)
+        .toEqual([{epoch_id:oldEpoch}]);
+      expect(await hasWebsite(restored)).toBe(false);
+      expect(await contentChecksum(restored)).toBe(checksum);
+      expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+      const restoredDigest=(await restored.dbAdmin.query<{manifest_digest:string}>("SELECT manifest_digest FROM public.platform_schema_registry")).rows[0]!.manifest_digest;
+      const restoredJournal=(await restored.dbAdmin.query<{operationId:string;submissionId:string;approvalId:string;planDigest:string;newDigest:string}>('SELECT operation_id AS "operationId",submission_id AS "submissionId",approval_id AS "approvalId",canonical_plan_digest AS "planDigest",new_digest AS "newDigest" FROM public.s03_p06_completed_operations')).rows;
+      const readiness={epoch:nextEpoch,catalogManifestDigest:restoredDigest,readinessEvidenceDigest:createHash("sha256").update(JSON.stringify(restoredJournal)).digest("hex"),journal:restoredJournal};
+      expect(()=>durable.activate(readiness,attestRecovery(durable,"READY",readiness))).toThrow();
+      expect(durable.snapshot().pending).toBe(true);
+      // Test epoch mismatch independently even if an authority actively
+      // attests the new epoch. The actual lab authority stays pending.
+      const activeNewEpoch = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => proofFor(challenge,nextEpoch));
+      for (const request of [stale,revoked,completed]) {
+        await expect(executeP06Raw(restored.operator,request,new ExperimentalD1Budget(),activeNewEpoch))
+          .rejects.toMatchObject({code:"UNAUTHORIZED",message:"recovery epoch mismatch; re-enrollment required"});
+        await expect(executeP06(restored.operator,request,new ExperimentalD1Budget()))
+          .rejects.toMatchObject({code:"UNAUTHORIZED",message:"fresh recovery authority proof unavailable"});
+      }
+      await expect(reconcileP06(restored.operator,completed,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      const unavailable = new RecoveryEpochAuthority(epochKeys.publicKey, async () => {throw Error("unavailable");});
+      const replay = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge =>
+        proofFor({...challenge,nonce:randomUUID()},oldEpoch));
+      const forged = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge =>
+        ({...proofFor(challenge,nextEpoch),signature:"A".repeat(86)}));
+      for (const invalid of [unavailable,replay,forged])
+        await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),invalid))
+          .rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // Explicit disposable recovery enrollment, under I -> registry fence.
+      // No automatic approval or historical journal reconstruction.
+      await restored.dbAdmin.query("BEGIN");
+      try {
+        await restored.dbAdmin.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03'),hashtext($1))",[lab.installationId]);
+        await restored.dbAdmin.query("SELECT 1 FROM public.platform_schema_registry WHERE installation_id=$1 FOR UPDATE",[lab.installationId]);
+        await restored.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+        await restored.dbAdmin.query("COMMIT");
+      } catch (error) {await restored.dbAdmin.query("ROLLBACK");throw error;}
+      const actor = await connect(lab.name,lab.author);
+      try {
+        await expect(actor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]))
+          .rejects.toMatchObject({code:"42501"});
+      } finally {await actor.end();}
+      // Simulate separately authenticated root re-enrollment. Prior UUIDs stay
+      // in the restored history. This does not certify external journal recovery.
+      for (const [login,kind] of [[lab.author,"AUTHOR"],[lab.approver,"APPROVER"]]) {
+        const row=(await restored.dbAdmin.query<{principal_id:string}>(
+          "SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[login])).rows[0]!;
+        await restored.dbAdmin.query("DELETE FROM public.platform_schema_trusted_actors WHERE login_name=$1",[login]);
+        await restored.dbAdmin.query("INSERT INTO public.platform_schema_trusted_actors(login_name,principal_id,actor_kind) VALUES($1,$2,$3)",
+          [login,row.principal_id,kind]);
+      }
+      await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),activeNewEpoch))
+        .rejects.toMatchObject({code:"UNAUTHORIZED",message:"independent P06 authorization unavailable"});
+      const fresh = await freshP06(restored);
+      expect(fresh.planDigest).toBe(stale.planDigest);
+      expect(fresh.operationId).not.toBe(stale.operationId);
+      expect(fresh.approvalId).not.toBe(stale.approvalId);
+      // Fresh enrollment and approval are insufficient while the authority
+      // marks the rewound completed operation as requiring recovery review.
+      await expect(executeP06(restored.operator,fresh,new ExperimentalD1Budget()))
+        .rejects.toMatchObject({code:"UNAUTHORIZED",message:"fresh recovery authority proof unavailable"});
+      expect(await hasWebsite(restored)).toBe(false);
+      expect((await restored.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    } finally {
+      if (retainedExists) await cluster.query("DROP DATABASE "+escaped(retained));
+      labEpochs.delete(key);
+      labRecoveryPending.delete(key);
+    }
+    } finally { durable.close();rmSync(authorityDirectory,{recursive:true,force:true}); }
+  }, 90000);
+});
+
+describe("P06 root lifecycle and LOGIN identity boundaries", () => {
+  it("P06-E2E-19: root lifecycle pre-locks actor; mixed root calls roll back; replacement invalidates stale authority", async () => {
+    const lab=await createLab("bg");labs.push(lab);await p06Install(lab);
+    const stale=await freshP06(lab),checksum=await contentChecksum(lab);
+    const before=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>(
+      "SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    await expect(lab.runtime.query("SELECT public.s03_p06_root_retire($1,$2)",[lab.installationId,lab.author])).rejects.toMatchObject({code:"42501"});
+    await lab.dbAdmin.query("BEGIN");
+    try {
+      await lab.dbAdmin.query("SELECT public.s03_p06_root_retire($1,$2)",[lab.installationId,lab.author]);
+      await expect(lab.dbAdmin.query("SELECT public.s03_p06_root_register($1,$2,$3,'AUTHOR')",
+        [lab.installationId,lab.author,before.principal_id])).rejects.toMatchObject({code:"42501"});
+    } finally {await lab.dbAdmin.query("ROLLBACK");}
+    expect((await lab.dbAdmin.query("SELECT actor_instance_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows)
+      .toEqual([{actor_instance_id:before.actor_instance_id}]);
+    const blocker=await connect(lab.name),writer=await connect(lab.name);
+    let pending:Promise<unknown>|undefined;
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT pg_advisory_xact_lock(hashtext('vibress_m03s03_actor'),hashtext($1))",[lab.author]);
+      pending=writer.query("SELECT public.s03_p06_root_replace($1,$2,$3,'AUTHOR')",
+        [lab.installationId,lab.author,before.principal_id]);
+      void pending.catch(()=>undefined);
+      let waiting=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{waiting:boolean}>("SELECT $1::int=ANY(pg_blocking_pids($2)) AS waiting",
+          [blocker.processID,writer.processID])).rows[0];
+        if(row?.waiting){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(waiting).toBe(true);
+      // Root writer is waiting on advisory X, not holding the actor tuple.
+      await blocker.query("SELECT 1 FROM public.platform_schema_trusted_actors WHERE login_name=$1 FOR UPDATE NOWAIT",[lab.author]);
+      await blocker.query("COMMIT");
+      await pending;
+    } finally {await blocker.query("ROLLBACK").catch(()=>undefined);await pending?.catch(()=>undefined);await blocker.end();await writer.end();}
+    expect((await lab.dbAdmin.query("SELECT actor_instance_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]?.actor_instance_id)
+      .not.toBe(before.actor_instance_id);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+
+  it("P06-E2E-20: LOGIN name reuse with different PostgreSQL role OID cannot revive approved authority", async () => {
+    const lab=await createLab("bh");labs.push(lab);await p06Install(lab);
+    const stale=await freshP06(lab),checksum=await contentChecksum(lab);
+    const previous=lab.author+"_old",esc=(v:string)=>cluster.escapeIdentifier(v);
+    await cluster.query("ALTER ROLE "+esc(lab.author)+" RENAME TO "+esc(previous));
+    let replacement=false;
+    try {
+      await cluster.query("CREATE ROLE "+esc(lab.author)+" LOGIN PASSWORD "+cluster.escapeLiteral(password)+
+        " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+      replacement=true;
+      await lab.dbAdmin.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(lab.author));
+      await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO "+esc(lab.author));
+      await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+esc(lab.author));
+      const impostor=await connect(lab.name,lab.author);
+      try {await expect(impostor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]))
+        .rejects.toMatchObject({code:"42501"});} finally {await impostor.end();}
+      await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    } finally {
+      if(replacement){await lab.dbAdmin.query("DROP OWNED BY "+esc(lab.author));await cluster.query("DROP ROLE "+esc(lab.author));}
+      await cluster.query("ALTER ROLE "+esc(previous)+" RENAME TO "+esc(lab.author));
+    }
+    // Trusted cluster administration must reenroll after identity transitions;
+    // an OID check alone cannot detect a role rename that was later reversed.
+    const principal=(await lab.dbAdmin.query<{principal_id:string}>("SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_replace($1,$2,$3,'AUTHOR')",[lab.installationId,lab.author,principal.principal_id]);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+});
+
+describe("P06 owned physical session supervisor and capability ordering", () => {
+  it("P06-E2E-21: committed capability removal fences a waiting delegated transition before DML", async () => {
+    const lab=await createLab("bi");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const delegate="s03_delegate_"+lab.key+"_"+id,gateway="s03_gateway_"+lab.key+"_"+id;
+    const esc=(v:string)=>cluster.escapeIdentifier(v);
+    await cluster.query("CREATE ROLE "+esc(delegate)+" LOGIN PASSWORD "+cluster.escapeLiteral(password)+
+      " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("CREATE ROLE "+esc(gateway)+" NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS");
+    await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(delegate));
+    await lab.dbAdmin.query("GRANT USAGE ON SCHEMA public TO "+esc(delegate)+","+esc(gateway));
+    await lab.dbAdmin.query("GRANT SELECT ON public.platform_schema_registry,public.s03_p06_admin_capability,public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT UPDATE(active) ON public.platform_schema_trusted_actors TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_enter() TO "+esc(gateway));
+    await lab.dbAdmin.query("ALTER FUNCTION public.s03_p06_set_actor_active(text,text,boolean) OWNER TO "+esc(gateway));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_set_actor_active(text,text,boolean) TO "+esc(delegate));
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_set_capability($1,$2,true)",[lab.installationId,delegate]);
+    const admin=await connect(lab.name,delegate);
+    let pending:Promise<unknown>|undefined;
+    try {
+      await expect(admin.query("SELECT public.s03_p06_root_set_capability($1,$2,true)",[lab.installationId,delegate])).rejects.toMatchObject({code:"42501"});
+      await lab.dbAdmin.query("BEGIN");
+      await lab.dbAdmin.query("SELECT public.s03_p06_root_set_capability($1,$2,false)",[lab.installationId,delegate]);
+      pending=admin.query("SELECT public.s03_p06_set_actor_active($1,$2,false)",[lab.installationId,lab.author]);
+      void pending.catch(()=>undefined);
+      const observer=await connect(lab.name);
+      try {
+        let waiting=false;
+        for(let i=0;i<100;i++){
+          const row=(await observer.query<{waiting:boolean}>("SELECT $1::int=ANY(pg_blocking_pids($2)) AS waiting",[lab.dbAdmin.processID,admin.processID])).rows[0];
+          if(row?.waiting){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+        }
+        expect(waiting).toBe(true);
+        // The delegated writer is still upstream of the actor tuple.
+        await observer.query("BEGIN");
+        await observer.query("SELECT 1 FROM public.platform_schema_trusted_actors WHERE login_name=$1 FOR UPDATE NOWAIT",[lab.author]);
+        await observer.query("ROLLBACK");
+      }finally{await observer.end();}
+      await lab.dbAdmin.query("COMMIT");
+      await expect(pending).rejects.toMatchObject({code:"42501"});
+    }finally{await lab.dbAdmin.query("ROLLBACK").catch(()=>undefined);await pending?.catch(()=>undefined);await admin.end();}
+    expect((await lab.dbAdmin.query("SELECT active,actor_generation FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows)
+      .toEqual([{active:true,actor_generation:"1"}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_admin_capability")).rowCount).toBe(0);
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+
+  it("P06-E2E-22: real stalled BEGIN acknowledgment hits D1, burns owned connection and leaves no committed effect", async () => {
+    const lab=await createLab("bj");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const proxy=await startTransactionAckFaultProxy("BEGIN","STALL");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const connection=new URL(urlFor(lab.name,lab.operatorRole));
+    connection.port=String(proxy.port);
+    const budget=new ExperimentalD1Budget();
+    try {
+      await expect(superviseDisposableSchemaOperation(connection.toString(),request,labRecoveryAuthority,"EXECUTE",budget))
+        .rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+      expect(budget.expired()).toBe(true);
+      let sessions=0;
+      for(let i=0;i<100;i++){
+        sessions=Number((await lab.dbAdmin.query<{n:string}>(
+          "SELECT count(*)::text AS n FROM pg_stat_activity WHERE datname=$1 AND usename=$2",[lab.name,lab.operatorRole])).rows[0]!.n);
+        if(sessions===1)break;await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(sessions).toBe(1); // only original unused lab.operator remains
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+      await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    }finally{await proxy.close();}
+  },30000);
+});
+
+describe("P06 administrative metadata, cancellation diagnostic and D1 measurement", () => {
+  it("P06-E2E-23: accidental metadata DML/TRUNCATE grants cannot forge capability, epoch, enrollment or journal", async () => {
+    const lab=await createLab("bk");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const rootTables=["s03_p06_admin_capability","s03_p06_actor_enrollments","s03_p06_recovery_epochs",
+      "s03_p06_call_guard","s03_e2_actor_instance_history","s03_p06_lifecycle_audit"];
+    const immutableTables=["s03_p06_submissions","s03_p06_approvals","s03_p06_revocations","s03_p06_completed_operations"];
+    const author=await connect(lab.name,lab.author);
+    try {
+      for(const table of [...rootTables,...immutableTables]){
+        const qualified="public."+lab.dbAdmin.escapeIdentifier(table);
+        await lab.dbAdmin.query("GRANT INSERT,UPDATE,DELETE,TRUNCATE ON "+qualified+" TO "+lab.dbAdmin.escapeIdentifier(lab.author));
+        if(rootTables.includes(table)) await expect(author.query("INSERT INTO "+qualified+" DEFAULT VALUES")).rejects.toMatchObject({code:"42501"});
+        await expect(author.query("DELETE FROM "+qualified)).rejects.toMatchObject({code:"42501"});
+        // FK prechecks may reject TRUNCATE before its BEFORE STATEMENT trigger.
+        await expect(author.query("TRUNCATE "+qualified)).rejects.toMatchObject({code:expect.stringMatching(/^(42501|0A000)$/)});
+      }
+    }finally{await author.end();}
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_admin_capability")).rowCount).toBe(0);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_actor_enrollments")).rowCount).toBe(2);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_recovery_epochs")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_submissions")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_approvals")).rowCount).toBe(1);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  },30000);
+
+  it("P06-E2E-24: delayed same-role cancellation can strike a subsequent query on reused backend, not a separate session", async () => {
+    const lab=await createLab("bl");labs.push(lab);await p06Install(lab);
+    const checksum=await contentChecksum(lab);
+    const reused=await connect(lab.name,lab.operatorRole),signaler=await connect(lab.name,lab.operatorRole),fresh=await connect(lab.name,lab.operatorRole);
+    let second:Promise<unknown>|undefined;
+    try {
+      await reused.query("SELECT 1");
+      second=reused.query("SELECT pg_sleep(5) /* s03_next_statement */");
+      void second.catch(()=>undefined);
+      let running=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{running:boolean}>("SELECT state='active' AND query LIKE '%s03_next_statement%' AS running FROM pg_stat_activity WHERE pid=$1",[reused.processID])).rows[0];
+        if(row?.running){running=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(running).toBe(true);
+      // Diagnostic only: ordinary same-role permission, NOT a privileged
+      // cancellation gateway or wire CancelRequest implementation.
+      expect((await signaler.query<{sent:boolean}>("SELECT pg_cancel_backend($1) AS sent",[reused.processID])).rows[0]?.sent).toBe(true);
+      await expect(second).rejects.toMatchObject({code:"57014"});
+      expect((await fresh.query("SELECT 1 AS ok")).rows).toEqual([{ok:1}]);
+    }finally{await second?.catch(()=>undefined);await Promise.all([reused.end(),signaler.end(),fresh.end()]);}
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+
+  it("P06-E2E-25: measure five isolated integrated one-shot operations from before connect through outcome", async () => {
+    const samples:number[]=[];
+    for(const key of ["bm","bn","bo","bp","bq"] as const){
+      const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+      const request=await freshP06(lab),checksum=await contentChecksum(lab);
+      const budget=new ExperimentalD1Budget();
+      const result=await superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority,"EXECUTE",budget);
+      const elapsed=2517-budget.remainingMs();
+      samples.push(Math.round(elapsed*1000)/1000);
+      expect(result.status).toBe("APPLIED");expect(elapsed).toBeLessThan(2517);
+      expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    }
+    // Exploratory only: two fixture rows, ephemeral in-process signing provider,
+    // one runner; no inferential percentile, no approved admission margin.
+    console.info("D1_INTEGRATED_EXPLORATORY "+JSON.stringify({samplesMs:samples,n:samples.length,rows:2,margin:"NOT_DETERMINABLE"}));
+  },60000);
+});
+
+describe("P06 supervised terminal session regression", () => {
+  it("P06-E2E-26: transport failure during external proof fences the suspended operation", async () => {
+    const lab = await createLab("br"); labs.push(lab); await p06Install(lab);
+    const request = await freshP06(lab), checksum = await contentChecksum(lab);
+    let entered: () => void = () => undefined;
+    let release: () => void = () => undefined;
+    const providerEntered = new Promise<void>(resolve => { entered = resolve; });
+    const providerRelease = new Promise<void>(resolve => { release = resolve; });
+    const authority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+      entered();
+      await providerRelease;
+      return proofFor(challenge, labEpochs.get(challenge.installationId + ":" + challenge.databaseName)!);
+    });
+    const operation = superviseDisposableSchemaOperation(urlFor(lab.name, lab.operatorRole), request, authority);
+    void operation.catch(() => undefined);
+    try {
+      await Promise.race([providerEntered, operation.then(() => { throw Error("unexpected completion"); })]);
+      const killed = await lab.dbAdmin.query<{ killed: boolean }>(
+        "SELECT pg_terminate_backend(pid) AS killed FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND pid<>$3",
+        [lab.name, lab.operatorRole, lab.operator.processID]);
+      expect(killed.rows).toEqual([{ killed: true }]);
+      await expect(operation).rejects.toMatchObject({ code: "INDETERMINATE",
+        message: "supervisor transport failed; reconcile on fresh connection" });
+    } finally {
+      release();
+      await operation.catch(() => undefined);
+    }
+    await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget()))
+      .rejects.toMatchObject({ code: "INDETERMINATE" });
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  }, 30000);
+
+  it("P06-E2E-27: supervised lost COMMIT acknowledgment remains indeterminate and reconciles exactly once", async () => {
+    const lab = await createLab("bs"); labs.push(lab); await p06Install(lab);
+    const request = await freshP06(lab), checksum = await contentChecksum(lab);
+    const proxy = await startCommitAckDropProxy();
+    void proxy.serverCommitObserved.catch(() => undefined);
+    const connection = new URL(urlFor(lab.name, lab.operatorRole));
+    connection.port = String(proxy.port);
+    try {
+      await expect(superviseDisposableSchemaOperation(connection.toString(), request, labRecoveryAuthority))
+        .rejects.toMatchObject({ code: "INDETERMINATE" });
+      await proxy.serverCommitObserved;
+    } finally {
+      await proxy.close();
+    }
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows)
+      .toEqual([{ operation_id: request.operationId }]);
+    expect((await superviseDisposableSchemaOperation(urlFor(lab.name, lab.operatorRole), request,
+      labRecoveryAuthority, "RECONCILE")).status).toBe("ALREADY_APPLIED");
+  }, 30000);
+});
+
+it("P06-E2E-28: actual operator refuses all dispatch after fence while proof is suspended", async () => {
+  const lab = await createLab("bt"); labs.push(lab); await p06Install(lab);
+  const request = await freshP06(lab), checksum = await contentChecksum(lab);
+  const client = await connect(lab.name, lab.operatorRole);
+  // Freeze this test clock to isolate the terminal-state mechanism from D1.
+  // Real elapsed-time/transport behavior is covered separately by E2E-22/26/27.
+  const budget = new ExperimentalD1Budget(() => 0);
+  const session = new ExperimentalSessionLifecycle(budget);
+  let entered: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const providerEntered = new Promise<void>(resolve => { entered = resolve; });
+  const providerRelease = new Promise<void>(resolve => { release = resolve; });
+  const authority = new RecoveryEpochAuthority(epochKeys.publicKey, async challenge => {
+    entered();
+    await providerRelease;
+    return proofFor(challenge, labEpochs.get(challenge.installationId + ":" + challenge.databaseName)!);
+  });
+  // Observe calls at the driver boundary, including timeout refresh, DDL,
+  // COMMIT and ROLLBACK. Socket termination alone would not prove this.
+  let dispatches = 0;
+  const wrapped = {
+    getTransactionStatus: () => (client as Client & {getTransactionStatus(): string | null}).getTransactionStatus(),
+    escapeIdentifier: client.escapeIdentifier.bind(client),
+    query: (sql: string, params?: unknown[]) => {
+      dispatches++;
+      return params ? client.query(sql, params) : client.query(sql);
+    },
+  } as unknown as ClientBase;
+  const operation = executeP06Raw(wrapped, request, budget, authority, session);
+  void operation.catch(() => undefined);
+  try {
+    await Promise.race([providerEntered, operation.then(() => { throw Error("unexpected completion"); })]);
+    const beforeFence = dispatches;
+    expect(beforeFence).toBeGreaterThan(0);
+    expect(session.fence("TRANSPORT_FAILED")).toBe(true);
+    session.retire();
+    release();
+    await expect(operation).rejects.toMatchObject({code: "INDETERMINATE"});
+    expect(dispatches).toBe(beforeFence);
+    expect(session.snapshot()).toMatchObject({beginDispatched: true, commitDispatched: false,
+      terminalCause: "TRANSPORT_FAILED", cleanupPermitted: false});
+  } finally {
+    release();
+    await operation.catch(() => undefined);
+    await client.end();
+  }
+  await expect(reconcileP06(lab.operator, request, new ExperimentalD1Budget()))
+    .rejects.toMatchObject({code: "INDETERMINATE"});
+  expect(await hasWebsite(lab)).toBe(false);
+  expect(await contentChecksum(lab)).toBe(checksum);
+  expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+}, 30000);
+
+it("P06-E2E-29: same-OID membership drift and accidental legacy EXECUTE deny authorization", async () => {
+  const lab=await createLab("bu"); labs.push(lab); await p06Install(lab);
+  const stale=await freshP06(lab), checksum=await contentChecksum(lab);
+  const esc=(v:string)=>lab.dbAdmin.escapeIdentifier(v);
+  const author=await connect(lab.name,lab.author), approver=await connect(lab.name,lab.approver);
+  try {
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.platform_schema_approve_operation(text,text,text,timestamptz),public.platform_schema_revoke_operation(text,text,text) TO "+esc(lab.approver));
+    await expect(approver.query("SELECT public.platform_schema_approve_operation($1,$2,$3,clock_timestamp()+interval '1 hour')",[lab.installationId,lab.plan.digest,stale.operationId])).rejects.toMatchObject({code:"42501"});
+    await expect(approver.query("SELECT public.platform_schema_revoke_operation($1,$2,$3)",[lab.installationId,lab.plan.digest,stale.operationId])).rejects.toMatchObject({code:"42501"});
+    const oid=(await cluster.query("SELECT oid FROM pg_roles WHERE rolname=$1",[lab.author])).rows;
+    await cluster.query("GRANT "+esc(lab.runtimeRole)+" TO "+esc(lab.author));
+    try {
+      expect((await cluster.query("SELECT oid FROM pg_roles WHERE rolname=$1",[lab.author])).rows).toEqual(oid);
+      await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    } finally {await cluster.query("REVOKE "+esc(lab.runtimeRole)+" FROM "+esc(lab.author));}
+    // Trusted administration must invalidate provenance after an authority
+    // change, including a change reversed before it is observed by the operator.
+    const principal=(await lab.dbAdmin.query<{principal_id:string}>("SELECT principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_replace($1,$2,$3,'AUTHOR')",[lab.installationId,lab.author,principal.principal_id]);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  } finally {await author.end();await approver.end();}
+},30000);
+
+it("P06-E2E-30: durable external admission and history survive restart; rewind cannot activate", async()=>{
+  const lab=await createLab("bv");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-authority-"));
+  const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+  const anchor=testAnchor(directory);
+  let authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+  try{
+    const result=await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+    expect(result.status).toBe("APPLIED");
+    expect((await authority.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("ALREADY_APPLIED");
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),{...request,operationId:randomUUID()},epochKeys.publicKey)).rejects.toThrow();
+    authority.close();
+    authority=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+    expect(authority.snapshot().operations).toMatchObject([{operationId:request.operationId,outcome:"COMMITTED",newDigest:result.newDigest}]);
+    authority.beginRecovery();
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(authority.proofAuthority(epochKeys.publicKey).prove(lab.installationId,lab.name,new ExperimentalD1Budget())).rejects.toThrow();
+    expect(()=>authority.advance(epoch,"a".repeat(64))).toThrow();
+    const next=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    // Here a synthetic signed administration assertion tests history gating;
+    // real backend quiescence and restore are exercised in E2E-18.
+    authority.advance(next,quiescenceEvidenceDigest,attestRecovery(authority,"ADVANCE",{epoch:next,quiescenceEvidenceDigest}));
+    const readiness={epoch:next,catalogManifestDigest:result.newDigest,readinessEvidenceDigest:"b".repeat(64),journal:[]};
+    expect(()=>authority.activate(readiness,attestRecovery(authority,"READY",readiness))).toThrow();
+    expect(authority.snapshot().pending).toBe(true);
+    expect(await hasWebsite(lab)).toBe(true);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  }finally{authority.close();rmSync(directory,{recursive:true,force:true});}
+},30000);
+
+describe("P06 transport acknowledgment and recovery fencing",()=>{
+  it.each([
+    ["P06-E2E-31","bw","ALTER TABLE"],
+    ["P06-E2E-32","bx","UPDATE"],
+    ["P06-E2E-33","by","INSERT"],
+  ] as const)("%s: lost statement acknowledgment (%s, %s)",async(_name,key,command)=>{
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const proxy=await startStatementAckFaultProxy(command,"DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(superviseDisposableSchemaOperation(url.toString(),request,labRecoveryAuthority)).rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+    }finally{await proxy.close();}
+    await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows).toEqual([{manifest_digest:lab.current.digest}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+
+  it("P06-E2E-34: recovery intent fences operator holding an older proof during target wait",async()=>{
+    const lab=await createLab("bz");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const directory=mkdtempSync(path.join(tmpdir(),"vibress-s03-recovery-fence-"));
+    const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+    const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,epoch,testAnchor(directory),recoveryAdminKeys.publicKey);
+    const blocker=await connect(lab.name);
+    let operation:Promise<unknown>|undefined;
+    try{
+      await blocker.query("BEGIN");
+      await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+      operation=authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+      void operation.catch(()=>undefined);
+      let waiting=false;
+      for(let i=0;i<100;i++){
+        const row=(await lab.dbAdmin.query<{waiting:boolean}>(
+          "SELECT EXISTS(SELECT 1 FROM pg_stat_activity a WHERE datname=$1 AND usename=$2 AND $3::int=ANY(pg_blocking_pids(a.pid))) AS waiting",
+          [lab.name,lab.operatorRole,blocker.processID])).rows[0];
+        if(row?.waiting){waiting=true;break;}await new Promise(resolve=>setTimeout(resolve,10));
+      }
+      expect(waiting).toBe(true);
+      authority.beginRecovery();
+      await expect(operation).rejects.toMatchObject({code:"INDETERMINATE"});
+      await blocker.query("ROLLBACK");
+      expect(authority.snapshot().operations).toMatchObject([{outcome:"UNCERTAIN",operationId:request.operationId}]);
+      expect(()=>authority.advance(randomUUID(),"a".repeat(64))).toThrow();
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await operation?.catch(()=>undefined);
+      await blocker.end();authority.close();rmSync(directory,{recursive:true,force:true});}
+  },30000);
+
+  it("P06-E2E-35: unsupported non-test raw operator cannot bypass supervisor",async()=>{
+    const lab=await createLab("ca");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const old=process.env.NODE_ENV;
+    try{
+      process.env.NODE_ENV="development";
+      await expect(executeP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
+      await expect(reconcileP06(lab.operator,request,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED",message:"dedicated supervisor required"});
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      await expect(superviseDisposableSchemaOperation(urlFor(lab.name,lab.operatorRole),request,labRecoveryAuthority)).rejects.toMatchObject({code:"UNAUTHORIZED",message:"durable operation admission required"});
+      const directory=mkdtempSync(path.join(tmpdir(),"s03-cli-boundary-"));
+      const authority=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(directory),recoveryAdminKeys.publicKey);
+      try{expect((await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("APPLIED");}
+      finally{authority.close();rmSync(directory,{recursive:true,force:true});}
+    }finally{if(old===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=old;}
+  },30000);
+});
+
+describe("P06 supervised D1 classification and rollback acknowledgment",()=>{
+  it("P06-E2E-36: real rollback acknowledgment loss does not claim verified rollback",async()=>{
+    const lab=await createLab("cb");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab);
+    const proxy=await startStatementAckFaultProxy("ROLLBACK","DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(superviseDisposableSchemaOperation(url.toString(),{...request,approvalId:randomUUID()},labRecoveryAuthority)).rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+    }finally{await proxy.close();}
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+  it("P06-E2E-37: real COMMIT acknowledged after monotonic deadline never returns APPLIED",async()=>{
+    const lab=await createLab("cc");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    let tick=0;
+    const budget=new ExperimentalD1Budget(()=>tick);
+    const proxy=await startStatementAckFaultProxy("COMMIT","OBSERVE",()=>{tick=2518;});
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      const result=await superviseDisposableSchemaOperation(url.toString(),request,labRecoveryAuthority,"EXECUTE",budget);
+      expect(result.status).toBe("COMMITTED_LATE");
+      await proxy.serverCommitObserved;
+    }finally{await proxy.close();}
+    expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  },30000);
+  it("P06-E2E-38: real journal acknowledgment at expiry prevents COMMIT dispatch",async()=>{
+    const lab=await createLab("cd");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    let tick=0;const budget=new ExperimentalD1Budget(()=>tick);
+    const proxy=await startStatementAckFaultProxy("INSERT","OBSERVE",()=>{tick=2518;});
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(superviseDisposableSchemaOperation(url.toString(),request,labRecoveryAuthority,"EXECUTE",budget))
+        .rejects.toMatchObject({code:"DEADLINE_EXCEEDED"});
+      await proxy.serverCommitObserved;
+    }finally{await proxy.close();}
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows).toEqual([{manifest_digest:lab.current.digest}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+  },30000);
+});
+
+it("P06-E2E-39: admission anchor failure before SQL and outcome anchor failure after COMMIT are fail-closed",async()=>{
+  const lab=await createLab("ce");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-anchor-fault-"));
+  const anchor=testAnchor(dir);
+  let failAt=2;
+  const fault:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+    if(n.sequence===failAt)throw Error("injected anchor failure");anchor.compareAndSet(p,n);
+  }};
+  let authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,fault,recoveryAdminKeys.publicKey);
+  try{
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey)).toThrow();
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+  // Independent fresh disposable ledger (not repair or reset of a live authority).
+  const second=mkdtempSync(path.join(tmpdir(),"s03-anchor-outcome-")),secondAnchor=testAnchor(second);
+  failAt=3;
+  const afterCommit:ExperimentalRecoveryAnchor={read:()=>secondAnchor.read(),compareAndSet:(p,n)=>{
+    if(n.sequence===failAt)throw Error("injected outcome anchor failure");secondAnchor.compareAndSet(p,n);
+  }};
+  authority=DisposableDurableRecoveryAuthority.initialize(second,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,afterCommit,recoveryAdminKeys.publicKey);
+  try{
+    await expect(authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE",persistenceStatus:"UNCONFIRMED",transactionFacts:{mode:"EXECUTE",transaction:{outcome:"COMMITTED",commitDigest:lab.plan.proposedManifest.digest}}});
+    expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    authority.close();expect(()=>DisposableDurableRecoveryAuthority.open(second,epochKeys.privateKey,secondAnchor,recoveryAdminKeys.publicKey)).toThrow();
+  }finally{authority.close();rmSync(second,{recursive:true,force:true});}
+},30000);
+
+it("P06-E2E-40: PUBLIC and inherited/SET ROLE ACL drift cannot write registry or forge journal; retirement fences reversed LOGIN",async()=>{
+  const lab=await createLab("cf");labs.push(lab);await p06Install(lab);
+  const stale=await freshP06(lab),checksum=await contentChecksum(lab),esc=(v:string)=>lab.dbAdmin.escapeIdentifier(v);
+  const author=await connect(lab.name,lab.author);
+  try{
+    await lab.dbAdmin.query("GRANT SELECT,UPDATE(manifest_digest) ON public.platform_schema_registry TO PUBLIC");
+    await lab.dbAdmin.query("GRANT INSERT ON public.s03_p06_completed_operations TO PUBLIC");
+    try{
+      expect((await lab.dbAdmin.query("SELECT has_column_privilege($1,'public.platform_schema_registry','manifest_digest','UPDATE') AS can_update,has_table_privilege($1,'public.s03_p06_completed_operations','INSERT') AS can_insert",[lab.author])).rows)
+        .toEqual([{can_update:true,can_insert:true}]);
+      await expect(author.query("UPDATE public.platform_schema_registry SET manifest_digest=$1",["f".repeat(64)])).rejects.toMatchObject({code:"42501"});
+      await expect(author.query("INSERT INTO public.s03_p06_completed_operations(installation_id,operator_role) VALUES($1,$2)",[lab.installationId,lab.operatorRole])).rejects.toMatchObject({code:"42501"});
+    }finally{
+      await lab.dbAdmin.query("REVOKE SELECT,UPDATE(manifest_digest) ON public.platform_schema_registry FROM PUBLIC");
+      await lab.dbAdmin.query("REVOKE INSERT ON public.s03_p06_completed_operations FROM PUBLIC");
+    }
+    await cluster.query("GRANT "+esc(lab.author)+" TO "+esc(lab.runtimeRole)+" WITH INHERIT TRUE, SET TRUE");
+    try{
+      expect((await cluster.query("SELECT inherit_option,set_option FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=$1) AND roleid=(SELECT oid FROM pg_roles WHERE rolname=$2)",[lab.runtimeRole,lab.author])).rows)
+        .toMatchObject([{inherit_option:true,set_option:true}]);
+      await lab.runtime.query("SET ROLE "+esc(lab.author));
+      await expect(lab.runtime.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+      await lab.runtime.query("RESET ROLE");
+    }finally{await lab.runtime.query("RESET ROLE");await cluster.query("REVOKE "+esc(lab.author)+" FROM "+esc(lab.runtimeRole));}
+    const previous=(await lab.dbAdmin.query<{actor_instance_id:string;principal_id:string}>("SELECT actor_instance_id,principal_id FROM public.platform_schema_trusted_actors WHERE login_name=$1",[lab.author])).rows[0]!;
+    // Trusted cluster-admin protocol: retire and commit before any security-
+    // relevant cluster mutation, even if the native role change is later reversed.
+    await lab.dbAdmin.query("SELECT public.s03_p06_root_retire($1,$2)",[lab.installationId,lab.author]);
+    await cluster.query("ALTER ROLE "+esc(lab.author)+" NOLOGIN");
+    await cluster.query("ALTER ROLE "+esc(lab.author)+" LOGIN");
+    const replacement=(await lab.dbAdmin.query<{instance:string}>("SELECT public.s03_p06_root_register($1,$2,$3,'AUTHOR') AS instance",[lab.installationId,lab.author,previous.principal_id])).rows[0]!;
+    expect(replacement.instance).not.toBe(previous.actor_instance_id);
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT manifest_digest FROM public.platform_schema_registry")).rows).toEqual([{manifest_digest:lab.current.digest}]);
+    expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(0);
+    expect((await executeP06(lab.operator,await freshP06(lab),new ExperimentalD1Budget())).status).toBe("APPLIED");
+  }finally{await author.end();}
+},30000);
+
+it("P06-E2E-41: durable admitted whole-operation stage measurement includes ledger fsync and anchor",async()=>{
+  const lab=await createLab("cg");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-durable-measurement-"));
+  const authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+    const budget=new ExperimentalD1Budget(undefined,true);
+    const result=await authority.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,budget);
+    const samples=budget.measurements();
+    expect(samples.map(s=>s.stage)).toEqual(expect.arrayContaining(["ADMISSION_START","ADMIT_LEDGER_FSYNC","ADMIT_ANCHOR_CONFIRMED","CONNECT_START","CONNECT_ACK","REGISTRY_LOCK","INITIAL_PROOF","TARGET_LOCK","ACTOR_LOCKS","FINAL_PROOF","FINAL_AUTHORIZATION","DDL_ACK","MANIFEST_CAS_ACK","JOURNAL_ACK","COMMIT_ACK","OUTCOME_LEDGER_FSYNC","OUTCOME_ANCHOR_CONFIRMED","FINAL_CLASSIFICATION"]));
+    for(let i=1;i<samples.length;i++)expect(samples[i]!.elapsedMs).toBeGreaterThanOrEqual(samples[i-1]!.elapsedMs);
+    expect(result.status).toBe("APPLIED");expect(budget.expired()).toBe(false);
+    console.info("D1_DURABLE_EXPLORATORY "+JSON.stringify({rows:2,n:1,margin:"NOT_DETERMINABLE",stages:samples}));
+    const recoveryBudget=new ExperimentalD1Budget(undefined,true);
+    expect((await authority.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,recoveryBudget)).status).toBe("ALREADY_APPLIED");
+    console.info("D1_DURABLE_RECONCILE_EXPLORATORY "+JSON.stringify({elapsedMs:2517-recoveryBudget.remainingMs(),n:1}));
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+describe("P06 durable transaction facts",()=>{
+  it("P06-E2E-42: acknowledged rollback is persisted; consumed identities never retry; fresh approval works",async()=>{
+    const lab=await createLab("ch");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    const approver=await connect(lab.name,lab.approver);
+    try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-rollback-fact-")),anchor=testAnchor(dir);
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    try{
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      expect(a.snapshot()).toMatchObject({pending:false,operations:[{operationId:request.operationId,outcome:"ROLLED_BACK"}]});
+      a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().pending).toBe(false);
+      for(const replay of [request,{...request,operationId:randomUUID()},{...request,operationId:randomUUID(),submissionId:randomUUID()}])
+        await expect(a.execute(urlFor(lab.name,lab.operatorRole),replay,epochKeys.publicKey)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await a.execute(urlFor(lab.name,lab.operatorRole),await freshP06(lab),epochKeys.publicKey)).status).toBe("APPLIED");
+      expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["ROLLED_BACK","COMMITTED"]);
+    }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it.each([["P06-E2E-43","ci","ROLLBACK"],["P06-E2E-44","cj","COMMIT"]] as const)("%s: durable lost acknowledgment (%s, %s) stays uncertain",async(_name,key,command)=>{
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),checksum=await contentChecksum(lab);
+    if(command==="ROLLBACK"){
+      const approver=await connect(lab.name,lab.approver);
+      try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+    }
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-uncertain-fact-")),anchor=testAnchor(dir);
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    const proxy=await startStatementAckFaultProxy(command,"DROP");
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      await expect(a.execute(url.toString(),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+      await proxy.serverCommitObserved;
+      expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+      a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().pending).toBe(true);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+      expect(await hasWebsite(lab)).toBe(command==="COMMIT");expect(await contentChecksum(lab)).toBe(checksum);
+      expect((await lab.dbAdmin.query("SELECT 1 FROM public.s03_p06_completed_operations")).rowCount).toBe(command==="COMMIT"?1:0);
+    }finally{await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it("P06-E2E-45: late confirmed COMMIT persists independently of D1; reconciliation failure preserves history",async()=>{
+    const lab=await createLab("ck");labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab);
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-late-fact-"));
+    const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+    let tick=0;
+    const proxy=await startStatementAckFaultProxy("COMMIT","OBSERVE",()=>{tick=2518;});
+    void proxy.serverCommitObserved.catch(()=>undefined);
+    const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+    try{
+      expect((await a.execute(url.toString(),request,epochKeys.publicKey,new ExperimentalD1Budget(()=>tick))).status).toBe("COMMITTED_LATE");
+      expect(a.snapshot().operations).toMatchObject([{outcome:"COMMITTED",newDigest:lab.plan.proposedManifest.digest}]);
+      await expect(a.reconcile(urlFor(lab.name,lab.operatorRole),request,generateKeyPairSync("ed25519").publicKey)).rejects.toThrow();
+      expect(a.snapshot().operations).toMatchObject([{outcome:"COMMITTED",newDigest:lab.plan.proposedManifest.digest}]);
+    }finally{await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+  },30000);
+  it("P06-E2E-46: repeated durable execution under baseline and injected storage latency",async()=>{
+    const samples:{profile:string;executionMs:number;reconciliationMs:number}[]=[];
+    for(const [key,delay] of [["cl",0],["cm",0],["cn",0],["co",20],["cp",20]] as const){
+      const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+      const request=await freshP06(lab),dir=mkdtempSync(path.join(tmpdir(),"s03-repeat-"));
+      const anchor=testAnchor(dir);
+      const adapter:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+        if(delay)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,delay);
+        anchor.compareAndSet(p,n);
+      }};
+      const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,adapter,recoveryAdminKeys.publicKey);
+      try{
+        const b=new ExperimentalD1Budget(undefined,true);
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,b)).status).toBe("APPLIED");
+        const c=new ExperimentalD1Budget();
+        expect((await a.reconcile(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey,c)).status).toBe("ALREADY_APPLIED");
+        samples.push({profile:delay?"injected-sync-anchor-delay":"baseline",executionMs:2517-b.remainingMs(),reconciliationMs:2517-c.remainingMs()});
+      }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+    }
+    console.info("D1_DURABLE_REPEATED "+JSON.stringify({n:samples.length,margin:"NOT_DETERMINABLE",samples}));
+  },60000);
+});
+
+
+it.each([["P06-E2E-47","cq",false],["P06-E2E-50","cu",true]] as const)("%s: actual post-COMMIT restore, fenced catalog, fresh enrollment and forward activation (%s, lost ACK=%s)",async(_name,key,lostAck)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),stale=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-forward-recovery-")),anchor=testAnchor(dir);
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+  const esc=(v:string)=>cluster.escapeIdentifier(v),retained=lab.name+"_retained";
+  let retainedExists=false,restored:Lab|undefined;
+  try{
+    const newDigest=lab.plan.proposedManifest.digest;
+    if(lostAck){
+      const proxy=await startStatementAckFaultProxy("COMMIT","DROP");
+      void proxy.serverCommitObserved.catch(()=>undefined);
+      const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+      try{
+        await expect(a.execute(url.toString(),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+        await proxy.serverCommitObserved;
+        expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"UNCERTAIN"}]});
+      }finally{await proxy.close();}
+    }else{
+      const result=await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey);
+      expect(result).toMatchObject({status:"APPLIED",newDigest});
+    }
+    const rows=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+esc(lab.table)+' t ORDER BY value')).rows;
+    const dataDigests={[lab.table]:createHash("sha256").update(JSON.stringify(rows.map(row=>row.value))).digest("hex")};
+    const archive=spawnSync("docker",["compose","-f","compose.dev.yml","exec","-T","postgres","pg_dump","-U","vibress","--format=custom","--dbname",lab.name],{timeout:20000,maxBuffer:16*1024*1024});
+    expect(archive.status).toBe(0);expect(archive.stdout.length).toBeGreaterThan(0);
+    if(lostAck){
+      // Observe the original, unrewound database while new sessions are
+      // forbidden. The observer is the only remaining backend.
+      await Promise.all([lab.operator.end(),lab.runtime.end()]);
+      await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+      try{
+        const evidence=await collectDisposableRecoveryReadiness(lab.dbAdmin,{installationId:lab.installationId,databaseName:lab.name,epoch:a.snapshot().epoch,manifestDigest:newDigest,dataDigests});
+        expect(evidence.journal).toHaveLength(1);
+        const payload={operationId:request.operationId,evidence};
+        expect(()=>a.resolveObservedCommit(request.operationId,evidence,"A".repeat(86))).toThrow();
+        const incomplete={...evidence,journal:[]};
+        expect(()=>a.resolveObservedCommit(request.operationId,incomplete,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",{operationId:request.operationId,evidence:incomplete}))).toThrow();
+        const signature=attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",payload);
+        a.resolveObservedCommit(request.operationId,evidence,signature);
+        expect(a.snapshot().operations).toMatchObject([{outcome:"COMMITTED",newDigest}]);
+        expect(()=>a.resolveObservedCommit(request.operationId,evidence,signature)).toThrow();
+      }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+      await lab.dbAdmin.end();
+    }else{
+      a.beginRecovery();
+      await Promise.all([lab.operator.end(),lab.runtime.end(),lab.dbAdmin.end()]);
+    }
+    await cluster.query("ALTER DATABASE "+esc(lab.name)+" RENAME TO "+esc(retained));retainedExists=true;
+    await cluster.query("ALTER DATABASE "+esc(retained)+" ALLOW_CONNECTIONS false");
+    const q=(await cluster.query<{oid:number;datallowconn:boolean;sessions:number;prepared:number}>(
+      "SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity a WHERE a.datid=d.oid) AS sessions,(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[retained])).rows[0]!;
+    expect(q).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+    const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify({retained,q})).digest("hex");
+    a.advance(nextEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:nextEpoch,quiescenceEvidenceDigest}));
+    await cluster.query("CREATE DATABASE "+esc(lab.name));
+    await cluster.query("REVOKE CONNECT ON DATABASE "+esc(lab.name)+" FROM PUBLIC");
+    for(const role of [lab.author,lab.approver,lab.operatorRole,lab.runtimeRole])
+      await cluster.query("GRANT CONNECT ON DATABASE "+esc(lab.name)+" TO "+esc(role));
+    const recover=spawnSync("docker",["compose","-f","compose.dev.yml","exec","-T","postgres","pg_restore","-U","vibress","--exit-on-error","--single-transaction","--dbname",lab.name],{input:archive.stdout,timeout:20000,maxBuffer:16*1024*1024});
+    expect(recover.status).toBe(0);
+    restored={...lab,current:lab.plan.proposedManifest,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+    labs[labs.indexOf(lab)]=restored;
+    expect(await hasWebsite(restored)).toBe(true);
+    const observation={installationId:lab.installationId,databaseName:lab.name,epoch:nextEpoch,manifestDigest:newDigest,dataDigests};
+    await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,observation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await restored.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+    const oldActors=(await restored.dbAdmin.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string}>("SELECT login_name,principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+    await Promise.all([restored.operator.end(),restored.runtime.end()]);
+    await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+    try{
+      await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,observation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+      // Existing trusted DBA session only. Historical actor UUIDs stay recorded.
+      for(const actor of oldActors){
+        const replacement=(await restored.dbAdmin.query<{id:string}>("SELECT public.s03_p06_root_replace($1,$2,$3,$4) AS id",[lab.installationId,actor.login_name,actor.principal_id,actor.actor_kind])).rows[0]!;
+        expect(replacement.id).not.toBe(actor.actor_instance_id);
+      }
+      await expect(collectDisposableRecoveryReadiness(restored.dbAdmin,{...observation,dataDigests:{[lab.table]:"f".repeat(64)}})).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+      const ready=await collectDisposableRecoveryReadiness(restored.dbAdmin,observation);
+      expect(ready.journal).toMatchObject([{operationId:request.operationId,newDigest}]);
+      expect(()=>a.activate(ready,"A".repeat(86))).toThrow();
+      const signature=attestRecovery(a,"READY",ready);
+      expect(()=>a.activate({...ready,journal:[]},signature)).toThrow();
+      a.activate(ready,signature);
+      expect(a.snapshot().pending).toBe(false);
+      expect(()=>a.activate(ready,signature)).toThrow();
+    }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+    restored={...restored,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+    const i=labs.findIndex(l=>l.name===lab.name);labs[i]=restored;
+    await expect(a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).rejects.toThrow();
+    await expect(executeP06Raw(restored.operator,stale,new ExperimentalD1Budget(),a.proofAuthority(epochKeys.publicKey))).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    // New content and independent approval after fresh enrollment.
+    const scope={applicationId,installationId:lab.installationId};
+    const next=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+      {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+    const plan=planSchemaChanges(restored.current,next,{scope,expectedCurrentDigest:restored.current.digest});
+    const author=await connect(lab.name,lab.author);
+    try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(restored.current),JSON.stringify(plan)]);}finally{await author.end();}
+    const fresh=await freshP06({...restored,plan});
+    expect(fresh.approvalId).not.toBe(stale.approvalId);
+    expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
+    expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+  }finally{
+    if(retainedExists)await cluster.query("DROP DATABASE "+esc(retained));
+    a.close();rmSync(dir,{recursive:true,force:true});
+  }
+},90000);
+
+
+it.each([["P06-E2E-48A","cr",false],["P06-E2E-48B","ct",true]] as const)("%s: disposable trusted lifecycle preserves principal provenance (%s, replacement=%s)",async(_name,key,replacePrincipal)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const stale=await freshP06(lab),checksum=await contentChecksum(lab);
+  const actor=await connect(lab.name,lab.author),esc=(v:string)=>cluster.escapeIdentifier(v);
+  try{
+    const ticket=await retireDisposableIdentity(lab.dbAdmin,cluster,lab.installationId,lab.author);
+    expect((await cluster.query("SELECT rolcanlogin FROM pg_roles WHERE rolname=$1",[lab.author])).rows).toEqual([{rolcanlogin:false}]);
+    await expect(actor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();
+    // No runtime session signal or broad grant. The fixture owns this client.
+    await actor.end();
+    // Native temporary membership drift while retired is reversed; historical
+    // authorization still cannot reappear when LOGIN is restored.
+    await cluster.query("GRANT "+esc(lab.runtimeRole)+" TO "+esc(lab.author));
+    try{await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();}
+    finally{await cluster.query("REVOKE "+esc(lab.runtimeRole)+" FROM "+esc(lab.author));}
+    const principal=replacePrincipal?"individual:replacement_"+lab.author:ticket.principal;
+    const outcomes=await Promise.allSettled([
+      completeDisposableIdentity(lab.dbAdmin,cluster,ticket,principal),
+      completeDisposableIdentity(lab.dbAdmin,cluster,ticket,principal)]);
+    expect(outcomes.filter(result=>result.status==="fulfilled")).toHaveLength(1);
+    const success=outcomes.find(result=>result.status==="fulfilled");
+    expect(success?.value).not.toBe(ticket.oldInstance);
+    await expect(completeDisposableIdentity(lab.dbAdmin,cluster,ticket)).rejects.toThrow();
+    await expect(executeP06(lab.operator,stale,new ExperimentalD1Budget())).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(await hasWebsite(lab)).toBe(false);expect(await contentChecksum(lab)).toBe(checksum);
+    const previous=(await lab.dbAdmin.query<{author_principal_id:string;author_login:string}>("SELECT author_principal_id,author_login FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",[lab.installationId,lab.plan.digest])).rows[0]!;
+    expect(previous).toEqual({author_principal_id:ticket.principal,author_login:lab.author});
+    let candidate=lab;
+    if(replacePrincipal){
+      const newAuthor=await connect(lab.name,lab.author);
+      try{
+        await expect(newAuthor.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501",message:"content scope unavailable"});
+        // New, semantically different canonical optional scalar addition:
+        // not a digest manipulation or historical re-authorship.
+        const scope={applicationId,installationId:lab.installationId};
+        const next=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+          {id:"name",type:"text",required:true},{id:"phone",type:"text",required:false}]}],scope);
+        const plan=planSchemaChanges(lab.current,next,{scope,expectedCurrentDigest:lab.current.digest});
+        expect(plan.digest).not.toBe(lab.plan.digest);
+        await newAuthor.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(lab.current),JSON.stringify(plan)]);
+        const registered=(await lab.dbAdmin.query("SELECT author_principal_id,author_login FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",[lab.installationId,plan.digest])).rows;
+        expect(registered).toEqual([{author_principal_id:principal,author_login:lab.author}]);
+        candidate={...lab,plan};
+      }finally{await newAuthor.end();}
+    }
+    const fresh=await freshP06(candidate);
+    expect(fresh.submissionId).not.toBe(stale.submissionId);
+    expect(fresh.approvalId).not.toBe(stale.approvalId);
+    expect(fresh.operationId).not.toBe(stale.operationId);
+    expect((await executeP06(lab.operator,fresh,new ExperimentalD1Budget())).status).toBe("APPLIED");
+    const field=replacePrincipal?"phone":"website";
+    expect((await lab.dbAdmin.query("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2",[lab.table,field])).rows).toEqual([{column_name:field}]);
+    expect((await lab.dbAdmin.query("SELECT author_principal_id,author_login FROM public.platform_schema_plans WHERE installation_id=$1 AND plan_digest=$2",[lab.installationId,lab.plan.digest])).rows).toEqual([previous]);
+    expect(await contentChecksum(lab)).toBe(checksum);
+  }finally{await actor.end().catch(()=>undefined);}
+},30000);
+
+
+it("P06-E2E-49: rollback before historical journal observation is not operation rollback proof",async()=>{
+  const lab=await createLab("cs");labs.push(lab);await p06Install(lab);
+  const valid=await freshP06(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-unobserved-history-"));
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+    await expect(a.execute(urlFor(lab.name,lab.operatorRole),{...valid,approvalId:randomUUID()},epochKeys.publicKey)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:valid.operationId,outcome:"UNCERTAIN"}]});
+    expect(await hasWebsite(lab)).toBe(false);
+  }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+
+it.each([["P06-E2E-51","cv","DROP"],["P06-E2E-52","cw","STALL"]] as const)("%s: combined target contention, synchronous storage delay and COMMIT %s (%s)",async(_name,key,fault)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-combined-fault-")),anchor=testAnchor(dir);
+  const adapter:ExperimentalRecoveryAnchor={read:()=>anchor.read(),compareAndSet:(p,n)=>{
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);
+    anchor.compareAndSet(p,n);
+  }};
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,adapter,recoveryAdminKeys.publicKey);
+  const blocker=await connect(lab.name),proxy=await startStatementAckFaultProxy("COMMIT",fault,()=>{Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,25);});
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  let operation:Promise<unknown>|undefined;
+  try{
+    const sentinel=(await lab.operator.query<{pid:number}>("SELECT pg_backend_pid() AS pid")).rows[0]!;
+    await blocker.query("BEGIN");
+    await blocker.query('LOCK TABLE ONLY "public".'+blocker.escapeIdentifier(lab.table)+" IN ACCESS EXCLUSIVE MODE");
+    const budget=new ExperimentalD1Budget(undefined,true);
+    operation=a.execute(url.toString(),request,epochKeys.publicKey,budget);
+    void operation.catch(()=>undefined);
+    let observed=false;
+    for(let index=0;index<120;index++){
+      const row=(await lab.dbAdmin.query<{waiting:boolean}>("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=$1 AND usename=$2 AND $3::int=ANY(pg_blocking_pids(pid))) AS waiting",[lab.name,lab.operatorRole,blocker.processID])).rows[0];
+      if(row?.waiting){observed=true;break;}
+      await new Promise(resolve=>setTimeout(resolve,10));
+    }
+    expect(observed).toBe(true);
+    await blocker.query("COMMIT");
+    await proxy.serverCommitObserved;
+    await expect(operation).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    expect((await lab.operator.query("SELECT pg_backend_pid() AS pid")).rows).toEqual([sentinel]);
+    expect(await hasWebsite(lab)).toBe(true);expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+    console.info("D1_COMBINED_FAULT "+JSON.stringify({fault,n:1,elapsedMs:2517-budget.remainingMs(),stages:budget.measurements(),margin:"NOT_DETERMINABLE"}));
+  }finally{await blocker.query("ROLLBACK").catch(()=>undefined);await operation?.catch(()=>undefined);await blocker.end();await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+// Catalog-derived finite supported surface. This is evidence, not a universal
+// deadlock-freedom statement or an authorization policy for native cluster DDL.
+async function disposableWriterInventory(lab:Lab){
+  const principals=[lab.author,lab.approver,lab.runtimeRole,lab.operatorRole];
+  const relations=(await lab.dbAdmin.query<{role:string;relation:string;insert:boolean;update:boolean;delete:boolean;truncate:boolean;columnupdate:boolean;references:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,has_table_privilege(r.oid,c.oid,'INSERT') AS insert,has_table_privilege(r.oid,c.oid,'UPDATE') AS update,"+
+    "has_table_privilege(r.oid,c.oid,'DELETE') AS delete,has_table_privilege(r.oid,c.oid,'TRUNCATE') AS truncate,has_any_column_privilege(r.oid,c.oid,'UPDATE') AS columnupdate,"+
+    "has_any_column_privilege(r.oid,c.oid,'REFERENCES') AS references FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN pg_roles r "+
+    "WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation",[principals])).rows;
+  const functions=(await lab.dbAdmin.query<{role:string;routine:string;definer:boolean;executable:boolean}>(
+    "SELECT r.rolname AS role,p.proname AS routine,p.prosecdef AS definer,(has_schema_privilege(r.oid,n.oid,'USAGE') AND has_function_privilege(r.oid,p.oid,'EXECUTE')) AS executable "+
+    "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace CROSS JOIN pg_roles r WHERE n.nspname='public' AND (p.proname LIKE 'platform_schema_%' OR p.proname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,routine,p.oid",[principals])).rows;
+  const memberships=(await lab.dbAdmin.query("SELECT roleid::text,member::text,admin_option,inherit_option,set_option FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1::name[])) OR roleid IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1::name[])) ORDER BY roleid,member,grantor",[principals])).rows;
+  const foreignKeys=(await lab.dbAdmin.query("SELECT c.conname,c.conrelid::regclass::text AS source,c.confrelid::regclass::text AS target FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid JOIN pg_namespace n ON n.oid=r.relnamespace WHERE c.contype='f' AND n.nspname='public' AND (r.relname LIKE 'platform_schema_%' OR r.relname LIKE 's03_%') ORDER BY source,c.conname")).rows;
+  return {relations,functions,memberships,foreignKeys};
+}
+
+it("P06-E2E-53: catalog writer inventory and explicit mixed relation/advisory transaction denial",async()=>{
+  const lab=await createLab("cx");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const inventory=await disposableWriterInventory(lab);
+  expect(inventory.relations.length).toBeGreaterThan(0);expect(inventory.foreignKeys.length).toBeGreaterThan(0);
+  expect(inventory.memberships).toEqual([]);
+  const ordinary=inventory.relations.filter(row=>row.role!==lab.operatorRole);
+  expect(ordinary.filter(row=>row.insert||row.update||row.delete||row.truncate||row.columnupdate||row.references)).toEqual([]);
+  expect(inventory.functions.filter(row=>[lab.runtimeRole,lab.operatorRole].includes(row.role)&&row.definer&&row.executable)).toEqual([]);
+  expect(inventory.functions.filter(row=>row.role===lab.author&&row.definer&&row.executable).map(row=>row.routine).sort()).toEqual(["platform_schema_submit_plan","s03_p06_submit"]);
+  const author=await connect(lab.name,lab.author);
+  try{
+    await author.query("BEGIN");
+    await author.query("SELECT pg_advisory_xact_lock(92731,1)");
+    await author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest]);
+    const locks=(await lab.dbAdmin.query<{locktype:string;mode:string}>("SELECT locktype,mode FROM pg_locks WHERE pid=$1 AND granted",[author.processID])).rows;
+    expect(locks.some(row=>row.locktype==="advisory")).toBe(true);
+    expect(locks.some(row=>row.locktype==="relation"&&row.mode==="RowShareLock")).toBe(true);
+    await expect(author.query("SELECT public.s03_p06_submit($1,$2)",[lab.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await author.query("ROLLBACK");
+    expect(await contentChecksum(lab)).toBe(checksum);
+    expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+    console.info("L1_WRITER_INVENTORY "+JSON.stringify({relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length,scope:"supported-disposable-writers"}));
+  }finally{await author.query("ROLLBACK").catch(()=>undefined);await author.end();}
+},30000);
+
+// Only the dedicated owned-service workflow selects this definition. It is not
+// discovered on shared infrastructure or the ordinary monorepo full CI.
+if(process.env.M03_S03_OWNED_RESTART==="I_CONFIRM_OWNED_SERVICE"&&process.env.GITHUB_ACTIONS==="true"){
+  it("P06-RESTART-01: real post-COMMIT process death, authenticated takeover and PostgreSQL restart preserve pending and committed history",async()=>{
+    let lab=await createLab("cy");labs.push(lab);await p06Install(lab);
+    const first=await freshP06(lab),stale=await freshP06(lab);
+    const root=mkdtempSync(path.join(tmpdir(),"s03-process-restart-")),directory=path.join(root,"ledger"),anchorDirectory=path.join(root,"anchor");
+    mkdirSync(directory);mkdirSync(anchorDirectory);
+    const anchorKeys=generateKeyPairSync("ed25519"),anchor=new FileExperimentalRecoveryAnchor(anchorDirectory,anchorKeys.privateKey);
+    for(const [name,key] of [["ledger-key.pem",epochKeys.privateKey],["anchor-key.pem",anchorKeys.privateKey]] as const)
+      writeFileSync(path.join(root,name),key.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+    writeFileSync(path.join(root,"admin-key.pem"),recoveryAdminKeys.publicKey.export({type:"spki",format:"pem"}),{mode:0o600});
+    let a=DisposableDurableRecoveryAuthority.initialize(directory,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+    try{
+      expect((await a.execute(urlFor(lab.name,lab.operatorRole),first,epochKeys.publicKey)).status).toBe("APPLIED");
+      const scope={applicationId,installationId:lab.installationId},current=lab.plan.proposedManifest;
+      const ir=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+        {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+      const plan=planSchemaChanges(current,ir,{scope,expectedCurrentDigest:current.digest});
+      const author=await connect(lab.name,lab.author);
+      try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(current),JSON.stringify(plan)]);}finally{await author.end();}
+      const second=await freshP06({...lab,current,plan});
+      writeFileSync(path.join(root,"request.json"),JSON.stringify(second),{mode:0o600});
+      a.close();
+      const child=spawnSync(process.execPath,["--import","tsx","scripts/platform/m03-s03-fault/crash-authority.ts",root,"BEFORE_OUTCOME_WRITE"],{env:{...process.env,NODE_ENV:"test",M03_S03_DISPOSABLE_CONFIRM:"I_CONFIRM_DISPOSABLE",M03_S03_FAULT_DATABASE_URL:urlFor(lab.name,lab.operatorRole)},timeout:20000});
+      expect(child.signal).toBe("SIGKILL");
+      expect(DisposableDurableRecoveryAuthority.inspectOffline(directory,anchor)).toMatchObject({disposition:"MATCHED",pending:false,unresolved:1});
+      expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations ORDER BY completed_at")).rows).toEqual([{operation_id:first.operationId},{operation_id:second.operationId}]);
+      const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
+      const signature=sign(null,recoveryAdministrationMessage(view,"OFFLINE_TAKEOVER",payload),recoveryAdminKeys.privateKey).toString("base64url");
+      a=DisposableDurableRecoveryAuthority.takeoverMatchedPending(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey,{...payload,signature});
+      expect(a.snapshot().pending).toBe(true);expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","UNCERTAIN"]);
+      const history=a.snapshot().operations,acl=await disposableWriterInventory(lab);
+      const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+cluster.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+      const dataDigests={[lab.table]:createHash("sha256").update(JSON.stringify(data.map(row=>row.value))).digest("hex")};
+      const before=(await cluster.query<{started:string}>("SELECT pg_postmaster_start_time()::text AS started")).rows[0]!.started;
+      a.close();
+      for(const existing of labs)await Promise.allSettled([existing.operator.end(),existing.runtime.end(),existing.dbAdmin.end()]);
+      await cluster.end();
+      const restart=spawnSync("docker",["compose","-f","compose.dev.yml","restart","postgres"],{timeout:30000});expect(restart.status).toBe(0);
+      const up=spawnSync("docker",["compose","-f","compose.dev.yml","up","-d","--wait","postgres"],{timeout:30000});expect(up.status).toBe(0);
+      cluster=await connect("vibress");
+      expect((await cluster.query<{started:string}>("SELECT pg_postmaster_start_time()::text AS started")).rows[0]!.started).not.toBe(before);
+      lab={...lab,dbAdmin:await connect(lab.name),operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.findIndex(x=>x.name===lab.name)]=lab;
+      a=DisposableDurableRecoveryAuthority.open(directory,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().operations).toEqual(history);expect(a.snapshot().pending).toBe(true);
+      expect(await disposableWriterInventory(lab)).toEqual(acl);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+      await Promise.all([lab.operator.end(),lab.runtime.end()]);
+      await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+      try{
+        const evidence=await collectDisposableRecoveryReadiness(lab.dbAdmin,{installationId:lab.installationId,databaseName:lab.name,epoch:a.snapshot().epoch,manifestDigest:plan.proposedManifest.digest,dataDigests});
+        expect(evidence.journal).toHaveLength(2);
+        const signed=attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",{operationId:second.operationId,evidence});
+        a.resolveObservedCommit(second.operationId,evidence,signed);
+        expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+        expect(a.snapshot().pending).toBe(true); // activation is a separate verified epoch transition
+      }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+      console.info("P06_POSTCOMMIT_CRASH_RESTART=PASS");
+    }finally{a.close();rmSync(root,{recursive:true,force:true});}
+  },120000);
+}
+
+
+it.each([["P06-E2E-54","cz","ROLLBACK"],["P06-E2E-55","da","COMMIT"]] as const)("%s: real xid8 witness and fenced physical outcome control (%s, %s)",async(_name,key,command)=>{
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  if(command==="ROLLBACK"){
+    const approver=await connect(lab.name,lab.approver);
+    try{await approver.query("SELECT public.s03_p06_revoke($1::uuid)",[request.approvalId]);}finally{await approver.end();}
+  }
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-xid-rollback-")),anchor=testAnchor(dir);
+  let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,anchor,recoveryAdminKeys.publicKey);
+  const proxy=await startStatementAckFaultProxy(command,"DROP");
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  const esc=cluster.escapeIdentifier(lab.name);
+  let fenced=false;
+  try{
+    await expect(a.execute(url.toString(),request,epochKeys.publicKey,new ExperimentalD1Budget(),true)).rejects.toMatchObject({code:"INDETERMINATE"});
+    await proxy.serverCommitObserved;
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    a.close();a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+    const witness=a.snapshot().operations[0]?.rollbackWitness;
+    if(!witness)throw Error("durable xid8 witness missing");
+    expect(witness.previousDigest).toBe(lab.current.digest);
+    const scope={installationId:lab.installationId,databaseName:lab.name,epoch:a.snapshot().epoch};
+    const generic={operationId:request.operationId,outcome:"ROLLED_BACK",evidenceDigest:"a".repeat(64),newDigest:undefined};
+    expect(()=>a.resolve(request.operationId,"ROLLED_BACK",generic.evidenceDigest,undefined,attestRecovery(a,"RESOLVE",generic))).toThrow();
+    await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+    await Promise.all([lab.operator.end(),lab.runtime.end()]);
+    await cluster.query("ALTER DATABASE "+esc+" ALLOW_CONNECTIONS false");fenced=true;
+    const tx=(await lab.dbAdmin.query<{status:string|null}>("SELECT pg_xact_status($1::xid8) AS status",[witness.xid])).rows[0]!;
+    expect(tx.status).toBe(command==="ROLLBACK"?"aborted":"committed");
+    if(command==="COMMIT"){
+      await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness)).rejects.toMatchObject({code:"INDETERMINATE"});
+      expect(a.snapshot().operations[0]?.outcome).toBe("UNCERTAIN");
+      return;
+    }
+    await expect(collectDisposableRollbackEvidence(lab.dbAdmin,scope,{...witness,postmasterStart:"0.0"})).rejects.toMatchObject({code:"INDETERMINATE"});
+    const evidence=await collectDisposableRollbackEvidence(lab.dbAdmin,scope,witness);
+    const payload={operationId:request.operationId,evidence};
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,"A".repeat(86))).rejects.toThrow();
+    const forged={...evidence,readinessEvidenceDigest:"f".repeat(64)};
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,forged,attestRecovery(a,"RESOLVE_OBSERVED_ROLLBACK",{operationId:request.operationId,evidence:forged}))).rejects.toThrow();
+    const signature=attestRecovery(a,"RESOLVE_OBSERVED_ROLLBACK",payload);
+    // A signed assertion cannot replace actual data equivalence. Mutate only
+    // this owned disposable fixture, then restore its exact original rows.
+    const seed=(await lab.dbAdmin.query<{name:string}>('SELECT name FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" ORDER BY name")).rows;
+    await lab.dbAdmin.query('UPDATE "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" SET name='unexpected'");
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature)).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+    await lab.dbAdmin.query('TRUNCATE "public".'+lab.dbAdmin.escapeIdentifier(lab.table));
+    for(const row of seed)await lab.dbAdmin.query('INSERT INTO "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+" (name) VALUES ($1)",[row.name]);
+    expect(await contentChecksum(lab)).toBe(checksum);
+    await a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature);
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"ROLLED_BACK"}]});
+    await expect(a.resolveObservedRollback(lab.dbAdmin,request.operationId,evidence,signature)).rejects.toThrow();
+    expect(await hasWebsite(lab)).toBe(false);
+    expect(await contentChecksum(lab)).toBe(checksum);
+  }finally{
+    if(fenced)await cluster.query("ALTER DATABASE "+esc+" ALLOW_CONNECTIONS true");
+    await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});
+  }
+},30000);
+
+
+
+// Dedicated opt-in physical cluster replacement. The ordinary logical recovery
+// suite is unchanged; only the isolated workflow may run this cluster-wide test.
+describe.skipIf(process.env.M03_PHYSICAL_COMPONENT !== "1")("PHY-M03 actual component recovery", () => {
+  it.each([
+    ["PHY-M03-01", "cq", "committed"],
+    ["PHY-M03-02", "cu", "rewound"],
+    ["PHY-M03-03", "cz", "lost-ack"],
+    ["PHY-M03-07", "da", "corrupt-input"],
+  ] as const)("%s: actual component physical WAL recovery (%s, %s)", async (scenario, key, mode) => {
+    const container=process.env.M03_PHYSICAL_CONTAINER;
+    if(container!=="vibress-m03-physical-ci" || process.env.GITHUB_ACTIONS!=="true") throw Error("dedicated CI container required");
+    const physical=(...args:string[])=>{
+      const x=spawnSync("bash",["tests/fixtures/m03-actual-physical-cluster.sh",...args],{encoding:"utf8",timeout:120000});
+      if(x.status!==0)throw Error("physical helper failed ["+args[0]+"]: "+x.stdout+" "+x.stderr);
+      console.info(x.stdout.trim());
+    };
+    const start=performance.now();
+    const lab=await createLab(key);labs.push(lab);await p06Install(lab);
+    const request=await freshP06(lab),stale=await freshP06(lab);
+    const dir=mkdtempSync(path.join(tmpdir(),"s03-actual-physical-")),anchorDir=path.join(dir,"separate-anchor");
+    mkdirSync(anchorDir);
+    const anchorKeys=generateKeyPairSync("ed25519"),anchor=new FileExperimentalRecoveryAnchor(anchorDir,anchorKeys.privateKey);
+    const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+    let a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+    for(const [name,key] of [["ledger-key.pem",epochKeys.privateKey],["anchor-key.pem",anchorKeys.privateKey]] as const)
+      writeFileSync(path.join(dir,name),key.export({type:"pkcs8",format:"pem"}),{mode:0o600});
+    writeFileSync(path.join(dir,"admin-key.pem"),recoveryAdminKeys.publicKey.export({type:"spki",format:"pem"}),{mode:0o600});
+    const child=(mode:"CLEAN"|"CRASH")=>{
+      const c=spawnSync(process.execPath,["--import","tsx","scripts/platform/m03-s03-fault/reopen-authority.ts",dir,mode],{env:{...process.env,NODE_ENV:"test"},encoding:"utf8",timeout:20000});
+      if(mode==="CRASH")expect(c.signal).toBe("SIGKILL");
+      else{expect(c.status,c.stderr).toBe(0);return JSON.parse(c.stdout.trim()) as ReturnType<typeof a.snapshot>;}
+    };
+    const reopen=()=>{
+      const expected=a.snapshot();a.close();
+      expect(child("CLEAN")).toEqual(expected);
+      a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot()).toEqual(expected);
+    };
+    const esc=(v:string)=>cluster.escapeIdentifier(v);
+    const ledgerFile=path.join(dir,"authority.jsonl"),anchorFile=path.join(anchorDir,"head.json");
+    const oldLedger=readFileSync(ledgerFile),oldAnchor=readFileSync(anchorFile);
+    const elapsed:Record<string,number>={};
+    let stage=performance.now();
+    const mark=(name:string)=>{elapsed[name]=Number((performance.now()-stage).toFixed(2));stage=performance.now();};
+    const migrationDigest=async()=>createHash("sha256").update(JSON.stringify((await cluster.query("SELECT to_jsonb(t)::text AS value FROM drizzle.__drizzle_migrations t ORDER BY id")).rows)).digest("hex");
+    const state=async(db:Client)=>{
+      const entries:Record<string,unknown>={};
+      for(const table of ["platform_schema_registry","platform_schema_plans","platform_schema_trusted_actors","s03_p06_actor_enrollments","s03_p06_submissions","s03_p06_approvals","s03_p06_revocations","s03_p06_completed_operations","s03_p06_recovery_epochs",lab.table]){
+        entries[table]=(await db.query("SELECT to_jsonb(t)::text AS value FROM public."+db.escapeIdentifier(table)+" t ORDER BY value")).rows;
+      }
+      entries.roles=(await db.query("SELECT oid,rolname,rolsuper,rolbypassrls,rolcanlogin FROM pg_roles WHERE rolname=ANY($1) ORDER BY rolname",[[lab.author,lab.approver,lab.operatorRole,lab.runtimeRole]])).rows;
+      entries.members=(await db.query("SELECT roleid,member,grantor,admin_option,inherit_option,set_option FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname=ANY($1)) ORDER BY roleid,member,grantor",[[lab.author,lab.approver,lab.operatorRole,lab.runtimeRole]])).rows;
+      entries.catalog=(await db.query("SELECT c.oid,c.relacl::text,c.relowner,c.relrowsecurity,c.relforcerowsecurity,a.attname,a.atttypid,a.attnotnull,a.attacl::text FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid WHERE n.nspname='public' AND c.relname=$1 AND a.attnum>0 AND NOT a.attisdropped ORDER BY a.attnum",[lab.table])).rows;
+      entries.identity=(await db.query("SELECT (pg_control_system()).system_identifier::text AS system_id,oid::text AS database_oid FROM pg_database WHERE datname=current_database()")).rows;
+      return createHash("sha256").update(JSON.stringify(entries)).digest("hex");
+    };
+    const data=async(db:Client)=>{
+      const rows=(await db.query<{value:string}>("SELECT to_jsonb(t)::text AS value FROM public."+db.escapeIdentifier(lab.table)+" t ORDER BY value")).rows;
+      return {[lab.table]:createHash("sha256").update(JSON.stringify(rows.map(row=>row.value))).digest("hex")};
+    };
+    try{
+      const initial=await state(lab.dbAdmin),initialData=await data(lab.dbAdmin),initialMigrations=await migrationDigest();
+      const primaryIdentity=(await lab.dbAdmin.query<{systemIdentifier:string;databaseOid:string;timeline:number}>('SELECT (pg_control_system()).system_identifier::text AS "systemIdentifier",oid::text AS "databaseOid",(pg_control_checkpoint()).timeline_id AS timeline FROM pg_database WHERE datname=current_database()')).rows[0]!;
+      const setTarget=async()=>(await lab.dbAdmin.query<{segment:string}>("SELECT pg_walfile_name(pg_create_restore_point('vibress_component_target')) AS segment")).rows[0]!.segment;
+      let segment:string|undefined;
+      mark("baseline");
+      physical("backup");
+      mark("backup_and_verify");
+      // Generate a real record before forcing a segment switch. A no-op
+      // pg_switch_wal on an empty current segment is not sufficient.
+      await lab.dbAdmin.query("SELECT pg_create_restore_point('vibress_component_padding')");
+      await lab.dbAdmin.query("SELECT pg_switch_wal()");
+      if(mode==="rewound")segment=await setTarget();
+      if(mode==="lost-ack"){
+        const proxy=await startStatementAckFaultProxy("COMMIT","DROP");
+        void proxy.serverCommitObserved.catch(()=>undefined);
+        const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+        try{
+          await expect(a.execute(url.toString(),request,epochKeys.publicKey)).rejects.toMatchObject({code:"INDETERMINATE"});
+          await proxy.serverCommitObserved;
+          expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"UNCERTAIN"}]});
+        }finally{await proxy.close();}
+      }else{
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),request,epochKeys.publicKey)).status).toBe("APPLIED");
+      }
+      reopen();
+      const committed=await state(lab.dbAdmin),committedData=await data(lab.dbAdmin);
+      expect(committed).not.toBe(initial);
+      if(mode!=="rewound")segment=await setTarget();
+      if(!segment)throw Error("named target WAL identity missing");
+      // Archive the exact segment containing the named restore record.
+      // Do not infer it from a later insert LSN.
+      await lab.dbAdmin.query("SELECT pg_switch_wal()");
+      physical("archive",segment);
+      if(!a.snapshot().pending)a.beginRecovery();
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+      const authorityBefore=a.snapshot();
+      const retainedLedger=readFileSync(ledgerFile),retainedAnchor=readFileSync(anchorFile);
+      // Only detached copies are rewound. Never touch the retained live authority.
+      for(const [label,ledger,head] of [["ledger-only",oldLedger,retainedAnchor],["anchor-only",retainedLedger,oldAnchor]] as const){
+        const copy=path.join(dir,"copy-"+label),copyAnchor=path.join(copy,"anchor");
+        mkdirSync(copy);mkdirSync(copyAnchor);
+        writeFileSync(path.join(copy,"authority.jsonl"),ledger,{mode:0o600});
+        writeFileSync(path.join(copyAnchor,"head.json"),head,{mode:0o600});
+        const adapter=new FileExperimentalRecoveryAnchor(copyAnchor,anchorKeys.privateKey);
+        expect(DisposableDurableRecoveryAuthority.classifyOffline(copy,adapter).disposition).not.toBe("MATCHED");
+        expect(()=>DisposableDurableRecoveryAuthority.open(copy,epochKeys.privateKey,adapter,recoveryAdminKeys.publicKey)).toThrow();
+      }
+      await expect(a.proofAuthority(epochKeys.publicKey).prove("other-installation",lab.name,new ExperimentalD1Budget())).rejects.toThrow();
+      expect(a.snapshot()).toEqual(authorityBefore);
+      mark("authority_fence_and_mismatch_controls");
+      for(const l of labs) await Promise.allSettled([l.operator.end(),l.runtime.end(),l.dbAdmin.end()]);
+      await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+      const q=(await cluster.query("SELECT d.oid,d.datallowconn,(SELECT count(*)::int FROM pg_stat_activity s WHERE s.datid=d.oid) AS sessions,(SELECT count(*)::int FROM pg_prepared_xacts p WHERE p.database=d.datname) AS prepared FROM pg_database d WHERE d.datname=$1",[lab.name])).rows[0];
+      expect(q).toMatchObject({datallowconn:false,sessions:0,prepared:0});
+      expect((await cluster.query("SELECT count(*)::int AS n FROM pg_prepared_xacts")).rows).toEqual([{n:0}]);
+      expect((await cluster.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE backend_type='client backend' AND pid<>pg_backend_pid()")).rows).toEqual([{n:0}]);
+      await cluster.end();
+      mark("original_cluster_quiescence");
+      a.close();
+      const crash=mode==="committed";
+      if(crash)child("CRASH");else expect(child("CLEAN")).toEqual(authorityBefore);
+      if(mode==="corrupt-input")physical("invalid-backup");
+      physical("restore",mode==="corrupt-input"?segment:"");
+      if(crash){
+        const view=DisposableDurableRecoveryAuthority.inspectOfflineTakeover(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+        const payload={nonce:randomUUID(),writerDigest:view.writerDigest};
+        a=DisposableDurableRecoveryAuthority.takeoverMatchedPending(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey,{...payload,signature:sign(null,recoveryAdministrationMessage(view,"OFFLINE_TAKEOVER",payload),recoveryAdminKeys.privateKey).toString("base64url")});
+      }else a=DisposableDurableRecoveryAuthority.open(dir,epochKeys.privateKey,anchor,recoveryAdminKeys.publicKey);
+      expect(a.snapshot().operations).toEqual(authorityBefore.operations);
+      expect(a.snapshot().pending).toBe(true);
+      await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+      mark("physical_restore");
+      cluster=await connect("vibress");
+      expect(await migrationDigest()).toBe(initialMigrations);
+      const dbAdmin=await connect(lab.name);
+      const restored={...lab,dbAdmin,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole)};
+      labs[labs.indexOf(lab)]=restored;
+      expect(a.snapshot().epoch).toBe(authorityBefore.epoch);
+      const restoredState=await state(dbAdmin);
+      mark("database_and_registry_verification");
+      expect(restoredState).toBe(mode==="rewound"?initial:committed);
+      expect(await hasWebsite(restored)).toBe(mode!=="rewound");
+      const dataDigests=mode==="rewound"?initialData:committedData;
+      const manifestDigest=mode==="rewound"?lab.current.digest:lab.plan.proposedManifest.digest;
+      await Promise.all([restored.operator.end(),restored.runtime.end()]);
+      await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS false");
+      try{
+        const observation={installationId:lab.installationId,databaseName:lab.name,epoch,manifestDigest,dataDigests};
+        const evidence=await collectDisposableRecoveryReadiness(dbAdmin,observation);
+        expect(evidence.journal).toHaveLength(mode==="rewound"?0:1);
+        if(mode==="lost-ack"){
+          expect(a.snapshot().operations[0]?.outcome).toBe("UNCERTAIN");
+          const payload={operationId:request.operationId,evidence};
+          expect(()=>a.resolveObservedCommit(request.operationId,evidence,"A".repeat(86))).toThrow();
+          const wrong={...evidence,installationId:"other-installation"};
+          expect(()=>a.resolveObservedCommit(request.operationId,wrong,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",{operationId:request.operationId,evidence:wrong}))).toThrow();
+          a.resolveObservedCommit(request.operationId,evidence,attestRecovery(a,"RESOLVE_OBSERVED_COMMIT",payload));
+          expect(a.snapshot().operations[0]?.outcome).toBe("COMMITTED");
+        }
+        mark("journal_and_authority_reconciliation");
+        const nextEpoch=randomUUID(),quiescenceEvidenceDigest=createHash("sha256").update(JSON.stringify(q)).digest("hex");
+        expect(()=>a.advance(nextEpoch,quiescenceEvidenceDigest,"A".repeat(86))).toThrow();
+        // Same physical cluster/database, new timeline after promotion.
+        // Expected identity comes from the retained pre-restore observation.
+        const target={version:2 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,...primaryIdentity,timeline:primaryIdentity.timeline+1,manifestDigest,dataDigests};
+        const advance={epoch:nextEpoch,quiescenceEvidenceDigest,target};
+        const wrongTarget={...target,installationId:"other-installation"};
+        expect(()=>a.advanceScoped(nextEpoch,quiescenceEvidenceDigest,wrongTarget,attestRecovery(a,"ADVANCE_V2",{...advance,target:wrongTarget}))).toThrow();
+        a.advanceScoped(nextEpoch,quiescenceEvidenceDigest,target,attestRecovery(a,"ADVANCE_V2",advance));
+        reopen();
+        const nextObservation={...observation,epoch:nextEpoch};
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+        await dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[nextEpoch]);
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,nextObservation)).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        const actors=(await dbAdmin.query<{login_name:string;principal_id:string;actor_kind:string;actor_instance_id:string}>("SELECT login_name,principal_id,actor_kind,actor_instance_id FROM public.platform_schema_trusted_actors ORDER BY login_name")).rows;
+        for(const actor of actors){
+          const replacement=(await dbAdmin.query<{id:string}>("SELECT public.s03_p06_root_replace($1,$2,$3,$4) AS id",[lab.installationId,actor.login_name,actor.principal_id,actor.actor_kind])).rows[0]!;
+          expect(replacement.id).not.toBe(actor.actor_instance_id);
+        }
+        await expect(collectDisposableRecoveryReadiness(dbAdmin,{...nextObservation,dataDigests:{[lab.table]:"f".repeat(64)}})).rejects.toMatchObject({code:"CATALOG_DRIFT"});
+        const ready=await collectDisposableRecoveryReadiness(dbAdmin,nextObservation);
+        mark("epoch_and_actor_reenrollment");
+        const wrongEpoch={...ready,epoch};
+        expect(()=>a.activate(wrongEpoch,attestRecovery(a,"READY",wrongEpoch))).toThrow();
+        const scoped=await a.scopedReadiness(dbAdmin);
+        const sig=attestRecovery(a,"READY_V2",scoped);
+        if(scoped.observed.journal.length){const missing={...scoped,observed:{...scoped.observed,journal:[]}};await expect(a.activateScoped(dbAdmin,missing,attestRecovery(a,"READY_V2",missing))).rejects.toThrow();}
+        expect(()=>a.activate(ready,attestRecovery(a,"READY",ready))).toThrow();
+        await expect(a.activateScoped(dbAdmin,scoped,"A".repeat(86))).rejects.toThrow();
+        for(const bad of [
+          {...scoped,context:{...scoped.context,version:1 as 2}},
+          {...scoped,context:{...scoped.context,intent:randomUUID()}},
+          {...scoped,context:{...scoped.context,head:"f".repeat(64)}},
+          {...scoped,observed:{...scoped.observed,epoch}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,applicationId:"wrong-app"}}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,installationId:"wrong-installation"}}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,databaseName:"vibress_s03_wrong"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,databaseOid:"99999"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,systemIdentifier:"99999"}}},
+          {...scoped,observed:{...scoped.observed,physical:{...scoped.observed.physical,timeline:99}}},
+          {...scoped,observed:{...scoped.observed,catalogManifestDigest:"f".repeat(64)}},
+          {...scoped,observed:{...scoped.observed,target:{...scoped.observed.target,dataDigests:{[lab.table]:"f".repeat(64)}}}},
+        ])await expect(a.activateScoped(dbAdmin,bad,attestRecovery(a,"READY_V2",bad))).rejects.toThrow();
+        if(mode==="rewound"){
+          await expect(a.activateScoped(dbAdmin,scoped,sig)).rejects.toThrow();
+          expect(a.snapshot()).toMatchObject({pending:true,operations:[{outcome:"COMMITTED"}]});
+          await expect(a.execute(urlFor(lab.name,lab.operatorRole),stale,epochKeys.publicKey)).rejects.toThrow();
+        }else{
+          await a.activateScoped(dbAdmin,scoped,sig);
+          await expect(a.activateScoped(dbAdmin,scoped,sig)).rejects.toThrow();
+          reopen();
+          expect(a.snapshot().pending).toBe(false);
+        }
+      }finally{await cluster.query("ALTER DATABASE "+esc(lab.name)+" ALLOW_CONNECTIONS true");}
+      mark("readiness_activation_or_refusal");
+      const online={...restored,operator:await connect(lab.name,lab.operatorRole),runtime:await connect(lab.name,lab.runtimeRole),current:mode==="rewound"?lab.current:lab.plan.proposedManifest};
+      labs[labs.indexOf(restored)]=online;
+      if(mode!=="rewound"){
+        await expect(executeP06Raw(online.operator,stale,new ExperimentalD1Budget(),a.proofAuthority(epochKeys.publicKey))).rejects.toMatchObject({code:"UNAUTHORIZED"});
+        const scope={applicationId,installationId:lab.installationId};
+        const next=compileResourceSchema([{...scope,id:"catalog",ownership:"application",fields:[
+          {id:"name",type:"text",required:true},{id:"website",type:"text",required:false},{id:"phone",type:"text",required:false}]}],scope);
+        const plan=planSchemaChanges(online.current,next,{scope,expectedCurrentDigest:online.current.digest});
+        const author=await connect(lab.name,lab.author);
+        try{await author.query("SELECT public.platform_schema_submit_plan($1,$2,$3,$4)",[lab.installationId,plan.digest,JSON.stringify(online.current),JSON.stringify(plan)]);}finally{await author.end();}
+        const fresh=await freshP06({...online,plan});
+        expect((await a.execute(urlFor(lab.name,lab.operatorRole),fresh,epochKeys.publicKey)).status).toBe("APPLIED");
+        expect(a.snapshot().operations.map(o=>o.outcome)).toEqual(["COMMITTED","COMMITTED"]);
+        expect(a.snapshot().readyProtocol).toBe(2);
+        const ledgerText=readFileSync(path.join(dir,"authority.jsonl"),"utf8");
+        expect(ledgerText).toContain('"kind":"ADVANCE_V2"');
+        expect(ledgerText).toContain('"kind":"READY_V2"');
+        a.beginRecovery();
+        const downgradeEpoch=randomUUID(),quiescenceEvidenceDigest="c".repeat(64);
+        expect(()=>a.advance(downgradeEpoch,quiescenceEvidenceDigest,attestRecovery(a,"ADVANCE",{epoch:downgradeEpoch,quiescenceEvidenceDigest}))).toThrow();
+        expect(a.snapshot().pending).toBe(true);
+      }
+      mark("fresh_operation_or_pending");
+      console.info(scenario+" ACTUAL_COMPONENT_STAGES_MS="+JSON.stringify(elapsed));
+      console.info(scenario+" ACTUAL_COMPONENT_PITR=PASS total_fixture_ms="+(performance.now()-start).toFixed(2));
+    }finally{a.close();rmSync(dir,{recursive:true,force:true});}
+  },240000);
+});
+
+it("M03-COMPAT-01: actual additive operator preserves old prepared reader and refuses unsupported early reader",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab);
+  const table='"public".'+lab.runtime.escapeIdentifier(lab.table);
+  const query={name:"old_reader_projection",text:"SELECT name FROM "+table+" ORDER BY name"};
+  const old=(await lab.runtime.query(query)).rows;
+  expect(old).toEqual([{name:"Alice"},{name:"Bob"}]);
+  await expect(lab.runtime.query("SELECT name,website FROM "+table)).rejects.toMatchObject({code:"42703"});
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect((await lab.runtime.query(query)).rows).toEqual(old);
+  const restarted=await connect(lab.name,lab.runtimeRole);
+  try{
+    expect((await restarted.query("SELECT name,website FROM "+table+" ORDER BY name")).rows).toEqual([{name:"Alice",website:null},{name:"Bob",website:null}]);
+    await restarted.query("UPDATE "+table+" SET website=$1 WHERE name=$2",["https://example.invalid","Alice"]);
+    expect((await lab.runtime.query(query)).rows).toEqual(old);
+    expect((await restarted.query("SELECT website FROM "+table+" WHERE name=$1",["Alice"])).rows).toEqual([{website:"https://example.invalid"}]);
+    expect((await reconcileP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("ALREADY_APPLIED");
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([{operation_id:request.operationId}]);
+  }finally{await restarted.end();}
+},30000);
+
+it("M03-WRITER-01: actual cross-installation, SET ROLE and routine/column ACL matrix",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const other=await createLab("cz");labs.push(other);await p06Install(other);
+  const request=await freshP06(lab),checksum=await contentChecksum(lab);
+  const roles=[lab.author,lab.approver,lab.runtimeRole,lab.operatorRole];
+  const matrix=(await lab.dbAdmin.query<{subject:string;target:string;can_set:boolean;can_use:boolean}>(
+    "SELECT a.rolname AS subject,b.rolname AS target,pg_has_role(a.oid,b.oid,'SET') AS can_set,pg_has_role(a.oid,b.oid,'USAGE') AS can_use FROM pg_roles a CROSS JOIN pg_roles b WHERE a.rolname=ANY($1::name[]) AND b.rolname=ANY($1::name[]) AND a.oid<>b.oid ORDER BY subject,target",[roles])).rows;
+  expect(matrix).toHaveLength(12);
+  expect(matrix.filter(row=>row.can_set||row.can_use)).toEqual([]);
+  const inventory=await disposableWriterInventory(lab);
+  const columnMatrix=(await lab.dbAdmin.query<{role:string;relation:string;column_name:string;can_update:boolean;can_insert:boolean}>(
+    "SELECT r.rolname AS role,c.relname AS relation,a.attname AS column_name,has_column_privilege(r.oid,c.oid,a.attnum,'UPDATE') AS can_update,has_column_privilege(r.oid,c.oid,a.attnum,'INSERT') AS can_insert FROM pg_roles r CROSS JOIN pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum>0 AND NOT a.attisdropped WHERE n.nspname='public' AND c.relkind='r' AND (c.relname LIKE 'platform_schema_%' OR c.relname LIKE 's03_%') AND r.rolname=ANY($1::name[]) ORDER BY role,relation,column_name",[roles])).rows;
+  expect(columnMatrix.filter(row=>row.role!==lab.operatorRole&&(row.can_update||row.can_insert))).toEqual([]);
+  const authors=await connect(lab.name,lab.author);
+  try{
+    await expect(authors.query("SET ROLE "+authors.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("SELECT public.s03_p06_submit($1,$2)",[other.installationId,lab.plan.digest])).rejects.toMatchObject({code:"42501"});
+    await expect(authors.query("UPDATE public.platform_schema_registry SET manifest_digest=manifest_digest")).rejects.toMatchObject({code:"42501"});
+  }finally{await authors.end();}
+  await expect(lab.runtime.query("SET ROLE "+lab.runtime.escapeIdentifier(lab.operatorRole))).rejects.toMatchObject({code:"42501"});
+  await expect(lab.runtime.query("INSERT INTO public.s03_p06_completed_operations SELECT * FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("UPDATE public.platform_schema_registry SET application_id=application_id")).rejects.toMatchObject({code:"42501"});
+  await expect(lab.operator.query("DELETE FROM public.s03_p06_completed_operations WHERE false")).rejects.toMatchObject({code:"42501"});
+  const foreign=new Client({connectionString:urlFor(other.name,lab.runtimeRole),connectionTimeoutMillis:4000});
+  try{await expect(foreign.connect()).rejects.toMatchObject({code:"42501"});}finally{await foreign.end().catch(()=>undefined);}
+  const signalling=(await lab.dbAdmin.query("SELECT rolname FROM pg_roles WHERE rolname=ANY($1::name[]) AND pg_has_role(oid,'pg_signal_backend','USAGE')",[roles])).rows;
+  expect(signalling).toEqual([]);
+  expect((await lab.dbAdmin.query("SELECT count(*)::int AS n FROM pg_prepared_xacts WHERE database=current_database()")).rows).toEqual([{n:0}]);
+  const routines=(await lab.dbAdmin.query("SELECT p.oid::regprocedure::text AS signature,p.prosecdef,pg_get_userbyid(p.proowner) AS owner FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND (p.proname LIKE 'platform_schema_%' OR p.proname LIKE 's03_%') ORDER BY signature")).rows;
+  expect(routines.length).toBeGreaterThan(0);
+  expect(inventory.functions.filter(row=>[lab.runtimeRole,lab.operatorRole].includes(row.role)&&row.definer&&row.executable)).toEqual([]);
+  expect(await contentChecksum(lab)).toBe(checksum);
+  expect((await executeP06(lab.operator,request,new ExperimentalD1Budget())).status).toBe("APPLIED");
+  expect(await hasWebsite(other)).toBe(false);
+  console.info("M03_WRITER_MATRIX "+JSON.stringify({roleEdges:matrix.length,relationRoleRows:inventory.relations.length,routineRoleRows:inventory.functions.length,routineOwners:routines.length,columnRoleRows:columnMatrix.length,foreignKeys:inventory.foreignKeys.length,membershipRows:inventory.memberships.length}));
+},30000);
+
+
+async function installAdmissionObservationV1(lab:Lab){
+  await lab.dbAdmin.query("BEGIN");
+  try{
+    await lab.dbAdmin.query(readFileSync(path.resolve(process.cwd(),"tests/fixtures/m03-s03-admission-observation-v1.sql"),"utf8"));
+    await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_admission_observation_v1() TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole));
+    await lab.dbAdmin.query("COMMIT");
+  }catch(error){await lab.dbAdmin.query("ROLLBACK");throw error;}
+}
+
+it("M03-ADMISSION-01: authority-local transaction fence through actual TenantUnitOfWork",async()=>{
+  const lab=await createLab("cr");labs.push(lab);await p06Install(lab);await installAdmissionObservationV1(lab);
+  const root=mkdtempSync(path.join(tmpdir(),"s03-business-admission-")),anchor=testAnchor(root);
+  const epoch=labEpochs.get(lab.installationId+":"+lab.name)!;
+  const auth=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,lab.installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+  const pool=new Pool({connectionString:urlFor(lab.name,lab.runtimeRole),max:1});
+  const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
+  const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
+    membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
+  const databaseOid=(await lab.dbAdmin.query<{oid:string}>("SELECT oid::text AS oid FROM pg_database WHERE datname=current_database()")).rows[0]!.oid;
+  const expected={applicationId,installationId:lab.installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(auth,uow,expected,scope,work);
+  const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
+  try{
+    expect(await run(async tx=>(await tx.query("SELECT name FROM "+q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
+    await expect(runExperimentalRecoveryUnit(auth,uow,{...expected,epoch:randomUUID()},scope,async()=>{throw Error("should not admit stale epoch");})).rejects.toThrow();
+    let entered!:()=>void,release!:()=>void;
+    const started=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
+    const active=run(async tx=>{await tx.query("UPDATE "+q+" SET name='uncommitted' WHERE name='Alice'");entered();await hold;});
+    const settled=active.then(()=>false,()=>true);
+    try{
+      await started;
+      await expect(run(async()=>{throw Error("should not admit concurrently");})).rejects.toThrow();
+      auth.beginRecovery();
+      await expect(run(async()=>{throw Error("should not admit pending");})).rejects.toThrow();
+      const next=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+      expect(()=>auth.advance(next,quiescenceEvidenceDigest,attestRecovery(auth,"ADVANCE",{epoch:next,quiescenceEvidenceDigest}))).toThrow();
+    }finally{release();}
+    expect(await settled).toBe(true);
+    expect(await contentChecksum(lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+    expect(auth.snapshot().pending).toBe(true);
+    auth.close();
+    await expect(run(async()=>{throw Error("should not admit offline authority");})).rejects.toThrow();
+    console.info("M03_LOCAL_UOW_ADMISSION=PASS");
+  }finally{auth.close();await pool.end();rmSync(root,{recursive:true,force:true});}
+},30000);
+
+it("M03-REGISTRY-01: signed committed registry provenance, pure physical planning and live catalog drift refusal",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const req=await freshP06(lab),scope={applicationId,installationId:lab.installationId};
+  const target=lab.plan.proposedManifest;
+  const prepared=prepareExperimentalPhysicalTransition(lab.current,target,scope);
+  expect(prepared.disposition).toBe("EXISTING_OPERATOR_AUTHORIZATION_REQUIRED");
+  expect(prepared.ddl?.columnName).toBe("website");
+  expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
+  expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-registry-authority-")),authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+  expect((await authority.execute(urlFor(lab.name,lab.operatorRole),req,epochKeys.publicKey)).status).toBe("APPLIED");
+  const external=authority.authenticatedSnapshot();
+  const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+  const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
+    ledgerId:external.ledgerId,authorityHead:external.head,authoritySequence:external.sequence,operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
+  const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
+  await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await awaitQuiescentLab(cluster,lab.dbAdmin,lab.name);
+  await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+  try{
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
+    expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const stale={...evidence,authorityHead:"f".repeat(64)};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,stale,attest(stale),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const wrong={...evidence,operationId:randomUUID()};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const q='"public".'+lab.dbAdmin.escapeIdentifier(lab.table);
+    await lab.dbAdmin.query("GRANT SELECT ON "+q+" TO PUBLIC");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("REVOKE SELECT ON "+q+" FROM PUBLIC");}
+    await lab.dbAdmin.query("ALTER TABLE "+q+" ADD COLUMN surprise text");
+    try{await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();}
+    finally{await lab.dbAdmin.query("ALTER TABLE "+q+" DROP COLUMN surprise");}
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
+  }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+it("M03-WRITER-02: expected effective authority, grant and ownership drift refusal",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"};
+  const verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify();
+  expect(expected.relationChecks).toBeGreaterThan(0);
+  const checks=[
+    ["GRANT UPDATE(installation_id) ON public.platform_schema_registry TO "+lab.dbAdmin.escapeIdentifier(lab.operatorRole),"REVOKE UPDATE(installation_id) ON public.platform_schema_registry FROM "+lab.dbAdmin.escapeIdentifier(lab.operatorRole)],
+    ["GRANT SELECT ON public.platform_schema_registry TO PUBLIC","REVOKE SELECT ON public.platform_schema_registry FROM PUBLIC"],
+    ["GRANT "+lab.dbAdmin.escapeIdentifier(lab.author)+" TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"REVOKE "+lab.dbAdmin.escapeIdentifier(lab.author)+" FROM "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole)],
+    ["ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO public","ALTER FUNCTION public.s03_p06_submit(text,text) SET search_path TO pg_catalog,pg_temp"],
+    ["ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO PUBLIC","ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM PUBLIC"],
+    ["CREATE FUNCTION public.s03_unreviewed() RETURNS int LANGUAGE sql SET search_path=pg_catalog,pg_temp AS 'SELECT 1'","DROP FUNCTION public.s03_unreviewed()"],
+    ["ALTER TABLE public.s03_p06_revocations OWNER TO "+lab.dbAdmin.escapeIdentifier(lab.runtimeRole),"ALTER TABLE public.s03_p06_revocations OWNER TO vibress"]
+  ];
+  for(const [change,undo] of checks){
+    await lab.dbAdmin.query(change!);
+    try{await expect(verify()).rejects.toThrow();}
+    finally{await lab.dbAdmin.query(undo!);}
+    expect(await verify()).toEqual(expected);
+  }
+  console.info("EXPECTED_WRITER_CONTRACT "+JSON.stringify(expected));
+},30000);
+
+
+it("M03-WATCHDOG-01: one-shot deadline owns only its target; unrelated same-role transaction survives",async()=>{
+  const lab=await createLab("ct");labs.push(lab);await p06Install(lab);
+  const request=await freshP06(lab),dir=mkdtempSync(path.join(tmpdir(),"s03-owned-watchdog-"));
+  const a=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  const proxy=await startTransactionAckFaultProxy("BEGIN","STALL");
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(lab.name,lab.operatorRole));url.port=String(proxy.port);
+  type Backend={pid:number;started:string;db:number;role:string;state:string};
+  const sessions=async()=> (await lab.dbAdmin.query<Backend>("SELECT pid,backend_start::text AS started,datid AS db,usename AS role,state FROM pg_stat_activity WHERE datname=$1 AND usename=$2 ORDER BY pid",[lab.name,lab.operatorRole])).rows;
+  let execution:Promise<unknown>|undefined;
+  try{
+    await lab.operator.query("BEGIN");
+    const sentinel=(await sessions()).find(x=>x.pid===lab.operator.processID)!;
+    expect(sentinel.state).toBe("idle in transaction");
+    const budget=new ExperimentalD1Budget();
+    execution=a.execute(url.toString(),request,epochKeys.publicKey,budget);
+    void execution.catch(()=>undefined);
+    await proxy.serverCommitObserved;
+    const owned=(await sessions()).filter(x=>x.pid!==sentinel.pid);
+    expect(owned).toHaveLength(1);
+    expect(owned[0]).toMatchObject({db:sentinel.db,role:sentinel.role,state:"idle in transaction"});
+    await expect(execution).rejects.toMatchObject({code:"INDETERMINATE"});
+    expect(a.snapshot()).toMatchObject({pending:true,operations:[{operationId:request.operationId,outcome:"UNCERTAIN"}]});
+    let current:Backend[]=[];
+    for(let i=0;i<100;i++){current=await sessions();if(current.length===1)break;await new Promise(resolve=>setTimeout(resolve,10));}
+    expect(current).toEqual([sentinel]);
+    expect((await lab.operator.query("SELECT pg_backend_pid() AS pid")).rows).toEqual([{pid:sentinel.pid}]);
+    await lab.operator.query("ROLLBACK");
+    expect(await hasWebsite(lab)).toBe(false);
+    expect((await lab.dbAdmin.query("SELECT operation_id FROM public.s03_p06_completed_operations")).rows).toEqual([]);
+    expect((await lab.dbAdmin.query("SELECT pg_has_role($1,'pg_signal_backend','USAGE') AS signal",[lab.operatorRole])).rows).toEqual([{signal:false}]);
+    console.info("M03_OWNED_WATCHDOG_SAME_ROLE=PASS");
+  }finally{await execution?.catch(()=>undefined);await lab.operator.query("ROLLBACK").catch(()=>undefined);await proxy.close();a.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+
+async function intAdmissionLab(key:Key,installOverride?:ReturnType<typeof asInstallationId>){
+  const lab=await createLab(key);labs.push(lab);await p06Install(lab);await installAdmissionObservationV1(lab);
+  const root=mkdtempSync(path.join(tmpdir(),"s03-int-admission-")),epoch=labEpochs.get(lab.installationId+":"+lab.name)!,anchor=testAnchor(root),installationId=installOverride??lab.installationId;
+  const authority=DisposableDurableRecoveryAuthority.initialize(root,epochKeys.privateKey,installationId,lab.name,epoch,anchor,recoveryAdminKeys.publicKey);
+  const pool=new Pool({connectionString:urlFor(lab.name,lab.runtimeRole),max:2});
+  const uow=new TenantUnitOfWork(pool),tenantId=asTenantId("disposable-tenant"),principalId=asPrincipalId("disposable-principal");
+  const scope=verifyTenantScope({applicationId,tenantId,principal:{id:principalId,kind:"staff",applicationId,tenantIds:[tenantId],roles:["staff"],permissions:[]},
+    membership:{applicationId,tenantId,principalId,active:true,roles:["staff"],permissions:[]},authorization:{allowed:true,permissions:[],policyVersion:"disposable"}});
+  const databaseOid=(await lab.dbAdmin.query<{oid:string}>("SELECT oid::text AS oid FROM pg_database WHERE datname=current_database()")).rows[0]!.oid;
+  const expected={applicationId,installationId,databaseName:lab.name,databaseOid,runtimeRole:lab.runtimeRole,epoch,confirm:"DISPOSABLE_ONLY" as const};
+  const run=<T>(work:(tx:import("@vibress/tenancy").ScopedTransaction)=>Promise<T>)=>runExperimentalRecoveryUnit(authority,uow,expected,scope,work);
+  return {lab,authority,pool,uow,scope,expected,run,root,anchor,q:'"public".'+lab.dbAdmin.escapeIdentifier(lab.table),cleanup:async()=>{authority.close();await pool.end();rmSync(root,{recursive:true,force:true});}};
+}
+it("M03-INT-01: ACTIVE authority must deny stale actual persisted database epoch",async()=>{
+  const f=await intAdmissionLab("cr");let entered=false;const acquired:number[]=[];
+  f.pool.on("acquire",client=>{acquired.push(client.processID!);});
+  try{
+    expect(await f.run(async tx=>(await tx.query("SELECT name FROM "+f.q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
+    const stale=randomUUID();
+    await f.lab.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[stale]);
+    expect((await f.lab.dbAdmin.query("SELECT epoch_id FROM public.s03_p06_recovery_epochs")).rows).toEqual([{epoch_id:stale}]);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({epoch:f.expected.epoch,pending:false});
+    const outcome=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='stale-epoch' WHERE name='Alice'");}).then(()=> "COMMITTED",()=> "REFUSED");
+    console.info("INT-01 actual stale persisted epoch outcome="+outcome+" callback="+entered);
+    expect(acquired).toHaveLength(2);expect(acquired[0]).toBe(acquired[1]);
+    expect({outcome,entered,checksum:await contentChecksum(f.lab)}).toEqual({outcome:"REFUSED",entered:false,checksum:createHash("md5").update("Alice,Bob").digest("hex")});
+  }finally{await f.cleanup();}
+},30000);
+
+it("M03-INT-02: unmanaged outer transaction must not acquire nested admission",async()=>{
+  const f=await intAdmissionLab("cr");let entered=false,second=false;
+  try{
+    const before=f.authority.authenticatedSnapshot();
+    const structural={run:async()=>{throw Error("must not invoke structural runner");}} as unknown as TenantUnitOfWork;
+    await expect(runExperimentalRecoveryUnit(f.authority,structural,f.expected,f.scope,async()=>{entered=true;})).rejects.toThrow();
+    expect(f.authority.authenticatedSnapshot()).toEqual(before);
+    const outcome=await f.uow.run(f.scope,async outer=>{
+      const first=await f.run(async tx=>{entered=true;await tx.query("UPDATE "+f.q+" SET name='nested-admission' WHERE name='Alice'");}).then(()=> "ADMITTED",()=> "REFUSED");
+      const backend=(await outer.query<{pid:number}>("SELECT pg_backend_pid() AS pid")).rows[0]!.pid;
+      expect((await f.lab.dbAdmin.query("SELECT state FROM pg_stat_activity WHERE pid=$1",[backend])).rows).toEqual([{state:"idle in transaction"}]);
+      await f.run(async()=>{second=true;}).catch(()=>undefined);
+      return first;
+    });
+    console.info("INT-02 actual nested outcome="+outcome+" callback="+entered+" second="+second);
+    expect({outcome,entered,second,checksum:await contentChecksum(f.lab)}).toEqual({outcome:"REFUSED",entered:false,second:false,checksum:createHash("md5").update("Alice,Bob").digest("hex")});
+  }finally{await f.cleanup();}
+},30000);
+
+it("M03-INT-03: exact routine authority rejects nondelegable author grant option",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"},verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify(),role=lab.dbAdmin.escapeIdentifier(lab.author);
+  await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION public.s03_p06_submit(text,text) TO "+role+" WITH GRANT OPTION");
+  try{
+    expect((await lab.dbAdmin.query("SELECT has_function_privilege($1,'public.s03_p06_submit(text,text)','EXECUTE WITH GRANT OPTION') AS granted",[lab.author])).rows).toEqual([{granted:true}]);
+    const outcome=await verify().then(()=> "ACCEPTED",()=> "REFUSED");
+    console.info("INT-03 actual grant option outcome="+outcome);
+    expect(outcome).toBe("REFUSED");
+  }finally{await lab.dbAdmin.query("REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION public.s03_p06_submit(text,text) FROM "+role);}
+  expect(await verify()).toEqual(expected);
+},30000);
+
+it("M03-INT-04: signed wrong previous digest must not become valid during real query",async()=>{
+  const lab=await createLab("cq");labs.push(lab);await p06Install(lab);
+  const req=await freshP06(lab),scope={applicationId,installationId:lab.installationId};
+  const target=lab.plan.proposedManifest;
+  const prepared=prepareExperimentalPhysicalTransition(lab.current,target,scope);
+  expect(prepared.disposition).toBe("EXISTING_OPERATOR_AUTHORIZATION_REQUIRED");
+  expect(prepared.ddl?.columnName).toBe("website");
+  expect(prepareExperimentalPhysicalTransition(null,target,scope).ddl).toBeNull();
+  expect(()=>compileExperimentalPhysicalContract(target,{...scope,installationId:asInstallationId("other") })).toThrow();
+  const dir=mkdtempSync(path.join(tmpdir(),"s03-registry-authority-")),authority=DisposableDurableRecoveryAuthority.initialize(dir,epochKeys.privateKey,lab.installationId,lab.name,labEpochs.get(lab.installationId+":"+lab.name)!,testAnchor(dir),recoveryAdminKeys.publicKey);
+  try{
+  expect((await authority.execute(urlFor(lab.name,lab.operatorRole),req,epochKeys.publicKey)).status).toBe("APPLIED");
+  const external=authority.authenticatedSnapshot();
+  const data=(await lab.dbAdmin.query<{value:string}>('SELECT to_jsonb(t)::text AS value FROM "public".'+lab.dbAdmin.escapeIdentifier(lab.table)+' t ORDER BY value')).rows;
+  const evidence={version:1 as const,applicationId,installationId:lab.installationId,databaseName:lab.name,epoch:labEpochs.get(lab.installationId+":"+lab.name)!,
+    ledgerId:external.ledgerId,authorityHead:external.head,authoritySequence:external.sequence,operationId:req.operationId,submissionId:req.submissionId,approvalId:req.approvalId,planDigest:req.planDigest,previousDigest:lab.current.digest,manifestDigest:target.digest,
+    dataDigests:{[lab.table]:createHash("sha256").update(JSON.stringify(data.map(x=>x.value))).digest("hex")}};
+  const attest=(value:typeof evidence)=>sign(null,registryAcceptanceMessage(value),recoveryAdminKeys.privateKey).toString("base64url");
+  await Promise.all([lab.operator.end(),lab.runtime.end()]);
+  await awaitQuiescentLab(cluster,lab.dbAdmin,lab.name);
+  await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS false");
+  try{
+    const good=await verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority);
+    expect(good).toMatchObject({lifecycle:"VERIFIED_COMMITTED",revisionDigest:target.digest,operationId:req.operationId});
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,evidence,"A".repeat(86),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const stale={...evidence,authorityHead:"f".repeat(64)};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,stale,attest(stale),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+    const wrong={...evidence,operationId:randomUUID()};
+    await expect(verifyExperimentalRegistry(lab.dbAdmin,wrong,attest(wrong),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+
+    const changed={...evidence,previousDigest:"f".repeat(64)},signature=attest(changed);
+    const query=lab.dbAdmin.query;
+    let entered!:()=>void,release!:()=>void;
+    const started=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
+    let first=true;
+    lab.dbAdmin.query=(async (...args:unknown[])=>{
+      const result=await Reflect.apply(query,lab.dbAdmin,args);
+      if(first){first=false;entered();await hold;}
+      return result;
+    }) as typeof query;
+    try{
+      const pending=verifyExperimentalRegistry(lab.dbAdmin,changed,signature,recoveryAdminKeys.publicKey,authority).then(()=> "ACCEPTED",()=> "REFUSED");
+      await Promise.race([started,pending.then(()=>{throw Error("verification settled before actual query barrier");})]);
+      changed.previousDigest=evidence.previousDigest;release();
+      const outcome=await pending;
+      console.info("INT-04 actual unsigned mutation outcome="+outcome);
+      expect(outcome).toBe("REFUSED");
+    }finally{release();lab.dbAdmin.query=query;}
+    const valid={...evidence,dataDigests:{...evidence.dataDigests}},validSignature=attest(valid);
+    let resume!:()=>void,atBarrier!:()=>void;
+    const observed=new Promise<void>(r=>{atBarrier=r;}),paused=new Promise<void>(r=>{resume=r;});
+    let intercept=true;
+    lab.dbAdmin.query=(async (...args:unknown[])=>{
+      const result=await Reflect.apply(query,lab.dbAdmin,args);
+      if(intercept){intercept=false;atBarrier();await paused;}
+      return result;
+    }) as typeof query;
+    try{
+      const pending=verifyExperimentalRegistry(lab.dbAdmin,valid,validSignature,recoveryAdminKeys.publicKey,authority);
+      await Promise.race([observed,pending.then(()=>{throw Error("early result");})]);
+      Object.assign(valid,{operationId:randomUUID(),installationId:asInstallationId("other-installation"),authorityHead:"a".repeat(64),manifestDigest:"b".repeat(64),previousDigest:"c".repeat(64),epoch:randomUUID()});
+      valid.dataDigests[lab.table]="d".repeat(64);
+      resume();
+      expect(await pending).toEqual(good);
+    }finally{resume();lab.dbAdmin.query=query;}
+    const reordered=Object.fromEntries(Object.entries(evidence).reverse()) as typeof evidence;
+    expect(registryAcceptanceMessage(reordered)).toEqual(registryAcceptanceMessage(evidence));
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,reordered,attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
+    expect(good.evidenceDigestVersion).toBe(2);
+    let effects=0,queries=0;
+    const getter={...evidence};
+    Object.defineProperty(getter,"previousDigest",{enumerable:true,get(){effects++;return evidence.previousDigest;}});
+    const proxy=new Proxy(evidence,{get(){effects++;throw Error("trap");}});
+    const nestedGetter={...evidence.dataDigests};
+    Object.defineProperty(nestedGetter,lab.table,{enumerable:true,get(){effects++;return evidence.dataDigests[lab.table];}});
+    const cyclic:Record<string,unknown>={};cyclic[lab.table]=cyclic;
+    const oversized=Object.fromEntries(Array.from({length:129},(_,i)=>["vr_x_"+i.toString(16).padStart(12,"0"),"a".repeat(64)]));
+    lab.dbAdmin.query=(async(...args:unknown[])=>{queries++;return Reflect.apply(query,lab.dbAdmin,args);}) as typeof query;
+    try{
+      for(const bad of [getter,proxy,{...evidence,dataDigests:nestedGetter},{...evidence,dataDigests:new Proxy(evidence.dataDigests,{ownKeys(){effects++;throw Error("trap");}})},
+        {...evidence,[Symbol("unexpected")]:true},{...evidence,extra:true},{...evidence,dataDigests:{[lab.table]:"bad"}},{...evidence,dataDigests:cyclic},
+        {...evidence,dataDigests:oversized},{...evidence,version:2},Object.assign(Object.create(evidence),evidence)]){
+        await expect(verifyExperimentalRegistry(lab.dbAdmin,bad as typeof evidence,attest(evidence),recoveryAdminKeys.publicKey,authority)).rejects.toThrow();
+      }
+      expect(effects).toBe(0);expect(queries).toBe(0);
+    }finally{lab.dbAdmin.query=query;}
+    expect(await verifyExperimentalRegistry(lab.dbAdmin,Object.freeze({...evidence,dataDigests:Object.freeze({...evidence.dataDigests})}),attest(evidence),recoveryAdminKeys.publicKey,authority)).toEqual(good);
+    let authorityEntered!:()=>void,authorityRelease!:()=>void;
+    const authorityBarrier=new Promise<void>(r=>{authorityEntered=r;}),authorityHold=new Promise<void>(r=>{authorityRelease=r;});
+    let firstAuthorityQuery=true;
+    lab.dbAdmin.query=(async(...args:unknown[])=>{
+      const result=await Reflect.apply(query,lab.dbAdmin,args);
+      if(firstAuthorityQuery){firstAuthorityQuery=false;authorityEntered();await authorityHold;}
+      return result;
+    }) as typeof query;
+    const changedAuthority=verifyExperimentalRegistry(lab.dbAdmin,evidence,attest(evidence),recoveryAdminKeys.publicKey,authority).then(()=>false,()=>true);
+    try{
+      await Promise.race([authorityBarrier,changedAuthority.then(()=>{throw Error("early result");})]);
+      authority.beginRecovery();authorityRelease();
+      expect(await changedAuthority).toBe(true);
+    }finally{authorityRelease();await changedAuthority;lab.dbAdmin.query=query;}
+  }finally{await cluster.query("ALTER DATABASE "+cluster.escapeIdentifier(lab.name)+" ALLOW_CONNECTIONS true");}
+  }finally{authority.close();rmSync(dir,{recursive:true,force:true});}
+},30000);
+
+
+it("M03-INT-01B: actual scope observation is narrow and rechecked before settlement",async()=>{
+  const f=await intAdmissionLab("cr");
+  try{
+    const roles={author:f.lab.author,approver:f.lab.approver,operator:f.lab.operatorRole,runtime:f.lab.runtimeRole,root:"vibress"};
+    expect((await verifyExperimentalWriterTopology(f.lab.dbAdmin,roles,"P06_ADMISSION_V1")).routineChecks).toBe(148);
+    for(const table of ["platform_schema_registry","s03_p06_recovery_epochs","s03_p06_completed_operations","s03_p06_actor_enrollments","s03_p06_approvals","s03_p06_admin_capability"])
+      await expect(f.lab.runtime.query("SELECT * FROM public."+table)).rejects.toMatchObject({code:"42501"});
+    expect(await f.run(async tx=>(await tx.query("SELECT name FROM "+f.q+" ORDER BY name")).rows)).toEqual([{name:"Alice"},{name:"Bob"}]);
+    const pending=f.run(async tx=>{
+      await tx.query("UPDATE "+f.q+" SET name='not-committed' WHERE name='Alice'");
+      await f.lab.dbAdmin.query("UPDATE public.s03_p06_recovery_epochs SET epoch_id=$1::uuid",[randomUUID()]);
+    });
+    await expect(pending).rejects.toThrow();
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true});
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+  }finally{await f.cleanup();}
+},30000);
+
+it.each(["wrong-app","wrong-installation","missing-epoch","missing-capability","ambiguous","multiple-results","wrong-pool"] as const)("M03-INT-01C: fail closed for persisted observation %s",async(mode)=>{
+  const f=await intAdmissionLab("cr",mode==="wrong-installation"?asInstallationId("other-installation"):undefined);let entered=false;
+  try{
+    const admin=f.lab.dbAdmin;
+    if(mode==="wrong-app"){
+      await admin.query("INSERT INTO public.platform_applications VALUES('other-app','Other')");
+      await admin.query("UPDATE public.platform_installations SET application_id='other-app'");
+    }else if(mode==="ambiguous"){
+      await admin.query("INSERT INTO public.platform_installations VALUES('other-installation',$1,'test')",[applicationId]);
+    }else if(mode==="multiple-results"){
+      await admin.query("CREATE OR REPLACE FUNCTION public.s03_p06_admission_observation_v1() RETURNS TABLE(version integer,application_id text,installation_id text,epoch_id text,database_name text,database_oid text) LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $test$ SELECT 1,r.application_id,r.installation_id,e.epoch_id::text,current_database()::text,d.oid::text FROM public.platform_schema_registry r JOIN public.s03_p06_recovery_epochs e USING(installation_id) JOIN pg_catalog.pg_database d ON d.datname=current_database() CROSS JOIN generate_series(1,2) $test$");
+    }else if(mode==="missing-epoch")await admin.query("DELETE FROM public.s03_p06_recovery_epochs");
+    else if(mode==="missing-capability")await admin.query("REVOKE EXECUTE ON FUNCTION public.s03_p06_admission_observation_v1() FROM "+admin.escapeIdentifier(f.lab.runtimeRole));
+    const invoke=mode==="wrong-pool"?runExperimentalRecoveryUnit(f.authority,f.uow,{...f.expected,databaseOid:"99999"},f.scope,async()=>{entered=true;}):f.run(async()=>{entered=true;});
+    await expect(invoke).rejects.toThrow();
+    expect(entered).toBe(false);
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+  }finally{await f.cleanup();}
+},30000);
+
+it("M03-INT-02B: top-level lease owns nested work and rejects reentrant admission",async()=>{
+  const f=await intAdmissionLab("cr");
+  let entered!:()=>void,release!:()=>void;
+  const started=new Promise<void>(r=>{entered=r;}),hold=new Promise<void>(r=>{release=r;});
+  let stale:(()=>Promise<unknown>)|undefined;
+  const active=f.run(async tx=>{
+    await expect(f.run(async()=>{throw Error("must not reach nested work");})).rejects.toThrow("outermost");
+    await f.uow.run(f.scope,async nested=>{
+      expect((await nested.query("SELECT pg_backend_pid()")).rows).toEqual((await tx.query("SELECT pg_backend_pid()")).rows);
+      await nested.query("UPDATE "+f.q+" SET name='nested-drain' WHERE name='Alice'");
+    });
+    stale=()=>tx.query("SELECT 1");
+    entered();await hold;
+  });
+  const done=active.then(()=>true,()=>false);
+  try{
+    await Promise.race([started,done.then(()=>{throw Error("early settlement");})]);
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeDefined();
+    await expect(f.run(async()=>{throw Error("must not enter competing work");})).rejects.toThrow();
+    f.authority.beginRecovery();
+    const next=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    expect(()=>f.authority.advance(next,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch:next,quiescenceEvidenceDigest}))).toThrow();
+    release();expect(await done).toBe(false);
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+    await expect(stale!()).rejects.toThrow();
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+  }finally{release();await done;await f.cleanup();}
+},30000);
+
+it("M03-INT-02C: actual lost COMMIT acknowledgment retains durable unresolved admission",async()=>{
+  const f=await intAdmissionLab("cr");
+  const proxy=await startTransactionAckFaultProxy("COMMIT","DROP");
+  void proxy.serverCommitObserved.catch(()=>undefined);
+  const url=new URL(urlFor(f.lab.name,f.lab.runtimeRole));url.port=String(proxy.port);
+  const pool=new Pool({connectionString:url.toString(),max:1,connectionTimeoutMillis:4000});
+  const transportErrors:string[]=[];
+  let signalTransport!:()=>void;
+  const transportObserved=new Promise<void>(r=>{signalTransport=r;});
+  const observeTransport=(error:Error)=>{transportErrors.push(error.message);signalTransport();};
+  pool.on("connect",client=>client.on("error",observeTransport));
+  pool.on("error",observeTransport);
+  try{
+    const pending=runExperimentalRecoveryUnit(f.authority,new TenantUnitOfWork(pool),f.expected,f.scope,async tx=>{
+      await tx.query("UPDATE "+f.q+" SET name='committed-without-ack' WHERE name='Alice'");
+    });
+    const rejected=pending.then(()=>false,()=>true);
+    await proxy.serverCommitObserved;
+    expect(await rejected).toBe(true);
+    await transportObserved;
+    expect(transportErrors.every(message=>/connection terminated|socket|ECONNRESET/i.test(message))).toBe(true);
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Bob,committed-without-ack").digest("hex"));
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:expect.any(String)});
+    const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    expect(()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
+    await expect(f.run(async()=>{throw Error("no retry");})).rejects.toThrow();
+    const before=f.authority.authenticatedSnapshot();f.authority.close();
+    const reopened=DisposableDurableRecoveryAuthority.open(f.root,epochKeys.privateKey,f.anchor,recoveryAdminKeys.publicKey);
+    try{
+      expect(reopened.authenticatedSnapshot()).toEqual(before);
+      expect(()=>reopened.advance(epoch,quiescenceEvidenceDigest,attestRecovery(reopened,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
+    }finally{reopened.close();}
+  }finally{await pool.end();await proxy.close();await f.cleanup();}
+},30000);
+
+it("M03-INT-03B: reject routine grant edges and incoming/transitive memberships",async()=>{
+  const lab=await createLab("cu");labs.push(lab);await p06Install(lab);
+  const roles={author:lab.author,approver:lab.approver,operator:lab.operatorRole,runtime:lab.runtimeRole,root:"vibress"},verify=()=>verifyExperimentalWriterTopology(lab.dbAdmin,roles);
+  const expected=await verify(),a=lab.dbAdmin.escapeIdentifier(lab.author),b=lab.dbAdmin.escapeIdentifier(lab.approver),other=lab.dbAdmin.escapeIdentifier("s03_delegate_"+lab.key+"_"+id),bridge=lab.dbAdmin.escapeIdentifier("s03_gateway_"+lab.key+"_"+id);
+  await cluster.query("CREATE ROLE "+other+" NOLOGIN");await cluster.query("CREATE ROLE "+bridge+" NOLOGIN");
+  const fn="public.s03_p06_submit(text,text)",approve="public.s03_p06_approve(uuid)";
+  const changes=[
+    ["GRANT EXECUTE ON FUNCTION "+approve+" TO "+b+" WITH GRANT OPTION","REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION "+approve+" FROM "+b],
+    ["GRANT EXECUTE ON FUNCTION "+fn+" TO "+other,"REVOKE EXECUTE ON FUNCTION "+fn+" FROM "+other],
+    ["GRANT EXECUTE ON FUNCTION "+fn+" TO PUBLIC","REVOKE EXECUTE ON FUNCTION "+fn+" FROM PUBLIC"],
+    ["GRANT "+a+" TO "+other,"REVOKE "+a+" FROM "+other],
+    ["GRANT "+a+" TO "+bridge+"; GRANT "+bridge+" TO "+other,"REVOKE "+bridge+" FROM "+other+"; REVOKE "+a+" FROM "+bridge],
+    ["REVOKE EXECUTE ON FUNCTION "+fn+" FROM "+a,"GRANT EXECUTE ON FUNCTION "+fn+" TO "+a],
+    ["ALTER FUNCTION "+fn+" OWNER TO "+other,"ALTER FUNCTION "+fn+" OWNER TO vibress"],
+    ["CREATE FUNCTION public.s03_p06_submit(integer) RETURNS int LANGUAGE sql SET search_path=pg_catalog,pg_temp AS 'SELECT 1'","DROP FUNCTION public.s03_p06_submit(integer)"]
+  ];
+  for(const [change,undo] of changes){
+    await lab.dbAdmin.query(change!);
+    try{await expect(verify()).rejects.toThrow();}
+    finally{await lab.dbAdmin.query(undo!);}
+    expect(await verify()).toEqual(expected);
+  }
+  await lab.dbAdmin.query("GRANT EXECUTE ON FUNCTION "+fn+" TO "+a+" WITH GRANT OPTION");
+  try{
+    const actor=await connect(lab.name,lab.author);
+    try{await actor.query("GRANT EXECUTE ON FUNCTION "+fn+" TO "+other);}
+    finally{await actor.end();}
+    await expect(verify()).rejects.toThrow();
+  }finally{await lab.dbAdmin.query("REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION "+fn+" FROM "+a+" CASCADE");}
+  expect(await verify()).toEqual(expected);
+},30000);
+
+
+it("M03-INT-02D: recovery intent after final check drains actual COMMIT and retains lease until release",async()=>{
+  const f=await intAdmissionLab("cr");
+  let dispatch!:()=>void,allowDispatch!:()=>void,receipt!:()=>void,allowReceipt!:()=>void;
+  const atDispatch=new Promise<void>(r=>{dispatch=r;}),dispatchGate=new Promise<void>(r=>{allowDispatch=r;});
+  const atReceipt=new Promise<void>(r=>{receipt=r;}),receiptGate=new Promise<void>(r=>{allowReceipt=r;});
+  const runner=new TenantUnitOfWork({connect:async()=>{
+    const c=await f.pool.connect(),original=c.query,release=c.release.bind(c);
+    c.query=(async(...args:unknown[])=>{
+      if(args[0]==="COMMIT"){dispatch();await dispatchGate;const result=await Reflect.apply(original,c,args);receipt();await receiptGate;return result;}
+      return Reflect.apply(original,c,args);
+    }) as typeof original;
+    c.release=(destroy?:boolean|Error)=>{c.query=original;c.release=release;release(destroy);};
+    return c;
+  }});
+  const active=runExperimentalRecoveryUnit(f.authority,runner,f.expected,f.scope,async tx=>{
+    await tx.query("UPDATE "+f.q+" SET name='drained' WHERE name='Alice'");
+  });
+  const done=active.then(()=>true,()=>false);
+  try{
+    await Promise.race([atDispatch,done.then(()=>{throw Error("settled before COMMIT");})]);
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeDefined();
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Alice,Bob").digest("hex"));
+    f.authority.beginRecovery();
+    const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    const advance=()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}));
+    expect(advance).toThrow();
+    allowDispatch();
+    await Promise.race([atReceipt,done.then(()=>{throw Error("settled before receipt");})]);
+    expect(await contentChecksum(f.lab)).toBe(createHash("md5").update("Bob,drained").digest("hex"));
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeDefined();expect(advance).toThrow();
+    allowReceipt();expect(await done).toBe(true);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true});
+    expect(f.authority.authenticatedSnapshot().businessLease).toBeUndefined();
+    await expect(f.run(async()=>{throw Error("must not admit during drain");})).rejects.toThrow();
+  }finally{allowDispatch();allowReceipt();await done;await f.cleanup();}
+},30000);
+
+it("M03-INT-02E: connection acquisition failure leaves durable fail-closed recovery marker",async()=>{
+  const f=await intAdmissionLab("cr"),closed=new Pool({connectionString:urlFor(f.lab.name,f.lab.runtimeRole)});
+  await closed.end();
+  let entered=false;
+  try{
+    await expect(runExperimentalRecoveryUnit(f.authority,new TenantUnitOfWork(closed),f.expected,f.scope,async()=>{entered=true;})).rejects.toThrow();
+    expect(entered).toBe(false);
+    expect(f.authority.authenticatedSnapshot()).toMatchObject({pending:true,businessLease:expect.any(String)});
+    const epoch=randomUUID(),quiescenceEvidenceDigest="a".repeat(64);
+    expect(()=>f.authority.advance(epoch,quiescenceEvidenceDigest,attestRecovery(f.authority,"ADVANCE",{epoch,quiescenceEvidenceDigest}))).toThrow();
+  }finally{await f.cleanup();}
+},30000);

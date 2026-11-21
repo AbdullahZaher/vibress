@@ -4,7 +4,7 @@ on:
   push:
     # Temporarily suspended for docs/native-admin-ui-plan-20261025 during local-only validation session.
     # RESTORATION PROCEDURE: Re-add 'docs/native-admin-ui-plan-20261025' to the push.branches list below before final release approval.
-    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116, integration/wave1-final-remediation-20261116]
+    branches: [main, feat/plugin-platform-completion-phases-1-4-20261021, feat/plugin-platform-roadmap-execution-20261024, integration/wave1-agents-01-06-20261116, integration/wave1-final-remediation-20261116, experiment/m03-s03-p06-e2a-l1-d1-final-engineering-20261118, experiment/m03-scoped-recovery-lifecycle-20261118, experiment/m03-final-engineering-closure-20261118, experiment/m03-normative-schema-infrastructure-20261119, experiment/m03-remaining-functional-20261119, experiment/m03-remaining-functional-exec-20261119]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -31,11 +31,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "24.22.3"
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
 
       - name: Audit production dependencies
         id: production_audit
@@ -323,11 +327,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "24.22.3"
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
 
       - name: Build plugin SDK for clean-checkout E2E servers
         run: pnpm --filter @vibress/plugin-sdk build
@@ -496,11 +504,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "24.22.3"
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          git rev-parse HEAD HEAD^{tree}
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
 
       - name: Start disposable PostgreSQL
         run: docker compose -f compose.dev.yml up -d --wait postgres

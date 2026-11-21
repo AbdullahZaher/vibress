@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
+import { createHash } from "node:crypto";
 import { ContentModelerService } from "../application/content-modeler-service";
-import { getDb, publications, workspaces, users, contentEntries, contentModels } from "@vibress/database";
-import { eq, inArray } from "drizzle-orm";
+import { getDb, publications, workspaces, users, contentEntries, contentModels, outboxEvents } from "@vibress/database";
+import { eq, inArray, sql } from "drizzle-orm";
 
 describe("ContentModelerService Publication Scoping and Relations", () => {
   const service = new ContentModelerService();
@@ -295,5 +296,47 @@ describe("ContentModelerService Publication Scoping and Relations", () => {
     // Pub B resolving relations cannot see Pub A author
     const bookInB = await service.getEntryById(bookModel.id, bookEntry.id, pubB, true);
     expect(bookInB).toBeNull();
+  });
+
+  it("writes the outbox event in the mutation transaction and rolls the mutation back if it fails", async () => {
+    const db = getDb();
+    const created = await service.createModel(
+      { name: "Outbox Product", slug: "outbox-product", fields: [] },
+      pubA,
+    );
+    const expectedId = createHash("sha256")
+      .update(["VIBRESS-OUTBOX-EVENT-V1", "content_model.created", `model:${created.id}:created`].join("\u0000"))
+      .digest("hex");
+    const rows = await db
+      .select()
+      .from(outboxEvents)
+      .where(eq(outboxEvents.id, expectedId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      eventType: "content_model.created",
+      status: "pending",
+    });
+    expect(rows[0]!.payload).toMatchObject({ modelId: created.id, slug: "outbox-product" });
+
+    const failingSlug = "outbox-failing-slug";
+    await db.execute(sql.raw(
+      "CREATE FUNCTION cm_test_reject_outbox() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cm_outbox_forced_failure'; END $$",
+    ));
+    await db.execute(sql.raw(
+      "CREATE TRIGGER cm_test_reject_outbox BEFORE INSERT ON outbox_events FOR EACH ROW WHEN (NEW.payload->>'slug' = 'outbox-failing-slug') EXECUTE FUNCTION cm_test_reject_outbox()",
+    ));
+    try {
+      await expect(
+        service.createModel({ name: "Outbox Failing", slug: failingSlug, fields: [] }, pubA),
+      ).rejects.toThrow(/outbox_events/);
+    } finally {
+      await db.execute(sql.raw("DROP TRIGGER cm_test_reject_outbox ON outbox_events"));
+      await db.execute(sql.raw("DROP FUNCTION cm_test_reject_outbox()"));
+    }
+    const orphan = await db
+      .select()
+      .from(contentModels)
+      .where(eq(contentModels.slug, failingSlug));
+    expect(orphan).toHaveLength(0);
   });
 });

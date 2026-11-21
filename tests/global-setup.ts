@@ -28,6 +28,8 @@ export async function setup() {
     ])
     .onConflictDoNothing();
   console.log("Global setup: Database setup completed.");
+  // Cluster-wide disposable PITR must not retain an idle global-setup backend.
+  if (process.env.M03_PHYSICAL_COMPONENT === "1" && process.env.GITHUB_ACTIONS === "true") await closeDbPool();
 }
 
 export async function teardown() {

@@ -1,0 +1,114 @@
+name: M03-S03 Agent05+02+03 R1-10 E2 Experimental PostgreSQL16 Evidence
+
+on:
+  push:
+    branches:
+      - test/m03-s03-ag05-ag03-trusted-actor-watchdog-20261117
+      - experiment/m03-s03-r1-actor-linearization-20261118
+      - experiment/m03-s03-r1-lock-order-e2-20261118
+      - experiment/m03-s03-p06-e2a-l1-d1-final-engineering-20261118
+  pull_request:
+    branches:
+      - fix/m03-s03-ag01-ag05-approval-expiry-linearization-20261117
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iam-race-security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  disposable-pg16-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 11.22.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "24.22.3"
+          cache: pnpm
+      - name: Verify pinned source and dependencies
+        run: |
+          git rev-parse HEAD
+          test "$(node -v)" = "v24.22.3"
+          pnpm install --frozen-lockfile
+          pnpm --filter @vibress/plugin-sdk build
+          pnpm --filter @vibress/database typecheck
+          pnpm typecheck
+          pnpm exec eslint tests/integration/platform-schema-migration-operator.test.ts tests/fixtures/m03-s03-legacy-operator-diagnostic.ts packages/database/src/platform-schema-migration-operator.ts packages/database/src/schema-operator-experimental-durable-authority.ts packages/database/src/schema-operator-experimental-anchor.ts packages/database/src/schema-operator-cli.ts packages/database/src/schema-operator-experimental-supervisor.ts
+          pnpm verify:explicit-any
+      - name: Start disposable PostgreSQL 16 only
+        id: pg16
+        run: |
+          docker compose -f compose.dev.yml up -d --wait postgres
+          pg_ver="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c 'SHOW server_version_num')"
+          test "$pg_ver" -ge 160000 && test "$pg_ver" -lt 170000
+          echo "POSTGRES_VERSION_NUM=$pg_ver"
+      - name: Verify targeted unit and architecture tests against ready database setup
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --config vitest.unit.config.ts tests/unit/schema-operator-experimental-durable-authority.test.ts tests/unit/schema-operator-experimental-deadline.test.ts tests/architecture/platform-boundaries.test.ts
+      - name: Run targeted same-principal and replacement-principal provenance controls
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-E2E-48[AB]" --testTimeout=90000 --hookTimeout=120000
+      - name: Run actual integrated P06 operator tests (separate evidence)
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-E2E-" --testTimeout=90000 --hookTimeout=120000
+      - name: Run adversarial historical actor-state and watchdog observation tests
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "IAM-RACE-01|IAM-WD-01|P05/R1|R1-0|R1-10|E2-|P06-01|L1-P06-01|D1-0|AG06-S03-10" --testTimeout=90000 --hookTimeout=120000
+      - name: Rerun full original authenticated operator and expiry regressions (exclude integrated P06)
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "^(?!.*P06-E2E-).*" --testTimeout=90000 --hookTimeout=120000
+      - name: Preserve real PostgreSQL fault-injection baseline
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-fault-injection.test.ts --testTimeout=90000 --hookTimeout=120000
+      - name: Three independently executed PostgreSQL R1-10 and E2 concurrency repetitions
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          for repetition in 1 2 3; do
+            echo "R1_E2_REPETITION=$repetition SOURCE_SHA=$(git rev-parse HEAD)"
+            # Each Vitest invocation starts a fresh Node process and creates
+            # separately named disposable PG16 fixture databases.
+            pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "R1-10|E2-0|E2-REPLAY" --testTimeout=90000 --hookTimeout=120000
+          done
+      - name: Verify post-COMMIT authority crash and actual owned PostgreSQL restart
+        if: always() && steps.pg16.outcome == 'success' && !cancelled()
+        env:
+          M03_S03_OWNED_RESTART: I_CONFIRM_OWNED_SERVICE
+        run: |
+          pnpm exec vitest run --passWithNoTests=false --no-file-parallelism tests/integration/platform-schema-migration-operator.test.ts -t "P06-RESTART-01" --testTimeout=120000 --hookTimeout=120000
+      - name: Confirm disposable fixture databases fully cleaned
+        if: always() && steps.pg16.outcome == 'success'
+        run: |
+          leaked="$(docker compose -f compose.dev.yml exec -T postgres psql -At -U vibress -d vibress -c "SELECT count(*) FROM pg_database WHERE datname LIKE 'vibress_s03_%'")"
+          echo "DISPOSABLE_DB_LEAK_COUNT=$leaked"
+          test "$leaked" = "0"
+      - name: Restart owned PostgreSQL and verify persisted migration journal and seeded data
+        if: steps.pg16.outcome == 'success' && !cancelled()
+        run: |
+          sql() { docker compose -f compose.dev.yml exec -T postgres psql -v ON_ERROR_STOP=1 -At -U vibress -d vibress -c "$1"; }
+          before_started="$(sql "SELECT pg_postmaster_start_time()")"
+          before_journal="$(sql "SELECT count(*)||':'||md5(string_agg(hash||':'||created_at::text, ',' ORDER BY id)) FROM drizzle.__drizzle_migrations")"
+          before_seed="$(sql "SELECT count(*)||':'||md5(string_agg(id, ',' ORDER BY id)) FROM publications WHERE id IN ('pub_alpha','pub_beta')")"
+          test -n "$before_journal" && test -n "$before_seed"
+          docker compose -f compose.dev.yml restart postgres
+          docker compose -f compose.dev.yml up -d --wait postgres
+          after_started="$(sql "SELECT pg_postmaster_start_time()")"
+          test -n "$after_started" && test "$before_started" != "$after_started"
+          test "$(sql "SELECT count(*)||':'||md5(string_agg(hash||':'||created_at::text, ',' ORDER BY id)) FROM drizzle.__drizzle_migrations")" = "$before_journal"
+          test "$(sql "SELECT count(*)||':'||md5(string_agg(id, ',' ORDER BY id)) FROM publications WHERE id IN ('pub_alpha','pub_beta')")" = "$before_seed"
+          echo "POSTGRES_RESTART_PERSISTENCE=PASS"
+      - name: Teardown ONLY the owned disposable PostgreSQL service
+        if: always()
+        run: docker compose -f compose.dev.yml down --volumes --remove-orphans

@@ -1,0 +1,54 @@
+name: M03 C01 legacy CMS physical backup and restore
+on:
+  push:
+    branches:
+      - experiment/m03-remaining-functional-exec-20261119
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  c01-physical-restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://vibress:vibress@127.0.0.1:5433/vibress
+      M03_C01_PHYSICAL: "1"
+    steps:
+      - name: Exact source, read-only checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Pinned pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115
+        with:
+          version: 11.22.0
+      - name: Pinned Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "24.22.3"
+      - name: Frozen install and static checks
+        run: |
+          git rev-parse HEAD 'HEAD^{tree}'
+          test "$(node -v)" = v24.22.3
+          test "$(pnpm -v)" = 11.22.0
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm exec eslint packages/database/src/legacy-cms-compatibility.ts tests/integration/c01-legacy-cms-publication-identity.test.ts
+          pnpm verify:explicit-any
+      - name: Start pinned disposable PostgreSQL 16.16 and Redis
+        run: |
+          printf 'services:\n  postgres:\n    image: postgres@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e\n' > "$RUNNER_TEMP/pg16.16.yml"
+          docker compose -f compose.dev.yml -f "$RUNNER_TEMP/pg16.16.yml" up -d --wait postgres redis
+          test "$(docker compose -f compose.dev.yml exec -T postgres psql -U vibress -d vibress -Atqc 'SHOW server_version_num')" = 160016
+      - name: Actual ordered migrations, C01 inventory, binary dump and fresh restore
+        run: pnpm exec vitest run --no-file-parallelism tests/integration/c01-legacy-cms-publication-identity.test.ts -t "M03-213-03"
+      - name: Destroy disposable services and volumes
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/pg16.16.yml" ]; then
+            docker compose -f compose.dev.yml -f "$RUNNER_TEMP/pg16.16.yml" down --volumes
+          else
+            docker compose -f compose.dev.yml down --volumes
+          fi

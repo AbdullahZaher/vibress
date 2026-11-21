@@ -96,6 +96,25 @@ describe("Transactional Outbox", () => {
       expect(await countRows(`1=1`)).toBe(before);
     });
 
+    it("dedupes a replayed producer event id instead of failing or duplicating", async () => {
+      const id = `dedupe-${randomUUID()}`;
+      const row = {
+        id,
+        eventType: "post.published" as const,
+        payload: buildEventEnvelope("post.published", {
+          postId: "dedupe-target",
+          slug: "dedupe",
+        }),
+        status: "pending",
+        attempts: 0,
+      };
+      await repository.insert(row);
+      await repository.insert(row);
+      expect(
+        await countRows(`id = '${id}'`),
+      ).toBe(1);
+    });
+
     it("persists rows outside a transaction as pending (worker-down safety)", async () => {
       const before = await countRows(`event_type = 'post.unpublished'`);
       await writer.write("post.unpublished", {

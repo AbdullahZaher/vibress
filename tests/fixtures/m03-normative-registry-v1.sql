@@ -1,0 +1,214 @@
+-- Isolated prototype, not a numbered migration or production schema.
+-- Root-controlled trust configuration and immutable revision extension of 0059.
+DO $scope$ BEGIN
+ IF current_database() !~ '^vibress_s03_norm_[a-z0-9_]+$' OR current_setting('server_version_num')::int NOT BETWEEN 160000 AND 169999
+ THEN RAISE EXCEPTION 'disposable PG16 only'; END IF;
+END $scope$;
+CREATE TABLE public.platform_schema_installation_trust_v1 (
+ installation_id text PRIMARY KEY REFERENCES public.platform_installations(id),
+ application_id text NOT NULL REFERENCES public.platform_applications(id),
+ database_name text NOT NULL UNIQUE, database_oid text NOT NULL, system_identifier text NOT NULL, timeline integer NOT NULL,
+ namespace text NOT NULL UNIQUE, installer_role text NOT NULL, runtime_role text NOT NULL,
+ approval_key text NOT NULL, approval_key_digest text NOT NULL CHECK (approval_key_digest ~ '^[a-f0-9]{64}$'),
+ epoch uuid NOT NULL, ledger_id uuid NOT NULL, profile text NOT NULL CHECK(profile='DEDICATED_PG16_CORE_V1'),
+ revoked boolean NOT NULL DEFAULT false, CHECK(installer_role<>runtime_role)
+);
+CREATE TABLE public.platform_schema_revisions_v1 (
+ installation_id text NOT NULL REFERENCES public.platform_schema_registry(installation_id),
+ revision_digest text NOT NULL CHECK(revision_digest ~ '^[a-f0-9]{64}$'),
+ parent_digest text, manifest text NOT NULL, physical_digest text NOT NULL, plan_digest text NOT NULL,
+ operation_id uuid NOT NULL UNIQUE, approval_id uuid NOT NULL UNIQUE,
+ authority_epoch uuid NOT NULL, authority_head text NOT NULL, authority_sequence bigint NOT NULL,
+ signer_digest text NOT NULL, signed_evidence text NOT NULL, signature text NOT NULL,
+ applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest),
+ FOREIGN KEY(installation_id,parent_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_installation_trust_v1,public.platform_schema_revisions_v1 FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_backfill_chunks_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ operation_id uuid PRIMARY KEY,
+ tenant_id text NOT NULL, resource_id text NOT NULL, column_name text NOT NULL,
+ evidence text NOT NULL, signature text NOT NULL, affected integer NOT NULL CHECK(affected BETWEEN 0 AND 100),
+ ids text[] NOT NULL, committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_backfill_chunks_v1 FROM PUBLIC;
+
+-- Durable per-target backfill admission and progress. One target admits exactly
+-- one value; progress only moves forward and a completed target is terminal.
+CREATE TABLE public.platform_schema_backfill_targets_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ tenant_id text NOT NULL, resource_id text NOT NULL, column_name text NOT NULL,
+ value text NOT NULL,
+ admitted_evidence text NOT NULL, admitted_signature text NOT NULL,
+ chunks integer NOT NULL DEFAULT 0 CHECK(chunks>=0),
+ affected_total bigint NOT NULL DEFAULT 0 CHECK(affected_total>=0),
+ complete boolean NOT NULL DEFAULT false,
+ completed_at timestamptz,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,tenant_id,resource_id,column_name),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_backfill_targets_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_backfill_targets_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $backfill_targets$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF OLD.complete THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NEW.installation_id<>OLD.installation_id OR NEW.revision_digest<>OLD.revision_digest OR NEW.tenant_id<>OLD.tenant_id OR
+    NEW.resource_id<>OLD.resource_id OR NEW.column_name<>OLD.column_name OR NEW.value<>OLD.value OR
+    NEW.admitted_evidence<>OLD.admitted_evidence OR NEW.admitted_signature<>OLD.admitted_signature THEN
+   RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE';
+ END IF;
+ IF NEW.chunks<OLD.chunks OR NEW.affected_total<OLD.affected_total THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NEW.complete AND NEW.completed_at IS NULL THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ IF NOT NEW.complete AND NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'M03_BACKFILL_TARGET_IMMUTABLE'; END IF;
+ RETURN NEW;
+END $backfill_targets$;
+CREATE TRIGGER platform_schema_backfill_targets_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_backfill_targets_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_backfill_targets_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_backfill_targets_immutable_v1() FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_recovery_reattestations_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ original_operation_id uuid NOT NULL REFERENCES public.platform_schema_revisions_v1(operation_id),
+ original_epoch uuid NOT NULL, new_epoch uuid PRIMARY KEY,
+ recovery_intent uuid NOT NULL UNIQUE, approval_id uuid NOT NULL UNIQUE,
+ authority_head text NOT NULL, evidence text NOT NULL, signature text NOT NULL,
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest),
+ CHECK(original_epoch<>new_epoch)
+);
+REVOKE ALL ON public.platform_schema_recovery_reattestations_v1 FROM PUBLIC;
+
+-- Narrow append-only witness. XID is generated by PostgreSQL; runtime
+-- cannot select, update, delete, or specify it. A signed witness is required.
+CREATE TABLE public.platform_schema_business_witnesses_v1 (
+ operation_id uuid PRIMARY KEY,
+ xid xid8 NOT NULL DEFAULT pg_current_xact_id(),
+ evidence text NOT NULL,
+ signature text NOT NULL
+);
+REVOKE ALL ON public.platform_schema_business_witnesses_v1 FROM PUBLIC;
+
+-- Persistent registry lifecycle v1: current state is CAS-updated; every
+-- transition is append-only history. DB_COMMITTED is deliberately distinct
+-- from ACTIVE so a crash between install COMMIT and global admission is visible.
+CREATE TABLE public.platform_schema_revision_states_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL CHECK(revision_digest ~ '^[a-f0-9]{64}$'),
+ state text NOT NULL CHECK(state IN ('PROPOSED','VALIDATED','APPROVED','PROVISIONING','DB_COMMITTED','ACTIVE','SUPERSEDED','REVOKED','FAILED','INDETERMINATE','RECOVERY_PENDING','REATTESTED')),
+ state_version integer NOT NULL CHECK(state_version>0),
+ operation_id uuid NOT NULL,
+ approval_id uuid NOT NULL,
+ authority_epoch uuid NOT NULL,
+ authority_head text, authority_sequence bigint,
+ actor text NOT NULL,
+ updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest)
+);
+CREATE TABLE public.platform_schema_state_transitions_v1 (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ from_state text, to_state text NOT NULL CHECK(to_state IN ('PROPOSED','VALIDATED','APPROVED','PROVISIONING','DB_COMMITTED','ACTIVE','SUPERSEDED','REVOKED','FAILED','INDETERMINATE','RECOVERY_PENDING','REATTESTED')),
+ state_version integer NOT NULL,
+ operation_id uuid NOT NULL,
+ approval_id uuid NOT NULL,
+ authority_epoch uuid NOT NULL,
+ authority_head text, authority_sequence bigint,
+ actor text NOT NULL, evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revision_states_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_revision_states_v1,public.platform_schema_state_transitions_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_state_transitions_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $immutable$
+BEGIN RAISE EXCEPTION 'M03_LIFECYCLE_HISTORY_IMMUTABLE'; END $immutable$;
+CREATE TRIGGER platform_schema_state_transitions_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_state_transitions_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_state_transitions_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_state_transitions_immutable_v1() FROM PUBLIC;
+
+-- Module namespace reservation v1: one immutable row per verified
+-- (installation, module), a deterministic namespace and an explicit binding
+-- digest. Reservations are created atomically with the schema itself.
+CREATE TABLE public.platform_module_namespaces_v1 (
+ installation_id text NOT NULL REFERENCES public.platform_schema_installation_trust_v1(installation_id),
+ application_id text NOT NULL,
+ module_id text NOT NULL CHECK(module_id ~ '^[a-z][a-z0-9_]{1,62}$'),
+ namespace text NOT NULL UNIQUE CHECK(namespace ~ '^v3_mod_[a-f0-9]{24}$'),
+ installer_role text NOT NULL,
+ runtime_role text NOT NULL,
+ binding_digest text NOT NULL CHECK(binding_digest ~ '^[a-f0-9]{64}$'),
+ reserved_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,module_id),
+ CHECK(installer_role<>runtime_role)
+);
+REVOKE ALL ON public.platform_module_namespaces_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_module_namespaces_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $module_namespaces$
+BEGIN RAISE EXCEPTION 'M03_MODULE_NAMESPACE_IMMUTABLE'; END $module_namespaces$;
+CREATE TRIGGER platform_module_namespaces_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_module_namespaces_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_module_namespaces_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_module_namespaces_immutable_v1() FROM PUBLIC;
+
+-- Rename intent evidence v1: reviewed EXPAND, bounded copy chunks and
+-- monotonic per-tenant progress. The source column is never dropped here.
+CREATE TABLE public.platform_schema_rename_phases_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ plan_digest text NOT NULL CHECK(plan_digest ~ '^[a-f0-9]{64}$'),
+ operation_id uuid NOT NULL UNIQUE,
+ evidence text NOT NULL, signature text NOT NULL,
+ applied_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,target_revision_digest,resource_id,source_column,target_column),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_phases_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_rename_evidence_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $rename_evidence$
+BEGIN RAISE EXCEPTION 'M03_RENAME_EVIDENCE_IMMUTABLE'; END $rename_evidence$;
+CREATE TRIGGER platform_schema_rename_phases_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_phases_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_evidence_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_rename_evidence_immutable_v1() FROM PUBLIC;
+
+CREATE TABLE public.platform_schema_rename_chunks_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ operation_id uuid PRIMARY KEY,
+ tenant_id text NOT NULL, resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ evidence text NOT NULL, signature text NOT NULL, affected integer NOT NULL CHECK(affected BETWEEN 0 AND 100),
+ ids text[] NOT NULL, committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_chunks_v1 FROM PUBLIC;
+CREATE TRIGGER platform_schema_rename_chunks_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_chunks_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_evidence_immutable_v1();
+
+CREATE TABLE public.platform_schema_rename_progress_v1 (
+ installation_id text NOT NULL,
+ revision_digest text NOT NULL,
+ target_revision_digest text NOT NULL CHECK(target_revision_digest ~ '^[a-f0-9]{64}$'),
+ tenant_id text NOT NULL, resource_id text NOT NULL, source_column text NOT NULL, target_column text NOT NULL,
+ chunks integer NOT NULL DEFAULT 0 CHECK(chunks>=0),
+ affected_total bigint NOT NULL DEFAULT 0 CHECK(affected_total>=0),
+ complete boolean NOT NULL DEFAULT false,
+ completed_at timestamptz, updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(installation_id,revision_digest,target_revision_digest,tenant_id,resource_id,source_column,target_column),
+ FOREIGN KEY(installation_id,revision_digest) REFERENCES public.platform_schema_revisions_v1(installation_id,revision_digest)
+);
+REVOKE ALL ON public.platform_schema_rename_progress_v1 FROM PUBLIC;
+CREATE FUNCTION public.platform_schema_rename_progress_immutable_v1() RETURNS trigger LANGUAGE plpgsql AS $rename_progress$
+BEGIN
+ IF TG_OP='DELETE' THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF OLD.complete THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NEW.installation_id<>OLD.installation_id OR NEW.revision_digest<>OLD.revision_digest OR NEW.target_revision_digest<>OLD.target_revision_digest OR
+    NEW.tenant_id<>OLD.tenant_id OR NEW.resource_id<>OLD.resource_id OR NEW.source_column<>OLD.source_column OR NEW.target_column<>OLD.target_column THEN
+   RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE';
+ END IF;
+ IF NEW.chunks<OLD.chunks OR NEW.affected_total<OLD.affected_total THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NEW.complete AND NEW.completed_at IS NULL THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ IF NOT NEW.complete AND NEW.completed_at IS NOT NULL THEN RAISE EXCEPTION 'M03_RENAME_PROGRESS_IMMUTABLE'; END IF;
+ RETURN NEW;
+END $rename_progress$;
+CREATE TRIGGER platform_schema_rename_progress_immutable_v1 BEFORE UPDATE OR DELETE ON public.platform_schema_rename_progress_v1 FOR EACH ROW EXECUTE FUNCTION public.platform_schema_rename_progress_immutable_v1();
+REVOKE ALL ON FUNCTION public.platform_schema_rename_progress_immutable_v1() FROM PUBLIC;

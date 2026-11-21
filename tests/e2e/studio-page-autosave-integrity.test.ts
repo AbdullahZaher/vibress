@@ -63,5 +63,8 @@ test("page autosave persists the latest content without remounting Lexical", asy
   );
 
   await page.reload();
+  // A cold reload recompiles the admin editor route in dev; wait for the
+  // editor mount before asserting the persisted document.
+  await expect(editor).toBeVisible({ timeout: 30_000 });
   await expect(editor).toContainText(marker);
 });

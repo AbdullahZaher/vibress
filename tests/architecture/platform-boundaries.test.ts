@@ -171,3 +171,24 @@ describe("platform dependency boundaries", () => {
     ).toThrow(/Required source directory does not exist/);
   });
 });
+
+describe("M03-S03 experimental execution architecture", () => {
+  it("keeps operator and session supervisor out of public database exports and serving source imports", () => {
+    const forbidden=/platform-schema-migration-operator|schema-operator-experimental-(?:supervisor|session|recovery-epoch|durable-authority|anchor|lifecycle|offline-lock)/;
+    const index=fs.readFileSync(path.join(ROOT,"packages/database/src/index.ts"),"utf8");
+    expect(index).not.toMatch(forbidden);
+    const cli=fs.readFileSync(path.join(ROOT,"packages/database/src/schema-operator-cli.ts"),"utf8");
+    expect(cli).toContain("DisposableDurableRecoveryAuthority.open");
+    expect(cli).not.toContain("superviseDisposableSchemaOperation");
+    for(const directory of ["apps","packages"]) {
+      const sources=fs.readdirSync(path.join(ROOT,directory),{withFileTypes:true})
+        .filter(entry=>entry.isDirectory() && fs.existsSync(path.join(ROOT,directory,entry.name,"src")))
+        .flatMap(entry=>listTypeScriptFiles(path.join(ROOT,directory,entry.name,"src")))
+        .map(file=>({path:path.relative(ROOT,file).split(path.sep).join("/"),content:fs.readFileSync(file,"utf8")}));
+      for(const file of sources) {
+        if(file.path.startsWith("packages/database/src/") && /\/(?:platform-schema-migration-operator|schema-operator-cli|schema-operator-experimental-[\w-]+)\.ts$/.test(file.path)) continue;
+        expect(specifiers(file.content).filter(s=>forbidden.test(s)),file.path).toEqual([]);
+      }
+    }
+  });
+});

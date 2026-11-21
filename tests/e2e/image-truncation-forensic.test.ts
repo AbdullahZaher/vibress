@@ -68,6 +68,8 @@ test.describe("Vibress Studio Image Truncation Forensic E2E", () => {
     // Wait for studio content to be populated
     const editorArea = page.locator('div.vibress-studio-editor div[contenteditable="true"]').first();
     await expect(editorArea).toBeVisible();
+    // Lexical attaches the editor before it paints the initial document.
+    await expect(editorArea.locator("p").first()).toBeVisible({ timeout: 15000 });
 
     // Check baseline word count in UI
     console.log("Header text:", await page.locator("header").last().innerText());

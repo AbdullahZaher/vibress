@@ -351,12 +351,19 @@ test.describe("Admin UI design acceptance: visual, responsive, RTL, accessibilit
   test("staff interface language preference is independent and persists per account", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page);
+    // The provider resolves the account's language from the locales context on
+    // mount; a click that lands mid-refresh is overwritten by that response.
+    // Let the refresh settle, then assert the toggle flips the direction.
+    await page.waitForLoadState("networkidle");
     const languageToggle = page.getByRole("button", { name: "Switch interface language" });
     await expect(languageToggle).toBeVisible();
+    const initialDir = await page.locator("html").getAttribute("dir");
+    expect(["ltr", "rtl"]).toContain(initialDir);
+    const expectedDir = initialDir === "rtl" ? "ltr" : "rtl";
     await languageToggle.click();
-    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await expect(page.locator("html")).toHaveAttribute("dir", expectedDir);
     await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+    await expect(page.locator("html")).toHaveAttribute("dir", expectedDir);
     await assertDocumentFits(page);
   });
 

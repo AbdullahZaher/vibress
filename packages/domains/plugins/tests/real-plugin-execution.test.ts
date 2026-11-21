@@ -995,12 +995,12 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
     });
 
     it("Test H: enforces resource limits on infinite loops and crash loops", async () => {
-      const supervisor = new Tier2PluginSupervisor({
+      const loopSupervisor = new Tier2PluginSupervisor({
         invocationTimeoutMs: 350, // Bounded timeout
         maxCrashCount: 3,
         crashWindowMs: 30_000,
       });
-      supervisorsToClean.push(supervisor);
+      supervisorsToClean.push(loopSupervisor);
 
       const context: Tier2InvocationContext = {
         pluginId: "com.vibress.real-fixture-plugin",
@@ -1014,13 +1014,22 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
 
       // 1. Timeout on infinite loop
       await expect(
-        supervisor.invoke(context, "infinite_loop", {}),
+        loopSupervisor.invoke(context, "infinite_loop", {}),
       ).rejects.toThrowError(/timed out/i);
 
       // Verify worker process terminated
-      expect(supervisor.getProcessState(context.pluginId)).toBeNull();
+      expect(loopSupervisor.getProcessState(context.pluginId)).toBeNull();
 
-      // 2. Quarantine on repeated crashes
+      // 2. Quarantine on repeated crashes. Worker startup must not race the
+      // crash itself, so this supervisor uses a timeout that only bounds a
+      // genuinely stuck worker; each rejection must be the crash path.
+      const crashSupervisor = new Tier2PluginSupervisor({
+        invocationTimeoutMs: 10_000,
+        maxCrashCount: 3,
+        crashWindowMs: 30_000,
+      });
+      supervisorsToClean.push(crashSupervisor);
+
       const flakyContext: Tier2InvocationContext = {
         pluginId: "com.vendor.flaky-plugin",
         releaseDigest: "sha256:release_flaky",
@@ -1030,12 +1039,17 @@ describe("Real Plugin Execution & Production Security Integration (M7.2, M7.3, M
         trustTier: "curated_operator",
       };
 
-      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
-      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
-      await expect(supervisor.invoke(flakyContext, "simulate_crash", {})).rejects.toThrow();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const error = await crashSupervisor
+          .invoke(flakyContext, "simulate_crash", {})
+          .then(() => null, (caught: unknown) => caught);
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toMatch(/crashed|exited/i);
+        expect((error as Error).message).not.toMatch(/timed out/i);
+      }
 
-      expect(supervisor.isQuarantined("com.vendor.flaky-plugin")).toBe(true);
-      await expect(supervisor.invoke(flakyContext, "compute", 10)).rejects.toThrowError(
+      expect(crashSupervisor.isQuarantined("com.vendor.flaky-plugin")).toBe(true);
+      await expect(crashSupervisor.invoke(flakyContext, "compute", 10)).rejects.toThrowError(
         /is quarantined due to excessive crashes/i,
       );
     });

@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "dev": "pnpm --filter @vibress/plugin-sdk build && nx run-many --target=dev --all --parallel=5",
+    "dev": "pnpm --filter @vibress/plugin-sdk build && nx run-many --target=dev --all --exclude=@vibress/platform-reference --parallel=5",
     "dev:infra": "docker-compose -f compose.dev.yml up -d",
     "dev:infra:down": "docker-compose -f compose.dev.yml down",
     "build": "pnpm -r build",
@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@nx/eslint-plugin": "^23.1.1",
+    "@nx/eslint-plugin": "^23.3.2",
     "@playwright/test": "^1.64.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^26.6.5",
@@ -53,7 +53,7 @@
     "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "jsdom": "^24.1.0",
-    "nx": "^23.1.1",
+    "nx": "^23.3.2",
     "pg": "^8.22.0",
     "prettier": "^3.9.6",
     "tsx": "^4.23.9",
@@ -65,7 +65,7 @@
   },
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=24.0.0 <25",
+    "node": ">=24.22.3 <25",
     "pnpm": ">=11.17.0"
   },
   "version": "1.2.0"
