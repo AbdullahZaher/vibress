@@ -72,16 +72,16 @@ describe("Epic execution traceability ledger (M00-E06)", () => {
 
   it("refuses to close an Epic without pinned evidence", () => {
     const registry = clone(committed);
-    // M00-E02 has a prepared decision package but no implementation SHA.
-    const epic = epicById(registry, "M00-E02");
+    // M01-E01 is an unimplemented Epic with no pinned implementation SHA.
+    const epic = epicById(registry, "M01-E01");
     epic.executionStatus = "FORMALLY_CLOSED";
     epic.formallyClosed = true;
     const { errors } = validateLedger(registry, parsedWave, parsedMilestones);
     expect(errors).toEqual(
       expect.arrayContaining([
-        "M00-E02: closure requires a pinned implementation SHA",
-        "M00-E02: closure requires an independent ACCEPT verdict with URL",
-        "M00-E02: closure requires recorded owner authorization with URL",
+        "M01-E01: closure requires a pinned implementation SHA",
+        "M01-E01: closure requires an independent ACCEPT verdict with URL",
+        "M01-E01: closure requires recorded owner authorization with URL",
       ]),
     );
   });

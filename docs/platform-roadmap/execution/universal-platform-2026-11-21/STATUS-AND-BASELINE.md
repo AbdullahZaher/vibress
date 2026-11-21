@@ -112,3 +112,16 @@ M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet prove
 - Full `pnpm test:unit` against disposable PostgreSQL 16 on port 15433: **53 failed / 2324 passed / 356 skipped (2733 total)**. Failures are concentrated in API/security tests returning HTTP 503 (missing external services such as Redis/S3/AI), localStorage being undefined in jsdom, and hook timeouts. This suite therefore **does not pass** and M00 cannot be declared accepted.
 
 **Baseline comparison:** the same two failing files were run at the pre-increment commit `e44477ca` against the same disposable PG16; they failed identically (`expected 503 to be 200`, `window.localStorage` undefined). The failures are environmental and pre-existing, not introduced by the M00 increment. The full suite still fails, so M00 acceptance is not requested.
+
+## 2026-11-21 M00 test-environment recovery and final verification (Agent 01)
+
+- [x] Classified the original 76 unique FAIL identifiers (53 reported test-level failures): JSDOM_ENVIRONMENT, MISSING_TEST_DEPENDENCY, TEST_TIMEOUT, INCORRECT_SERVICE_CONFIGURATION; **zero application regressions**. Evidence: `M00-UNIT-FAILURE-ROOT-CAUSE-REGISTER.md`.
+- [x] Reproduced representative failures at baseline `e44477ca` under identical conditions; failures predate the M00 increment. Evidence: `M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md`.
+- [x] Restored the supported runtime (Node v24.22.3) and disposable PostgreSQL 16 / Redis 7 / S3-compatible / Mailpit stack; added explicit jsdom origin; removed no assertion. Evidence: `M00-TEST-ENVIRONMENT-RECOVERY-REPORT.md`.
+- [x] Final full unit suite: **379 files / 2733 tests passed, exit 0** (previously 2324 passed / 53 failed / 356 skipped).
+- [x] All artifact validators, docs validator, link validator, typecheck and targeted suites pass.
+- [x] `M00-FINAL-MILESTONE-VERIFICATION.md` and `M00-INDEPENDENT-CERTIFICATION-HANDOFF.md` produced.
+- [ ] Agent 06 independent certification **not performed**; no verdict claimed.
+- [ ] Project Owner / maintainer merge authorization **not granted**; no merge to `main`.
+
+`ENGINEERING_IMPLEMENTED` and verification-complete; `M00_ACCEPTANCE_BLOCKED` pending independent review and human approvals. All prior restrictions preserved.

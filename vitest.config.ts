@@ -11,6 +11,13 @@ export default defineConfig({
   oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "jsdom",
+    // jsdom only exposes Storage for a non-opaque origin. Without an explicit
+    // URL the document origin is opaque and window.localStorage is undefined.
+    environmentOptions: {
+      jsdom: {
+        url: "http://localhost/",
+      },
+    },
     globals: true,
     globalSetup: path.resolve(__dirname, "./tests/global-setup.ts"),
     fileParallelism: false,

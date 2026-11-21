@@ -3,7 +3,7 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "71f2e06db5225804f9fa68a4aaf8a43043d95d58c11603abc1e6a489b7c0fc51"
+      "sha256": "b82cbca41c7e354606b1bb926729805bafc072aa49756477f46bbffcff1bb8fa"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
@@ -20,12 +20,32 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
       "sha256": "585a13875aba3c91fbfd5e32fd75cd4058400282e87dc427dfe5fd223fc362ff"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-UNIT-FAILURE-ROOT-CAUSE-REGISTER.md",
+      "sha256": "e93a4e57a0f8f8615f7cc68067dc8c7e5a52ca01ee3e4c358874421e3cebd7cb"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-TEST-ENVIRONMENT-RECOVERY-REPORT.md",
+      "sha256": "2ee329717294897cb990c9918442a6405b1bb683c6a0251e41fa08333b01e491"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md",
+      "sha256": "f066f8e68605622785c13104049da2064290a4086980a83a722e725d77ca0631"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MILESTONE-VERIFICATION.md",
+      "sha256": "45fa9e54a506e805e6db998156d3d4d4631ec24d0aad39dd2227e0059b876819"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "sha256": "e09c4c21d6615fa8f9f4c25d54a5b724caee002c3aceac86ce60261e35420416"
     }
   ],
   "testSuites": [
     {
       "path": "scripts/__tests__/execution-traceability.test.mjs",
-      "sha256": "f7a13c7d8f80c52c3125f7666c4acb10c7a75c291e3e86ba3ccd60c00b12e796",
+      "sha256": "f7d26b2b3826486e5f30b74ec9fe84276b894336fc27f4b26015164f230815ce",
       "negativeCases": true
     },
     {
@@ -76,12 +96,17 @@
     "referencedSourcePaths": [
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/CMS-STUDIO-COMPATIBILITY-MANIFEST.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-CAPABILITY-MATRIX.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E02-ADR-DECISION-PACKAGES.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E07-DEPLOYMENT-IDENTITY-ARCHITECTURE.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E11-OWNERSHIP-AND-QUALITY-BASELINE.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-ACTUAL-DX-TRIALS.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-CRM-ADOPTER-DX-BASELINE.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MILESTONE-VERIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-TEST-ENVIRONMENT-RECOVERY-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-UNIT-FAILURE-ROOT-CAUSE-REGISTER.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",

@@ -21,6 +21,11 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/BRANCH-CONSOLIDATION-INVENTORY-2026-11-21.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-UNIT-FAILURE-ROOT-CAUSE-REGISTER.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-TEST-ENVIRONMENT-RECOVERY-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-BASELINE-VS-CANDIDATE-REGRESSION-EVIDENCE.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MILESTONE-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
 ];
 
 export const TEST_SUITES = [
