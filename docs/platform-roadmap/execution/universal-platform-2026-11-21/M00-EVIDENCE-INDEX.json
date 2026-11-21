@@ -223,11 +223,11 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-SECURITY-TEST-HARDENING.md",
-      "sha256": "dd357f51eeeb95fb4024bfe1ff63e3d597e34864cfb1f727d7b0fa1ee8c5372c"
+      "sha256": "3b3def101e7ddcee56ab49f555b463c498bcdfe622d638a147b5e1537f1ecb20"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-LIVE-INSTALLATION-ISOLATION.md",
-      "sha256": "47c03fabd49c5cc84aa313b075ab53714ed3d68e71f881ca78d01557f3eec4d5"
+      "sha256": "dec24a01dd1e704e9c9adff5f65efc7244e8f4a871fef2349da2fa82189c5ff5"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-CONCURRENCY-CERTIFICATION.md",
@@ -276,6 +276,10 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-RUNTIME-FINAL-UNIT-LOG.txt",
       "sha256": "74563dd6591906de369e01ebdf3768944bed1bdc6a12a225634e592aa089986f"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INDEPENDENT-RECERTIFICATION.md",
+      "sha256": "226e25865a33a445fa33cb159c22601a7c521a9819244592e8390fd90b89a556"
     }
   ],
   "testSuites": [

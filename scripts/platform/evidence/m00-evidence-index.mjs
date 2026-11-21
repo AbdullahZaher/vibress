@@ -85,6 +85,7 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-OWNER-DECISION.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-DRILL-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-RUNTIME-FINAL-UNIT-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INDEPENDENT-RECERTIFICATION.md",
 ];
 
 export const TEST_SUITES = [

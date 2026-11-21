@@ -163,3 +163,12 @@ The line above was accurate when written, before the independent auditor was app
 - Final full unit suite after remediation: 384 files / 2768 tests passed, exit 0; raw log `M02-HARDENING-FINAL-UNIT-LOG.txt`.
 - Agent 06 P2/P3 closure: OIDC log replaced with passing 79/79 run; candidate SHA/tree and CI pinned here; tautological S3 assertion replaced with alias-absence check; test totals updated here.
 - Formal M02/M00/M01 closure and merge into `main` remain BLOCKED pending human governance and owner authorization.
+
+## 2026-11-22 — M02 final runtime candidate identity and CI
+
+- Independently audited final candidate: `b245a4806786df1f0b559eaf8aa6448b412e247b` / tree `b6b2f72385e22f4f63353cb8bfae4041e14c3635`.
+- Independent verdict: `M02_CONDITIONALLY_ACCEPTABLE` (`M02-FINAL-INDEPENDENT-RECERTIFICATION.md`); Wave 1 technical GO: NO-GO.
+- Documentation CI on that candidate: [44956535643](https://github.com/AbdullahZaher/vibress/actions/runs/44956535643) SUCCESS (documentation workflow only; a duplicate dispatch was cancelled).
+- Final full unit suite: 384 files / 2768 tests passed, exit 0; raw log `M02-RUNTIME-FINAL-UNIT-LOG.txt`.
+- Agent 06 P2/P3 closure: candidate SHA/tree and CI pinned here; S3 count corrected to 18 PASS lines; BullMQ limitations disclosed in its report.
+- Formal closure and merge into `main` remain BLOCKED pending owner authorization.
