@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -56,7 +56,7 @@ jobs:
         run: docker compose -f compose.dev.yml up -d --wait
 
       - name: Checkout pinned LMS repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           repository: AbdullahZaher/vibress-lms
           ref: 4ae44d903b723e4411ab2a090e19e99ff87a0923
@@ -107,7 +107,7 @@ jobs:
     # Continue to run on main pushes to validate the released runtime images.
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Set up Docker Buildx (container driver for GHA cache)
         uses: docker/setup-buildx-action@v4
@@ -311,7 +311,7 @@ jobs:
     if: always() && (github.event_name == 'push' || github.event_name == 'pull_request') && (needs.build.result == 'success' || needs.build.result == 'failure')
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event.pull_request.number == 141 && github.event.pull_request.head.sha || github.sha }}
 
@@ -336,7 +336,7 @@ jobs:
       # This is separate from the build job because GitHub runners do not share checkouts.
       - name: Checkout pinned LMS candidate for Native Admin UI PR acceptance
         if: github.event_name == 'pull_request'
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           repository: AbdullahZaher/vibress-lms
           ref: 4ae44d903b723e4411ab2a090e19e99ff87a0923
@@ -486,7 +486,7 @@ jobs:
     needs: build
     steps:
       - name: Checkout candidate source
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
