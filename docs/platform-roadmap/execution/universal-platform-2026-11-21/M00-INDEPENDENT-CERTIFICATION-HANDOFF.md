@@ -13,7 +13,7 @@ SHA labels are deliberately unique; earlier "final" labels are superseded:
 - Implementation code commit (last runtime-affecting commit): `5c79f9bb23797f37f3432ae6bf4cf3740dd886c2` / `dfdddcd59b416334357988937fa0ef45238daf90` — **not** a certification target
 - Independently certified engineering baseline: `77a6043b6f442ef7b091ae9bbbe76e08613282e8` / `2eb592b95648fdb47a2c17cb79d9b0ea26b3db8b` — verdict `M00_ENGINEERING_ACCEPTED`
 - Delta-reviewed candidate: `8e7dbc3fb2f83e266b57059e4d4886250771c5cb` / `d208f1bd7b462648c7eeb4087dd5e7e14aec5cbf` — verdict `M00_DELTA_CONDITIONALLY_ACCEPTABLE`
-- Final candidate after P2/P3 reconciliation: pinned in `M00-FINAL-MERGE-READINESS-REPORT.md`
+- Audited final candidate: `a6d33b9c3f976a4f182c40a5b7820d4643017661` / `cbb2e877d781d2ba8c958cf7ff40d7323fae1c7c`; documentation CI [44941858106](https://github.com/AbdullahZaher/vibress/actions/runs/44941858106) SUCCESS (docs only)
 - Documentation CI on the implementation checkpoint: [44937688713](https://github.com/AbdullahZaher/vibress/actions/runs/44937688713) (success)
 - Documentation CI on the remediation commit: [44939544401](https://github.com/AbdullahZaher/vibress/actions/runs/44939544401) (success)
 - Immutable full-suite log: `M00-FINAL-UNIT-TEST-LOG.txt` (379 files / 2733 tests passed, exit 0)

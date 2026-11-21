@@ -3,7 +3,7 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "6ae242c9900a0ca60f53e447a435067ca9001e9f6fd20ad0abdee1a3de3d8a5c"
+      "sha256": "c7f2ce781e44d43f04d847e5441d0e46e8e6664fb48a53e861460b09adcf4ab5"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
@@ -39,7 +39,7 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
-      "sha256": "6d36e7126435c7011cc4eb9ec57ce20f2dbe08c9e0a4ca7c57098f2fa2d8956a"
+      "sha256": "bb1cc4f233b07ee8887ea35bec40cda4977b2f3b4eb861a045097bd36e914447"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
@@ -48,6 +48,26 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-ATTESTATION.txt",
       "sha256": "cd4a10d05d10db4f982b0270845cd0c6ad677f29068555bfbbdc93b9b03555e9"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-DELTA-CLASSIFICATION.md",
+      "sha256": "ccb487edb956ccb4f1a76b5c0d663274973e2caa5766c34b3ef794d946c832ce"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-DOCUMENTATION-RECONCILIATION.md",
+      "sha256": "772e40225dbe2421f4c35e0936212f1bfcbe23b8106422a7684c835f4a744a6e"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-GOVERNANCE-DECISION-REGISTER.md",
+      "sha256": "ca1b9bda41cc0563003103b945b77928c29b5db1646ac2e7c77ebe71fbbf14bf"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MERGE-READINESS-REPORT.md",
+      "sha256": "e019755df791f31f9d929e4c9d366deab67834e9dedac18d0e333d29237d610e"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-INDEPENDENT-DELTA-VERDICT.md",
+      "sha256": "21de562c845484c72f5b3b5bc9801c0cdf3d17ca1d8cd6cdc63c11a12523ed1c"
     }
   ],
   "testSuites": [

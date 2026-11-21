@@ -10,7 +10,7 @@
 | Implementation code commit | `5c79f9bb23797f37f3432ae6bf4cf3740dd886c2` / `dfdddcd59b416334357988937fa0ef45238daf90` |
 | Independently certified engineering baseline | `77a6043b6f442ef7b091ae9bbbe76e08613282e8` / `2eb592b95648fdb47a2c17cb79d9b0ea26b3db8b` |
 | Delta-reviewed candidate | `8e7dbc3fb2f83e266b57059e4d4886250771c5cb` / `d208f1bd7b462648c7eeb4087dd5e7e14aec5cbf` |
-| Final candidate after P2/P3 reconciliation | exact SHA/tree recorded in the dated entry of `STATUS-AND-BASELINE.md` |
+| Audited final candidate: `a6d33b9c3f976a4f182c40a5b7820d4643017661` / `cbb2e877d781d2ba8c958cf7ff40d7323fae1c7c`; documentation CI [44941858106](https://github.com/AbdullahZaher/vibress/actions/runs/44941858106) SUCCESS (docs only)
 
 ## Merge preconditions
 

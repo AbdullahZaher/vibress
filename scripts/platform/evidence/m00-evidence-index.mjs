@@ -28,6 +28,11 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-ATTESTATION.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-DELTA-CLASSIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-DOCUMENTATION-RECONCILIATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-GOVERNANCE-DECISION-REGISTER.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-MERGE-READINESS-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-INDEPENDENT-DELTA-VERDICT.md",
 ];
 
 export const TEST_SUITES = [

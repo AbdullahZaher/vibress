@@ -129,3 +129,11 @@ M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet prove
 ## 2026-11-21 — Final delta status reconciliation (supersedes the earlier "not performed" line)
 
 The line above was accurate when written, before the independent auditor was appointed. It is superseded by the actual verdicts recorded in `M00-INDEPENDENT-CERTIFICATION-HANDOFF.md` and `M00-FINAL-DELTA-INDEPENDENT-RECERTIFICATION.md`. These are restricted technical certifications only: they do not close any Epic, approve governance, authorize a merge or permit production release. M00 remains `M00_ENGINEERING_ACCEPTED_RESTRICTED_SCOPE` / `M00_FORMAL_ACCEPTANCE_BLOCKED`.
+
+## 2026-11-21 — M00 audited final candidate identity (direct pin)
+
+- Audited final candidate: `a6d33b9c3f976a4f182c40a5b7820d4643017661`
+- Audited final Git tree: `cbb2e877d781d2ba8c958cf7ff40d7323fae1c7c`
+- Documentation workflow CI on that exact SHA: [44941858106](https://github.com/AbdullahZaher/vibress/actions/runs/44941858106) — SUCCESS. This is documentation CI only, not runtime/DB/browser acceptance.
+- Independent final delta verdict on that SHA: `M00_FINAL_DELTA_CONDITIONAL` (`M00-FINAL-INDEPENDENT-DELTA-VERDICT.md`).
+- This documentation-only closure commit follows the audited SHA; it does not change runtime, tests or security.
