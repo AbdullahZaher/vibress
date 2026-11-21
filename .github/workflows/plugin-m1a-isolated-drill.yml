@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
       - name: Fetch pinned historical migration baseline (immutable SHA)
         run: |
           git fetch --no-tags --depth=1 origin 3f39f29bd34625545ab8a1699415b8c98ee557c7
