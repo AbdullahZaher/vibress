@@ -72,3 +72,20 @@ Every status change cites repo, source SHA/tree, exact job/run IDs, relevant fix
 - [x] Implemented M00-E06 traceability: `EPIC-EXECUTION-LEDGER.json` enumerates all 140 Epics across 13 milestones with owners, assessment, execution status, scope, evidence, independent review, merge and authorization fields. `pnpm verify:execution-traceability` fails closed on closure without evidence, illegal statuses, checklist drift and invented progress metrics.
 - [x] M00-E06 is `IMPLEMENTED_RESTRICTED`: tooling and tests exist; milestone-end acceptance and independent review remain pending.
 - [ ] M00/M01/M02 formal GO and Wave 1 GO remain blocked by the owner/human gates listed above. No Epic is `FORMALLY_CLOSED`.
+
+## 2026-11-21 Six-workstream engineering increment (Agent 01)
+
+All workstreams are isolated nonproduction deliverables. **No milestone is formally closed; M00/M01/M02/M03 remain open; Production NO-GO.** No blocked historical PR was merged.
+
+| Workstream | Epic / gate | Deliverable | Status |
+| --- | --- | --- | --- |
+| A | M00-E01 | Deterministic repository inventory generator + committed JSON/Markdown artifact; 6 apps, 70 packages, 58 migrations, 0 boundary violations | `IMPLEMENTED_RESTRICTED`, 7 tests pass |
+| B | M00-E13 | CRM adopter task script (9 tasks), clean-install criteria, DX readiness harness; no interviews or timings | `IMPLEMENTED_RESTRICTED`, 6 tests pass; DX-08 `BLOCKED` on A2/G6 |
+| C | M01-E09 | Packed-kernel external consumer: custom action + route, zero private imports, offline typecheck pass | `IMPLEMENTED_RESTRICTED`, 5 tests pass; public publication still blocked |
+| D | M02-E11 | Tenant export/retention/offboarding contracts; backup erasure never claimed; 11 negative tests | `IMPLEMENTED_RESTRICTED`; no disposable infra drill yet |
+| E | M03 D-02 | Disposable PG16 retained/rewound Backfill PITR drill executed twice, 9/9 assertions PASS, exit 0 | Physical evidence obtained; **D-02 still BLOCKED** — frozen operator/authenticated authority not exercised |
+| F | M03 D-01 / D-03 | Owner/human DBA-IAM decision packages with explicit PENDING status and blank signature fields | Prepared, no simulated approvals |
+
+Verification: 40/40 targeted tests pass across five suites; tenancy typecheck clean; traceability ledger 140 Epics, 0 formally closed; roadmap docs validator and link validator pass. Repository docs CI is the only CI run for this increment; no full monorepo/milestone-end gate was run because M00 still has governance-blocked Epics.
+
+M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet proven sufficient**. The drill proves physical retained/rewound recovery, journal reconciliation, external anchor, unknown-COMMIT preservation, duplicate prevention and operator forward-fix, but not signed authority enforcement against the frozen M03 implementation.

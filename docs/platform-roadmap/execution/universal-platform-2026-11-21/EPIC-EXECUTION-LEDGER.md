@@ -13,9 +13,9 @@
 
 | Execution status | Epics |
 | --- | --- |
-| NOT_STARTED | 79 |
+| NOT_STARTED | 76 |
 | IN_PROGRESS | 42 |
-| IMPLEMENTED_PENDING_TESTS | 8 |
+| IMPLEMENTED_PENDING_TESTS | 11 |
 | TESTED_PENDING_REVIEW | 8 |
 | INDEPENDENTLY_ACCEPTED | 0 |
 | BLOCKED | 3 |
@@ -29,12 +29,11 @@
 | BLOCKED_GOVERNANCE | 3 |
 | CERTIFIED_RESTRICTED | 7 |
 | CERTIFIED_RESTRICTED_D01 | 1 |
-| IMPLEMENTED_RESTRICTED | 8 |
+| IMPLEMENTED_RESTRICTED | 11 |
 | IN_PROGRESS_CONTRACT_ONLY | 2 |
 | IN_PROGRESS_METADATA_ONLY | 1 |
 | IN_PROGRESS_MOCK_ONLY | 1 |
 | NOT_ACCEPTED | 61 |
-| NOT_EVIDENCED | 3 |
 | NOT_VERIFIED | 15 |
 | PARTIAL | 23 |
 | PARTIAL_BLOCKED_D02 | 2 |
@@ -58,7 +57,7 @@
 | M00-E10 | M00 | v1 product capability matrix | PARTIAL | IN_PROGRESS | NONE | no |
 | M00-E11 | M00 | Operational/privacy ownership | BLOCKED_GOVERNANCE | BLOCKED | NONE | no |
 | M00-E12 | M00 | Postgres grant and RLS inventory | PARTIAL | IN_PROGRESS | NONE | no |
-| M00-E13 | M00 | First adopter and DX baseline | NOT_EVIDENCED | NOT_STARTED | NONE | no |
+| M00-E13 | M00 | First adopter and DX baseline | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M01-E01 | M01 | Domain vocabulary | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M01-E02 | M01 | Public kernel contracts | PARTIAL | IN_PROGRESS | NONE | no |
 | M01-E03 | M01 | Application registry | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
@@ -67,7 +66,7 @@
 | M01-E06 | M01 | Reference consumer | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M01-E07 | M01 | Per-installation runtime | PARTIAL | IN_PROGRESS | NONE | no |
 | M01-E08 | M01 | Authenticated application context | PARTIAL | IN_PROGRESS | NONE | no |
-| M01-E09 | M01 | Independent app packaging/extensions | NOT_EVIDENCED | NOT_STARTED | NONE | no |
+| M01-E09 | M01 | Independent app packaging/extensions | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M01-E10 | M01 | Physical installation isolation | PARTIAL | IN_PROGRESS | NONE | no |
 | M02-E01 | M02 | Identity | PARTIAL | IN_PROGRESS | NONE | no |
 | M02-E02 | M02 | Authorization | PARTIAL | IN_PROGRESS | NONE | no |
@@ -79,7 +78,7 @@
 | M02-E08 | M02 | Scoped unit of work | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M02-E09 | M02 | RLS policy coverage/exceptions | PARTIAL | IN_PROGRESS | NONE | no |
 | M02-E10 | M02 | Plugin provisioning grant migration | BLOCKED_GOVERNANCE | BLOCKED | NONE | no |
-| M02-E11 | M02 | Tenant data lifecycle | NOT_EVIDENCED | NOT_STARTED | NONE | no |
+| M02-E11 | M02 | Tenant data lifecycle | IMPLEMENTED_RESTRICTED | IMPLEMENTED_PENDING_TESTS | RESTRICTED | no |
 | M02-E12 | M02 | Function ACL / SECURITY DEFINER | PARTIAL | IN_PROGRESS | NONE | no |
 | M02-E13 | M02 | RLS multi-policy/non-row SQL | PARTIAL | IN_PROGRESS | NONE | no |
 | M02-E14 | M02 | Infrastructure cross-install boundaries | PARTIAL | IN_PROGRESS | NONE | no |

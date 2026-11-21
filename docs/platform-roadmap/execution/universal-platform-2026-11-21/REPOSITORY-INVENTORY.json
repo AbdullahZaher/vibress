@@ -863,7 +863,7 @@
       "private": true,
       "hasBuildScript": false,
       "entryKind": "typescript-source",
-      "exportCount": 4,
+      "exportCount": 5,
       "nxTags": [
         "type:platform"
       ],
@@ -2247,7 +2247,7 @@
     {
       "packageName": "@vibress/tenancy",
       "entryKind": "typescript-source",
-      "exportCount": 4
+      "exportCount": 5
     },
     {
       "packageName": "@vibress/testing",

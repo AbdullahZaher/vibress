@@ -551,9 +551,9 @@
         "A10",
         "A11"
       ],
-      "assessment": "NOT_EVIDENCED",
-      "executionStatus": "NOT_STARTED",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -561,10 +561,18 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/dx/crm-adoption-baseline.mjs",
+          "scripts/__tests__/crm-adopter-dx.test.mjs",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-CRM-ADOPTER-DX-BASELINE.md"
+        ],
+        "testNames": [
+          "CRM developer-adoption baseline (M00-E13)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "9 measurable tasks defined; all statuses NOT_MEASURED except DX-08 BLOCKED. No adoption trial or competitor measurement executed."
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -579,7 +587,9 @@
         "status": "PENDING",
         "url": null
       },
-      "blockers": []
+      "blockers": [
+        "A2/G6 public packaging decision blocks DX-08; no real first-user trial has been executed."
+      ]
     },
     {
       "id": "M01-E01",
@@ -910,9 +920,9 @@
         "A10",
         "A07"
       ],
-      "assessment": "NOT_EVIDENCED",
-      "executionStatus": "NOT_STARTED",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -920,10 +930,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "examples/external-crm-consumer/src/app.ts",
+          "scripts/platform/dx/external-consumer-proof.mjs",
+          "scripts/verify-external-consumer.mjs",
+          "scripts/__tests__/external-consumer-proof.test.mjs"
+        ],
+        "testNames": [
+          "clean external consumer proof (M01-E09)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "Offline npm pack -> extracted tarball -> consumer typecheck passed; zero private imports; custom action and route present. Public registry publication remains blocked by A2/G6 and private/TS-source package metadata."
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -938,7 +957,9 @@
         "status": "PENDING",
         "url": null
       },
-      "blockers": []
+      "blockers": [
+        "A2/G6 package publication decision; no server, database or production hosting was enabled."
+      ]
     },
     {
       "id": "M01-E10",
@@ -1392,9 +1413,9 @@
         "A05",
         "A04"
       ],
-      "assessment": "NOT_EVIDENCED",
-      "executionStatus": "NOT_STARTED",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -1402,10 +1423,18 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "packages/tenancy/src/lifecycle.ts",
+          "packages/tenancy/src/__tests__/lifecycle.test.ts",
+          "packages/tenancy/src/index.ts"
+        ],
+        "testNames": [
+          "bounded tenant lifecycle contracts (M02-E11)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "11 unit tests pass and tenancy typecheck passes. Pure contracts only: no disposable PG/S3/queue drill executed, no backup erasure claimed."
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -1420,7 +1449,9 @@
         "status": "PENDING",
         "url": null
       },
-      "blockers": []
+      "blockers": [
+        "Disposable infrastructure-backed export/retention/offboarding drill not executed; Agent 02/04/05 verdicts pending."
+      ]
     },
     {
       "id": "M02-E12",
@@ -1830,10 +1861,17 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/m03/backfill-pitr-drill.sh",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md"
+        ],
+        "testNames": [
+          "disposable PG16 retained/rewound Backfill PITR drill (9 assertions, exit 0)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "Physical PITR evidence only; frozen M03 operator, authenticated authority and Agent 06 review not exercised. D-02 remains BLOCKED."
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -1981,10 +2019,17 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/m03/backfill-pitr-drill.sh",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md"
+        ],
+        "testNames": [
+          "disposable PG16 retained/rewound Backfill PITR drill (9 assertions, exit 0)"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          "Physical PITR evidence only; frozen M03 operator, authenticated authority and Agent 06 review not exercised. D-02 remains BLOCKED."
+        ]
       },
       "independentReview": {
         "verdict": null,

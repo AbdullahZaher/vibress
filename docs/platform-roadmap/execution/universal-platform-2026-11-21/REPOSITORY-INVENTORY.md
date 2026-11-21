@@ -60,7 +60,7 @@
 | @vibress/studio-testing | declared-entry | 3 |
 | @vibress/studio-transforms | declared-entry | 1 |
 | @vibress/studio-utils | declared-entry | 8 |
-| @vibress/tenancy | typescript-source | 4 |
+| @vibress/tenancy | typescript-source | 5 |
 | @vibress/testing | typescript-source | 7 |
 | @vibress/theme-core | typescript-source | 6 |
 | @vibress/themes-registry | typescript-source | 14 |
