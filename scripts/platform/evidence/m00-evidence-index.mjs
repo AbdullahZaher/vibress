@@ -28,6 +28,11 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-ATTESTATION.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ENGINEERING-IMPLEMENTATION-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-REGISTRY-AND-IDENTITY-SECURITY-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-EXTERNAL-CONSUMER-CERTIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-MILESTONE-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
 ];
 
 export const TEST_SUITES = [

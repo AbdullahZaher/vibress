@@ -3,11 +3,11 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "6ae242c9900a0ca60f53e447a435067ca9001e9f6fd20ad0abdee1a3de3d8a5c"
+      "sha256": "d30c12ccf7a7a91216a2dd0772aca0df8e5215934011a02e8dda5f7899c8e428"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
-      "sha256": "572eaac5b48bbc5204f8cbe86ee1e90877623781553c9387ec61ef600f82ee33"
+      "sha256": "ece04c69e8d2d21a02e6cb7911f6915fda5c83964e0f0dac2a8901dfff0d63d9"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
@@ -48,6 +48,26 @@
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-ATTESTATION.txt",
       "sha256": "cd4a10d05d10db4f982b0270845cd0c6ad677f29068555bfbbdc93b9b03555e9"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ENGINEERING-IMPLEMENTATION-REPORT.md",
+      "sha256": "bb3f02d84bdd9747b83ffba49161065834ceeabde0edb5d345e56d3d9f4dc7be"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-REGISTRY-AND-IDENTITY-SECURITY-REPORT.md",
+      "sha256": "813fc4a26e4c66df9ee18e36562056e2482da0200fc4544d1b2b49638c5cb4c9"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-EXTERNAL-CONSUMER-CERTIFICATION.md",
+      "sha256": "0ad3c85747299bd7ae75b28798bd93f1d92519bdc4ecdbd1fefdfe70f9d793ce"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-MILESTONE-VERIFICATION.md",
+      "sha256": "67f87419ffd33158756749986a311355506bbebb491376c9fd1e19774fd38d4f"
+    },
+    {
+      "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "sha256": "939dc7c2671ac76cd9c7618dbbc9e5bc3e29a66ec12dee2ba31ee079868010b3"
     }
   ],
   "testSuites": [
@@ -115,6 +135,12 @@
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-TEST-ENVIRONMENT-RECOVERY-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-UNIT-FAILURE-ROOT-CAUSE-REGISTER.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ENGINEERING-IMPLEMENTATION-REPORT.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-EXTERNAL-APPLICATION-LIFECYCLE-TEST-MATRIX.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-EXTERNAL-CONSUMER-CERTIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-MILESTONE-VERIFICATION.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+      "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-REGISTRY-AND-IDENTITY-SECURITY-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json",
       "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",

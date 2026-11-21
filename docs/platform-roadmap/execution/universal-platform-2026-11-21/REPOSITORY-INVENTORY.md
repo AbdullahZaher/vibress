@@ -40,7 +40,7 @@
 | @vibress/events | typescript-source | 7 |
 | @vibress/i18n | typescript-source | 12 |
 | @vibress/observability | typescript-source | 19 |
-| @vibress/platform-kernel | typescript-source | 5 |
+| @vibress/platform-kernel | typescript-source | 6 |
 | @vibress/plugin-core | typescript-source | 9 |
 | @vibress/plugin-sdk | declared-entry | 41 |
 | @vibress/queue | typescript-source | 14 |

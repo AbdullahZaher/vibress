@@ -21,6 +21,7 @@ export type ProjectId = Brand<string, "ProjectId">;
 export type TenantId = Brand<string, "TenantId">;
 export type PrincipalId = Brand<string, "PrincipalId">;
 export type PublicationId = Brand<string, "PublicationId">;
+export type WorkspaceId = Brand<string, "WorkspaceId">;
 
 export const LEGACY_PUBLICATION_FALLBACK = "pub_default" as const;
 
@@ -77,6 +78,8 @@ export const asTenantId = (value: unknown): TenantId =>
   parseIdentifier<TenantId>("TenantId", value);
 export const asPrincipalId = (value: unknown): PrincipalId =>
   parseIdentifier<PrincipalId>("PrincipalId", value);
+export const asWorkspaceId = (value: unknown): WorkspaceId =>
+  parseIdentifier<WorkspaceId>("WorkspaceId", value);
 
 /**
  * Publication identities use the legacy CMS vocabulary and therefore do not
