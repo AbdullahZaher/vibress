@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "matrixVersion": "2026-11-21",
+  "productionStatus": "NO-GO",
+  "riskAcceptance": "NONE",
+  "categories": [
+    "EXISTING_HOST_CMS",
+    "UNIVERSAL_PLATFORM",
+    "RESTRICTED_EXPERIMENTAL",
+    "PUBLIC_CONTRACT",
+    "PLANNED",
+    "UNSUPPORTED_PROHIBITED"
+  ],
+  "capabilities": [
+    {
+      "id": "CAP-01",
+      "name": "Custom application HTTP routes",
+      "category": "UNIVERSAL_PLATFORM",
+      "evidence": "apps/platform-reference/src/application.ts",
+      "evidencePresent": true,
+      "status": "IMPLEMENTED_RESTRICTED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-02",
+      "name": "Transactional custom actions",
+      "category": "UNIVERSAL_PLATFORM",
+      "evidence": "apps/platform-reference/src/application.ts",
+      "evidencePresent": true,
+      "status": "IMPLEMENTED_RESTRICTED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-03",
+      "name": "End-user frontend surface",
+      "category": "EXISTING_HOST_CMS",
+      "evidence": "apps/web/src",
+      "evidencePresent": true,
+      "status": "REUSE_BASELINE",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-04",
+      "name": "Generated CRUD REST/OpenAPI",
+      "category": "RESTRICTED_EXPERIMENTAL",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-02-M03-M06.md",
+      "evidencePresent": true,
+      "status": "CONTRACT_ONLY",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-05",
+      "name": "Generated Admin UI",
+      "category": "RESTRICTED_EXPERIMENTAL",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-02-M03-M06.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-06",
+      "name": "Trusted Module SDK",
+      "category": "PUBLIC_CONTRACT",
+      "evidence": "packages/plugin-sdk/src/index.ts",
+      "evidencePresent": true,
+      "status": "PRIVATE_PACKAGE",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-07",
+      "name": "PostgreSQL tenant isolation",
+      "category": "UNIVERSAL_PLATFORM",
+      "evidence": "packages/tenancy/src/scope.ts",
+      "evidencePresent": true,
+      "status": "IMPLEMENTED_RESTRICTED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-08",
+      "name": "Workers and Outbox",
+      "category": "EXISTING_HOST_CMS",
+      "evidence": "apps/worker/src/processors",
+      "evidencePresent": true,
+      "status": "REUSE_BASELINE",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-09",
+      "name": "Published public SDK and CLI",
+      "category": "PLANNED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-03-M07-M08.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-10",
+      "name": "External CRM consumer",
+      "category": "UNIVERSAL_PLATFORM",
+      "evidence": "examples/external-crm-consumer/src/app.ts",
+      "evidencePresent": true,
+      "status": "PACKED_PROOF_ONLY",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-11",
+      "name": "Visual Builder",
+      "category": "PLANNED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-04-M09-M10.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-12",
+      "name": "AI-native development",
+      "category": "PLANNED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-04-M09-M10.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-13",
+      "name": "Cloud control plane",
+      "category": "PLANNED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-05-M11-M12.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-14",
+      "name": "Marketplace",
+      "category": "PLANNED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-05-M11-M12.md",
+      "evidencePresent": true,
+      "status": "NOT_EVIDENCED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-15",
+      "name": "M04 Batch 03 runtime",
+      "category": "UNSUPPORTED_PROHIBITED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/RELEASE-AND-GOVERNANCE-GATES.md",
+      "evidencePresent": true,
+      "status": "NOT_AUTHORIZED",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-16",
+      "name": "Production application hosting",
+      "category": "UNSUPPORTED_PROHIBITED",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/RELEASE-AND-GOVERNANCE-GATES.md",
+      "evidencePresent": true,
+      "status": "NO_GO",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-17",
+      "name": "Native mobile / arbitrary compute",
+      "category": "UNSUPPORTED_PROHIBITED",
+      "evidence": "docs/platform-roadmap/milestones/M00-engineering-baseline.md",
+      "evidencePresent": true,
+      "status": "OUT_OF_SCOPE",
+      "generallyAvailable": false
+    },
+    {
+      "id": "CAP-18",
+      "name": "Legacy CMS compatibility",
+      "category": "EXISTING_HOST_CMS",
+      "evidence": "packages/database/src/schema/operations.ts",
+      "evidencePresent": true,
+      "status": "REUSE_BASELINE",
+      "generallyAvailable": false
+    }
+  ]
+}

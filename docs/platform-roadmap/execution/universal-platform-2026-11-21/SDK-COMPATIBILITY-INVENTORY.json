@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "policyStatus": "UNCHANGED_PENDING_AUTHORIZED_OWNER_APPROVAL",
+  "packagesPublished": false,
+  "observed": {
+    "hostVersion": "1.2.0",
+    "node": ">=24.0.0 <25",
+    "pnpmEngine": ">=11.17.0",
+    "packageManager": "pnpm@11.22.0",
+    "kernelVersion": "1.2.0",
+    "kernelPrivate": true,
+    "pluginSdkVersion": "1.2.0",
+    "pluginSdkPrivate": true,
+    "schemaEngineVersion": "1.2.0",
+    "schemaEnginePrivate": true,
+    "composeVersionFallback": "${VIBRESS_VERSION:-1.0.0}",
+    "migrationJournalEntries": 58,
+    "latestMigrationTag": "0058_platform_installation_audit",
+    "supportMatrixDocumented": true,
+    "externalConsumerPresent": true,
+    "workspaceManifestPresent": true
+  },
+  "checks": [
+    {
+      "id": "NODE-24",
+      "expected": ">=24.0.0 <25",
+      "actual": ">=24.0.0 <25",
+      "pass": true
+    },
+    {
+      "id": "PNPM-11",
+      "expected": ">=11.17.0",
+      "actual": ">=11.17.0",
+      "pass": true
+    },
+    {
+      "id": "PLUGIN-SDK-PRIVATE",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "id": "KERNEL-PRIVATE",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "id": "MIGRATION-JOURNAL",
+      "expected": 58,
+      "actual": 58,
+      "pass": true
+    },
+    {
+      "id": "SUPPORT-MATRIX-PRESENT",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    },
+    {
+      "id": "EXTERNAL-CONSUMER",
+      "expected": true,
+      "actual": true,
+      "pass": true
+    }
+  ],
+  "failedChecks": [],
+  "notes": [
+    "PostgreSQL 16 and Redis 7 are documented deployment prerequisites; runtime versions are not probed here.",
+    "ADR-013 Host 1.2.0 vs Compose VIBRESS_VERSION fallback requires the R40 owner decision.",
+    "No private package was published and no registry operation was performed."
+  ]
+}

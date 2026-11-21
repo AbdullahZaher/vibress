@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "fixturePack": {
+    "source": "tests/fixtures/cms-studio/fixture-pack.ts",
+    "sourceSha256": "c5f87c37adc66dc677901e1c33be457b211c1dfedb8cd8b065527ef8d22bb810",
+    "pinnedDigestConstant": "83736be82f4d7302cc6c3dbe4d4fc2df4a23c0897dd99ce238ab5766cee147c7",
+    "schema": "vibress-cms-studio-fixture-pack",
+    "version": 1
+  },
+  "dimensions": [
+    {
+      "id": "two-publications",
+      "requirement": "Pinned primary + secondary publications",
+      "evidence": "tests/fixtures/cms-studio/fixture-pack.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "pub-default-compatibility",
+      "requirement": "Legacy fallback is explicit, not an application identity",
+      "evidence": "packages/database/src/schema/operations.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "users-memberships-roles",
+      "requirement": "Membership and role isolation",
+      "evidence": "tests/integration/runtime-multi-publication-isolation.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "subscriptions-payments",
+      "requirement": "Subscription/payment reference behavior",
+      "evidence": "tests/integration/transactions.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "media-files",
+      "requirement": "Media and file references",
+      "evidence": "tests/integration/studio-public-content.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "studio-documents",
+      "requirement": "Pinned Studio document schema/version",
+      "evidence": "tests/unit/cms-studio-fixture-pack.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "yjs-document-version",
+      "requirement": "Lexical/Yjs version pinned in fixture",
+      "evidence": "tests/fixtures/cms-studio/fixture-pack.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "delayed-jobs",
+      "requirement": "Delayed job references",
+      "evidence": "tests/integration/worker-scheduling.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "transactional-outbox",
+      "requirement": "Outbox persistence and replay",
+      "evidence": "tests/integration/outbox.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "urls-localized-content",
+      "requirement": "Existing URLs and localized content",
+      "evidence": "tests/integration/multilingual-production-verification.test.ts",
+      "evidencePresent": true
+    },
+    {
+      "id": "migration-restore-invariants",
+      "requirement": "Migration/restore evidence",
+      "evidence": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-BACKFILL-PITR-DRILL-REPORT.md",
+      "evidencePresent": true
+    },
+    {
+      "id": "kernel-identity-boundary",
+      "requirement": "pub_default is rejected as application/tenant identity",
+      "evidence": "packages/tenancy/src/scope.ts",
+      "evidencePresent": true
+    }
+  ],
+  "immutable": true,
+  "note": "This manifest binds existing fixtures to requirements; it does not re-create fixtures or claim runtime restore results."
+}

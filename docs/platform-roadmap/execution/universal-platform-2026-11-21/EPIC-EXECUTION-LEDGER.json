@@ -87,10 +87,16 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
+        "sourcePaths": [
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E02-ADR-DECISION-PACKAGES.md"
+        ],
         "testNames": [],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "ADR/R40/A1-A8 decision packages prepared; no approvals recorded."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -120,9 +126,9 @@
         "A03",
         "A11"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -130,10 +136,18 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "tests/architecture/m00-boundary-contract.test.ts"
+        ],
+        "testNames": [
+          "M00-E03 architecture boundary contract"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "7 negative/static boundary tests pass; no runtime import changes."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -161,9 +175,9 @@
         "A08",
         "A11"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -171,10 +185,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/CMS-STUDIO-COMPATIBILITY-MANIFEST.json",
+          "tests/fixtures/cms-studio/fixture-pack.ts"
+        ],
+        "testNames": [
+          "pinned CMS/Studio fixture pack"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "12 compatibility dimensions bound to existing pinned fixture pack; no fixture recreated."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -201,9 +224,9 @@
         "A11",
         "A03"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -211,10 +234,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/evidence/m00-evidence-index.mjs",
+          "scripts/verify-m00-evidence.mjs"
+        ],
+        "testNames": [
+          "M00 completion evidence artifacts"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "Evidence index cross-checks SHAs, fixture digests, CI URLs and negative suites; docs CI is not runtime certification."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -295,9 +327,9 @@
         "A04",
         "A05"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -305,10 +337,16 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
+        "sourcePaths": [
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E07-DEPLOYMENT-IDENTITY-ARCHITECTURE.md"
+        ],
         "testNames": [],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "Nonproduction topology, threat model and authorization matrix; R26/F-012/PENDING unchanged."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -335,9 +373,9 @@
         "A07",
         "A10"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -345,10 +383,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/compatibility/compat-inventory.mjs",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/SDK-COMPATIBILITY-INVENTORY.json"
+        ],
+        "testNames": [
+          "M00 completion evidence artifacts"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "Node/pnpm/plugin-SDK/migration checks pass; no package published; R40 version conflict recorded."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -430,9 +477,9 @@
         "A07",
         "A08"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -440,10 +487,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/capability/capability-matrix.mjs",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-CAPABILITY-MATRIX.json"
+        ],
+        "testNames": [
+          "M00 completion evidence artifacts"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "18 capabilities classified; none generally available."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -481,10 +537,16 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
+        "sourcePaths": [
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E11-OWNERSHIP-AND-QUALITY-BASELINE.md"
+        ],
         "testNames": [],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "Role definitions prepared; human names/signatures NOT PROVIDED."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -513,9 +575,9 @@
         "A02",
         "A03"
       ],
-      "assessment": "PARTIAL",
-      "executionStatus": "IN_PROGRESS",
-      "scope": "NONE",
+      "assessment": "IMPLEMENTED_RESTRICTED",
+      "executionStatus": "IMPLEMENTED_PENDING_TESTS",
+      "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
         "codeSha": null,
@@ -523,10 +585,19 @@
         "branch": null
       },
       "evidence": {
-        "sourcePaths": [],
-        "testNames": [],
+        "sourcePaths": [
+          "scripts/platform/security/pg-security-inventory.mjs",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/POSTGRES-SECURITY-INVENTORY.json"
+        ],
+        "testNames": [
+          "M00 completion evidence artifacts"
+        ],
         "ciRunUrls": [],
-        "notes": []
+        "notes": [
+          [
+            "Read-only static inventory; no database contacted; R26/F-012/R35/D-03 decisions remain open."
+          ]
+        ]
       },
       "independentReview": {
         "verdict": null,
@@ -566,16 +637,21 @@
         "sourcePaths": [
           "scripts/platform/dx/crm-adoption-baseline.mjs",
           "scripts/__tests__/crm-adopter-dx.test.mjs",
-          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-CRM-ADOPTER-DX-BASELINE.md"
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-CRM-ADOPTER-DX-BASELINE.md",
+          "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-E13-ACTUAL-DX-TRIALS.md"
         ],
         "testNames": [
-          "CRM developer-adoption baseline (M00-E13)"
+          "CRM developer-adoption baseline (M00-E13)",
+          "clean external consumer proof (M01-E09)"
         ],
         "ciRunUrls": [
           "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
         ],
         "notes": [
-          "9 measurable tasks defined; all statuses NOT_MEASURED except DX-08 BLOCKED. No adoption trial or competitor measurement executed."
+          "9 measurable tasks defined; all statuses NOT_MEASURED except DX-08 BLOCKED. No adoption trial or competitor measurement executed.",
+          [
+            "Packed consumer trial executed; interviews/timings not measured."
+          ]
         ]
       },
       "independentReview": {

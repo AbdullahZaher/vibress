@@ -89,3 +89,24 @@ All workstreams are isolated nonproduction deliverables. **No milestone is forma
 Verification: 40/40 targeted tests pass across five suites; tenancy typecheck clean; traceability ledger 140 Epics, 0 formally closed; roadmap docs validator and link validator pass. Repository docs CI is the only CI run for this increment; no full monorepo/milestone-end gate was run because M00 still has governance-blocked Epics.
 
 M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet proven sufficient**. The drill proves physical retained/rewound recovery, journal reconciliation, external anchor, unknown-COMMIT preservation, duplicate prevention and operator forward-fix, but not signed authority enforcement against the frozen M03 implementation.
+
+## 2026-11-21 M00 completion increment (Agent 01)
+
+**Candidate:** workstreams A–G implemented on the execution branch. **M00 remains NO-GO** — governance decisions and a genuinely independent Agent 06 review are still absent.
+
+- [x] M00-E03: `tests/architecture/m00-boundary-contract.test.ts` — 7 negative/static boundary tests pass (publication domains, infrastructure adapters, credentials, cycles, private imports, external consumer, legal CMS surface).
+- [x] M00-E04: `CMS-STUDIO-COMPATIBILITY-MANIFEST.json` binds 12 dimensions to the existing pinned fixture pack (digest `83736be8…`); no fixture recreated.
+- [x] M00-E05: `M00-EVIDENCE-INDEX.json` + `scripts/verify-m00-evidence.mjs` cross-check artifact digests, 7 test suites, negative identification, SHAs and CI URLs. Docs CI is explicitly not runtime certification.
+- [x] M00-E07: nonproduction deployment/identity baseline, threat model and PENDING authorization matrix.
+- [x] M00-E08: `SDK-COMPATIBILITY-INVENTORY.json` — 7 checks pass; no package published; Compose `1.0.0` fallback vs Host `1.2.0` recorded for R40.
+- [x] M00-E10: `M00-CAPABILITY-MATRIX.json` — 18 classified capabilities, none generally available.
+- [x] M00-E12: `POSTGRES-SECURITY-INVENTORY.json` — read-only static scan (58 migrations, digest `2b0a77bf…`); no database contacted, no grants applied; R26/F-012/R35/D-03 remain open.
+- [x] M00-E02/E11: decision and ownership packages prepared with all human fields `NOT PROVIDED`.
+- [x] M00-E13: `M00-E13-ACTUAL-DX-TRIALS.md` records only executed trials; unperformed items stay `NOT_MEASURED`.
+- [x] M03 D-02: `M03-D02-FROZEN-OPERATOR-BLOCKER.md` documents the exact reason the frozen operator cannot be exercised from this branch without a new executable candidate.
+
+### End-of-M00 verification results
+
+- 53/53 targeted tests pass across 7 suites (including 13 new M00-completion and boundary tests).
+- Tenancy typecheck clean; all seven artifact validators pass; docs validator and link validator pass (112 files).
+- Full `pnpm test:unit` against disposable PostgreSQL 16 on port 15433: **53 failed / 2324 passed / 356 skipped (2733 total)**. Failures are concentrated in API/security tests returning HTTP 503 (missing external services such as Redis/S3/AI), localStorage being undefined in jsdom, and hook timeouts. This suite therefore **does not pass** and M00 cannot be declared accepted.
