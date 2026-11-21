@@ -121,7 +121,11 @@ M03 D-02 assessment: the restricted E06/E09 recovery contract is **not yet prove
 - [x] Final full unit suite: **379 files / 2733 tests passed, exit 0** (previously 2324 passed / 53 failed / 356 skipped).
 - [x] All artifact validators, docs validator, link validator, typecheck and targeted suites pass.
 - [x] `M00-FINAL-MILESTONE-VERIFICATION.md` and `M00-INDEPENDENT-CERTIFICATION-HANDOFF.md` produced.
-- [ ] Agent 06 independent certification **not performed**; no verdict claimed.
+- [x] Agent 06 independent review **performed by a separate read-only auditor**: `M00_ENGINEERING_ACCEPTED` at `77a6043b6f442ef7b091ae9bbbe76e08613282e8` (restricted engineering scope only), followed by delta review `M00_DELTA_CONDITIONALLY_ACCEPTABLE` at `8e7dbc3fb2f83e266b57059e4d4886250771c5cb`.
 - [ ] Project Owner / maintainer merge authorization **not granted**; no merge to `main`.
 
-`ENGINEERING_IMPLEMENTED` and verification-complete; `M00_ACCEPTANCE_BLOCKED` pending independent review and human approvals. All prior restrictions preserved.
+`ENGINEERING_IMPLEMENTED` and verification-complete; `M00_ACCEPTANCE_BLOCKED` pending human approvals. All prior restrictions preserved.
+
+## 2026-11-21 — Final delta status reconciliation (supersedes the earlier "not performed" line)
+
+The line above was accurate when written, before the independent auditor was appointed. It is superseded by the actual verdicts recorded in `M00-INDEPENDENT-CERTIFICATION-HANDOFF.md` and `M00-FINAL-DELTA-INDEPENDENT-RECERTIFICATION.md`. These are restricted technical certifications only: they do not close any Epic, approve governance, authorize a merge or permit production release. M00 remains `M00_ENGINEERING_ACCEPTED_RESTRICTED_SCOPE` / `M00_FORMAL_ACCEPTANCE_BLOCKED`.

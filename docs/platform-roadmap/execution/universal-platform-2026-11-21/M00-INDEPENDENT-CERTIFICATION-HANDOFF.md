@@ -6,12 +6,14 @@ Agent 01 performed the implementation and remediation and therefore cannot act a
 
 ## Immutable candidate identity
 
-Record here after the final commit (Agent 01 pins the exact SHA/tree in the ledger and evidence index):
+SHA labels are deliberately unique; earlier "final" labels are superseded:
 
-- Remote execution branch: `docs/universal-platform-full-execution-checklist-20261121` (the local checkout uses the equivalent alias `exec/universal-platform-20261121`; both point at the same candidate SHA)
-- Implementation checkpoint under review: `ac07c737de0b512f9ad616773715ee3a8cd095a4`
-- Final remediation candidate SHA: 5c79f9bb23797f37f3432ae6bf4cf3740dd886c2
-- Final remediation candidate tree: dfdddcd59b416334357988937fa0ef45238daf90
+- Remote execution branch: `docs/universal-platform-full-execution-checklist-20261121` (local alias `exec/universal-platform-20261121`; both point at the same candidate)
+- Pre-remediation implementation checkpoint: `ac07c737de0b512f9ad616773715ee3a8cd095a4`
+- Implementation code commit (last runtime-affecting commit): `5c79f9bb23797f37f3432ae6bf4cf3740dd886c2` / `dfdddcd59b416334357988937fa0ef45238daf90` — **not** a certification target
+- Independently certified engineering baseline: `77a6043b6f442ef7b091ae9bbbe76e08613282e8` / `2eb592b95648fdb47a2c17cb79d9b0ea26b3db8b` — verdict `M00_ENGINEERING_ACCEPTED`
+- Delta-reviewed candidate: `8e7dbc3fb2f83e266b57059e4d4886250771c5cb` / `d208f1bd7b462648c7eeb4087dd5e7e14aec5cbf` — verdict `M00_DELTA_CONDITIONALLY_ACCEPTABLE`
+- Final candidate after P2/P3 reconciliation: pinned in `M00-FINAL-MERGE-READINESS-REPORT.md`
 - Documentation CI on the implementation checkpoint: [44937688713](https://github.com/AbdullahZaher/vibress/actions/runs/44937688713) (success)
 - Documentation CI on the remediation commit: [44939544401](https://github.com/AbdullahZaher/vibress/actions/runs/44939544401) (success)
 - Immutable full-suite log: `M00-FINAL-UNIT-TEST-LOG.txt` (379 files / 2733 tests passed, exit 0)

@@ -57,6 +57,22 @@ if (!process.argv.includes("--write")) {
       process.exit(1);
     }
   }
+  for (const field of ["implementationShas", "ciRunUrls", "referencedSourcePaths", "mandatoryChecks"]) {
+    const committedValue = JSON.stringify(committed.attribution?.[field] ?? (field === "mandatoryChecks" ? committed[field] : undefined));
+    const generatedValue = JSON.stringify(
+      field === "mandatoryChecks"
+        ? generated.mandatoryChecks
+        : generated.attribution[field],
+    );
+    if (committedValue !== generatedValue) {
+      console.error(`Committed evidence index ${field} does not match generated attribution; run --write.`);
+      process.exit(1);
+    }
+  }
+  if (committed.certificationNotice !== generated.certificationNotice) {
+    console.error("Committed certification notice does not match generated value; run --write.");
+    process.exit(1);
+  }
   for (const [pathOnDisk, digest] of committedByPath) {
     if (!fs.existsSync(path.join(root, pathOnDisk))) {
       console.error(`Committed evidence index references missing file ${pathOnDisk}.`);

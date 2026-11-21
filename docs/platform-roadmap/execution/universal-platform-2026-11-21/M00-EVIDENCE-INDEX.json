@@ -3,7 +3,7 @@
   "artifacts": [
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/EPIC-EXECUTION-LEDGER.json",
-      "sha256": "792b62cfdbd624314cb86023cc05e8e5c97f4aebe32e788e64b4bbe81d9b6166"
+      "sha256": "6ae242c9900a0ca60f53e447a435067ca9001e9f6fd20ad0abdee1a3de3d8a5c"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/REPOSITORY-INVENTORY.json",
@@ -39,7 +39,7 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-INDEPENDENT-CERTIFICATION-HANDOFF.md",
-      "sha256": "3abdad93b496629d13c48fae2ec97fefa076051e0d4fe913c9fe6c60ebc72a32"
+      "sha256": "6d36e7126435c7011cc4eb9ec57ce20f2dbe08c9e0a4ca7c57098f2fa2d8956a"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-FINAL-UNIT-TEST-LOG.txt",
