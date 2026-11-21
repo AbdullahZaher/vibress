@@ -5,10 +5,7 @@ import {
   asTenantId,
   type VerifiedPrincipal,
 } from "@vibress/platform-kernel";
-import {
-  runAtomicWorkerSqlEffect,
-  AtomicWorkerEffectError,
-} from "../atomic-worker-effect";
+import { runAtomicWorkerSqlEffect } from "../atomic-worker-effect";
 import {
   createWorkerEnvelope,
   workerOperationDigest,
@@ -93,6 +90,7 @@ class ReceiptTransactionFixture implements TenantUnitOfWorkRunner {
   readonly receipts = new Map<string, Receipt>();
   readonly effects: string[] = [];
   unknownCommitOnce = false;
+  failSqlEffectOnce = false;
   authorityAllowed = true;
   authorityChecks = 0;
 
@@ -130,6 +128,10 @@ class ReceiptTransactionFixture implements TenantUnitOfWorkRunner {
           const receipt = this.receipts.get(key);
           rows = receipt ? [receipt] : [];
         } else if (sql === "INSERT INTO test_protected_effects") {
+          if (this.failSqlEffectOnce) {
+            this.failSqlEffectOnce = false;
+            throw new Error("disposable SQL effect failed");
+          }
           pendingEffects.push(String(parameters[0]));
           rows = [];
         } else {
@@ -194,7 +196,7 @@ describe("M02 opt-in atomic SQL Worker effect contract (mock transaction)", () =
       payload: { dealId: "deal-2", amount: 5 },
     }))).rejects.toMatchObject({
       code: "IDENTITY_CONFLICT",
-    } satisfies Partial<AtomicWorkerEffectError>);
+    });
     expect(fixture.effects).toHaveLength(1);
   });
 
@@ -230,6 +232,16 @@ describe("M02 opt-in atomic SQL Worker effect contract (mock transaction)", () =
     expect(fixture.receipts.size).toBe(0);
     fixture.authorityAllowed = true;
     expect((await execute(fixture)).status).toBe("applied");
+  });
+
+  it("rolls back the receipt when the protected SQL effect fails", async () => {
+    const fixture = new ReceiptTransactionFixture();
+    fixture.failSqlEffectOnce = true;
+    await expect(execute(fixture)).rejects.toThrow("disposable SQL effect failed");
+    expect(fixture.receipts.size).toBe(0);
+    expect(fixture.effects).toHaveLength(0);
+    expect((await execute(fixture)).status).toBe("applied");
+    expect(fixture.effects).toHaveLength(1);
   });
 
   it("reconciles a simulated unknown COMMIT by replaying the same identity", async () => {
