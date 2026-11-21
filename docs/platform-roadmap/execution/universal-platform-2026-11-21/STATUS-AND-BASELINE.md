@@ -137,3 +137,12 @@ The line above was accurate when written, before the independent auditor was app
 - Documentation workflow CI on that exact SHA: [44941858106](https://github.com/AbdullahZaher/vibress/actions/runs/44941858106) — SUCCESS. This is documentation CI only, not runtime/DB/browser acceptance.
 - Independent final delta verdict on that SHA: `M00_FINAL_DELTA_CONDITIONAL` (`M00-FINAL-INDEPENDENT-DELTA-VERDICT.md`).
 - This documentation-only closure commit follows the audited SHA; it does not change runtime, tests or security.
+
+## 2026-11-21 — M00/M01 final delta closure pins
+
+- Independent combined verdicts: M00 `M00_DELTA_ACCEPT`; M01 `M01_DELTA_CONDITIONAL` (`M00-M01-FINAL-INDEPENDENT-DELTA-CLOSURE.md`).
+- Integrated execution HEAD at audit: `2a2ba1c5466d09fd863e8b9f084ae9e81a36b15e` / tree `1f56ac780550c2ee6a24afd18d9627c787416109`.
+- M01 candidate CI: [44944722370](https://github.com/AbdullahZaher/vibress/actions/runs/44944722370) SUCCESS (documentation workflow).
+- Integrated execution CI: [44944893593](https://github.com/AbdullahZaher/vibress/actions/runs/44944893593) SUCCESS (documentation workflow).
+- M01 full-suite exit code: 0, captured by the shell at execution; `M01-FINAL-UNIT-TEST-LOG.txt` contains the raw 381/2748 output, and this dated entry records the exit code.
+- Formal M00/M01 closure and merge into `main` remain BLOCKED pending human governance and owner authorization.
