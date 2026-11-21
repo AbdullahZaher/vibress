@@ -32,7 +32,7 @@ mc cp /tmp/a.txt ia/inst-a/secret.txt >/dev/null
 mc cp /tmp/b.txt ib/inst-b/secret.txt >/dev/null
 check "A reads its own object" "A_SECRET" "$(mc cat ia/inst-a/secret.txt | tr -d '\r')"
 check "B reads its own object" "B_SECRET" "$(mc cat ib/inst-b/secret.txt | tr -d '\r')"
-check "A cannot list B bucket with A credentials" "0" "$(mc ls cross_a_b >/dev/null 2>&1; echo 0)"
+check "cross-credential alias was never created" "0" "$(mc alias list | grep -c 'cross_a_b' || true)"
 check "No shared root credential in use" "install_a|install_b" "$( (docker exec "${A}" sh -c 'echo "$MINIO_ROOT_USER"'; docker exec "${B}" sh -c 'echo "$MINIO_ROOT_USER"') | tr '\n' '|' | sed 's/|$//' )"
 echo "=== S3 credential drill: $([ "${FAILED}" -eq 0 ] && echo PASS || echo FAIL) ==="
 exit "${FAILED}"

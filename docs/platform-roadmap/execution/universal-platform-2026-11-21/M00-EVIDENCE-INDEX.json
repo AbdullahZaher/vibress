@@ -207,7 +207,7 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-CREDENTIAL-DRILL-LOG.txt",
-      "sha256": "bb850ddeac03bf0c049bee728af80f7a314e53522d354a12b56d740403f0fd73"
+      "sha256": "4bbeb6237d032e17807c0b6d23f725ef2cf93db8d08213b0b5cc3df760fa9733"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
@@ -215,7 +215,7 @@
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
-      "sha256": "733006ff55c105b22cddba15ff8ee6123c07a88cbfd2e5313b3509703fce16c3"
+      "sha256": "a039568b6f7ab468e9566b828f13fe805ccd261dad94bae11ef2fd4b3ecbcd49"
     },
     {
       "path": "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-HARDENING-FINAL-UNIT-LOG.txt",

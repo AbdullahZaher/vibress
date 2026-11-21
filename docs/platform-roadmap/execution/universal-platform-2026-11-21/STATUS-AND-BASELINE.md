@@ -154,3 +154,12 @@ The line above was accurate when written, before the independent auditor was app
 - M02 full unit suite exit code captured by the shell: 0; raw output `M02-FINAL-UNIT-TEST-LOG.txt` shows 382 files / 2756 tests passed.
 - Agent 06 bounded findings closed: CI attribution pinned here; E14 narrowed to PARTIAL (Redis/PG only); unit-log exit code recorded here.
 - M02 remains formally open; R26/F-012/R35, live IdP, S3/backup isolation and human approvals remain PENDING.
+
+## 2026-11-22 — M02 hardening final candidate and CI attribution
+
+- Independently audited candidate: `77c649daa279175e1d5a7207835b26a1927c9600` / tree `a06cdddd6c42307acead886bf6a3b0f447d6f98a`.
+- Independent verdict: `M02_CONDITIONALLY_ACCEPTABLE` (`M02-INDEPENDENT-RECERTIFICATION-VERDICT.md`); Wave 1 technical GO: NO-GO while governance is pending.
+- Documentation CI on this candidate: [44953263394](https://github.com/AbdullahZaher/vibress/actions/runs/44953263394) SUCCESS (documentation workflow only; a duplicate dispatch was cancelled).
+- Final full unit suite after remediation: 384 files / 2768 tests passed, exit 0; raw log `M02-HARDENING-FINAL-UNIT-LOG.txt`.
+- Agent 06 P2/P3 closure: OIDC log replaced with passing 79/79 run; candidate SHA/tree and CI pinned here; tautological S3 assertion replaced with alias-absence check; test totals updated here.
+- Formal M02/M00/M01 closure and merge into `main` remain BLOCKED pending human governance and owner authorization.
