@@ -28,7 +28,7 @@
       "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -42,7 +42,9 @@
         "testNames": [
           "deterministic repository inventory (M00-E01)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "6 applications, 70 packages, 58 migrations inventoried; zero boundary violations. Implementation SHA pinned after commit."
         ]
@@ -61,7 +63,7 @@
         "url": null
       },
       "blockers": [
-        "Implementation SHA and docs CI run are pinned in the following ledger update."
+        "Agent 06 independent review of the M00 candidate is pending."
       ]
     },
     {
@@ -556,7 +558,7 @@
       "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -569,7 +571,9 @@
         "testNames": [
           "CRM developer-adoption baseline (M00-E13)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "9 measurable tasks defined; all statuses NOT_MEASURED except DX-08 BLOCKED. No adoption trial or competitor measurement executed."
         ]
@@ -925,7 +929,7 @@
       "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -939,7 +943,9 @@
         "testNames": [
           "clean external consumer proof (M01-E09)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "Offline npm pack -> extracted tarball -> consumer typecheck passed; zero private imports; custom action and route present. Public registry publication remains blocked by A2/G6 and private/TS-source package metadata."
         ]
@@ -1418,7 +1424,7 @@
       "scope": "RESTRICTED",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -1431,7 +1437,9 @@
         "testNames": [
           "bounded tenant lifecycle contracts (M02-E11)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "11 unit tests pass and tenancy typecheck passes. Pure contracts only: no disposable PG/S3/queue drill executed, no backup erasure claimed."
         ]
@@ -1856,7 +1864,7 @@
       "scope": "NONE",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -1868,7 +1876,9 @@
         "testNames": [
           "disposable PG16 retained/rewound Backfill PITR drill (9 assertions, exit 0)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "Physical PITR evidence only; frozen M03 operator, authenticated authority and Agent 06 review not exercised. D-02 remains BLOCKED."
         ]
@@ -2014,7 +2024,7 @@
       "scope": "NONE",
       "formallyClosed": false,
       "implementation": {
-        "codeSha": null,
+        "codeSha": "a37f4b3326e2cb829879e148dce21e3b8e271a1a",
         "pullRequest": null,
         "branch": null
       },
@@ -2026,7 +2036,9 @@
         "testNames": [
           "disposable PG16 retained/rewound Backfill PITR drill (9 assertions, exit 0)"
         ],
-        "ciRunUrls": [],
+        "ciRunUrls": [
+          "https://github.com/AbdullahZaher/vibress/actions/runs/44935360022"
+        ],
         "notes": [
           "Physical PITR evidence only; frozen M03 operator, authenticated authority and Agent 06 review not exercised. D-02 remains BLOCKED."
         ]
