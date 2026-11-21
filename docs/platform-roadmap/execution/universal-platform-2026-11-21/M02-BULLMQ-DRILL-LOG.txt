@@ -1,0 +1,17 @@
+npm notice run @vibress/queue@1.2.0 npx
+npm notice run 'tsx' ../../scripts/platform/m02/bullmq-installation-drill.mts
+PASS A processes its own authorized job
+JOB_FAILURE job-n2: envelope signature is invalid
+PASS A rejects modified HMAC payload
+JOB_FAILURE job-n3: envelope does not belong to the receiving application/installation
+PASS A rejects wrong installation envelope
+JOB_FAILURE job-n4: principal was revoked
+PASS A rejects revoked worker principal
+JOB_FAILURE job-n1-replay: REPLAY
+PASS A rejects replayed envelope
+PASS delayed job preserves binding
+PASS protected side effect applied exactly once per nonce: applied:n1,applied:n5
+PASS replay set persisted across processor invocations
+PASS B credentials cannot access A queue
+
+BullMQ installation drill: PASS (9/9)

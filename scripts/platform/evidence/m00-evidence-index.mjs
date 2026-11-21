@@ -71,6 +71,20 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BACKUP-RESTORE-DRILL-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-INTEGRATION-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-HARDENING-FINAL-UNIT-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-S3-SECURITY-TEST-HARDENING.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-LIVE-INSTALLATION-ISOLATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-CONCURRENCY-CERTIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-OFFBOARDING-INTEGRATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-RUNTIME-SECURITY-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-FINAL-DECISION-PACKAGE.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-ENGINEERING-READINESS-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D01-FINAL-SCOPE-DECISION-PACKAGE.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D02-FROZEN-OPERATOR-PITR-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M03-D03-TRUSTED-OWNER-APPROVAL-PACKAGE.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-INDEPENDENT-RECERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-OWNER-DECISION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-BULLMQ-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-RUNTIME-FINAL-UNIT-LOG.txt",
 ];
 
 export const TEST_SUITES = [
