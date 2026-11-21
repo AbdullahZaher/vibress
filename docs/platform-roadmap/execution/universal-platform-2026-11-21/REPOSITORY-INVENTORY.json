@@ -417,7 +417,7 @@
       "private": true,
       "hasBuildScript": false,
       "entryKind": "typescript-source",
-      "exportCount": 5,
+      "exportCount": 6,
       "nxTags": [
         "type:platform"
       ],
@@ -2147,7 +2147,7 @@
     {
       "packageName": "@vibress/platform-kernel",
       "entryKind": "typescript-source",
-      "exportCount": 5
+      "exportCount": 6
     },
     {
       "packageName": "@vibress/plugin-core",

@@ -1,0 +1,8 @@
+PASS A reads own secret: A_SECRET
+PASS B reads own secret: B_SECRET
+PASS A cannot read B: permission denied
+PASS A is not superuser: f|f|f
+PASS B is not superuser: f|f|f
+PASS Redis db1 cannot see db0: 
+PASS Redis db0 cannot see db1: 
+=== M01 isolation drill: PASS ===
