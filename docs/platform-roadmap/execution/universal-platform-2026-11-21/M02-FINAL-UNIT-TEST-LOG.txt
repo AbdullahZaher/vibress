@@ -1,0 +1,31 @@
+$ vitest run --no-file-parallelism --config vitest.unit.config.ts
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.unit.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /Users/abdullahzaher/vibress
+
+Global setup: Running database migrations...
+Running migrations from /Users/abdullahzaher/vibress/packages/database/migrations...
+Migrations completed successfully.
+Global setup: Seeding database with roles, permissions, and dev users...
+Seeding system roles...
+Seeding system permissions...
+Assigning baseline permissions to system roles...
+Seeding default dev staff users...
+Database seeding complete.
+Global setup: Database setup completed.
+Error: Not implemented: navigation (except hash changes)
+    at module.exports (/Users/abdullahzaher/vibress/node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/browser/not-implemented.js:9:17)
+    at navigateFetch (/Users/abdullahzaher/vibress/node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/window/navigation.js:77:3)
+    at exports.navigate (/Users/abdullahzaher/vibress/node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/window/navigation.js:55:3)
+    at Timeout._onTimeout (/Users/abdullahzaher/vibress/node_modules/.pnpm/jsdom@24.1.3_supports-color@7.2.0/node_modules/jsdom/lib/jsdom/living/nodes/HTMLHyperlinkElementUtils-impl.js:81:7)
+    at listOnTimeout (node:internal/timers:685:17)
+    at processTimers (node:internal/timers:618:7) undefined
+
+ Test Files  382 passed (382)
+      Tests  2756 passed (2756)
+   Start at  23:34:19
+   Duration  333.51s (transform 5.91s, setup 0ms, import 136.15s, tests 68.91s, environment 88.56s)
+

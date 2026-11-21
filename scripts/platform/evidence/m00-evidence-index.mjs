@@ -41,6 +41,20 @@ export const ARTIFACTS = [
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-INDEPENDENT-CERTIFICATION-VERDICT.md",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-FINAL-UNIT-TEST-LOG.txt",
   "docs/platform-roadmap/execution/universal-platform-2026-11-21/M01-ISOLATION-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M00-M01-FINAL-INDEPENDENT-DELTA-CLOSURE.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-PG16-RLS-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-ACL-DRILL-LOG.txt",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-COMPLETE-IMPLEMENTATION-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-POSTGRES-RLS-AND-PRIVILEGE-CERTIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-OIDC-IAM-AND-REVOCATION-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-API-WORKER-TENANT-ISOLATION-REPORT.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-REDIS-S3-BACKUP-INSTALLATION-ISOLATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-R26-F012-R35-GOVERNANCE-DECISIONS.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-TENANT-DATA-LIFECYCLE-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-MILESTONE-VERIFICATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-INDEPENDENT-CERTIFICATION-HANDOFF.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/WAVE-01-FINAL-READINESS-RECONCILIATION.md",
+  "docs/platform-roadmap/execution/universal-platform-2026-11-21/M02-FINAL-UNIT-TEST-LOG.txt",
 ];
 
 export const TEST_SUITES = [
